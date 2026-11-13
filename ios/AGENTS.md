@@ -560,12 +560,9 @@ added to it stays on the device.
 **The data directory lives in the App Group** (`group.io.byterepair.entoli`),
 because the extension is a process of its own and sees nothing of the app's
 container. `dataDir()` asks `path_provider_foundation` for the group's
-container and, once, renames a `Documents/entoli` from before into it: one
-volume, so a rename, where a copy would be gigabytes of rootfs. It is not an
-entry in `migrations.dart`, which moves things under the data directory; this
-moves the directory itself, before `AppConfig` exists. Where the rename fails
-the app runs from Documents and Files shows nothing until a launch where it
-lands. Both targets carry the group's entitlement, so the group has to exist
+container and has `relocateDataDir` (`migrations.dart`) move a
+`Documents/entoli` from before into it, once. Where the move fails the app
+runs from Documents and Files shows nothing until a launch where it lands. Both targets carry the group's entitlement, so the group has to exist
 for the team in the developer portal; the release job ad-hoc signs the
 extension with its own before the export, as it does the app.
 

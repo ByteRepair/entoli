@@ -298,6 +298,11 @@ entry this build has is a directory written by a newer build, and it is left
 exactly as it is. `AppConfig.load` runs the chain, and so does `restoreBackup` —
 a backup unpacks the layout of the build that made it, stamp included.
 
+**Migration code lives in `migrations.dart` and nowhere else.** A move of
+the data directory itself, which happens before there is a directory to
+stamp, is there too, beside the chain rather than in it: `relocateDataDir`,
+which iOS calls to move its data from Documents into the App Group.
+
 Three rules for writing one. **An entry that has shipped is never edited**: an
 installed copy has already run it and will not run it again, so a change reaches
 only the directories that were behind. **An entry spells its paths out** — it is

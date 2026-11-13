@@ -63,6 +63,7 @@ import "../../domain/app_settings.dart";
 import "../../domain/agent_browser.dart";
 import "../../domain/app_update.dart";
 import "../log.dart";
+import "../migrations.dart";
 import "../../domain/assistant_launch.dart";
 import "../../domain/confinement.dart";
 import "../../domain/intent_action.dart";
@@ -561,10 +562,10 @@ const iosAppGroup = "group.io.byterepair.entoli";
 /// Resolved once per process, since resolving it may move the directory.
 final Future<String> _iosBase = _resolveIosBase();
 
-/// The App Group's container, after moving a data directory from before it
-/// out of Documents. Documents is the fallback where the move fails, so the
-/// app still runs; the Files app then shows nothing until a launch where it
-/// lands.
+/// The App Group's container, once `relocateDataDir` has moved a data
+/// directory from before it out of Documents. Documents stays where the move
+/// fails, so the app still runs; the Files app then shows nothing until a
+/// launch where it lands.
 Future<String> _resolveIosBase() async {
   final group = await PathProviderFoundation().getContainerPath(
     appGroupIdentifier: iosAppGroup,
@@ -578,16 +579,11 @@ Future<String> _resolveIosBase() async {
     logFailure("files", "no App Group container, data stays in Documents");
     return documents;
   }
-  final from = Directory(p.join(documents, _dirLeaf));
-  if (!from.existsSync()) return group;
-  try {
-    // One volume, so a rename: a copy of a rootfs would be gigabytes.
-    from.renameSync(p.join(group, _dirLeaf));
-    return group;
-  } on FileSystemException catch (e) {
-    logFailure("files", "moving the data directory to the App Group failed", e);
-    return documents;
-  }
+  final moved = relocateDataDir(
+    from: p.join(documents, _dirLeaf),
+    to: p.join(group, _dirLeaf),
+  );
+  return moved ? group : documents;
 }
 
 String get _home => LocalShell.machineHomeDir()!;

@@ -4,6 +4,7 @@ import "dart:io";
 import "package:path/path.dart" as p;
 
 import "../domain/documents.dart";
+import "log.dart";
 
 /// A change to the data directory that a release makes once, to files an
 /// earlier release wrote. See "Migrations" in AGENTS.md for writing one.
@@ -75,6 +76,27 @@ Future<void> _athenaIn(File log) async {
     changed = true;
   }
   if (changed) await writeThroughRename(log.path, "${lines.join("\n")}\n");
+}
+
+/// Moves a whole data directory from where an earlier release kept it to
+/// [to], before the chain runs over it: iOS's, from Documents into the App
+/// Group (see "The workspaces in the Files app" in ios/AGENTS.md). Not an
+/// entry: an entry moves things under a data directory, and this moves the
+/// directory itself, before there is one to stamp.
+///
+/// A rename, the two being on one volume, where a copy would be gigabytes of
+/// rootfs. Where [to] is already there, or [from] is not, there is nothing to
+/// move. False only where the rename failed, so the caller keeps [from].
+bool relocateDataDir({required String from, required String to}) {
+  final old = Directory(from);
+  if (Directory(to).existsSync() || !old.existsSync()) return true;
+  try {
+    old.renameSync(to);
+    return true;
+  } on FileSystemException catch (e) {
+    logFailure("migrations", "moving the data directory failed", e);
+    return false;
+  }
 }
 
 /// Bring [dataDir] to the end of [chain]. Called at launch and
