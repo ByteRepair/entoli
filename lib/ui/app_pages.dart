@@ -6,7 +6,9 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../app/pages/app_page.dart";
 import "../app/settings/spec.dart";
 import "../app/settings/controller.dart";
+import "settings/form_dialog.dart" show editItem;
 import "settings/schema_view.dart";
+import "settings/setting_icons.dart";
 import "widgets/document_view.dart";
 import "widgets/web_view.dart";
 import "widgets/dialogs.dart";
@@ -113,17 +115,7 @@ class AppPageView extends ConsumerWidget {
           title: page.title(reader),
           subtitle: page.subtitle(reader),
           leading: held ? PageLeading.none : PageLeading.back,
-          actions: [
-            for (final (i, action) in page.toolbar(reader).indexed)
-              if (action.visible)
-                PageAction.text(
-                  label: action.label,
-                  prominent: i == 0,
-                  onPressed: action.enabled
-                      ? () => runSettingAction(context, action)
-                      : null,
-                ),
-          ],
+          actions: _actions(context, page.toolbar(reader), sections),
         ),
         body: switch (sections) {
           [PageSection(fills: true, controllers: [final c])] => switch (c) {
@@ -147,4 +139,54 @@ class AppPageView extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// The bar's buttons: an action with a glyph as its icon, the page's own
+/// tick last as the bar keeps it, and a list added to from the bar beside
+/// the rest.
+List<PageAction> _actions(
+  BuildContext context,
+  List<ActionController> toolbar,
+  List<PageSection> sections,
+) {
+  PageAction drawn(ActionController action, {bool prominent = false}) {
+    final onPressed = action.enabled
+        ? () => runSettingAction(context, action)
+        : null;
+    if (action.glyph == SettingGlyph.check) {
+      return PageAction.confirm(label: action.label, onPressed: onPressed);
+    }
+    if (settingIcon(action.glyph) case final icon?) {
+      return PageAction.icon(
+        icon: icon,
+        label: action.label,
+        onPressed: onPressed,
+      );
+    }
+    return PageAction.text(
+      label: action.label,
+      prominent: prominent,
+      onPressed: onPressed,
+    );
+  }
+
+  final shown = [
+    for (final action in toolbar)
+      if (action.visible) action,
+  ];
+  final tick = shown.firstOrNull?.glyph == SettingGlyph.check;
+  return [
+    for (final (i, action) in shown.indexed)
+      if (!tick || i > 0) drawn(action, prominent: i == 0),
+    for (final section in sections)
+      for (final c in section.controllers)
+        if (c case final CollectionController c
+            when c.visible && c.editable && c.addGlyph != null)
+          PageAction.icon(
+            icon: settingIcon(c.addGlyph)!,
+            label: c.addLabel ?? c.title,
+            onPressed: () => c.typed(<V>(c) => editItem<V>(context, c)),
+          ),
+    if (tick) drawn(shown.first),
+  ];
 }

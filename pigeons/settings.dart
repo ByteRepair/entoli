@@ -42,6 +42,7 @@ enum SettingKind {
   setup,
   document,
   web,
+  prompt,
 }
 
 /// How a row would like to be drawn; a client that cannot honour one draws
@@ -122,6 +123,10 @@ enum SettingIcon {
   check,
   info,
   star,
+  copy,
+  reveal,
+  newFolder,
+  restart,
 }
 
 enum SettingTone { plain, good, warning }
@@ -235,12 +240,41 @@ class TextPageData {
 }
 
 class SettingMeterData {
-  SettingMeterData({required this.text, this.fraction});
+  SettingMeterData({
+    required this.text,
+    this.fraction,
+    this.segments = const [],
+    this.markFraction,
+    this.markLabel,
+  });
 
   String text;
 
   /// How much of it is gone, 0 to 1; none for a balance.
   double? fraction;
+
+  /// The bar as parts end to end, each named in a legend; none for one fill.
+  List<SettingMeterSegmentData?> segments;
+
+  /// A line across the bar, and what it says over it.
+  double? markFraction;
+  String? markLabel;
+}
+
+enum MeterHueData { grey, orange, green, purple, blue }
+
+class SettingMeterSegmentData {
+  SettingMeterSegmentData({
+    required this.label,
+    required this.amount,
+    required this.fraction,
+    required this.hue,
+  });
+
+  String label;
+  String amount;
+  double fraction;
+  MeterHueData hue;
 }
 
 /// One item of a collection, by its place in the list.
@@ -471,6 +505,8 @@ class SettingRowData {
     this.editing = false,
     this.webUrl,
     this.inheritedPick,
+    this.iconOnly = false,
+    this.addIcon,
   });
 
   String id;
@@ -590,6 +626,12 @@ class SettingRowData {
 
   // choice: the option unset stands for, by its place
   int? inheritedPick;
+
+  /// An action's button is its icon alone, its label the tooltip.
+  bool iconOnly;
+
+  /// A collection added to from the page's bar, as this icon.
+  SettingIcon? addIcon;
 }
 
 class SettingsSectionData {

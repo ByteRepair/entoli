@@ -231,7 +231,13 @@ class _Encoder {
           ..kind = SettingKind.action
           ..label = c.label
           ..destructive = c.destructive
-          ..secondary = c.secondary;
+          ..secondary = c.secondary
+          ..iconOnly = c.iconOnly;
+      case PromptController():
+        row
+          ..kind = SettingKind.prompt
+          ..text = c.text
+          ..prompt = c.placeholder;
       case GroupController():
         row
           ..kind = SettingKind.group
@@ -275,7 +281,8 @@ class _Encoder {
           ..kind = SettingKind.document
           ..text = c.text
           ..markdown = c.markdown
-          ..editing = c.editing;
+          ..editing = c.editing
+          ..prompt = c.placeholder;
       case NoticeController():
         row
           ..kind = SettingKind.notice
@@ -310,6 +317,17 @@ class _Encoder {
                       SettingMeterData(
                         text: meter.text,
                         fraction: meter.fraction,
+                        segments: [
+                          for (final s in meter.segments)
+                            SettingMeterSegmentData(
+                              label: s.label,
+                              amount: s.amount,
+                              fraction: s.fraction,
+                              hue: MeterHueData.values.byName(s.hue.name),
+                            ),
+                        ],
+                        markFraction: meter.mark?.fraction,
+                        markLabel: meter.mark?.label,
                       ),
                   ],
                   editable: item.editable,
@@ -331,6 +349,7 @@ class _Encoder {
                 ),
           ]
           ..addLabel = c.addLabel
+          ..addIcon = _icon(c.addGlyph)
           ..removeLabel = c.removeLabel
           ..removable = c.removable
           ..editable = c.editable
@@ -776,6 +795,10 @@ class SettingsBridge implements SettingsIntents {
 
   @override
   Future<SettingNoticeData?> run(String id) async {
+    if (_at<SettingController>(id) case final PromptController prompt) {
+      await prompt.open();
+      return null;
+    }
     final c = _asked.remove(id) ?? _at<ActionController>(id);
     return _notice(await c?.run());
   }

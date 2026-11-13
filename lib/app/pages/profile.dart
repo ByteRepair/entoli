@@ -11,6 +11,7 @@ import "../../providers.dart";
 import "../settings/controller.dart";
 import "../settings/spec.dart";
 import "app_page.dart";
+import "prompt.dart";
 import "text_file.dart";
 
 /// What a turn knows about the user. With no [project] it is the app's
@@ -141,20 +142,20 @@ class ProfileAppPage extends AppPage {
   SettingConfirm? leaving(SettingReader reader) =>
       _edited ? AppPage.discardChanges : null;
 
+  /// Typed in place, the draft taking each edit; trimmed on Save.
   TextController _field(
     String id,
     String title,
     String value,
     void Function(String) set, {
-    String? prompt,
+    String prompt = "Not set",
   }) => TextController(
-    part(id, title, hint: UiHint.field),
+    part(id, title, hint: UiHint.input),
     value: value,
-    emptyLabel: "Not set",
     prompt: prompt,
     allowBlank: true,
     onSet: (text) async {
-      _set(() => set(text.trim()));
+      _set(() => set(text));
       return null;
     },
   );
@@ -227,22 +228,16 @@ class ProfileAppPage extends AppPage {
         "instructions",
         "Instructions",
         [
-          // No completions: an `@` here is a file to pull in, not an agent.
-          TextController(
-            part("instructions", "General instructions", hint: UiHint.field),
-            value: _instructions,
-            emptyLabel: "None",
-            prompt: _global
+          prompt(
+            "instructions",
+            "General instructions",
+            text: _instructions,
+            placeholder: _global
                 ? "Standing rules for the agent, applied to every turn"
                 : "Standing rules for this project's chats. Pull in a file "
                       "from the project workspace with a line like "
                       "@docs/style.md",
-            lines: 12,
-            allowBlank: true,
-            onSet: (text) async {
-              _set(() => _instructions = text);
-              return null;
-            },
+            onSet: (text) => _set(() => _instructions = text),
           ),
         ],
         detail: _global
@@ -354,12 +349,12 @@ class ProfileAppPage extends AppPage {
   @override
   List<ActionController> toolbar(SettingReader reader) => [
     ActionController(
-      part("save", "Save"),
+      part("save", "Save", glyph: SettingGlyph.check),
       enabled: _loaded && !_saving,
       run: _save,
     ),
     ActionController(
-      part("clear", "Clear"),
+      part("clear", "Clear", glyph: SettingGlyph.restart),
       enabled: _loaded && !_saving,
       run: () async {
         _set(() {
@@ -380,7 +375,8 @@ class ProfileAppPage extends AppPage {
   String? _blank(String s) => s.trim().isEmpty ? null : s.trim();
 
   Future<SettingNotice?> _save() async {
-    if (_dob.isNotEmpty && DateTime.tryParse(_dob) == null) {
+    final dob = _dob.trim();
+    if (dob.isNotEmpty && DateTime.tryParse(dob) == null) {
       return const SettingNotice("The date of birth is written YYYY-MM-DD.");
     }
     _saving = true;

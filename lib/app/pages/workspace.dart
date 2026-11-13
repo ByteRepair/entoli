@@ -76,7 +76,8 @@ class WorkspaceAppPage extends AppPage {
               ? "Nothing here yet. The agent's files land here; share files "
                     "to Entoli to add your own."
               : "Nothing here yet. The agent's files land here.",
-          addLabel: "New Folder…",
+          addLabel: "New Folder",
+          addGlyph: SettingGlyph.newFolder,
           form: (_) => _NewFolder(dir),
           submit: (answers, _) async {
             await createFolder(dir, answers["name"] ?? "");
@@ -145,7 +146,7 @@ class WorkspaceAppPage extends AppPage {
     return [
       if (handoff.canReveal)
         ActionController(
-          part("reveal", "Show in File Manager", glyph: SettingGlyph.folder),
+          part("reveal", "Show in File Manager", glyph: SettingGlyph.reveal),
           run: () async {
             await handoff.reveal(dir);
             return null;

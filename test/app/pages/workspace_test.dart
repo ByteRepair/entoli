@@ -270,11 +270,13 @@ void main() {
       );
       final rows = page.at<CollectionController<String>>("participants").rows;
       expect(rows.map((r) => r.title), ["@athena", "@reviewer"]);
+      final meter = rows.first.meters.single;
       expect(
-        rows.first.meters.map((m) => m.text),
+        meter.segments.map((s) => "${s.label} · ${s.amount}"),
         contains("Instructions · 3.0k"),
       );
-      expect(rows.first.meters.first.text, "Used · auto-compacts at 80%");
+      expect(meter.mark?.label, "Auto-compact 80%");
+      expect(meter.mark?.fraction, 0.8);
     });
 
     test("nothing measured says so", () async {

@@ -131,6 +131,7 @@ class _DocumentViewState extends ConsumerState<DocumentView> {
       controller: _controller,
       readOnly: !editing,
       autofocus: editing,
+      hint: widget.c.placeholder,
       wordWrap: _wrap,
       padding: const EdgeInsets.fromLTRB(4, 8, 16, 8),
       style: CodeEditorStyle(

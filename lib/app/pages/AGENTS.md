@@ -27,6 +27,24 @@ file's text as the whole of a page, edited in place with each edit said back,
 and `WebController`, a web page. A `CollectionItem`'s `RowFace` says who
 leads its row: an agent in their face, or a Bot Avatar of its own.
 
+A few pieces keep the look the pages had before they were data.
+`PromptController` is prose the model reads — the profile's instructions —
+previewed as markdown, a tap opening `PromptAppPage` over the page: the
+text as a `DocumentController` being edited, Save handing it back to the
+page's draft. An `ItemMeter` with `segments` is one bar of parts end to end
+with a legend and a `MeterMark` across it: the context page's window. A bar
+action with a glyph is drawn as its icon, `SettingGlyph.check` as the page's
+tick; a `CollectionController` with an `addGlyph` is added to from the bar
+rather than a row under it (a folder's New Folder); an `iconOnly` action is
+its glyph alone on its row (a chat's Copy ID).
+
+Neither frontend has a code editor for free. Flutter's is `re_editor`'s; the
+native shell's is `CodeEditor.swift`, TextKit 1 on both platforms, with a
+gutter numbering the line fragments, the caret's line lit, wrap (macOS only:
+`UITextView` scrolls one way) and zoom in the page's menu, and colours from
+the core's grammar for the file, asked through `DocumentIntents.highlight`
+once the typing pauses.
+
 **The stack is the core's.** `AppPages` (`appPagesProvider`) holds the pages
 open, the first at the bottom: `open` puts one over the others (one already
 open comes to the top), `close` takes it and those over it, and `leave` is a

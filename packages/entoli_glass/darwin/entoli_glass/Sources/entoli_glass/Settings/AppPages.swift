@@ -158,6 +158,17 @@ struct AppPageView: View {
   /// In the card, which draws the page's bar itself.
   @Environment(\.appPagesCard) private var card
   @State private var leaving: SettingConfirmData?
+  @State private var adding: Adding?
+
+  struct Adding: Identifiable {
+    let id: String
+  }
+
+  /// The lists added to from the bar rather than a row under them.
+  private var barAdds: [SettingRowData] {
+    page.sections.compactMap { $0 }.flatMap { $0.rows.compactMap { $0 } }
+      .filter { $0.kind == .collection && $0.editable && $0.addIcon != nil }
+  }
 
   /// The row the page says is the whole of it — a file, a web page — rather
   /// than a row of a form.
@@ -174,7 +185,7 @@ struct AppPageView: View {
           if row.kind == .web {
             WebRow(model: model.rows, row: row).ignoresSafeArea(edges: .bottom)
           } else {
-            DocumentRow(model: model.rows, row: row)
+            DocumentRow(model: model.rows, row: row, controls: true)
           }
         }
         .navigationTitle(page.title)
@@ -201,7 +212,20 @@ struct AppPageView: View {
               ToolbarAction(model: model.rows, row: row)
             }
           }
+          ForEach(barAdds, id: \.id) { row in
+            ToolbarItem(placement: .primaryAction) {
+              Button {
+                adding = Adding(id: row.id)
+              } label: {
+                Label(row.addLabel ?? row.title, systemImage: row.addIcon?.symbol ?? "plus")
+              }
+              .help(row.addLabel ?? row.title)
+            }
+          }
         }
+      }
+      .sheet(item: $adding) { adding in
+        FormSheet(model: model.rows, id: adding.id, index: nil)
       }
       .leavingAlert($leaving) {
         if let address = page.address { model.close(address) }
@@ -404,27 +428,29 @@ extension EnvironmentValues {
   }
 #endif
 
-/// A file's text: markdown rendered while it is read, anything else set in
-/// the code face, and an editor while the page says it is being edited,
-/// each pause in the typing said back so Dart holds the draft.
+/// A file's text: markdown rendered while it is read, anything else in the
+/// code editor, read-only until the page says it is being edited, each pause
+/// in the typing said back so Dart holds the draft.
 struct DocumentRow: View {
   let model: SettingsModel
   let row: SettingRowData
+  /// Whether it is the whole of its page, whose bar carries the editor's
+  /// menu.
+  var controls = false
 
   @State private var text = ""
   @State private var sending: Task<Void, Never>?
 
+  /// The name the grammar is chosen by: the file's, which titles the row,
+  /// or markdown's for what is read as markdown.
+  private var name: String { row.markdown ? "text.md" : row.title }
+
+  private var code: Bool { row.editing || (!row.markdown && !(row.text ?? "").isEmpty) }
+
   var body: some View {
     Group {
       if row.editing {
-        TextEditor(text: $text)
-          .font(.system(size: 13, design: .monospaced))
-          .autocorrectionDisabled()
-          #if os(iOS)
-            .textInputAutocapitalization(.never)
-          #endif
-          .scrollContentBackground(.hidden)
-          .padding(.horizontal, 8)
+        CodeEditor(text: $text, name: name, editable: true, placeholder: row.prompt)
           .onChange(of: text) { _, now in send(now) }
       } else if (row.text ?? "").isEmpty {
         ContentUnavailableView("This file is empty", systemImage: "doc")
@@ -435,17 +461,15 @@ struct DocumentRow: View {
             .padding()
         }
       } else {
-        ScrollView([.vertical, .horizontal]) {
-          Text(row.text ?? "")
-            .font(.system(size: 13, design: .monospaced))
-            .textSelection(.enabled)
-            .fixedSize()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-        }
+        CodeEditor(text: .constant(row.text ?? ""), name: name, editable: false)
       }
     }
     .background(Color.pageBackground)
+    .toolbar {
+      if controls && code {
+        ToolbarItem(placement: .primaryAction) { CodeEditorMenu() }
+      }
+    }
     .onAppear { text = row.text ?? "" }
     .onChange(of: row.editing) { _, editing in
       if editing { text = row.text ?? "" }

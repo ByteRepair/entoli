@@ -61,10 +61,8 @@ class ContextAppPage extends AppPage {
               final used = usage.total;
               final percent = (used * 100 / window).round();
               final name = nameOf(author);
-              ItemMeter segment(String label, int tokens) => ItemMeter(
-                "$label · ${_k(tokens)}",
-                fraction: (tokens / window).clamp(0, 1),
-              );
+              MeterSegment segment(String label, int tokens, MeterHue hue) =>
+                  MeterSegment(label, _k(tokens), tokens / window, hue);
               return CollectionItem(
                 author,
                 subtitle: "$percent% · ${_k(used)} of ${_k(window)}",
@@ -75,16 +73,38 @@ class ContextAppPage extends AppPage {
                 takesImage: false,
                 meters: [
                   ItemMeter(
-                    threshold == null
-                        ? "Used"
-                        : "Used · auto-compacts at $threshold%",
+                    "",
                     fraction: (used / window).clamp(0, 1),
+                    mark: threshold == null
+                        ? null
+                        : MeterMark(
+                            threshold / 100,
+                            "Auto-compact $threshold%",
+                          ),
+                    segments: [
+                      segment(
+                        "System prompt",
+                        usage.share(usage.system),
+                        MeterHue.grey,
+                      ),
+                      segment(
+                        "Tool definitions",
+                        usage.share(usage.tools),
+                        MeterHue.orange,
+                      ),
+                      segment(
+                        "Profile",
+                        usage.share(usage.profile),
+                        MeterHue.green,
+                      ),
+                      segment(
+                        "Instructions",
+                        usage.share(usage.instructions),
+                        MeterHue.purple,
+                      ),
+                      segment("Chat", usage.share(usage.chat), MeterHue.blue),
+                    ],
                   ),
-                  segment("System prompt", usage.share(usage.system)),
-                  segment("Tool definitions", usage.share(usage.tools)),
-                  segment("Profile", usage.share(usage.profile)),
-                  segment("Instructions", usage.share(usage.instructions)),
-                  segment("Chat", usage.share(usage.chat)),
                 ],
               );
             },

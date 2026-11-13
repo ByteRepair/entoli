@@ -414,7 +414,15 @@ struct ActionRow: View {
         }
         Titled(title: row.title, detail: row.detail)
         Spacer()
-        ActionPress(model: model, row: row) { Text(row.label ?? row.title) }
+        if row.iconOnly, let icon = row.icon {
+          ActionPress(model: model, row: row) {
+            Label(row.label ?? row.title, systemImage: icon.symbol).labelStyle(.iconOnly)
+          }
+          .buttonStyle(.borderless)
+          .help(row.label ?? row.title)
+        } else {
+          ActionPress(model: model, row: row) { Text(row.label ?? row.title) }
+        }
       }
     } else {
       ActionPress(model: model, row: row, role: row.destructive ? .destructive : nil) {
@@ -540,6 +548,10 @@ struct TextRow: View {
           }
         }
         .onAppear { typed = row.submitLabel == nil ? row.text ?? "" : "" }
+        // Set from elsewhere — a page's Clear — rather than typed here.
+        .onChange(of: row.text) { was, now in
+          if row.submitLabel == nil, now != was, (now ?? "") != typed { typed = now ?? "" }
+        }
         .onChange(of: typed) { _, text in
           if row.submitLabel == nil { model.say.setText(id: row.id, text: text, completion: ignore) }
         }

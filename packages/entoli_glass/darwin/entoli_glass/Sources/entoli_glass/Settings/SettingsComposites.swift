@@ -56,11 +56,15 @@ struct CollectionRow: View {
               Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
             ForEach(Array(item.meters.compactMap { $0 }.enumerated()), id: \.offset) { _, meter in
-              VStack(alignment: .leading, spacing: 2) {
-                Text(meter.text).font(.caption).foregroundStyle(.secondary)
-                if let fraction = meter.fraction { ProgressView(value: fraction) }
+              if meter.segments.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(meter.text).font(.caption).foregroundStyle(.secondary)
+                  if let fraction = meter.fraction { ProgressView(value: fraction) }
+                }
+                .padding(.top, 4)
+              } else {
+                SegmentedMeter(meter: meter).padding(.top, 8)
               }
-              .padding(.top, 4)
             }
           }
           // An item with a page of its own opens it from its words; the
@@ -155,7 +159,8 @@ struct CollectionRow: View {
       }
       // Borderless, as every control here: a default button in a list row
       // answers a tap anywhere in the row.
-      if row.editable, let add = row.addLabel {
+      // One with an icon is added to from the page's bar.
+      if row.editable, row.addIcon == nil, let add = row.addLabel {
         Button(add) { editing = Editing(index: nil) }
           .buttonStyle(.borderless)
           .foregroundStyle(Color.accentColor)

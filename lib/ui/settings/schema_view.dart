@@ -19,6 +19,7 @@ import "../app_command.dart";
 import "../theme.dart" show appTitle;
 import "../widgets/app_mark.dart";
 import "privacy_policy_page.dart";
+import "rich_rows.dart";
 import "../../domain/models.dart" show AttachmentKind;
 import "../../providers.dart";
 import "../widgets/add_button_row.dart";
@@ -132,6 +133,7 @@ class SettingRow extends StatelessWidget {
       ),
       final GroupController c => _Group(c),
       final TextController c => _Text(c),
+      final PromptController c => PromptPreview(c),
       final DocumentController c => SizedBox(
         height: 480,
         child: DocumentView(c),
@@ -690,13 +692,18 @@ class _Action extends StatelessWidget {
     }
     if (c.hint == UiHint.row) {
       final description = c.description;
+      final icon = settingIcon(c.glyph);
+      final onPressed = c.enabled ? () => _press(context) : null;
       return ListTile(
         title: Text(c.title),
         subtitle: description == null ? null : Text(description),
-        trailing: OutlinedButton(
-          onPressed: c.enabled ? () => _press(context) : null,
-          child: Text(c.label),
-        ),
+        trailing: c.iconOnly && icon != null
+            ? IconButton(
+                icon: Icon(icon),
+                tooltip: c.label,
+                onPressed: onPressed,
+              )
+            : OutlinedButton(onPressed: onPressed, child: Text(c.label)),
       );
     }
     final colors = Theme.of(context).colorScheme;
@@ -1153,15 +1160,38 @@ class SchemaPage extends StatelessWidget {
 
 /// Text typed in place, saved as it is typed; a reset beside it where it
 /// can be cleared.
-class _Input extends StatelessWidget {
+class _Input extends StatefulWidget {
   const _Input(this.c);
 
   final TextController c;
 
   @override
+  State<_Input> createState() => _InputState();
+}
+
+class _InputState extends State<_Input> {
+  late final _text = TextEditingController(text: widget.c.value);
+
+  @override
+  void didUpdateWidget(_Input old) {
+    super.didUpdateWidget(old);
+    // Set from elsewhere — a page's Clear — rather than typed here; a value
+    // still catching up with the typing is left alone.
+    final value = widget.c.value;
+    if (value != old.c.value && value != _text.text) _text.text = value;
+  }
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final field = TextFormField(
-      initialValue: c.value,
+    final c = widget.c;
+    final field = TextField(
+      controller: _text,
       obscureText: c.secret,
       enabled: c.enabled,
       decoration: InputDecoration(hintText: c.prompt, isDense: true),
@@ -1470,7 +1500,8 @@ class _Collection<T> extends StatelessWidget {
                 ],
               ),
             ),
-        if (c.editable && c.addLabel != null)
+        // One with a glyph is added to from the page's bar.
+        if (c.editable && c.addLabel != null && c.addGlyph == null)
           AddButtonRow(
             child: OutlinedButton.icon(
               icon: const Icon(Icons.add),
@@ -1549,22 +1580,28 @@ class _Collection<T> extends StatelessWidget {
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         for (final meter in row.meters)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(meter.text),
-                if (meter.fraction case final fraction?) ...[
-                  const SizedBox(height: 2),
-                  LinearProgressIndicator(
-                    value: fraction,
-                    semanticsLabel: meter.text,
-                  ),
+          if (meter.segments.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: SegmentedMeter(meter),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(meter.text),
+                  if (meter.fraction case final fraction?) ...[
+                    const SizedBox(height: 2),
+                    LinearProgressIndicator(
+                      value: fraction,
+                      semanticsLabel: meter.text,
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
       ],
     );
   }
