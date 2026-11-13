@@ -23,11 +23,13 @@ private let rowKey = NSAttributedString.Key("entoli.row")
 private let columnsKey = NSAttributedString.Key("entoli.columns")
 /// How many quotes deep a paragraph is: the bars drawn beside it.
 private let quoteKey = NSAttributedString.Key("entoli.quote")
+/// A horizontal rule: a line of its own the view draws across.
+private let ruleKey = NSAttributedString.Key("entoli.rule")
 
 /// A reply's markdown as one attributed string — paragraphs, headings, list
 /// items, quotes, formulas, code and tables — so a selection runs across all
 /// of it as it does in the Flutter app. What the text cannot draw — a code
-/// block's box, a table's grid, a quote's bar — is marked on it, and the view
+/// block's box, a table's grid, a quote's bar, a rule — is marked on it, and the view
 /// draws it behind (`ProseDecorations`).
 enum ProseBuilder {
   /// Room inside a code box and a table cell.
@@ -49,6 +51,15 @@ enum ProseBuilder {
       case .table:
         out.append(
           table(block, id: index, model: model, tone: tone, first: first, width: width))
+      case .rule:
+        // A space to hold the line, copied as the markdown it was.
+        out.append(
+          NSAttributedString(
+            string: " ",
+            attributes: [
+              .font: body, ruleKey: true, swapKey: "---",
+              .paragraphStyle: paragraph(block, first: first),
+            ]))
       default:
         let start = out.length
         out.append(line(block, model: model, tone: tone))
@@ -435,6 +446,7 @@ struct ProseDecorations {
   var boxes: [Box] = []
   var grids: [Grid] = []
   var bars: [CGRect] = []
+  var rules: [CGRect] = []
 
   init() {}
 
@@ -486,6 +498,11 @@ struct ProseDecorations {
       grids.append(Grid(rows: rows, columns: edges))
     }
 
+    storage.enumerateAttribute(ruleKey, in: all) { value, range, _ in
+      guard value != nil, let rect = used(range) else { return }
+      rules.append(CGRect(x: origin.x, y: rect.midY.rounded(), width: width, height: 1))
+    }
+
     storage.enumerateAttribute(quoteKey, in: all) { value, range, _ in
       guard let depth = value as? Int, let rect = used(range) else { return }
       for level in 0..<depth {
@@ -530,6 +547,10 @@ struct ProseDecorations {
     PlatformColor.tertiaryLabelColor.setFill()
     for bar in bars {
       rounded(bar, 1.5).fill()
+    }
+    PlatformColor.separatorColor.setFill()
+    for rule in rules {
+      Path(rect: rule).fill()
     }
   }
 }
@@ -720,7 +741,7 @@ private let copySymbol = "doc.on.doc"
     var hugs = false
 
     func makeUIView(context: Context) -> ProseUITextView {
-      let view = ProseUITextView(usingTextLayoutManager: false)
+      let view = ProseUITextView()
       view.isEditable = false
       view.isSelectable = true
       view.isScrollEnabled = false
@@ -790,7 +811,8 @@ private let copySymbol = "doc.on.doc"
     }
   }
 
-  final class ProseUITextView: UITextView {
+  /// On TextKit 1, which the decorations measure with.
+  final class ProseUITextView: TextKit1View {
     private var decorations = ProseDecorations()
     private var buttons: [UIButton] = []
 

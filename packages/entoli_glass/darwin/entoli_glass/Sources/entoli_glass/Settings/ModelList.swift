@@ -176,10 +176,10 @@ struct ModelList: View {
               list.filters
             }
           }
-          .toolbar(.hidden, for: .windowToolbar)
           .toolbar(removing: .title)
           .navigationBarBackButtonHidden()
           #if os(macOS)
+            .toolbar(.hidden, for: .windowToolbar)
             // Escape clears the search, then goes back.
             .onExitCommand {
               if list.search.isEmpty { list.dismiss() } else { list.search = "" }

@@ -36,6 +36,29 @@ extension Image {
   }
 }
 
+#if os(iOS)
+  /// A text view on TextKit 1, made through the designated initializer:
+  /// UIKit's `init(usingTextLayoutManager:)` is a class factory, and a
+  /// subclass's instance it makes has its Swift properties unset — an array
+  /// among them reads as a null pointer.
+  class TextKit1View: UITextView {
+    /// Holds the layout manager, which holds the container the view holds.
+    private let storage = NSTextStorage()
+
+    init() {
+      let layout = NSLayoutManager()
+      storage.addLayoutManager(layout)
+      let container = NSTextContainer(
+        size: CGSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+      container.widthTracksTextView = true
+      layout.addTextContainer(container)
+      super.init(frame: .zero, textContainer: container)
+    }
+
+    required init?(coder: NSCoder) { nil }
+  }
+#endif
+
 /// A search's words: what is found holds every one of them, in any order.
 struct SearchWords {
   private let words: [String]

@@ -361,6 +361,8 @@ class _BlockReader {
 /// Inline nodes walked into runs, marks carried down from the elements they
 /// sit in and adjacent runs of the same marks joined.
 class _InlineReader {
+  static final _softBreak = RegExp(r" ?\n *");
+
   final _out = <Inline>[];
 
   List<Inline> read(List<md.Node> nodes) {
@@ -372,8 +374,10 @@ class _InlineReader {
 
   void _node(md.Node node, Set<InlineMark> marks, String? link) {
     switch (node) {
+      // A line ending inside a paragraph is a space, as the Flutter frontend
+      // reads it; a line break of its own is a `br`.
       case md.Text(:final text):
-        _text(text, marks, link);
+        _text(text.replaceAll(_softBreak, " "), marks, link);
       case md.Element(tag: mathInlineTag || mathDisplayTag):
         _out.add(
           FormulaInline(

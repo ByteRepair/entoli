@@ -161,7 +161,7 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
     var model: ComposerModel
 
     func makeUIView(context: Context) -> FieldView {
-      let view = FieldView(usingTextLayoutManager: false)
+      let view = FieldView()
       view.model = model
       view.delegate = view
       view.backgroundColor = .clear
@@ -191,7 +191,7 @@ private func embedCode(in storage: NSAttributedString, at index: Int) -> UInt16?
     }
   }
 
-  final class FieldView: UITextView, UITextViewDelegate, ComposerEditor {
+  final class FieldView: TextKit1View, UITextViewDelegate, ComposerEditor {
     weak var model: ComposerModel?
 
     /// Set while a value from Dart is being put in, so the change is not

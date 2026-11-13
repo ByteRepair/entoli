@@ -3,6 +3,19 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/app/transcript/markdown.dart";
 
 void main() {
+  test("a paragraph's line ends are spaces, and a hard break a break", () {
+    final paragraph =
+        MarkdownDocument.parse(
+              "Wrapped at\nthe column.  \nThen a break.",
+            ).blocks.single
+            as ParagraphBlock;
+    expect(paragraph.inlines.whereType<TextInline>().map((t) => t.text), [
+      "Wrapped at the column.",
+      "Then a break.",
+    ]);
+    expect(paragraph.inlines[1], isA<BreakInline>());
+  });
+
   test("a formula on a line of its own is a formula block, its TeX whole", () {
     final blocks = MarkdownDocument.parse(
       "Before.\n\n\$\$\\int_0^1 x^2\\,dx = \\frac{1}{3}\$\$\n\nAfter.",
