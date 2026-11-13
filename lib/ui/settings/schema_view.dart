@@ -1190,7 +1190,7 @@ class _InputState extends State<_Input> {
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
-    final field = TextField(
+    final field = TextFormField(
       controller: _text,
       obscureText: c.secret,
       enabled: c.enabled,
