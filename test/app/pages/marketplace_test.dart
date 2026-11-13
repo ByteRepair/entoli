@@ -5,6 +5,7 @@ import "dart:typed_data";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
+import "package:agent_chat/app/marketplace/groups.dart";
 import "package:agent_chat/app/marketplace/marketplace.dart";
 import "package:agent_chat/app/pages/app_page.dart";
 import "package:agent_chat/app/pages/marketplace.dart";
@@ -79,6 +80,11 @@ void main() {
   String extIndexPath(CompletionKind kind) =>
       Uri.parse("$marketplaceBaseUrl/ext/${kind.folder}/index.json").path;
 
+  /// The skills' collection records, which group `upstream/*` keys.
+  final collectionsPath = Uri.parse(
+    "$marketplaceBaseUrl/ext/skills/collections.json",
+  ).path;
+
   /// The path of one raw file of the remote fixtures' source repository, at
   /// the ref their location records name.
   String rawPath(String dir, String file) => Uri.parse(
@@ -148,6 +154,11 @@ void main() {
   }
 }"""),
     ],
+    collectionsPath: [
+      utf8.encode(
+        '{"upstream": {"name": "Upstream", "summary": "Letters from afar."}}',
+      ),
+    ],
     rawPath(upstreamSkillDir, "README.md"): [
       utf8.encode("# Red letter\n\nFrom upstream.\n"),
     ],
@@ -204,13 +215,21 @@ Frame it, from upstream.
     final page = PageDriver(app, MarketplaceAppPage());
     await page.until(
       () =>
-          page.find<CollectionController<MarketplaceEntry>>("local") != null ||
+          page.find<CollectionController<MarketplaceEntry>>("front") != null ||
           page.find<NoticeController>("failed") != null,
     );
     return page;
   }
 
-  List<String> names(PageDriver<MarketplaceAppPage> page, String part) =>
+  List<String> collectionNames(PageDriver page) =>
+      page
+          .find<CollectionController<MarketplaceCollection>>("collections")
+          ?.items
+          .map((c) => c.name)
+          .toList() ??
+      const [];
+
+  List<String> names(PageDriver page, String part) =>
       page
           .find<CollectionController<MarketplaceEntry>>(part)
           ?.items
@@ -222,7 +241,7 @@ Frame it, from upstream.
     CompletionKind kind,
     String slug,
   ) async {
-    final all = await fetchMarketplaceEntries(network, kind);
+    final all = (await fetchMarketplaceEntries(network, kind)).entries;
     final page = PageDriver(
       app,
       MarketplaceEntryAppPage(
@@ -237,33 +256,74 @@ Frame it, from upstream.
   String skillDir(String name) =>
       p.join(app.config.promptsDir(CompletionKind.skill), name);
 
-  test("the site's own entries first, the remote under External", () async {
+  test("collections first, then every entry in none", () async {
     start();
     final page = await list();
-    expect(names(page, "local"), ["letterbox"]);
-    expect(names(page, "remote"), ["red-letter"]);
+    expect(collectionNames(page), ["Upstream"]);
+    expect(names(page, "front"), ["letterbox"]);
+    // No agent collections: every agent is on the front page.
     await page
         .at<ChoiceController<CompletionKind>>("kind")
         .set(CompletionKind.agent);
-    await page.until(() => names(page, "local").contains("diary"));
-    expect(names(page, "remote"), ["letter-writer"]);
+    await page.until(() => names(page, "front").contains("diary"));
+    expect(names(page, "front"), ["diary", "letter-writer"]);
+    expect(collectionNames(page), isEmpty);
   });
 
-  test("the search and the tags narrow the list in its order", () async {
+  test("a site with no collections lists every entry up front", () async {
+    start(site()..remove(collectionsPath));
+    final page = await list();
+    expect(names(page, "front"), ["letterbox", "red-letter"]);
+    expect(collectionNames(page), isEmpty);
+  });
+
+  test("a search reaches into the collections", () async {
     start();
     final page = await list();
     await page.at<TextController>("search").set("upstream");
-    expect(names(page, "local"), isEmpty);
-    expect(names(page, "remote"), ["red-letter"]);
-    await page.at<TextController>("search").set("");
+    expect(collectionNames(page), ["Upstream"]);
+    expect(names(page, "front"), isEmpty);
+    expect(names(page, "in-upstream"), ["red-letter"]);
+    // A member matching where its collection does not is still found.
+    await page.at<TextController>("search").set("red");
+    expect(collectionNames(page), isEmpty);
+    expect(names(page, "in-upstream"), ["red-letter"]);
+    await page.at<TextController>("search").set("nothing like it");
+    expect(page.find<NoticeController>("nomatch"), isNotNull);
+  });
+
+  test("the front page's tags filter the front page's entries", () async {
+    start();
+    final page = await list();
     await page.at<ActionController>("tags").run();
     final tags =
         page.app.container.read(appPagesProvider).last
             as MarketplaceTagsAppPage;
     final tagged = PageDriver(app, tags);
+    // Built from the front alone: the members' "external" is not offered.
+    expect(tagged.find<ToggleController>("tag-external"), isNull);
     await tagged.at<ToggleController>("tag-layout").set(true);
-    expect(names(page, "local"), ["letterbox"]);
-    expect(names(page, "remote"), isEmpty);
+    expect(names(page, "front"), ["letterbox"]);
+  });
+
+  test("a collection opens on its members, searched on their own", () async {
+    start();
+    final page = await list();
+    await page
+        .at<CollectionController<MarketplaceCollection>>("collections")
+        .act(0, "open");
+    final opened = page.app.container.read(appPagesProvider).last;
+    expect(opened.address, "marketplace-collection/skill/upstream");
+    final collection = PageDriver(app, opened as MarketplaceCollectionAppPage);
+    expect(names(collection, "members"), ["red-letter"]);
+    await collection.at<TextController>("search").set("letterbox");
+    expect(names(collection, "members"), isEmpty);
+    await collection.at<TextController>("search").set("");
+    await collection.at<ActionController>("tags").run();
+    expect(
+      page.app.container.read(appPagesProvider).last.address,
+      "marketplace-tags/skill/upstream",
+    );
   });
 
   test(
@@ -274,7 +334,7 @@ Frame it, from upstream.
       expect(page.find<NoticeController>("failed"), isNotNull);
       network.bodies.addAll(site());
       await page.at<ActionController>("retry").run();
-      await page.until(() => names(page, "local").isNotEmpty);
+      await page.until(() => names(page, "front").isNotEmpty);
     },
   );
 

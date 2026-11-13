@@ -1,37 +1,74 @@
 import "../../domain/chat_search.dart" show searchNeedle;
 import "marketplace.dart";
 
-/// The marketplace's list, grouped and filtered — the pure half of what
-/// `MarketplacePage` draws, out of the widget the way the sidebar's chat
-/// groups and search are.
-///
-/// The list draws the site's own entries first, alphabetically, and the
-/// remote ones after — under the heading below, drawn only where both halves
-/// have something, a heading that separates nothing being no heading at all.
-const externalHeading = "External";
+// The marketplace's list, grouped and filtered: the pure half of what
+// `MarketplaceAppPage` draws.
 
-class MarketplaceGroups {
-  const MarketplaceGroups(this.local, this.remote);
+/// One ext manifest's entries under the name the site gives them.
+class MarketplaceCollection {
+  MarketplaceCollection({
+    required this.slug,
+    required this.name,
+    required this.summary,
+    required this.members,
+  });
 
-  final List<MarketplaceEntry> local;
-  final List<MarketplaceEntry> remote;
+  final String slug;
+  final String name;
+  final String summary;
+  final List<MarketplaceEntry> members;
+
+  late final String _lowerName = name.toLowerCase();
+  late final String _lowerSummary = summary.toLowerCase();
 }
 
-/// [entries] — alphabetical, as the fetch leaves them — split on what makes
-/// the two halves: a [MarketplaceEntry.location] names a remote entry's
-/// source repository, and null is the site's own. The order within each half
-/// is the order they came in.
-MarketplaceGroups groupByOrigin(List<MarketplaceEntry> entries) =>
-    MarketplaceGroups(
-      [
-        for (final entry in entries)
-          if (entry.location == null) entry,
-      ],
-      [
-        for (final entry in entries)
-          if (entry.location != null) entry,
-      ],
-    );
+/// [entries] split into the front page's and the collections'. An entry is a
+/// member of collection `<slug>` when its key is `<slug>/<sub>` and [records]
+/// names `<slug>`; everything else is the front's, in the order it came in.
+/// Collections are alphabetical by name, members in the order they came in,
+/// and one left with no members is dropped.
+(List<MarketplaceEntry>, List<MarketplaceCollection>) groupIntoCollections(
+  List<MarketplaceEntry> entries,
+  Map<String, CollectionRecord> records,
+) {
+  final front = <MarketplaceEntry>[];
+  final members = <String, List<MarketplaceEntry>>{};
+  for (final entry in entries) {
+    final slash = entry.slug.indexOf("/");
+    final slug = slash < 0 ? null : entry.slug.substring(0, slash);
+    if (slug != null && records.containsKey(slug)) {
+      (members[slug] ??= []).add(entry);
+    } else {
+      front.add(entry);
+    }
+  }
+  final collections = [
+    for (final MapEntry(key: slug, value: list) in members.entries)
+      MarketplaceCollection(
+        slug: slug,
+        name: records[slug]!.name,
+        summary: records[slug]!.summary,
+        members: list,
+      ),
+  ]..sort((a, b) => a._lowerName.compareTo(b._lowerName));
+  return (front, collections);
+}
+
+/// The collections whose name or summary [query] matches; all of them for an
+/// empty query.
+List<MarketplaceCollection> collectionsMatching(
+  List<MarketplaceCollection> collections,
+  String query,
+) {
+  final needle = searchNeedle(query);
+  return [
+    for (final collection in collections)
+      if (needle.isEmpty ||
+          collection._lowerName.contains(needle) ||
+          collection._lowerSummary.contains(needle))
+        collection,
+  ];
+}
 
 /// The entries a tab's search and tag ticks pick out, in the order they came
 /// in. [query] is matched against the name and the description alike — the

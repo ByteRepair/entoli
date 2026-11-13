@@ -6,10 +6,20 @@ entries, Skills or Agents picked above them. Tapping an entry opens
 `MarketplaceEntryAppPage`, which previews and installs it.
 
 The list is organized, and the organizing is `groups.dart`, pure
-and tested on its own. The site's own entries come first, each half
-alphabetical, and the remote half sits under an "External" heading — drawn
-only where both halves have something, a heading that separates nothing being
-no heading at all. A search row searches — name and description alike, over the entries the fetch already
+and tested on its own. **Collections** come first: an ext manifest publishing
+`<slug>/<sub>` entries is named in `/ext/<folder>/collections.json`
+(`{slug: {name, summary}}`, the marketplace build's), and every entry keyed
+under a named slug is that collection's member rather than a front-page row.
+Membership is the key's prefix and the record's presence, nothing else, so a
+single-entry manifest and a site from before the file (a 404, read as no
+records) leave every entry on the front page as it was. A collection row
+opens `MarketplaceCollectionAppPage`, the members already fetched, with a
+search and tags of its own; its picker leaves out `external`, which every
+member carries, and its address is scoped by slug, since `open` raises a page
+already open at an address. With a query the front page also shows the
+matching collections and, under each collection's name, its matching members,
+so a search finds a skill wherever it is filed. The front page's tag ticks
+filter its own entries only. A search row searches — name and description alike, over the entries the fetch already
 holds, nothing re-read off disk; the needle is the sidebar's
 `searchNeedle` (`domain/chat_search.dart`), the one shared rule for what a typed query compares as, and
 the lowercased name and description the match reads are `late final` on the
@@ -32,7 +42,9 @@ one. The section path is `CompletionKind.folder`, which is `"skills"` /
 `"agents"`, the site's own directory names: one fact, written once — and
 anchored on the field's doc in `models.dart`, the place an edit would land.
 Fetched beside it is `/ext/<folder>/index.json`, the site's record of where
-every remote entry's files live, joined into the list by key.
+every remote entry's files live, joined into the list by key, and
+`collections.json`, in the same wait, so one provider has one loading and one
+error state.
 
 Entry files fetch as `/{folder}/{slug}/{file}`; the skill package is the one
 exception, fetched as `/{folder}/{slug}.skill` — its own function,

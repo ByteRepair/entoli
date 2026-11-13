@@ -31,23 +31,58 @@ MarketplaceEntry remoteEntry(String name, {List<String> tags = const []}) =>
     );
 
 void main() {
-  test("the list groups the site's own entries ahead of the remote ones", () {
-    final groups = groupByOrigin([
-      localEntry("alpha"),
-      remoteEntry("alpha"),
-      localEntry("beta"),
-      remoteEntry("beta"),
+  test("entries under a recorded manifest slug make its collection", () {
+    final (front, collections) = groupIntoCollections(
+      [
+        localEntry("alpha"),
+        remoteEntry("zoo/gcs"),
+        remoteEntry("acme/build"),
+        remoteEntry("zoo/bigquery"),
+        // A key with no record stays on the front page, as does one with no
+        // slash: a single-entry manifest is not a collection.
+        remoteEntry("loose/one"),
+        remoteEntry("solo"),
+      ],
+      {
+        "zoo": (name: "Google", summary: "Cloud."),
+        "acme": (name: "Acme", summary: ""),
+      },
+    );
+    expect(front.map((e) => e.slug), ["alpha", "loose/one", "solo"]);
+    // By name, not slug; members in the order they came in.
+    expect(collections.map((c) => c.name), ["Acme", "Google"]);
+    expect(collections.last.members.map((e) => e.slug), [
+      "zoo/gcs",
+      "zoo/bigquery",
     ]);
-    expect(groups.local.map((e) => e.name), ["alpha", "beta"]);
-    expect(groups.remote.map((e) => e.name), ["alpha", "beta"]);
+    expect(collections.last.summary, "Cloud.");
+  });
 
-    // A category of one either side: the other list is just empty, rather
-    // than the row moving where it does not belong.
-    expect(groupByOrigin([remoteEntry("alpha")]).local, isEmpty);
-    expect(groupByOrigin([remoteEntry("alpha")]).remote.map((e) => e.name), [
-      "alpha",
+  test("a record with no members is no collection", () {
+    final (front, collections) = groupIntoCollections(
+      [localEntry("alpha")],
+      {"zoo": (name: "Google", summary: "")},
+    );
+    expect(front.length, 1);
+    expect(collections, isEmpty);
+  });
+
+  test("collections match on name or summary", () {
+    final (_, collections) = groupIntoCollections(
+      [remoteEntry("g/a"), remoteEntry("m/a")],
+      {
+        "g": (name: "Google", summary: "Cloud and BigQuery."),
+        "m": (name: "Microsoft", summary: "Azure."),
+      },
+    );
+    expect(collectionsMatching(collections, " GOOG").map((c) => c.name), [
+      "Google",
     ]);
-    expect(groupByOrigin([localEntry("alpha")]).remote, isEmpty);
+    expect(collectionsMatching(collections, "azure").map((c) => c.name), [
+      "Microsoft",
+    ]);
+    expect(collectionsMatching(collections, "").length, 2);
+    expect(collectionsMatching(collections, "wordpress"), isEmpty);
   });
 
   test("searching matches the name and the description alike", () {
