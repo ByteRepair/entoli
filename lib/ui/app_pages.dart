@@ -150,32 +150,37 @@ class AppPageView extends ConsumerWidget {
   }
 }
 
-/// The bar's buttons: an action with a glyph as its icon, the page's own
-/// tick last as the bar keeps it, and a list added to from the bar beside
-/// the rest.
+/// The bar's buttons, an action with a glyph drawn as its icon: the page's
+/// own — the first, unless it is secondary — at the end, where native
+/// keeps it too.
 List<PageAction> _actions(
   BuildContext context,
   List<ActionController> toolbar,
   List<PageSection> sections,
 ) {
-  PageAction drawn(ActionController action, {bool prominent = false}) {
-    final onPressed = action.enabled
-        ? () => runSettingAction(context, action)
-        : null;
-    if (action.glyph == SettingGlyph.check) {
-      return PageAction.confirm(label: action.label, onPressed: onPressed);
-    }
+  void Function()? press(ActionController action) {
+    if (!action.enabled) return null;
+    final adds = action.adds;
+    if (adds == null) return () => runSettingAction(context, action);
+    final list = sections
+        .expand((s) => s.controllers)
+        .whereType<CollectionController>()
+        .firstWhere((c) => c.id == adds);
+    return () => list.typed(<V>(c) => editItem<V>(context, c));
+  }
+
+  PageAction drawn(ActionController action, {bool own = false}) {
     if (settingIcon(action.glyph) case final icon?) {
       return PageAction.icon(
         icon: icon,
         label: action.label,
-        onPressed: onPressed,
+        onPressed: press(action),
       );
     }
     return PageAction.text(
       label: action.label,
-      prominent: prominent,
-      onPressed: onPressed,
+      prominent: own,
+      onPressed: press(action),
     );
   }
 
@@ -183,19 +188,10 @@ List<PageAction> _actions(
     for (final action in toolbar)
       if (action.visible) action,
   ];
-  final tick = shown.firstOrNull?.glyph == SettingGlyph.check;
+  final own = shown.firstOrNull?.secondary == false ? shown.first : null;
   return [
-    for (final (i, action) in shown.indexed)
-      if (!tick || i > 0) drawn(action, prominent: i == 0),
-    for (final section in sections)
-      for (final c in section.controllers)
-        if (c case final CollectionController c
-            when c.visible && c.editable && c.addGlyph != null)
-          PageAction.icon(
-            icon: settingIcon(c.addGlyph)!,
-            label: c.addLabel ?? c.title,
-            onPressed: () => c.typed(<V>(c) => editItem<V>(context, c)),
-          ),
-    if (tick) drawn(shown.first),
+    for (final action in shown)
+      if (action != own) drawn(action),
+    if (own != null) drawn(own, own: true),
   ];
 }

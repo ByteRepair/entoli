@@ -32,7 +32,7 @@ struct CodeEditor: View {
   var body: some View {
     CodeTextHost(
       text: $text, name: name, editable: editable, dark: scheme == .dark,
-      wrap: prefs.wrap, size: 13 * prefs.scale
+      size: 13 * prefs.scale, wrap: prefs.wrap
     )
     .overlay(alignment: .topLeading) {
       if editable, text.isEmpty, let placeholder {
@@ -89,17 +89,25 @@ struct LineStarts {
 
   var count: Int { starts.count }
 
-  /// The 1-based line [offset] starts, or nil where it is inside a line.
-  func line(startingAt offset: Int) -> Int? {
+  /// The index of the last start at or before [offset].
+  private func floor(_ offset: Int) -> Int {
     var low = 0
     var high = starts.count - 1
-    while low <= high {
-      let mid = (low + high) / 2
-      if starts[mid] == offset { return mid + 1 }
-      if starts[mid] < offset { low = mid + 1 } else { high = mid - 1 }
+    while low < high {
+      let mid = (low + high + 1) / 2
+      if starts[mid] <= offset { low = mid } else { high = mid - 1 }
     }
-    return nil
+    return low
   }
+
+  /// The 1-based line [offset] starts, or nil where it is inside a line.
+  func line(startingAt offset: Int) -> Int? {
+    let at = floor(offset)
+    return starts[at] == offset ? at + 1 : nil
+  }
+
+  /// The 1-based line [offset] is on.
+  func line(containing offset: Int) -> Int { floor(offset) + 1 }
 }
 
 enum CodeGutter {
@@ -109,27 +117,50 @@ enum CodeGutter {
     return CGFloat(digits) * size * 0.62 + 16
   }
 
-  static func font(_ size: CGFloat) -> PlatformFont {
-    .monospacedDigitSystemFont(ofSize: size * 0.9, weight: .regular)
+  /// The fragment the caret is on, in the container's coordinates: the
+  /// empty line after a final newline where it is past the end.
+  static func caretFragment(_ layout: NSLayoutManager, caret: Int, length: Int) -> CGRect? {
+    if caret >= length {
+      let extra = layout.extraLineFragmentRect
+      if !extra.isEmpty { return extra }
+      guard length > 0 else { return nil }
+    }
+    let glyph = layout.glyphIndexForCharacter(at: min(caret, length - 1))
+    return layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
   }
 
-  /// Each line fragment in [glyphs] that starts a line, its number and its
-  /// rect in the container's coordinates; the empty line after a final
-  /// newline among them.
-  static func numbered(
-    _ layout: NSLayoutManager, glyphs: NSRange, starts: LineStarts,
-    each: (Int, CGRect) -> Void
+  /// Each line's number beside its first fragment among [glyphs], right
+  /// aligned to [right]; [top] is where the container's origin falls in the
+  /// gutter, and [current] the line lit as the caret's.
+  static func draw(
+    _ layout: NSLayoutManager, glyphs: NSRange, starts: LineStarts, size: CGFloat,
+    current: Int?, right: CGFloat, top: CGFloat
   ) {
+    let font = PlatformFont.monospacedDigitSystemFont(ofSize: size * 0.9, weight: .regular)
+    func label(_ line: Int, _ rect: CGRect) {
+      let label = "\(line)" as NSString
+      let attributes: [NSAttributedString.Key: Any] = [
+        .font: font,
+        .foregroundColor: line == current
+          ? PlatformColor.labelColor : PlatformColor.tertiaryLabelColor,
+      ]
+      let measured = label.size(withAttributes: attributes)
+      label.draw(
+        at: CGPoint(
+          x: right - measured.width - 8,
+          y: top + rect.minY + (rect.height - measured.height) / 2),
+        withAttributes: attributes)
+    }
     var index = glyphs.location
     while index < NSMaxRange(glyphs) {
       var range = NSRange()
       let rect = layout.lineFragmentRect(forGlyphAt: index, effectiveRange: &range)
       let character = layout.characterIndexForGlyph(at: range.location)
-      if let line = starts.line(startingAt: character) { each(line, rect) }
+      if let line = starts.line(startingAt: character) { label(line, rect) }
       index = NSMaxRange(range)
     }
     let extra = layout.extraLineFragmentRect
-    if !extra.isEmpty { each(starts.count, extra) }
+    if !extra.isEmpty { label(starts.count, extra) }
   }
 }
 
@@ -142,15 +173,9 @@ enum CodeStyling {
   static func base(size: CGFloat) -> [NSAttributedString.Key: Any] {
     [
       .font: PlatformFont.monospacedSystemFont(ofSize: size, weight: .regular),
-      .foregroundColor: labelColour,
+      .foregroundColor: PlatformColor.labelColor,
     ]
   }
-
-  #if os(iOS)
-    static let labelColour = UIColor.label
-  #else
-    static let labelColour = NSColor.textColor
-  #endif
 
   static func apply(
     _ tokens: [CodeTokenSnapshot]?, to storage: NSTextStorage, size: CGFloat, dark: Bool
@@ -191,14 +216,14 @@ enum CodeStyling {
   }
 }
 
-/// What both platforms' views share: the binding, the highlight pass, and
-/// asking the core for the tokens once the typing pauses.
+/// What both platforms' hosts share: the binding and how the text is set,
+/// the line table, and asking the core for the tokens once typing pauses.
 @MainActor final class CodeEditorState {
   var text: Binding<String>
-  var name: String
-  var size: CGFloat
-  var dark: Bool
-  var starts = LineStarts()
+  private(set) var name: String
+  private(set) var size: CGFloat
+  private(set) var dark: Bool
+  private(set) var starts = LineStarts()
   private var colouring: Task<Void, Never>?
 
   init(text: Binding<String>, name: String, size: CGFloat, dark: Bool) {
@@ -208,14 +233,57 @@ enum CodeStyling {
     self.dark = dark
   }
 
-  /// Coloured again, at once where nothing was typed, after a pause where
-  /// something was.
-  func colour(_ storage: NSTextStorage, typed: Bool, done: @escaping () -> Void) {
+  /// Takes what SwiftUI passed: [storage] set to the text where it differs,
+  /// and styled again where that or how it is set changed. Whether the view
+  /// was refitted to it is [refit]'s.
+  func sync(
+    _ storage: NSTextStorage, text: String, name: String, size: CGFloat, dark: Bool,
+    typing: inout [NSAttributedString.Key: Any], refit: @escaping () -> Void
+  ) {
+    let restyle = self.size != size || self.dark != dark || self.name != name
+    self.size = size
+    self.dark = dark
+    self.name = name
+    if storage.string != text {
+      load(storage, text: text, typing: &typing, refit: refit)
+    } else if restyle {
+      style(storage, typing: &typing, refit: refit)
+    }
+  }
+
+  /// [text] in place of what [storage] holds, counted and styled.
+  func load(
+    _ storage: NSTextStorage, text: String, typing: inout [NSAttributedString.Key: Any],
+    refit: @escaping () -> Void
+  ) {
+    storage.replaceCharacters(in: NSRange(location: 0, length: storage.length), with: text)
+    starts = LineStarts(text as NSString)
+    style(storage, typing: &typing, refit: refit)
+  }
+
+  /// The base face at once, then the core's colours.
+  func style(
+    _ storage: NSTextStorage, typing: inout [NSAttributedString.Key: Any],
+    refit: @escaping () -> Void
+  ) {
+    typing = CodeStyling.base(size: size)
+    CodeStyling.apply(nil, to: storage, size: size, dark: dark)
+    colour(storage, typed: false, done: refit)
+    refit()
+  }
+
+  /// A keystroke: said back, counted, and coloured once the typing pauses.
+  func edited(_ storage: NSTextStorage) {
+    let string = storage.string
+    text.wrappedValue = string
+    starts = LineStarts(string as NSString)
+    colour(storage, typed: true) {}
+  }
+
+  private func colour(_ storage: NSTextStorage, typed: Bool, done: @escaping () -> Void) {
     colouring?.cancel()
     let code = storage.string
-    let size = size
-    let dark = dark
-    let name = name
+    let (size, dark, name) = (size, dark, name)
     colouring = Task { @MainActor in
       if typed { try? await Task.sleep(for: .milliseconds(250)) }
       guard !Task.isCancelled else { return }
@@ -228,8 +296,6 @@ enum CodeStyling {
       done()
     }
   }
-
-  func recount(_ string: String) { starts = LineStarts(string as NSString) }
 }
 
 #if os(macOS)
@@ -238,8 +304,8 @@ enum CodeStyling {
     let name: String
     let editable: Bool
     let dark: Bool
-    let wrap: Bool
     let size: CGFloat
+    let wrap: Bool
 
     func makeCoordinator() -> Coordinator {
       Coordinator(state: CodeEditorState(text: $text, name: name, size: size, dark: dark))
@@ -285,9 +351,10 @@ enum CodeStyling {
         context.coordinator, selector: #selector(Coordinator.scrolled),
         name: NSView.boundsDidChangeNotification, object: scroll.contentView)
       scroll.contentView.postsBoundsChangedNotifications = true
-      view.string = text
-      context.coordinator.state.recount(text)
-      context.coordinator.restyle()
+      if let storage = view.textStorage {
+        context.coordinator.state.load(
+          storage, text: text, typing: &view.typingAttributes, refit: context.coordinator.refit)
+      }
       setWrap(view, in: scroll)
       view.isEditable = editable
       if editable {
@@ -298,24 +365,13 @@ enum CodeStyling {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
       let coordinator = context.coordinator
-      let state = coordinator.state
-      state.text = $text
-      guard let view = coordinator.view else { return }
+      coordinator.state.text = $text
+      guard let view = coordinator.view, let storage = view.textStorage else { return }
       view.isEditable = editable
-      view.lit = editable
-      let restyle = state.size != size || state.dark != dark || state.name != name
-      state.size = size
-      state.dark = dark
-      state.name = name
-      if view.string != text {
-        view.string = text
-        state.recount(text)
-        coordinator.restyle()
-      } else if restyle {
-        coordinator.restyle()
-      }
+      coordinator.state.sync(
+        storage, text: text, name: name, size: size, dark: dark,
+        typing: &view.typingAttributes, refit: coordinator.refit)
       setWrap(view, in: scroll)
-      coordinator.ruler?.fit()
     }
 
     private func setWrap(_ view: NSTextView, in scroll: NSScrollView) {
@@ -343,25 +399,20 @@ enum CodeStyling {
 
       init(state: CodeEditorState) { self.state = state }
 
-      func restyle() {
-        guard let view, let storage = view.textStorage else { return }
-        view.typingAttributes = CodeStyling.base(size: state.size)
-        CodeStyling.apply(nil, to: storage, size: state.size, dark: state.dark)
-        state.colour(storage, typed: false) { [weak self] in self?.ruler?.needsDisplay = true }
-        ruler?.fit()
-      }
-
-      func textDidChange(_ notification: Notification) {
-        guard let view, let storage = view.textStorage else { return }
-        state.text.wrappedValue = view.string
-        state.recount(view.string)
-        state.colour(storage, typed: true) {}
+      func refit() {
         ruler?.fit()
         ruler?.needsDisplay = true
       }
 
+      func textDidChange(_ notification: Notification) {
+        guard let storage = view?.textStorage else { return }
+        state.edited(storage)
+        refit()
+      }
+
       func textViewDidChangeSelection(_ notification: Notification) {
-        view?.needsDisplay = true
+        view?.caretMoved()
+        ruler?.needsDisplay = true
       }
 
       @objc func scrolled() { ruler?.needsDisplay = true }
@@ -370,24 +421,31 @@ enum CodeStyling {
 
   /// The text view, lighting the line the caret is on while it is edited.
   final class CodeNSTextView: NSTextView {
-    var lit = true
+    /// Where the light was last drawn, redrawn as the caret leaves it.
+    private var lit: NSRect?
 
-    override func drawBackground(in rect: NSRect) {
-      super.drawBackground(in: rect)
-      guard lit, window?.firstResponder === self, let layout = layoutManager else { return }
-      let caret = selectedRange().location
-      var line: NSRect
-      if caret >= (string as NSString).length, !layout.extraLineFragmentRect.isEmpty {
-        line = layout.extraLineFragmentRect
-      } else {
-        let length = (string as NSString).length
-        guard length > 0 else { return }
-        let glyph = layout.glyphIndexForCharacter(at: min(caret, length - 1))
-        line = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-      }
+    private var caretLine: NSRect? {
+      guard isEditable, window?.firstResponder === self, let layout = layoutManager,
+        var line = CodeGutter.caretFragment(
+          layout, caret: selectedRange().location, length: (string as NSString).length)
+      else { return nil }
       line.origin.x = 0
       line.size.width = bounds.width
       line.origin.y += textContainerOrigin.y
+      return line
+    }
+
+    /// Only the line it left and the one it is on drawn again.
+    func caretMoved() {
+      let now = caretLine
+      if let lit { setNeedsDisplay(lit) }
+      if let now { setNeedsDisplay(now) }
+      lit = now
+    }
+
+    override func drawBackground(in rect: NSRect) {
+      super.drawBackground(in: rect)
+      guard let line = caretLine else { return }
       NSColor.labelColor.withAlphaComponent(0.06).setFill()
       line.fill()
     }
@@ -420,26 +478,13 @@ enum CodeStyling {
       else { return }
       NSColor.windowBackgroundColor.setFill()
       bounds.fill()
-      let visible = text.visibleRect
-      let glyphs = layout.glyphRange(forBoundingRect: visible, in: container)
-      let offset = convert(NSPoint.zero, from: text).y + text.textContainerOrigin.y
-      let caret = text.selectedRange().location
-      let caretLine = state.starts.starts.lastIndex { $0 <= caret }.map { $0 + 1 }
-      let font = CodeGutter.font(state.size)
-      CodeGutter.numbered(layout, glyphs: glyphs, starts: state.starts) { line, rect in
-        let label = "\(line)" as NSString
-        let current = line == caretLine && text.isEditable
-        let attributes: [NSAttributedString.Key: Any] = [
-          .font: font,
-          .foregroundColor: current ? NSColor.labelColor : NSColor.tertiaryLabelColor,
-        ]
-        let size = label.size(withAttributes: attributes)
-        label.draw(
-          at: NSPoint(
-            x: ruleThickness - size.width - 8,
-            y: offset + rect.minY + (rect.height - size.height) / 2),
-          withAttributes: attributes)
-      }
+      CodeGutter.draw(
+        layout, glyphs: layout.glyphRange(forBoundingRect: text.visibleRect, in: container),
+        starts: state.starts, size: state.size,
+        current: text.isEditable
+          ? state.starts.line(containing: text.selectedRange().location) : nil,
+        right: ruleThickness,
+        top: convert(NSPoint.zero, from: text).y + text.textContainerOrigin.y)
     }
   }
 #else
@@ -448,60 +493,32 @@ enum CodeStyling {
     let name: String
     let editable: Bool
     let dark: Bool
-    let wrap: Bool
     let size: CGFloat
+    /// UITextView scrolls one way, so it always wraps.
+    let wrap: Bool
 
     func makeCoordinator() -> Coordinator {
       Coordinator(state: CodeEditorState(text: $text, name: name, size: size, dark: dark))
     }
 
     func makeUIView(context: Context) -> CodeUITextView {
-      // A stack of its own, so the view is TextKit 1 from the start.
-      let storage = NSTextStorage()
-      let layout = NSLayoutManager()
-      storage.addLayoutManager(layout)
-      let container = NSTextContainer(size: CGSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
-      container.widthTracksTextView = true
-      layout.addTextContainer(container)
-      let view = CodeUITextView(frame: .zero, textContainer: container)
+      let view = CodeUITextView()
       view.state = context.coordinator.state
-      view.backgroundColor = .clear
-      view.autocorrectionType = .no
-      view.autocapitalizationType = .none
-      view.smartQuotesType = .no
-      view.smartDashesType = .no
-      view.smartInsertDeleteType = .no
-      view.spellCheckingType = .no
-      view.alwaysBounceVertical = true
-      view.keyboardDismissMode = .interactive
-      view.isFindInteractionEnabled = true
       view.delegate = context.coordinator
       context.coordinator.view = view
-      view.text = text
-      context.coordinator.state.recount(text)
-      context.coordinator.restyle()
+      context.coordinator.state.load(
+        view.textStorage, text: text, typing: &view.typingAttributes, refit: view.refit)
       view.isEditable = editable
       if editable { DispatchQueue.main.async { view.becomeFirstResponder() } }
       return view
     }
 
     func updateUIView(_ view: CodeUITextView, context: Context) {
-      let coordinator = context.coordinator
-      let state = coordinator.state
-      state.text = $text
+      context.coordinator.state.text = $text
       view.isEditable = editable
-      let restyle = state.size != size || state.dark != dark || state.name != name
-      state.size = size
-      state.dark = dark
-      state.name = name
-      if view.text != text {
-        view.text = text
-        state.recount(text)
-        coordinator.restyle()
-      } else if restyle {
-        coordinator.restyle()
-      }
-      view.refit()
+      context.coordinator.state.sync(
+        view.textStorage, text: text, name: name, size: size, dark: dark,
+        typing: &view.typingAttributes, refit: view.refit)
     }
 
     @MainActor final class Coordinator: NSObject, UITextViewDelegate {
@@ -510,43 +527,36 @@ enum CodeStyling {
 
       init(state: CodeEditorState) { self.state = state }
 
-      func restyle() {
-        guard let view else { return }
-        view.typingAttributes = CodeStyling.base(size: state.size)
-        CodeStyling.apply(nil, to: view.textStorage, size: state.size, dark: state.dark)
-        state.colour(view.textStorage, typed: false) { [weak view] in view?.refreshGutter() }
-        view.refit()
-      }
-
       func textViewDidChange(_ textView: UITextView) {
         guard let view else { return }
-        state.text.wrappedValue = view.text
-        state.recount(view.text)
-        state.colour(view.textStorage, typed: true) {}
+        state.edited(view.textStorage)
         view.refit()
       }
 
       func textViewDidChangeSelection(_ textView: UITextView) { view?.refreshGutter() }
-
-      func scrollViewDidScroll(_ scrollView: UIScrollView) { view?.refreshGutter() }
     }
   }
 
   /// The text view with its gutter and the caret's line lit, both drawn over
-  /// the visible part alone, so a long file costs only a screenful.
-  final class CodeUITextView: UITextView {
+  /// the visible part alone, so a long file costs only a screenful. A
+  /// scroll lays the view out, which is where they follow it.
+  final class CodeUITextView: TextKit1View {
     weak var state: CodeEditorState?
     private let gutter = CodeUIGutter()
     private let light = UIView()
 
-    override init(frame: CGRect, textContainer: NSTextContainer?) {
-      super.init(frame: frame, textContainer: textContainer)
-      setUp()
-    }
-
-    required init?(coder: NSCoder) { fatalError("not from a coder") }
-
-    private func setUp() {
+    override init() {
+      super.init()
+      backgroundColor = .clear
+      autocorrectionType = .no
+      autocapitalizationType = .none
+      smartQuotesType = .no
+      smartDashesType = .no
+      smartInsertDeleteType = .no
+      spellCheckingType = .no
+      alwaysBounceVertical = true
+      keyboardDismissMode = .interactive
+      isFindInteractionEnabled = true
       light.backgroundColor = UIColor.label.withAlphaComponent(0.06)
       light.isUserInteractionEnabled = false
       insertSubview(light, at: 0)
@@ -555,6 +565,8 @@ enum CodeStyling {
       gutter.backgroundColor = .systemBackground
       addSubview(gutter)
     }
+
+    required init?(coder: NSCoder) { nil }
 
     func refit() {
       guard let state else { return }
@@ -585,18 +597,10 @@ enum CodeStyling {
         light.isHidden = true
         return
       }
-      let caret = selectedRange.location
-      let length = (text as NSString).length
-      var line: CGRect
-      if caret >= length, !layoutManager.extraLineFragmentRect.isEmpty || length == 0 {
-        line = layoutManager.extraLineFragmentRect
-        if line.isEmpty {
-          line = CGRect(x: 0, y: 0, width: 0, height: font?.lineHeight ?? 16)
-        }
-      } else {
-        let glyph = layoutManager.glyphIndexForCharacter(at: min(caret, max(0, length - 1)))
-        line = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-      }
+      let line =
+        CodeGutter.caretFragment(
+          layoutManager, caret: selectedRange.location, length: (text as NSString).length)
+        ?? CGRect(x: 0, y: 0, width: 0, height: (state?.size ?? 13) * 1.2)
       light.isHidden = false
       light.frame = CGRect(
         x: 0, y: line.minY + textContainerInset.top,
@@ -610,29 +614,17 @@ enum CodeStyling {
 
     override func draw(_ rect: CGRect) {
       guard let text, let state else { return }
-      let layout = text.layoutManager
       let visible = CGRect(
         x: 0, y: text.contentOffset.y - text.textContainerInset.top,
         width: text.bounds.width, height: text.bounds.height)
-      let glyphs = layout.glyphRange(forBoundingRect: visible, in: text.textContainer)
-      let caret = text.selectedRange.location
-      let caretLine = state.starts.starts.lastIndex { $0 <= caret }.map { $0 + 1 }
-      let font = CodeGutter.font(state.size)
-      let top = text.textContainerInset.top - text.contentOffset.y
-      CodeGutter.numbered(layout, glyphs: glyphs, starts: state.starts) { line, fragment in
-        let label = "\(line)" as NSString
-        let current = line == caretLine && text.isEditable && text.isFirstResponder
-        let attributes: [NSAttributedString.Key: Any] = [
-          .font: font,
-          .foregroundColor: current ? UIColor.label : UIColor.tertiaryLabel,
-        ]
-        let size = label.size(withAttributes: attributes)
-        label.draw(
-          at: CGPoint(
-            x: bounds.width - size.width - 8,
-            y: top + fragment.minY + (fragment.height - size.height) / 2),
-          withAttributes: attributes)
-      }
+      let lit = text.isEditable && text.isFirstResponder
+      CodeGutter.draw(
+        text.layoutManager,
+        glyphs: text.layoutManager.glyphRange(forBoundingRect: visible, in: text.textContainer),
+        starts: state.starts, size: state.size,
+        current: lit ? state.starts.line(containing: text.selectedRange.location) : nil,
+        right: bounds.width,
+        top: text.textContainerInset.top - text.contentOffset.y)
     }
   }
 #endif

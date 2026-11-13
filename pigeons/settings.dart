@@ -506,7 +506,8 @@ class SettingRowData {
     this.webUrl,
     this.inheritedPick,
     this.iconOnly = false,
-    this.addIcon,
+    this.adds,
+    this.fileName,
   });
 
   String id;
@@ -630,8 +631,11 @@ class SettingRowData {
   /// An action's button is its icon alone, its label the tooltip.
   bool iconOnly;
 
-  /// A collection added to from the page's bar, as this icon.
-  SettingIcon? addIcon;
+  /// An action opening the new-item form of the collection with this id.
+  String? adds;
+
+  /// A document's file name, which picks its grammar.
+  String? fileName;
 }
 
 class SettingsSectionData {
@@ -639,6 +643,7 @@ class SettingsSectionData {
     required this.id,
     required this.title,
     this.detail,
+    this.footnote,
     this.rows = const [],
     this.fills = false,
   });
@@ -646,6 +651,9 @@ class SettingsSectionData {
   String id;
   String title;
   String? detail;
+
+  /// Said under the rows: how what they show was counted.
+  String? footnote;
   List<SettingRowData?> rows;
 
   /// Its one row is the whole of its page: a file, a web page.

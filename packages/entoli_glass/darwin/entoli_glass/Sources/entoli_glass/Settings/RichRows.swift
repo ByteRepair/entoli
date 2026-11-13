@@ -40,7 +40,7 @@ struct SegmentedMeter: View {
               ForEach(Array(segments.enumerated()), id: \.offset) { _, part in
                 Rectangle().fill(part.hue.colour)
                   .frame(width: width * part.fraction / scale)
-                  .help("\(part.label): \(part.amount) tokens")
+                  .help("\(part.label): \(part.amount)")
               }
             }
             .clipShape(Capsule())
@@ -63,7 +63,7 @@ struct SegmentedMeter: View {
     let segments: [SettingMeterSegmentData]
 
     var body: some View {
-      LegendFlow(spacing: 14, lineSpacing: 4) {
+      FlowLayout(spacing: 6, centred: false) {
         ForEach(Array(segments.enumerated()), id: \.offset) { _, part in
           HStack(spacing: 5) {
             Circle().fill(part.hue.colour).frame(width: 7, height: 7)
@@ -72,52 +72,6 @@ struct SegmentedMeter: View {
           }
         }
       }
-    }
-  }
-}
-
-/// Views laid along a line, wrapping onto the next where they run out of
-/// width: a meter's legend.
-private struct LegendFlow: Layout {
-  var spacing: CGFloat
-  var lineSpacing: CGFloat
-
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let width = proposal.width ?? .infinity
-    var x: CGFloat = 0
-    var y: CGFloat = 0
-    var line: CGFloat = 0
-    var widest: CGFloat = 0
-    for view in subviews {
-      let size = view.sizeThatFits(.unspecified)
-      if x > 0, x + size.width > width {
-        y += line + lineSpacing
-        x = 0
-        line = 0
-      }
-      x += size.width + spacing
-      widest = max(widest, x - spacing)
-      line = max(line, size.height)
-    }
-    return CGSize(width: proposal.width ?? widest, height: y + line)
-  }
-
-  func placeSubviews(
-    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
-  ) {
-    var x = bounds.minX
-    var y = bounds.minY
-    var line: CGFloat = 0
-    for view in subviews {
-      let size = view.sizeThatFits(.unspecified)
-      if x > bounds.minX, x + size.width > bounds.maxX {
-        y += line + lineSpacing
-        x = bounds.minX
-        line = 0
-      }
-      view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-      x += size.width + spacing
-      line = max(line, size.height)
     }
   }
 }

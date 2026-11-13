@@ -133,8 +133,8 @@ class _Encoder {
   SettingsSectionData section(PageSection section) => SettingsSectionData(
     id: section.id,
     title: section.title,
-    // A section's words are its footer on this frontend either way.
-    detail: section.detail ?? section.footnote,
+    detail: section.detail,
+    footnote: section.footnote,
     rows: [for (final c in section.controllers) ...rows(c)],
     fills: section.fills,
   );
@@ -233,7 +233,8 @@ class _Encoder {
           ..label = c.label
           ..destructive = c.destructive
           ..secondary = c.secondary
-          ..iconOnly = c.iconOnly;
+          ..iconOnly = c.iconOnly
+          ..adds = c.adds;
       case PromptController():
         row
           ..kind = SettingKind.prompt
@@ -283,7 +284,8 @@ class _Encoder {
           ..text = c.text
           ..markdown = c.markdown
           ..editing = c.editing
-          ..prompt = c.placeholder;
+          ..prompt = c.placeholder
+          ..fileName = c.name;
       case NoticeController():
         row
           ..kind = SettingKind.notice
@@ -350,7 +352,6 @@ class _Encoder {
                 ),
           ]
           ..addLabel = c.addLabel
-          ..addIcon = _icon(c.addGlyph)
           ..removeLabel = c.removeLabel
           ..removable = c.removable
           ..editable = c.editable
@@ -716,13 +717,13 @@ class SettingsBridge implements SettingsIntents {
     SettingsIntents.setUp(null);
   }
 
-  T? _at<T extends SettingController>(String id) {
+  T? _at<T extends Object>(String id) {
     final c = _container
         .read(
           AppPage.owns(id) ? nativeAppPagesProvider : nativeSettingsProvider,
         )
         .controllers[id];
-    return c is T ? c : null;
+    return c is T ? c as T : null;
   }
 
   @override
@@ -796,11 +797,7 @@ class SettingsBridge implements SettingsIntents {
 
   @override
   Future<SettingNoticeData?> run(String id) async {
-    if (_at<SettingController>(id) case final PromptController prompt) {
-      await prompt.open();
-      return null;
-    }
-    final c = _asked.remove(id) ?? _at<ActionController>(id);
+    final c = _asked.remove(id) ?? _at<Pressable>(id);
     return _notice(await c?.run());
   }
 

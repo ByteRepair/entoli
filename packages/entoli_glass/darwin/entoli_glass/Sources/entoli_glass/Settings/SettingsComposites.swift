@@ -160,7 +160,7 @@ struct CollectionRow: View {
       // Borderless, as every control here: a default button in a list row
       // answers a tap anywhere in the row.
       // One with an icon is added to from the page's bar.
-      if row.editable, row.addIcon == nil, let add = row.addLabel {
+      if row.editable, let add = row.addLabel {
         Button(add) { editing = Editing(index: nil) }
           .buttonStyle(.borderless)
           .foregroundStyle(Color.accentColor)

@@ -19,7 +19,7 @@ class PromptField extends StatelessWidget {
     required this.label,
     required this.value,
     required this.hint,
-    required this.onChanged,
+    this.onChanged,
     this.onEdit,
     this.project,
     this.completions = true,
@@ -30,11 +30,14 @@ class PromptField extends StatelessWidget {
   final String label;
   final String value;
   final String hint;
-  final ValueChanged<String> onChanged;
+
+  /// Given the edited text, where [PromptPage] edits it.
+  final ValueChanged<String>? onChanged;
 
   /// Opens the editor in place of [PromptPage], where the page that holds
-  /// the field opens its own: a core page's prompt.
-  final VoidCallback? onEdit;
+  /// the field opens its own: a core page's prompt. [onChanged] is then not
+  /// called.
+  final Future<void> Function()? onEdit;
 
   /// See [PromptPage.project] and [PromptPage.completions].
   final String? project;
@@ -57,7 +60,7 @@ class PromptField extends StatelessWidget {
       project: project,
       completions: completions,
     );
-    if (edited != null) onChanged(edited);
+    if (edited != null) onChanged?.call(edited);
   }
 
   @override

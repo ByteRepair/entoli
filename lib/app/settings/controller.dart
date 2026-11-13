@@ -409,9 +409,15 @@ final class KeyValuesController extends SettingController {
   Future<void> remove(String name) => _write({...entries}..remove(name));
 }
 
+/// A row a tap runs: an action, or a prompt opening its editor. What a
+/// frontend presses, whichever it is.
+abstract interface class Pressable {
+  Future<SettingNotice?> run();
+}
+
 /// Something done rather than set, asked first where [confirm] has a
 /// question.
-final class ActionController extends SettingController {
+final class ActionController extends SettingController implements Pressable {
   ActionController(
     super.spec, {
     this._label,
@@ -421,6 +427,7 @@ final class ActionController extends SettingController {
     this.destructive = false,
     this.secondary = false,
     this.iconOnly = false,
+    this.adds,
     super.title,
     super.description,
     super.footnote,
@@ -433,6 +440,10 @@ final class ActionController extends SettingController {
   /// Whether its button is its glyph alone, its words the tooltip: a row's
   /// Copy.
   final bool iconOnly;
+
+  /// The id of a collection on the page whose new-item form this opens,
+  /// in place of [run]: a folder's New Folder in its bar.
+  final String? adds;
 
   final String? _label;
 
@@ -448,7 +459,8 @@ final class ActionController extends SettingController {
 
   final bool destructive;
 
-  /// Whether it is the lesser of two side by side: drawn outlined.
+  /// Whether it is the lesser of two side by side: drawn outlined. First
+  /// in a page's bar, it is not the page's own action.
   final bool secondary;
 
   final Future<SettingNotice?> Function() _action;
@@ -457,6 +469,7 @@ final class ActionController extends SettingController {
   /// What to ask before [run], or null to run it straight away.
   Future<SettingConfirm?> confirm() async => _ask?.call();
 
+  @override
   Future<SettingNotice?> run() => _action();
 }
 
@@ -608,7 +621,7 @@ final class TextController extends SettingController {
 /// read, markdown rendered, and opened on a page of its own to change it:
 /// written once and read many times, so the page it sits on shows it, and
 /// one long enough to need the room gets a whole page to grow in.
-final class PromptController extends SettingController {
+final class PromptController extends SettingController implements Pressable {
   PromptController(
     super.spec, {
     required this.text,
@@ -630,7 +643,11 @@ final class PromptController extends SettingController {
   final Future<void> Function() _open;
 
   /// Opens the editor.
-  Future<void> open() => _open();
+  @override
+  Future<SettingNotice?> run() async {
+    await _open();
+    return null;
+  }
 }
 
 /// A file's text, the whole of a page: shown — markdown rendered, anything
@@ -735,7 +752,6 @@ final class CollectionController<T> extends SettingController {
     super.spec, {
     required this.items,
     this.addLabel,
-    this.addGlyph,
     Future<void> Function(List<T> items)? onSet,
     required this.describe,
     this.form,
@@ -762,10 +778,6 @@ final class CollectionController<T> extends SettingController {
 
   /// What adding one is called, where items are added through [form].
   final String? addLabel;
-
-  /// Where set, adding one is this glyph in the page's bar, [addLabel] its
-  /// tooltip, rather than a row under the list: a folder's New Folder.
-  final SettingGlyph? addGlyph;
   final String removeLabel;
 
   /// Whether an item can be removed from its row.

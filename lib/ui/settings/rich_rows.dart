@@ -16,8 +16,7 @@ class PromptPreview extends StatelessWidget {
     value: c.text,
     hint: c.placeholder,
     editable: c.enabled,
-    onChanged: (_) {},
-    onEdit: c.open,
+    onEdit: c.run,
   );
 }
 
@@ -82,7 +81,7 @@ class SegmentedMeter extends StatelessWidget {
                             Expanded(
                               flex: flex(s.fraction),
                               child: Tooltip(
-                                message: "${s.label}: ${s.amount} tokens",
+                                message: "${s.label}: ${s.amount}",
                                 child: Container(color: _hue(s.hue)),
                               ),
                             ),

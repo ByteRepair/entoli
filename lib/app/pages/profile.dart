@@ -134,6 +134,14 @@ class ProfileAppPage extends AppPage {
     changed();
   }
 
+  /// A keystroke: the draft takes it, and the page is drawn again only
+  /// where it turns edited or back — a field holds its own text meanwhile.
+  void _type(void Function() change) {
+    final was = _edited;
+    change();
+    if (_edited != was) changed();
+  }
+
   @override
   String title(SettingReader reader) =>
       _global ? "Profile" : "Project Instructions";
@@ -155,7 +163,7 @@ class ProfileAppPage extends AppPage {
     prompt: prompt,
     allowBlank: true,
     onSet: (text) async {
-      _set(() => set(text));
+      _type(() => set(text));
       return null;
     },
   );

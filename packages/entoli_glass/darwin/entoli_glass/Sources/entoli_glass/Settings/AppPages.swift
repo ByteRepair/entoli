@@ -158,17 +158,6 @@ struct AppPageView: View {
   /// In the card, which draws the page's bar itself.
   @Environment(\.appPagesCard) private var card
   @State private var leaving: SettingConfirmData?
-  @State private var adding: Adding?
-
-  struct Adding: Identifiable {
-    let id: String
-  }
-
-  /// The lists added to from the bar rather than a row under them.
-  private var barAdds: [SettingRowData] {
-    page.sections.compactMap { $0 }.flatMap { $0.rows.compactMap { $0 } }
-      .filter { $0.kind == .collection && $0.editable && $0.addIcon != nil }
-  }
 
   /// The row the page says is the whole of it — a file, a web page — rather
   /// than a row of a form.
@@ -208,24 +197,14 @@ struct AppPageView: View {
           }
           ForEach(Array(page.toolbar.compactMap { $0 }.enumerated()), id: \.element.id) {
             index, row in
-            ToolbarItem(placement: index == 0 ? .confirmationAction : .primaryAction) {
+            // The page's own: the first, unless it is secondary.
+            ToolbarItem(
+              placement: index == 0 && !row.secondary ? .confirmationAction : .primaryAction
+            ) {
               ToolbarAction(model: model.rows, row: row)
             }
           }
-          ForEach(barAdds, id: \.id) { row in
-            ToolbarItem(placement: .primaryAction) {
-              Button {
-                adding = Adding(id: row.id)
-              } label: {
-                Label(row.addLabel ?? row.title, systemImage: row.addIcon?.symbol ?? "plus")
-              }
-              .help(row.addLabel ?? row.title)
-            }
-          }
         }
-      }
-      .sheet(item: $adding) { adding in
-        FormSheet(model: model.rows, id: adding.id, index: nil)
       }
       .leavingAlert($leaving) {
         if let address = page.address { model.close(address) }
@@ -238,14 +217,25 @@ struct AppPageView: View {
   }
 }
 
-/// A page's action in its bar, asking first where it asks.
+/// A page's action in its bar, asking first where it asks; one that adds
+/// to a list on the page opens that list's form instead.
 private struct ToolbarAction: View {
   let model: SettingsModel
   let row: SettingRowData
+  @State private var adding = false
 
   var body: some View {
-    ActionPress(model: model, row: row, role: row.destructive ? .destructive : nil) {
-      ActionLabel(row: row)
+    Group {
+      if row.adds != nil {
+        Button { adding = true } label: { ActionLabel(row: row) }
+          .sheet(isPresented: $adding) {
+            if let list = row.adds { FormSheet(model: model, id: list, index: nil) }
+          }
+      } else {
+        ActionPress(model: model, row: row, role: row.destructive ? .destructive : nil) {
+          ActionLabel(row: row)
+        }
+      }
     }
     .disabled(!row.enabled || row.busy)
     .help(row.detail ?? row.label ?? row.title)
@@ -443,7 +433,7 @@ struct DocumentRow: View {
 
   /// The name the grammar is chosen by: the file's, which titles the row,
   /// or markdown's for what is read as markdown.
-  private var name: String { row.markdown ? "text.md" : row.title }
+  private var name: String { row.fileName ?? row.title }
 
   private var code: Bool { row.editing || (!row.markdown && !(row.text ?? "").isEmpty) }
 

@@ -33,10 +33,15 @@ previewed as markdown, a tap opening `PromptAppPage` over the page: the
 text as a `DocumentController` being edited, Save handing it back to the
 page's draft. An `ItemMeter` with `segments` is one bar of parts end to end
 with a legend and a `MeterMark` across it: the context page's window. A bar
-action with a glyph is drawn as its icon, `SettingGlyph.check` as the page's
-tick; a `CollectionController` with an `addGlyph` is added to from the bar
-rather than a row under it (a folder's New Folder); an `iconOnly` action is
-its glyph alone on its row (a chat's Copy ID).
+action with a glyph is drawn as its icon. The page's own action is the
+first in its bar unless that one is `secondary`, and each frontend puts it
+where its platform keeps a confirm: last in Flutter's bar, the confirmation
+slot natively. An action with `adds` opens the new-item form of the
+collection it names instead of running, which is how a folder's New Folder
+sits in the bar; an `iconOnly` action is its glyph alone on its row (a
+chat's Copy ID). Anything a tap runs is a `Pressable`, which is what the
+native bridge looks a pressed row up as. A section's `footnote` is said
+under its rows, its `detail` over them.
 
 Neither frontend has a code editor for free. Flutter's is `re_editor`'s; the
 native shell's is `CodeEditor.swift`, TextKit 1 on both platforms, with a

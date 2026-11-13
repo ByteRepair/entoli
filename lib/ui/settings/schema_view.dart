@@ -1500,8 +1500,7 @@ class _Collection<T> extends StatelessWidget {
                 ],
               ),
             ),
-        // One with a glyph is added to from the page's bar.
-        if (c.editable && c.addLabel != null && c.addGlyph == null)
+        if (c.editable && c.addLabel != null)
           AddButtonRow(
             child: OutlinedButton.icon(
               icon: const Icon(Icons.add),

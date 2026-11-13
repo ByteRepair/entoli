@@ -133,7 +133,8 @@ struct SettingsPageView: View {
           } header: {
             if !section.title.isEmpty { Text(section.title) }
           } footer: {
-            if let detail = section.detail { Text(detail) }
+            let words = [section.detail, section.footnote].compactMap { $0 }
+            if !words.isEmpty { Text(words.joined(separator: "\n\n")) }
           }
         }
       }

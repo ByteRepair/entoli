@@ -121,7 +121,7 @@ void main() {
 
     /// The instructions' editor, opened over the page, [text] typed into it.
     PromptAppPage edit(PageDriver<ProfileAppPage> page, String text) {
-      unawaited(page.at<PromptController>("instructions").open());
+      unawaited(page.at<PromptController>("instructions").run());
       final editor = app.container.read(appPagesProvider).last as PromptAppPage;
       final document =
           editor.sections(page.reader).single.controllers.single
