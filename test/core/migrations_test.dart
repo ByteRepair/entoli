@@ -1,6 +1,7 @@
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
+import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/core/migrations.dart";
@@ -112,5 +113,56 @@ void main() {
     final versions = [for (final migration in migrations) migration.version];
 
     expect(versions.toSet(), hasLength(versions.length));
+  });
+
+  group("relocateDataDir", () {
+    late String from;
+    late String to;
+
+    setUp(() {
+      final root = tempDir().path;
+      from = p.join(root, "documents", "entoli");
+      to = p.join(root, "group", "entoli");
+      Directory(p.dirname(to)).createSync();
+    });
+
+    test("moves the directory, files and all", () {
+      File(p.join(from, "settings.json"))
+        ..createSync(recursive: true)
+        ..writeAsStringSync("{}");
+
+      expect(relocateDataDir(from: from, to: to), isTrue);
+
+      expect(Directory(from).existsSync(), isFalse);
+      expect(File(p.join(to, "settings.json")).readAsStringSync(), "{}");
+    });
+
+    test("leaves both alone where the new place already holds one", () {
+      File(p.join(from, "old.json")).createSync(recursive: true);
+      File(p.join(to, "new.json")).createSync(recursive: true);
+
+      expect(relocateDataDir(from: from, to: to), isTrue);
+
+      expect(File(p.join(from, "old.json")).existsSync(), isTrue);
+      expect(Directory(to).listSync().map((e) => p.basename(e.path)), [
+        "new.json",
+      ]);
+    });
+
+    test("has nothing to do where there was none before", () {
+      expect(relocateDataDir(from: from, to: to), isTrue);
+
+      expect(Directory(to).existsSync(), isFalse);
+    });
+
+    test("says so where the rename fails, the old directory kept", () {
+      File(p.join(from, "settings.json")).createSync(recursive: true);
+      // No parent to rename into.
+      final nowhere = p.join(p.dirname(to), "missing", "entoli");
+
+      expect(relocateDataDir(from: from, to: nowhere), isFalse);
+
+      expect(File(p.join(from, "settings.json")).existsSync(), isTrue);
+    });
   });
 }

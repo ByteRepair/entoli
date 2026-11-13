@@ -10,6 +10,7 @@ import "package:record_platform_interface/record_platform_interface.dart"
     show RecordPlatform;
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
+import "package:path_provider_foundation/path_provider_foundation.dart";
 
 import "../../data/backup_handoff.dart";
 import "../../data/local/android_assistant_launch.dart";
@@ -19,6 +20,7 @@ import "../../data/local/android_reminder_alarms.dart";
 import "../../data/local/bundled_tools.dart";
 import "../../data/local/byte_repair_store.dart";
 import "../../data/local/file_secret_store.dart";
+import "../../data/local/ios_file_handoff.dart";
 import "../../data/local/ios_reminder_alarms.dart";
 import "../../data/local/file_modes.dart";
 import "../read_only_dirs.dart";
@@ -61,6 +63,7 @@ import "../../domain/app_settings.dart";
 import "../../domain/agent_browser.dart";
 import "../../domain/app_update.dart";
 import "../log.dart";
+import "../migrations.dart";
 import "../../domain/assistant_launch.dart";
 import "../../domain/confinement.dart";
 import "../../domain/intent_action.dart";
@@ -492,8 +495,11 @@ String bundledLinuxLibDir({String? executablePath}) {
   return p.basename(dir) == "lib" ? dir : p.join(dir, "lib");
 }
 
-FileHandoff createFileHandoff() =>
-    Platform.isAndroid ? AndroidFileHandoff() : const DesktopFileHandoff();
+FileHandoff createFileHandoff() => Platform.isAndroid
+    ? AndroidFileHandoff()
+    : Platform.isIOS
+    ? const IosFileHandoff()
+    : const DesktopFileHandoff();
 
 /// Android has no save dialog; a backup leaves through the share sheet.
 BackupHandoff createBackupHandoff(FileHandoff handoff) =>
@@ -543,8 +549,41 @@ Future<String> _resolveBase() async {
   if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
     return p.join(_home, ".config");
   }
+  if (Platform.isIOS) return _iosBase;
   final dir = await getApplicationDocumentsDirectory();
   return dir.path;
+}
+
+/// The App Group the Runner shares with its File Provider extension, which
+/// reads the workspaces from the data directory inside it. See "The
+/// workspaces in the Files app" in ios/AGENTS.md.
+const iosAppGroup = "group.io.byterepair.entoli";
+
+/// Resolved once per process, since resolving it may move the directory.
+final Future<String> _iosBase = _resolveIosBase();
+
+/// The App Group's container, once `relocateDataDir` has moved a data
+/// directory from before it out of Documents. Documents stays where the move
+/// fails, so the app still runs; the Files app then shows nothing until a
+/// launch where it lands.
+Future<String> _resolveIosBase() async {
+  final group = await PathProviderFoundation().getContainerPath(
+    appGroupIdentifier: iosAppGroup,
+  );
+  // Every launch after the move ends here, with no need of Documents.
+  if (group != null && Directory(p.join(group, _dirLeaf)).existsSync()) {
+    return group;
+  }
+  final documents = (await getApplicationDocumentsDirectory()).path;
+  if (group == null) {
+    logFailure("files", "no App Group container, data stays in Documents");
+    return documents;
+  }
+  final moved = relocateDataDir(
+    from: p.join(documents, _dirLeaf),
+    to: p.join(group, _dirLeaf),
+  );
+  return moved ? group : documents;
 }
 
 String get _home => LocalShell.machineHomeDir()!;

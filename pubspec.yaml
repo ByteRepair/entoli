@@ -39,6 +39,9 @@ dependencies:
   # Path / filesystem
   path: ^1.9.1
   path_provider: ^2.1.6
+  # The App Group container, which path_provider does not ask for. See
+  # "The workspaces in the Files app" in ios/AGENTS.md.
+  path_provider_foundation: ^2.6.0
   file_selector: ^1.1.0
   mime: ^2.0.0
   # A share sheet does not take a folder, so a folder leaves the workspace as

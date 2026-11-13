@@ -1,0 +1,4 @@
+// The version the app's is, which an extension's must match; none of the
+// Runner's own links, which an extension has no use for.
+#include "../Flutter/Generated.xcconfig"
+EXCLUDED_ARCHS[sdk=iphonesimulator*] = i386 x86_64

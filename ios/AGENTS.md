@@ -543,6 +543,60 @@ the owner may always do and the guest's root otherwise would. Checked with
 `clang -fsyntax-only` against the pinned tree; nothing here runs iOS, so the
 behaviour is untested on a device.
 
+## The workspaces in the Files app
+
+Android's `WorkspaceProvider` (see "The workspaces in the Files app" in
+`android/AGENTS.md`) has a twin here: `ios/WorkspaceProvider/`, a File
+Provider extension (`NSFileProviderReplicatedExtension`) that puts the same
+tree under "Entoli" in Files' Locations, its domain named Local Workspaces:
+this device's, with room beside it for a domain per synced device. The tree
+is the disk's: the root is every project, a project is its workspace, and its
+`chats/` is a Chats folder holding a folder per chat named by its title. So a
+title can collide only with another chat's, never with what the workspace
+holds; chats that share a title each get their id in brackets after it,
+Files keeping one name per folder. Chats holds only the app's chats: an item
+added to it stays on the device.
+
+**The data directory lives in the App Group** (`group.io.byterepair.entoli`),
+because the extension is a process of its own and sees nothing of the app's
+container. `dataDir()` asks `path_provider_foundation` for the group's
+container and has `relocateDataDir` (`migrations.dart`) move a
+`Documents/entoli` from before into it, once. Where the move fails the app
+runs from Documents and Files shows nothing until a launch where it lands. Both targets carry the group's entitlement, so the group has to exist
+for the team in the developer portal; the release job ad-hoc signs the
+extension with its own before the export, as it does the app.
+
+**Writable, unlike Android's.** What Files adds, edits or deletes inside a
+workspace lands in it: `createItem` writes the file or folder, `modifyItem`
+swaps new contents in, `deleteItem` removes the item. The root has no
+directory to write to, so an item added there stays on the device
+(`excludedFromSync`), and the projects, Chats and the chats' own folders
+cannot be deleted (`isFixed`). Nothing can be renamed or moved: an
+identifier is the item's path, and the system wants it to outlive both.
+The root still says it takes children, because a replica
+folder the system may not add to is one it cannot fill (`cannotSetMetadata`,
+EPERM, on the iOS 27 simulator).
+
+**Nothing tells the extension a workspace changed**, since the agent's
+commands write straight to the disk. So the working set is computed:
+`KnownFolders` keeps, in the extension's own container, every folder the
+system has listed and the version of each child it was given, and a pass over
+the working set lists those again and reports the difference. The app signals
+it when it goes to the background, which is when Files is about to be opened,
+and before Show in Files.
+
+**Show in Files** is `IosFileHandoff` over `agent_chat/files`, answered by
+`FilesChannel.swift`: it opens `shareddocuments://` at the path of the
+folder's user-visible URL, the nearest folder the tree holds
+(`WorkspaceNode.of`), falling back to the provider's root.
+`WorkspaceTree.swift` is compiled into the Runner as well for that.
+
+A new location is added switched off, and Files asks to turn it on at the
+first tap. The domain is added on every launch, a no-op where it is there.
+On the simulator a domain outlives the app's uninstall, and one removed and
+re-added in quick succession can be left user-disabled and hidden from Files;
+a different domain id is the way out there, a reinstall is not.
+
 ## Triggers
 
 iOS refuses the process wake every other scheduling clock is — AlarmManager,

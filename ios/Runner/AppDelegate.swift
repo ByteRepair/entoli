@@ -47,6 +47,7 @@ final class AppDelegate: FlutterAppDelegate {
     ClipboardChannel.register(with: messenger)
     IntentBridge.shared.register(with: messenger)
     BrowserChannel.register(with: messenger)
+    FilesChannel.register(with: messenger)
     return FlutterViewController(engine: engine, nibName: nil, bundle: nil)
   }()
 
