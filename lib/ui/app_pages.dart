@@ -132,6 +132,15 @@ class AppPageView extends ConsumerWidget {
                   SectionHeader(section.title, description: section.detail),
                 for (final c in section.controllers)
                   if (c.visible) SettingRow(c),
+                if (section.footnote case final footnote?)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    child: mutedParagraph(
+                      context,
+                      footnote,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
               ],
             ],
           ),

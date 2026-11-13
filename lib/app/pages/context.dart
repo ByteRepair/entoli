@@ -110,7 +110,7 @@ class ContextAppPage extends AppPage {
             },
           ),
         ],
-        detail:
+        footnote:
             "The total is the provider's count where it reports one. The "
             "split is estimated at four characters a token.",
       ),

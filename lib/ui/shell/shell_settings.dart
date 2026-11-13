@@ -133,7 +133,8 @@ class _Encoder {
   SettingsSectionData section(PageSection section) => SettingsSectionData(
     id: section.id,
     title: section.title,
-    detail: section.detail,
+    // A section's words are its footer on this frontend either way.
+    detail: section.detail ?? section.footnote,
     rows: [for (final c in section.controllers) ...rows(c)],
     fills: section.fills,
   );
