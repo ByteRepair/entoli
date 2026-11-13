@@ -566,19 +566,16 @@ lands. Both targets carry the group's entitlement, so the group has to exist
 for the team in the developer portal; the release job ad-hoc signs the
 extension with its own before the export, as it does the app.
 
-**Read-only in the workspace, if not in Files' copy of it.** A replicated
-extension's items live in a copy the system keeps, and on the iOS 27
-simulator that copy cannot be filled from items whose capabilities forbid
-writing: the system locks them, then fails to set their metadata
-(`cannotSetMetadata`, EPERM), and Files shows an empty folder. Read-only POSIX
-flags fail the same way, at the download. So folders allow adding and files
-allow writing, and the extension refuses the rest: `createItem` answers
-`excludedFromSync`, keeping what a user adds on the device and out of the
-workspace; `modifyItem` answers with the workspace's own item and has changed
-contents fetched again, so an edit made through Files is put back;
-`deleteItem` answers `deletionRejected`, which restores the item. A device's
-fileproviderd may lock read-only items without trouble, which would let the
-capabilities say read-only; that is for the device run to try.
+**Writable, unlike Android's.** What Files adds, edits or deletes inside a
+workspace lands in it: `createItem` writes the file or folder, `modifyItem`
+swaps new contents in, `deleteItem` removes the item. Above a workspace there
+is no directory to write to, so an item added there stays on the device
+(`excludedFromSync`), and the projects, the workspaces and the chats' own
+folders cannot be deleted (`isFixed`). Nothing can be renamed or moved: an
+identifier is the item's path, and the system wants it to outlive both.
+Folders above a workspace still say they take children, because a replica
+folder the system may not add to is one it cannot fill (`cannotSetMetadata`,
+EPERM, on the iOS 27 simulator).
 
 **Nothing tells the extension a workspace changed**, since the agent's
 commands write straight to the disk. So the working set is computed:

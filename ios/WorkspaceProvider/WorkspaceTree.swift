@@ -106,6 +106,19 @@ enum WorkspaceNode: Equatable {
     }
   }
 
+  /// A place the layout makes rather than the user: the projects, a
+  /// workspace and a chat's own folder, which Files may add to but not delete.
+  var isFixed: Bool {
+    guard case .path(let segments) = self else { return true }
+    return segments.count == Self.workspaceDepth || isChat
+  }
+
+  /// Where a child named [name] would be, if this holds files at all.
+  func child(_ name: String) -> WorkspaceNode? {
+    guard case .path(let segments) = self, !name.isEmpty, !name.contains("/") else { return nil }
+    return WorkspaceNode(.init((segments + [name]).joined(separator: "/")))
+  }
+
   /// A chat's own folder, `projects/<p>/workspace/chats/<id>`.
   private var isChat: Bool {
     guard case .path(let segments) = self else { return false }
@@ -255,8 +268,7 @@ struct WorkspaceTree {
   }
 }
 
-/// One entry in the tree, read-only: Files may list and read it, nothing
-/// else. Files come in through "Sharing to Entoli", which asks where.
+/// One entry in the tree.
 final class WorkspaceItem: NSObject, NSFileProviderItem {
   let node: WorkspaceNode
   let filename: String
@@ -277,14 +289,14 @@ final class WorkspaceItem: NSObject, NSFileProviderItem {
 
   var isFolder: Bool { url == nil || values?.isDirectory == true }
 
-  // Writable as far as the system's copy goes, because a copy it may not
-  // write is one it cannot fill ("cannotSetMetadata", EPERM, on iOS 27).
-  // The workspace is still read-only: `createItem` keeps what a user adds
-  // out of it and `modifyItem` puts its own copy back over an edit.
+  // No renaming or moving: an identifier is the item's path, and the system
+  // wants it to outlive both.
   var capabilities: NSFileProviderItemCapabilities {
-    isFolder
-      ? [.allowsReading, .allowsContentEnumerating, .allowsAddingSubItems]
+    var caps: NSFileProviderItemCapabilities =
+      isFolder ? [.allowsReading, .allowsContentEnumerating, .allowsAddingSubItems]
       : [.allowsReading, .allowsWriting]
+    if !node.isFixed { caps.insert(.allowsDeleting) }
+    return caps
   }
 
   // `viewerMime`, in lib/data/mime.dart: an unrecognised file is offered as

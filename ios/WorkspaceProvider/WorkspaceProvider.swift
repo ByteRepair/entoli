@@ -1,7 +1,7 @@
 import FileProvider
 import Foundation
 
-/// The workspaces in the Files app, read-only. See "The workspaces in the
+/// The workspaces in the Files app. See "The workspaces in the
 /// Files app" in ios/AGENTS.md.
 final class WorkspaceProvider: NSObject, NSFileProviderReplicatedExtension {
   private let domain: NSFileProviderDomain
@@ -54,8 +54,26 @@ final class WorkspaceProvider: NSObject, NSFileProviderReplicatedExtension {
     options: NSFileProviderCreateItemOptions = [], request: NSFileProviderRequest,
     completionHandler: @escaping (NSFileProviderItem?, NSFileProviderItemFields, Bool, Error?) -> Void
   ) -> Progress {
-    // What a user adds in Files stays on this device, out of the workspace.
-    completionHandler(nil, [], false, NSFileProviderError(.excludedFromSync))
+    do {
+      // Above a workspace is the layout's, with no directory to add to.
+      guard let tree, let parent = WorkspaceNode(itemTemplate.parentItemIdentifier),
+        let node = parent.child(itemTemplate.filename)
+      else { throw NSFileProviderError(.excludedFromSync) }
+      let target = try tree.url(of: parent).appendingPathComponent(itemTemplate.filename)
+      guard !FileManager.default.fileExists(atPath: target.path) else {
+        throw NSFileProviderError(.filenameCollision)
+      }
+      if itemTemplate.contentType == .folder {
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+      } else if let url {
+        try FileManager.default.copyItem(at: url, to: target)
+      } else {
+        FileManager.default.createFile(atPath: target.path, contents: nil)
+      }
+      completionHandler(try tree.item(for: node), [], false, nil)
+    } catch {
+      completionHandler(nil, [], false, error)
+    }
     return Progress()
   }
 
@@ -65,10 +83,19 @@ final class WorkspaceProvider: NSObject, NSFileProviderReplicatedExtension {
     options: NSFileProviderModifyItemOptions = [], request: NSFileProviderRequest,
     completionHandler: @escaping (NSFileProviderItem?, NSFileProviderItemFields, Bool, Error?) -> Void
   ) -> Progress {
-    // Whatever changed on this side, the workspace's copy stands: the system
-    // takes this item back and, for contents, fetches them again.
     do {
-      completionHandler(try lookUp(item.itemIdentifier), [], changedFields.contains(.contents), nil)
+      let current = try lookUp(item.itemIdentifier)
+      if changedFields.contains(.contents), let newContents, let target = current.url {
+        // Copied beside it and swapped in, since the system owns the file it
+        // hands over.
+        let staged = target.deletingLastPathComponent()
+          .appendingPathComponent(".\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: staged) }
+        try FileManager.default.copyItem(at: newContents, to: staged)
+        _ = try FileManager.default.replaceItemAt(target, withItemAt: staged)
+      }
+      // Anything else, a last-used date or a tag, is the system's to keep.
+      completionHandler(try lookUp(item.itemIdentifier), [], false, nil)
     } catch {
       completionHandler(nil, [], false, error)
     }
@@ -80,8 +107,15 @@ final class WorkspaceProvider: NSObject, NSFileProviderReplicatedExtension {
     options: NSFileProviderDeleteItemOptions = [], request: NSFileProviderRequest,
     completionHandler: @escaping (Error?) -> Void
   ) -> Progress {
-    // The system puts the item back.
-    completionHandler(NSFileProviderError(.deletionRejected))
+    do {
+      guard let tree, let node = WorkspaceNode(identifier), !node.isFixed else {
+        throw NSFileProviderError(.deletionRejected)
+      }
+      try FileManager.default.removeItem(at: try tree.url(of: node))
+      completionHandler(nil)
+    } catch {
+      completionHandler(error)
+    }
     return Progress()
   }
 
