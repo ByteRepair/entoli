@@ -106,6 +106,11 @@ struct ConversationView: View {
       .onChange(of: chapterTops) { readChapter() }
       .onChange(of: atBottom) { readChapter() }
       .onChange(of: model.chapters) { readChapter() }
+      // A margin change is not a size change to the scroll anchor, so the
+      // keyboard rising would otherwise cover the end.
+      .onChange(of: bottom) {
+        if atEnd, let last = model.order.last { proxy.scrollTo(last, anchor: .bottom) }
+      }
       .onChange(of: model.chatId) {
         chapterTops = [:]
         current = nil

@@ -177,7 +177,9 @@ struct ShellView: View {
               proxy.safeAreaInsets.bottom
                 - ComposerView.menuLift(rows: model.composer.menu.count))
           )
-          .ignoresSafeArea(.container, edges: .bottom)
+          // Under the keyboard too: [bottom] already counts it, and a frame
+          // ending at the keyboard counted it twice.
+          .ignoresSafeArea(edges: .bottom)
         }
         .safeAreaInset(edge: .top, spacing: 0) { DeviceBanner(foot: model.foot) }
         .background(.background)
