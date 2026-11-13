@@ -409,9 +409,15 @@ final class KeyValuesController extends SettingController {
   Future<void> remove(String name) => _write({...entries}..remove(name));
 }
 
+/// A row a tap runs: an action, or a prompt opening its editor. What a
+/// frontend presses, whichever it is.
+abstract interface class Pressable {
+  Future<SettingNotice?> run();
+}
+
 /// Something done rather than set, asked first where [confirm] has a
 /// question.
-final class ActionController extends SettingController {
+final class ActionController extends SettingController implements Pressable {
   ActionController(
     super.spec, {
     this._label,
@@ -420,6 +426,8 @@ final class ActionController extends SettingController {
     Future<SettingConfirm?> Function()? confirm,
     this.destructive = false,
     this.secondary = false,
+    this.iconOnly = false,
+    this.adds,
     super.title,
     super.description,
     super.footnote,
@@ -428,6 +436,14 @@ final class ActionController extends SettingController {
     super.accessory,
   }) : _action = run,
        _ask = confirm;
+
+  /// Whether its button is its glyph alone, its words the tooltip: a row's
+  /// Copy.
+  final bool iconOnly;
+
+  /// The id of a collection on the page whose new-item form this opens,
+  /// in place of [run]: a folder's New Folder in its bar.
+  final String? adds;
 
   final String? _label;
 
@@ -443,7 +459,8 @@ final class ActionController extends SettingController {
 
   final bool destructive;
 
-  /// Whether it is the lesser of two side by side: drawn outlined.
+  /// Whether it is the lesser of two side by side: drawn outlined. First
+  /// in a page's bar, it is not the page's own action.
   final bool secondary;
 
   final Future<SettingNotice?> Function() _action;
@@ -452,6 +469,7 @@ final class ActionController extends SettingController {
   /// What to ask before [run], or null to run it straight away.
   Future<SettingConfirm?> confirm() async => _ask?.call();
 
+  @override
   Future<SettingNotice?> run() => _action();
 }
 
@@ -599,6 +617,39 @@ final class TextController extends SettingController {
   final Future<SettingNotice?> Function(String value) set;
 }
 
+/// Prose the model reads — a set of instructions — shown as it will be
+/// read, markdown rendered, and opened on a page of its own to change it:
+/// written once and read many times, so the page it sits on shows it, and
+/// one long enough to need the room gets a whole page to grow in.
+final class PromptController extends SettingController implements Pressable {
+  PromptController(
+    super.spec, {
+    required this.text,
+    required this.placeholder,
+    required Future<void> Function() onOpen,
+    super.title,
+    super.description,
+    super.footnote,
+    super.enabled,
+    super.visible,
+    super.accessory,
+  }) : _open = onOpen;
+
+  final String text;
+
+  /// What the preview says while [text] is empty.
+  final String placeholder;
+
+  final Future<void> Function() _open;
+
+  /// Opens the editor.
+  @override
+  Future<SettingNotice?> run() async {
+    await _open();
+    return null;
+  }
+}
+
 /// A file's text, the whole of a page: shown — markdown rendered, anything
 /// else as code highlighted by its [name] — and, where it can be, edited in
 /// place, each edit said back through [edit] so the page holds the draft.
@@ -608,6 +659,7 @@ final class DocumentController extends SettingController {
     required this.text,
     required this.name,
     this.editing = false,
+    this.placeholder,
     void Function(String text)? onEdit,
     super.title,
     super.description,
@@ -624,6 +676,9 @@ final class DocumentController extends SettingController {
 
   /// Whether it is being edited now rather than read.
   final bool editing;
+
+  /// What the editor says while it is empty.
+  final String? placeholder;
 
   final void Function(String text)? _edit;
 
@@ -904,12 +959,45 @@ final class AvatarRowFace extends RowFace {
 }
 
 /// One thing an item has spent, said; [fraction] of it gone where it is
-/// measured against something, a balance having nothing to fill.
+/// measured against something, a balance having nothing to fill. Where it
+/// has [segments], the bar is those end to end, each named in a legend under
+/// it, and [mark] a line across it.
 class ItemMeter {
-  const ItemMeter(this.text, {this.fraction});
+  const ItemMeter(
+    this.text, {
+    this.fraction,
+    this.segments = const [],
+    this.mark,
+  });
 
   final String text;
   final double? fraction;
+  final List<MeterSegment> segments;
+  final MeterMark? mark;
+}
+
+/// A part of a segmented [ItemMeter]: what fills [fraction] of the bar.
+class MeterSegment {
+  const MeterSegment(this.label, this.amount, this.fraction, this.hue);
+
+  final String label;
+
+  /// How much it is, said: "3.2k".
+  final String amount;
+  final double fraction;
+  final MeterHue hue;
+}
+
+/// A segment's colour, which each frontend picks its own shade of.
+enum MeterHue { grey, orange, green, purple, blue }
+
+/// A line across a meter at [fraction], [label] over it: where auto-compact
+/// steps in.
+class MeterMark {
+  const MeterMark(this.fraction, this.label);
+
+  final double fraction;
+  final String label;
 }
 
 /// A page of text the app holds, which a row opens: each frontend draws it

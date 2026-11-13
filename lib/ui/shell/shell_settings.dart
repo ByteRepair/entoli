@@ -134,6 +134,7 @@ class _Encoder {
     id: section.id,
     title: section.title,
     detail: section.detail,
+    footnote: section.footnote,
     rows: [for (final c in section.controllers) ...rows(c)],
     fills: section.fills,
   );
@@ -231,7 +232,14 @@ class _Encoder {
           ..kind = SettingKind.action
           ..label = c.label
           ..destructive = c.destructive
-          ..secondary = c.secondary;
+          ..secondary = c.secondary
+          ..iconOnly = c.iconOnly
+          ..adds = c.adds;
+      case PromptController():
+        row
+          ..kind = SettingKind.prompt
+          ..text = c.text
+          ..prompt = c.placeholder;
       case GroupController():
         row
           ..kind = SettingKind.group
@@ -275,7 +283,9 @@ class _Encoder {
           ..kind = SettingKind.document
           ..text = c.text
           ..markdown = c.markdown
-          ..editing = c.editing;
+          ..editing = c.editing
+          ..prompt = c.placeholder
+          ..fileName = c.name;
       case NoticeController():
         row
           ..kind = SettingKind.notice
@@ -310,6 +320,17 @@ class _Encoder {
                       SettingMeterData(
                         text: meter.text,
                         fraction: meter.fraction,
+                        segments: [
+                          for (final s in meter.segments)
+                            SettingMeterSegmentData(
+                              label: s.label,
+                              amount: s.amount,
+                              fraction: s.fraction,
+                              hue: MeterHueData.values.byName(s.hue.name),
+                            ),
+                        ],
+                        markFraction: meter.mark?.fraction,
+                        markLabel: meter.mark?.label,
                       ),
                   ],
                   editable: item.editable,
@@ -696,13 +717,13 @@ class SettingsBridge implements SettingsIntents {
     SettingsIntents.setUp(null);
   }
 
-  T? _at<T extends SettingController>(String id) {
+  T? _at<T extends Object>(String id) {
     final c = _container
         .read(
           AppPage.owns(id) ? nativeAppPagesProvider : nativeSettingsProvider,
         )
         .controllers[id];
-    return c is T ? c : null;
+    return c is T ? c as T : null;
   }
 
   @override
@@ -776,7 +797,7 @@ class SettingsBridge implements SettingsIntents {
 
   @override
   Future<SettingNoticeData?> run(String id) async {
-    final c = _asked.remove(id) ?? _at<ActionController>(id);
+    final c = _asked.remove(id) ?? _at<Pressable>(id);
     return _notice(await c?.run());
   }
 

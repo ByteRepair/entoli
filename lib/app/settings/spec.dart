@@ -292,4 +292,8 @@ enum SettingGlyph {
   check,
   info,
   star,
+  copy,
+  reveal,
+  newFolder,
+  restart,
 }

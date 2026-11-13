@@ -6,7 +6,9 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../app/pages/app_page.dart";
 import "../app/settings/spec.dart";
 import "../app/settings/controller.dart";
+import "settings/form_dialog.dart" show editItem;
 import "settings/schema_view.dart";
+import "settings/setting_icons.dart";
 import "widgets/document_view.dart";
 import "widgets/web_view.dart";
 import "widgets/dialogs.dart";
@@ -113,17 +115,7 @@ class AppPageView extends ConsumerWidget {
           title: page.title(reader),
           subtitle: page.subtitle(reader),
           leading: held ? PageLeading.none : PageLeading.back,
-          actions: [
-            for (final (i, action) in page.toolbar(reader).indexed)
-              if (action.visible)
-                PageAction.text(
-                  label: action.label,
-                  prominent: i == 0,
-                  onPressed: action.enabled
-                      ? () => runSettingAction(context, action)
-                      : null,
-                ),
-          ],
+          actions: _actions(context, page.toolbar(reader), sections),
         ),
         body: switch (sections) {
           [PageSection(fills: true, controllers: [final c])] => switch (c) {
@@ -140,6 +132,15 @@ class AppPageView extends ConsumerWidget {
                   SectionHeader(section.title, description: section.detail),
                 for (final c in section.controllers)
                   if (c.visible) SettingRow(c),
+                if (section.footnote case final footnote?)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    child: mutedParagraph(
+                      context,
+                      footnote,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
               ],
             ],
           ),
@@ -147,4 +148,52 @@ class AppPageView extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// The bar's buttons, an action with a glyph drawn as its icon: the page's
+/// own — the first, unless it is secondary — at the end, where native
+/// keeps it too.
+List<PageAction> _actions(
+  BuildContext context,
+  List<ActionController> toolbar,
+  List<PageSection> sections,
+) {
+  void Function()? press(ActionController action) {
+    if (!action.enabled) return null;
+    final adds = action.adds;
+    if (adds == null) return () => runSettingAction(context, action);
+    final list = sections
+        .expand((s) => s.controllers)
+        .whereType<CollectionController>()
+        .where((c) => c.id == adds)
+        .firstOrNull;
+    if (list == null) return null;
+    return () => list.typed(<V>(c) => editItem<V>(context, c));
+  }
+
+  PageAction drawn(ActionController action, {bool own = false}) {
+    if (settingIcon(action.glyph) case final icon?) {
+      return PageAction.icon(
+        icon: icon,
+        label: action.label,
+        onPressed: press(action),
+      );
+    }
+    return PageAction.text(
+      label: action.label,
+      prominent: own,
+      onPressed: press(action),
+    );
+  }
+
+  final shown = [
+    for (final action in toolbar)
+      if (action.visible) action,
+  ];
+  final own = shown.firstOrNull?.secondary == false ? shown.first : null;
+  return [
+    for (final action in shown)
+      if (action != own) drawn(action),
+    if (own != null) drawn(own, own: true),
+  ];
 }

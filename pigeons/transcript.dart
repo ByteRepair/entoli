@@ -507,4 +507,8 @@ abstract class DocumentIntents {
 
   /// A link tapped in one: opened as the app opens a reply's.
   void link(String href);
+
+  /// [code] as tokens by the grammar [name], a file's name, says: an editor
+  /// colouring what it holds.
+  List<CodeTokenSnapshot> highlight(String code, String name);
 }

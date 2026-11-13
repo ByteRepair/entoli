@@ -19,7 +19,8 @@ class PromptField extends StatelessWidget {
     required this.label,
     required this.value,
     required this.hint,
-    required this.onChanged,
+    this.onChanged,
+    this.onEdit,
     this.project,
     this.completions = true,
     this.editable = true,
@@ -29,7 +30,14 @@ class PromptField extends StatelessWidget {
   final String label;
   final String value;
   final String hint;
-  final ValueChanged<String> onChanged;
+
+  /// Given the edited text, where [PromptPage] edits it.
+  final ValueChanged<String>? onChanged;
+
+  /// Opens the editor in place of [PromptPage], where the page that holds
+  /// the field opens its own: a core page's prompt. [onChanged] is then not
+  /// called.
+  final Future<void> Function()? onEdit;
 
   /// See [PromptPage.project] and [PromptPage.completions].
   final String? project;
@@ -43,6 +51,7 @@ class PromptField extends StatelessWidget {
   static const _previewHeight = 320.0;
 
   Future<void> _edit(BuildContext context) async {
+    if (onEdit case final edit?) return edit();
     final edited = await PromptPage.open(
       context,
       title: label,
@@ -51,7 +60,7 @@ class PromptField extends StatelessWidget {
       project: project,
       completions: completions,
     );
-    if (edited != null) onChanged(edited);
+    if (edited != null) onChanged?.call(edited);
   }
 
   @override
