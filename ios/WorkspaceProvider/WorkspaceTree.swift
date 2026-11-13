@@ -12,24 +12,25 @@ import UniformTypeIdentifiers
 /// `iosAppGroup`, in lib/core/platform/host.dart.
 let workspaceAppGroup = "group.io.byterepair.entoli"
 
+/// "Local": this device's workspaces, which a domain per synced device's
+/// could one day sit beside.
 let workspaceDomain = NSFileProviderDomain(
-  identifier: NSFileProviderDomainIdentifier("workspaces"), displayName: "Workspaces")
+  identifier: NSFileProviderDomainIdentifier("workspaces"), displayName: "Local Workspaces")
 
 /// The data directory, inside the App Group's container.
 let workspaceDataDir: URL? = FileManager.default
   .containerURL(forSecurityApplicationGroupIdentifier: workspaceAppGroup)?
   .appendingPathComponent("entoli", isDirectory: true)
 
-/// A place in the tree. Every project is the root; a project holds its
-/// workspace and, by title, the folder each of its chats works in. Those are
-/// inside the workspace, at `chats/<id>`, which the workspace's own listing
-/// leaves out: an item has one parent, and a title is what the user picks a
-/// chat by.
+/// A place in the tree. Every project is the root; a project is its
+/// workspace, holding what its chats share and, by title, the folder each
+/// chat works in. Those are at `chats/<id>`, which the project's listing
+/// replaces: a title is what the user picks a chat by.
 enum WorkspaceNode: Equatable {
   case projects
   case project(String)
-  /// Segments relative to the data directory, `projects/<name>/workspace`
-  /// first.
+  /// Segments relative to the data directory, under
+  /// `projects/<name>/workspace`.
   case path([String])
 
   // A project identifier is ":<name>"; anything else is a path relative to
@@ -46,9 +47,6 @@ enum WorkspaceNode: Equatable {
   /// scratch the Files app browses.
   static let unbrowsed: Set<String> = ["anonymous"]
 
-  /// What the explorer calls a workspace.
-  static let workspaceName = "Workspace"
-
   /// `projects/<name>/workspace`, which every path starts with.
   private static let workspaceDepth = 3
 
@@ -64,7 +62,7 @@ enum WorkspaceNode: Equatable {
       self = .project(name)
     } else {
       let segments = raw.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
-      guard segments.count >= Self.workspaceDepth, segments[0] == "projects",
+      guard segments.count > Self.workspaceDepth, segments[0] == "projects",
         Self.isProjectDir(segments[1]), segments[2] == "workspace",
         !segments.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }),
         // The chats' own folder is reached through the project, not here.
@@ -81,7 +79,7 @@ enum WorkspaceNode: Equatable {
     let path = url.standardizedFileURL.path
     guard path.hasPrefix(base) else { return .projects }
     var segments = path.dropFirst(base.count).split(separator: "/").map(String.init)
-    while segments.count >= workspaceDepth {
+    while segments.count > workspaceDepth {
       if let node = WorkspaceNode(.init(segments.joined(separator: "/"))) { return node }
       segments.removeLast()
     }
@@ -101,21 +99,31 @@ enum WorkspaceNode: Equatable {
     switch self {
     case .projects, .project: .projects
     case .path(let segments):
-      segments.count == Self.workspaceDepth || isChat
+      segments.count == Self.workspaceDepth + 1 || isChat
         ? .project(segments[1]) : .path(Array(segments.dropLast()))
     }
   }
 
-  /// A place the layout makes rather than the user: the projects, a
-  /// workspace and a chat's own folder, which Files may add to but not delete.
+  /// A place the layout makes rather than the user: the projects and a
+  /// chat's own folder, which Files may add to but not delete.
   var isFixed: Bool {
-    guard case .path(let segments) = self else { return true }
-    return segments.count == Self.workspaceDepth || isChat
+    guard case .path = self else { return true }
+    return isChat
+  }
+
+  /// The directory on disk, relative to the data directory; nil for the
+  /// root, which is every project rather than one.
+  var segments: [String]? {
+    switch self {
+    case .projects: nil
+    case .project(let name): ["projects", name, "workspace"]
+    case .path(let segments): segments
+    }
   }
 
   /// Where a child named [name] would be, if this holds files at all.
   func child(_ name: String) -> WorkspaceNode? {
-    guard case .path(let segments) = self, !name.isEmpty, !name.contains("/") else { return nil }
+    guard let segments, !name.isEmpty, !name.contains("/") else { return nil }
     return WorkspaceNode(.init((segments + [name]).joined(separator: "/")))
   }
 
@@ -141,14 +149,11 @@ struct WorkspaceTree {
   func item(for node: WorkspaceNode) throws -> WorkspaceItem {
     switch node {
     case .projects:
-      return WorkspaceItem(node: node, name: "Workspaces", url: nil)
+      return WorkspaceItem(node: node, name: workspaceDomain.displayName, url: nil)
     case .project(let name):
       return WorkspaceItem(node: node, name: projectLabel(name), url: nil)
     case .path(let segments):
       let url = try resolve(segments)
-      if segments.count == 3 {
-        return WorkspaceItem(node: node, name: WorkspaceNode.workspaceName, url: url)
-      }
       if node.parent != .path(Array(segments.dropLast())) {
         // A chat's folder, whose name depends on its siblings'.
         guard let chat = try children(of: node.parent).first(where: { $0.node == node })
@@ -166,29 +171,35 @@ struct WorkspaceTree {
     case .project(let name):
       return projectChildren(name)
     case .path(let segments):
-      let dir = try resolve(segments)
-      let workspace = try resolve(Array(segments.prefix(3)))
-      return list(dir).compactMap { child in
-        let node = WorkspaceNode(.init((segments + [child.lastPathComponent]).joined(separator: "/")))
-        // Resolved rather than trusted: the agent's own commands run in
-        // these folders, so a link out of one is something it can have been
-        // told to leave behind.
-        guard let node, contains(workspace, child) else { return nil }
-        return WorkspaceItem(node: node, name: child.lastPathComponent, url: child)
-      }
+      return try files(in: segments)
+    }
+  }
+
+  /// A folder's own files; a chat's folder in a project's is the project's
+  /// to list, by title.
+  private func files(in segments: [String]) throws -> [WorkspaceItem] {
+    let dir = try resolve(segments)
+    let workspace = try resolve(Array(segments.prefix(3)))
+    return list(dir).compactMap { child in
+      let node = WorkspaceNode(.init((segments + [child.lastPathComponent]).joined(separator: "/")))
+      // Resolved rather than trusted: the agent's own commands run in
+      // these folders, so a link out of one is something it can have been
+      // told to leave behind.
+      guard let node, contains(workspace, child) else { return nil }
+      return WorkspaceItem(node: node, name: child.lastPathComponent, url: child)
     }
   }
 
   func url(of node: WorkspaceNode) throws -> URL {
-    guard case .path(let segments) = node else { throw Failure.noSuchItem }
+    guard let segments = node.segments else { throw Failure.noSuchItem }
     return try resolve(segments)
   }
 
   private func projectChildren(_ project: String) -> [WorkspaceItem] {
     let id = ["projects", project, "workspace"]
     guard let workspace = try? resolve(id) else { return [] }
-    var items = [WorkspaceItem(node: .path(id), name: WorkspaceNode.workspaceName, url: workspace)]
-    var taken: Set<String> = [WorkspaceNode.workspaceName.lowercased()]
+    var items = (try? files(in: id)) ?? []
+    var taken = Set(items.map { $0.filename.lowercased() })
     let chats = workspace.appendingPathComponent("chats", isDirectory: true)
     for chat in list(chats) where isDirectory(chat) && contains(workspace, chat) {
       let chatId = chat.lastPathComponent

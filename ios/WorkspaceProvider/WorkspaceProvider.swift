@@ -55,7 +55,7 @@ final class WorkspaceProvider: NSObject, NSFileProviderReplicatedExtension {
     completionHandler: @escaping (NSFileProviderItem?, NSFileProviderItemFields, Bool, Error?) -> Void
   ) -> Progress {
     do {
-      // Above a workspace is the layout's, with no directory to add to.
+      // The root is every project, with no directory to add to.
       guard let tree, let parent = WorkspaceNode(itemTemplate.parentItemIdentifier),
         let node = parent.child(itemTemplate.filename)
       else { throw NSFileProviderError(.excludedFromSync) }

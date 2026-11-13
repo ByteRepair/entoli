@@ -548,11 +548,12 @@ behaviour is untested on a device.
 Android's `WorkspaceProvider` (see "The workspaces in the Files app" in
 `android/AGENTS.md`) has a twin here: `ios/WorkspaceProvider/`, a File
 Provider extension (`NSFileProviderReplicatedExtension`) that puts the same
-tree under "Entoli" in Files' Locations. The root is every project; a project
-holds its Workspace and, by title, the folder each of its chats works in.
-`chats/` is left out of the workspace's own listing, since an item has one
-parent and the chats are already under the project; two chats of one title
-get their id's first eight characters, Files keeping one name per folder.
+tree under "Entoli" in Files' Locations, its domain named Local Workspaces:
+this device's, with room beside it for a domain per synced device. The root
+is every project, and a project is its workspace: what its chats share,
+loose, beside a folder per chat named by its title. `chats/` itself is not
+listed, the project's listing standing in for it; two chats of one title get
+their id's first eight characters, Files keeping one name per folder.
 
 **The data directory lives in the App Group** (`group.io.byterepair.entoli`),
 because the extension is a process of its own and sees nothing of the app's
@@ -568,12 +569,12 @@ extension with its own before the export, as it does the app.
 
 **Writable, unlike Android's.** What Files adds, edits or deletes inside a
 workspace lands in it: `createItem` writes the file or folder, `modifyItem`
-swaps new contents in, `deleteItem` removes the item. Above a workspace there
-is no directory to write to, so an item added there stays on the device
-(`excludedFromSync`), and the projects, the workspaces and the chats' own
-folders cannot be deleted (`isFixed`). Nothing can be renamed or moved: an
+swaps new contents in, `deleteItem` removes the item. The root has no
+directory to write to, so an item added there stays on the device
+(`excludedFromSync`), and the projects and the chats' own folders cannot be
+deleted (`isFixed`). Nothing can be renamed or moved: an
 identifier is the item's path, and the system wants it to outlive both.
-Folders above a workspace still say they take children, because a replica
+The root still says it takes children, because a replica
 folder the system may not add to is one it cannot fill (`cannotSetMetadata`,
 EPERM, on the iOS 27 simulator).
 
