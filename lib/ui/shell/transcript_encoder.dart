@@ -65,13 +65,13 @@ class TranscriptEncoder {
       key: row.key,
       kind: wire.RowKind.compaction,
       text: CompactionRow.text,
-      body: markdown(summary),
+      body: prose.markdown(summary),
     ),
     CompactionFailedRow(:final reason) => wire.RowSnapshot(
       key: row.key,
       kind: wire.RowKind.compactionFailed,
       text: CompactionFailedRow.text,
-      body: markdown(reason),
+      body: prose.markdown(reason),
       isError: true,
     ),
     GoalRow() => wire.RowSnapshot(
@@ -181,7 +181,7 @@ class TranscriptEncoder {
 
   wire.SaidSnapshot _said(Said said) => switch (said) {
     ProseSaid(:final markdown, :final caret) => wire.SaidSnapshot(
-      blocks: this.markdown(markdown),
+      blocks: prose.markdown(markdown),
       caret: caret,
     ),
     ErrorSaid() => wire.SaidSnapshot(
@@ -289,17 +289,7 @@ class TranscriptEncoder {
     transcript: detail.transcript == null ? null : nested(detail.transcript!),
   );
 
-  /// Markdown as blocks, its code tokenised and its formulas by id.
-  List<wire.TextBlockSnapshot> markdown(String text) => prose.markdown(text);
-
-  static wire.Tint _tint(BubbleTint tint) => switch (tint) {
-    BubbleTint.none => wire.Tint.none,
-    BubbleTint.prompt => wire.Tint.prompt,
-    BubbleTint.command => wire.Tint.command,
-    BubbleTint.notice => wire.Tint.notice,
-    BubbleTint.tool => wire.Tint.tool,
-    BubbleTint.system => wire.Tint.system,
-  };
+  static wire.Tint _tint(BubbleTint tint) => wire.Tint.values.byName(tint.name);
 
   /// Name for name: the wire's enum is the core's.
   static wire.TranscriptIcon icon(TranscriptGlyph glyph) =>

@@ -131,28 +131,87 @@ class ShellChat implements ChatBarIntents {
   }
 }
 
-/// What `ShellChat` draws now: an open chat, or the new-chat screen.
+/// What `ShellChat` draws now: an open chat, or the new-chat screen. Both
+/// have a composer, a foot and the bar, and a reader per surface.
 sealed class _Screen {
+  _Screen(this._shell);
+
+  final ShellChat _shell;
+
+  ProviderContainer get _container => _shell._container;
+  ShellOutbox get _outbox => _shell._outbox;
+  ShellAnswers get _answers => _shell._answers;
+
+  /// The session this screen keeps while it is up.
+  ProviderSubscription<Object?> get _keep;
+  late final ComposerSurface composer;
+  late final foot = _FootRunner(_shell._context);
+  late final TrackingReader _composerReader;
+  List<TrackingReader> get _readers;
+  bool _closed = false;
+
   String? get id;
   void turnPass();
   void openBar(ChatBarDestination to);
 
+  ComposerSurface _composerOf(ComposerModel model, ComposerController text) =>
+      ComposerSurface(
+        outbox: _outbox,
+        model: model,
+        controller: text,
+        clipboardFiles: () => _container.read(clipboardFilesProvider).read(),
+      );
+
+  /// The composer up where [slot] is one, and taken off where not.
+  void _publishComposer(ComposerSlot slot) {
+    if (slot is! ComposerReady) {
+      if (_answers.composer.release(composer)) {
+        _outbox.composer(ComposerSnapshot(present: false));
+      }
+      return;
+    }
+    composer.bind(slot.binding);
+    _answers.composer.take(composer);
+    _outbox.composer(
+      composer.snapshot(
+        _composerReader,
+        pixelRatio: WidgetsBinding
+            .instance
+            .platformDispatcher
+            .implicitView!
+            .devicePixelRatio,
+        outline: _shellColours(_composerReader).outline,
+      ),
+    );
+  }
+
   /// [handingOver] is a chat opening next, which takes the conversation.
-  void close({bool handingOver = false});
+  @mustCallSuper
+  void close({bool handingOver = false}) {
+    _closed = true;
+    for (final reader in _readers) {
+      reader.close();
+    }
+    if (_answers.composer.release(composer)) {
+      _outbox.composer(ComposerSnapshot(present: false));
+    }
+    _answers.chatBar.release(_shell);
+    if (_answers.foot.release(foot)) _outbox.foot(ChatFootSnapshot());
+    composer.dispose();
+    _keep.close();
+  }
 }
 
 /// One chat while it is open: its session kept, a surface each, and a
 /// reader each that republishes that surface alone.
-final class _OpenChat implements _Screen {
-  _OpenChat(this._shell, this.id) {
+final class _OpenChat extends _Screen {
+  _OpenChat(super._shell, this.id) {
     _keep = _container.listen(chatSessionProvider(id), (_, _) {});
     final session = _keep.read();
     _session = session;
-    composer = ComposerSurface(
-      outbox: _shell._outbox,
-      model: session.composer,
-      controller: session.text as ComposerController,
-      clipboardFiles: () => _container.read(clipboardFilesProvider).read(),
+    composer = _composerOf(
+      session.composer,
+      session.text as ComposerController,
     );
     conversation = ConversationSurface(
       _container,
@@ -170,7 +229,6 @@ final class _OpenChat implements _Screen {
     _answers.turn.addListener(_turnReader.refresh);
     _composerReader = TrackingReader(_container, composerPass)
       ..listen(composer.shape);
-    foot = _FootRunner(_shell._context);
     _footReader = TrackingReader(_container, footPass);
     _answers.transcript.take(conversation);
     _answers.chatBar.take(_shell);
@@ -182,27 +240,28 @@ final class _OpenChat implements _Screen {
     footPass();
   }
 
-  final ShellChat _shell;
   @override
   final String id;
 
-  ProviderContainer get _container => _shell._container;
-  ShellOutbox get _outbox => _shell._outbox;
-  ShellAnswers get _answers => _shell._answers;
-
+  @override
   late final ProviderSubscription<ChatSession> _keep;
   late final ChatSession _session;
-  late final ComposerSurface composer;
   late final ConversationSurface conversation;
   late final TurnRunner turn;
   late final TrackingReader _conversationReader;
   late final TrackingReader _barReader;
   late final TrackingReader _turnReader;
-  late final TrackingReader _composerReader;
-  late final _FootRunner foot;
   late final TrackingReader _footReader;
 
-  bool _closed = false;
+  @override
+  List<TrackingReader> get _readers => [
+    _conversationReader,
+    _barReader,
+    _turnReader,
+    _composerReader,
+    _footReader,
+  ];
+
   bool _expiryChecked = false;
 
   /// The chat's view and what drives its turns, read through [reader] so a
@@ -306,26 +365,8 @@ final class _OpenChat implements _Screen {
     _composerReader.pass(() {
       final (:view, :driver) = _state(_composerReader);
       final device = _composerReader.watch(mirrorHomeProvider(id))?.deviceId;
-      final slot = _session.slot(_composerReader, view, driver, device: device);
-      if (slot is! ComposerReady) {
-        if (_answers.composer.release(composer)) {
-          _outbox.composer(ComposerSnapshot(present: false));
-        }
-        return;
-      }
-      composer.bind(slot.binding);
-      _answers.composer.take(composer);
-      final (:ink, :outline) = _shellColours(_composerReader);
-      _outbox.composer(
-        composer.snapshot(
-          _composerReader,
-          pixelRatio: WidgetsBinding
-              .instance
-              .platformDispatcher
-              .implicitView!
-              .devicePixelRatio,
-          outline: outline,
-        ),
+      _publishComposer(
+        _session.slot(_composerReader, view, driver, device: device),
       );
     });
   }
@@ -358,7 +399,7 @@ final class _OpenChat implements _Screen {
       final credentials = tab?.credentialRequest.value;
       _outbox.foot(
         ChatFootSnapshot(
-          device: mirrored ? (home ?? MirrorHome.unknown).name : null,
+          device: mirrored ? (home ?? unknownMirrorHome).name : null,
           deviceOffline: mirrored && !(home?.online ?? false),
           bar: bar,
           hold: tab?.hold.value?.reason,
@@ -384,28 +425,12 @@ final class _OpenChat implements _Screen {
 
   @override
   void close({bool handingOver = false}) {
-    _closed = true;
     _answers.turn.removeListener(_turnReader.refresh);
-    for (final reader in [
-      _conversationReader,
-      _barReader,
-      _turnReader,
-      _composerReader,
-      _footReader,
-    ]) {
-      reader.close();
-    }
+    super.close(handingOver: handingOver);
     if (_answers.transcript.release(conversation) && !handingOver) {
       conversation.clear();
     }
-    if (_answers.composer.release(composer)) {
-      _outbox.composer(ComposerSnapshot(present: false));
-    }
     if (_answers.turn.release(turn)) _outbox.turn(TurnSnapshot());
-    _answers.chatBar.release(_shell);
-    if (_answers.foot.release(foot)) _outbox.foot(ChatFootSnapshot());
-    composer.dispose();
-    _keep.close();
   }
 }
 
@@ -460,17 +485,12 @@ class _FootRunner implements ChatFootIntents {
 /// The new-chat screen while nothing is selected: its body, its bar, its
 /// composer and what stands in the composer's place, from the
 /// [NewChatSession] the Flutter page shares.
-final class _NewChat implements _Screen {
-  _NewChat(this._shell) {
+final class _NewChat extends _Screen {
+  _NewChat(super._shell) {
     _keep = _container.listen(newChatSessionProvider, (_, _) {});
     final session = _session = _keep.read();
     final controller = session.text as ComposerController;
-    composer = ComposerSurface(
-      outbox: _outbox,
-      model: session.composer,
-      controller: controller,
-      clipboardFiles: () => _container.read(clipboardFilesProvider).read(),
-    );
+    composer = _composerOf(session.composer, controller);
     screen = NewChatRunner(_container, controller: controller);
     _screenReader = TrackingReader(_container, screenPass)
       ..listen(session.starting);
@@ -481,7 +501,7 @@ final class _NewChat implements _Screen {
     _footReader = TrackingReader(_container, footPass);
     _answers.newChat.take(screen);
     _answers.chatBar.take(_shell);
-    _answers.foot.take(_foot);
+    _answers.foot.take(foot);
     // The open chat's, gone with it.
     _shell._outbox.turn(TurnSnapshot());
     screenPass();
@@ -490,24 +510,24 @@ final class _NewChat implements _Screen {
     footPass();
   }
 
-  final ShellChat _shell;
   @override
   String? get id => null;
 
-  ProviderContainer get _container => _shell._container;
-  ShellOutbox get _outbox => _shell._outbox;
-  ShellAnswers get _answers => _shell._answers;
-
+  @override
   late final ProviderSubscription<NewChatSession> _keep;
   late final NewChatSession _session;
-  late final ComposerSurface composer;
   late final NewChatRunner screen;
-  late final _foot = _FootRunner(_shell._context);
   late final TrackingReader _screenReader;
   late final TrackingReader _barReader;
-  late final TrackingReader _composerReader;
   late final TrackingReader _footReader;
-  bool _closed = false;
+
+  @override
+  List<TrackingReader> get _readers => [
+    _screenReader,
+    _barReader,
+    _composerReader,
+    _footReader,
+  ];
 
   ProjectRef _at(TrackingReader reader) =>
       reader.watch(selectedProjectProvider);
@@ -542,23 +562,7 @@ final class _NewChat implements _Screen {
   void composerPass() {
     if (_closed) return;
     _composerReader.pass(() {
-      final slot = _session.slot(_composerReader, _at(_composerReader));
-      if (slot is! ComposerReady) {
-        if (_answers.composer.release(composer)) {
-          _outbox.composer(ComposerSnapshot(present: false));
-        }
-        return;
-      }
-      composer.bind(slot.binding);
-      _answers.composer.take(composer);
-      final view = WidgetsBinding.instance.platformDispatcher.implicitView!;
-      _outbox.composer(
-        composer.snapshot(
-          _composerReader,
-          pixelRatio: view.devicePixelRatio,
-          outline: _shellColours(_composerReader).outline,
-        ),
-      );
+      _publishComposer(_session.slot(_composerReader, _at(_composerReader)));
     });
   }
 
@@ -596,25 +600,10 @@ final class _NewChat implements _Screen {
 
   @override
   void close({bool handingOver = false}) {
-    _closed = true;
-    for (final reader in [
-      _screenReader,
-      _barReader,
-      _composerReader,
-      _footReader,
-    ]) {
-      reader.close();
-    }
+    super.close(handingOver: handingOver);
     if (_answers.newChat.release(screen)) {
       _outbox.newChat(NewChatSnapshot(present: false));
     }
-    if (_answers.composer.release(composer)) {
-      _outbox.composer(ComposerSnapshot(present: false));
-    }
-    _answers.chatBar.release(_shell);
-    if (_answers.foot.release(_foot)) _outbox.foot(ChatFootSnapshot());
-    composer.dispose();
-    _keep.close();
   }
 }
 

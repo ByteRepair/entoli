@@ -6,7 +6,7 @@ import "../../../domain/room/room_state.dart" show ChatViewState;
 import "../../../app/running.dart";
 import "../../../app/settings/spec.dart" show WidgetReader;
 import "../activity/card.dart" show ContextHandOff;
-import "../activity/format.dart" show plural;
+import "../../../core/formatting.dart" show plural;
 import "running_pill.dart";
 
 /// What a pill shows in place of its spinner: the browser's state.

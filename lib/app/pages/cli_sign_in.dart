@@ -52,18 +52,11 @@ class CliSignInAppPage extends AppPage {
   @override
   String title(SettingReader reader) => "Sign In to ${_account.plan}";
 
-  NoticeController _line(String id, String text, {bool error = false}) =>
-      NoticeController(
-        part(id, ""),
-        tone: error ? NoticeTone.warning : NoticeTone.plain,
-        lines: [NoticeLine(text)],
-      );
-
   @override
   List<PageSection> sections(SettingReader reader) => [
     PageSection("stage", "", switch (_account.stage) {
       CliInstalling(:final progress) => [
-        _line(
+        noticeRow(
           "installing",
           progress?.bar == null
               ? "Installing ${_account.cli.config.displayName}…"
@@ -72,11 +65,11 @@ class CliSignInAppPage extends AppPage {
         ),
       ],
       CliChecking() || CliSignedIn() || CliSignedOut() => [
-        _line("checking", "Checking whether you are signed in…"),
+        noticeRow("checking", "Checking whether you are signed in…"),
       ],
-      CliStarting() => [_line("starting", "Starting the sign-in…")],
+      CliStarting() => [noticeRow("starting", "Starting the sign-in…")],
       CliWaiting(:final page) => [
-        _line(
+        noticeRow(
           "how",
           "Sign in with your ${_account.plan} account in your browser. This "
               "page carries on by itself once you have.",
@@ -114,7 +107,7 @@ class CliSignInAppPage extends AppPage {
         ),
       ],
       CliFailed(:final reason) => [
-        _line("failed", reason, error: true),
+        noticeRow("failed", reason, tone: NoticeTone.warning),
         ActionController(
           part("retry", "Try Again"),
           run: () async {

@@ -733,8 +733,7 @@ resume and its clear, each sent as the `/goal` command it is. **Where it
 moved** is a `GoalMarkRow` in the conversation for each `goal` record, after
 the message it names: an activity label in the reply's gutter, "Goal set: …",
 "Goal paused: …", "Goal met: …", and "Goal answered: …" for a command that
-changed nothing, opening the same kind of drawer every activity has (a sheet,
-a page under the native shell). The drawer says the state the goal was left
+changed nothing, opening the same kind of drawer every activity has. The drawer says the state the goal was left
 in, why — the user's pause, the reviewer's verdict — and the goal prompt as
 the model was given it. Off the log, so a restart
 draws the same rows and a rewind takes them away with their message.
@@ -914,9 +913,9 @@ the agent's call says so.
 
 Under the native shell the conversation is SwiftUI's
 (`packages/entoli_glass/.../Conversation/`), drawn from the same transcript
-over its own contract, `pigeons/transcript.dart`. `ChatChrome.conversation`
-is the seam: the Flutter chrome draws the list, `ShellChatChrome` puts
-`ShellConversation` there, which draws nothing and sends.
+over its own contract, `pigeons/transcript.dart`. `drawsOpenChatProvider`
+is the seam: false, the chat page draws the list; true, it draws nothing and
+`ShellChat` sends.
 
 **A row goes when it changed.** `TranscriptEncoder` turns each core row into
 its snapshot — markdown as the core's flat blocks (`MarkdownDocument`, read
@@ -946,7 +945,7 @@ composer and how it sends are its `ChatSession` (`lib/app/chat_session.dart`),
 one per chat and shared by both frontends' chat pages; the surfaces' logic is
 plain classes — `ConversationSurface`, `TurnRunner`, `ComposerSurface` — that
 `ShellChat` and the remaining widgets both hold. Under the shell the chat page
-draws nothing for an open chat (`ChatChrome.drawsOpenChat`), and a temporary
+draws nothing for an open chat (`drawsOpenChatProvider`), and a temporary
 chat's expiry is asked by `ShellChat` (`checkChatExpiry`). The chat's edges are a
 surface of their own (`ChatFootSnapshot`): the paired device a mirror lives
 on, as a strip over the conversation; what stands in the composer's place —

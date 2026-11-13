@@ -107,13 +107,9 @@ class TextFileAppPage extends AppPage {
     if (content.truncated) {
       return [
         PageSection("large", "Too large to show here", [
-          NoticeController(
-            part("large", ""),
-            lines: [
-              NoticeLine(
-                "Files over ${formatSize(textViewLimit)} open in another app.",
-              ),
-            ],
+          noticeRow(
+            "large",
+            "Files over ${formatSize(textViewLimit)} open in another app.",
           ),
           ActionController(part("open", "Open in Another App"), run: _handOff),
           ActionController(

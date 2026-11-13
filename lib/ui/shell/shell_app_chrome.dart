@@ -15,9 +15,6 @@ class ShellAppChrome extends AppChrome {
   @override
   TransitionBuilder? get builder => null;
 
-  @override
-  bool get drawersArePages => false;
-
   /// A message's reactions are the native conversation's own popover.
   @override
   Future<Reaction?>? pickReaction(BuildContext context, List<String> chosen) =>

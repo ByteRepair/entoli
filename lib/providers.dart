@@ -1432,34 +1432,14 @@ final projectFrozenProvider = Provider.family<bool, ProjectRef>(
 
 /// Where a mirrored chat lives: its home device, and whether that device is
 /// online now. A value, so a change elsewhere in the list is not one here.
-class MirrorHome {
-  const MirrorHome({
-    required this.deviceId,
-    required this.name,
-    required this.online,
-  });
+typedef MirrorHome = ({String? deviceId, String name, bool online});
 
-  /// A mirror whose entry has not arrived yet.
-  static const unknown = MirrorHome(
-    deviceId: null,
-    name: "the home device",
-    online: false,
-  );
-
-  final String? deviceId;
-  final String name;
-  final bool online;
-
-  @override
-  bool operator ==(Object other) =>
-      other is MirrorHome &&
-      other.deviceId == deviceId &&
-      other.name == name &&
-      other.online == online;
-
-  @override
-  int get hashCode => Object.hash(deviceId, name, online);
-}
+/// A mirror whose entry has not arrived yet.
+const MirrorHome unknownMirrorHome = (
+  deviceId: null,
+  name: "the home device",
+  online: false,
+);
 
 /// [chatId]'s home device where it is a mirror; null for this device's own.
 final mirrorHomeProvider = Provider.family<MirrorHome?, String>(
@@ -1467,11 +1447,7 @@ final mirrorHomeProvider = Provider.family<MirrorHome?, String>(
     remoteChatsProvider.select((chats) {
       for (final c in chats) {
         if (c.chatId == chatId) {
-          return MirrorHome(
-            deviceId: c.deviceId,
-            name: c.deviceName,
-            online: c.online,
-          );
+          return (deviceId: c.deviceId, name: c.deviceName, online: c.online);
         }
       }
       return null;

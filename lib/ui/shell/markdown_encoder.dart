@@ -213,14 +213,7 @@ class MarkdownEncoder {
           quotes: nesting.quotes,
           items: items,
           columns: align.length,
-          align: [
-            for (final a in align)
-              switch (a) {
-                CellAlign.start => wire.CellAlign.start,
-                CellAlign.center => wire.CellAlign.center,
-                CellAlign.end => wire.CellAlign.end,
-              },
-          ],
+          align: [for (final a in align) wire.CellAlign.values.byName(a.name)],
           cells: [
             for (final (c, cell) in header.indexed)
               wire.CellSnapshot(

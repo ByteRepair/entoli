@@ -87,11 +87,7 @@ class ConversationSurface implements wire.TranscriptIntents {
   /// the Flutter view back into the window for a moment.
   void loading(String chatId) {
     if (_sentFor == chatId) return;
-    _sent.clear();
-    _rows.clear();
-    _present.clear();
-    _sentFor = chatId;
-    _open = null;
+    _reset(chatId);
     _send(
       () => _client.conversation(
         wire.ConversationSnapshot(chatId: chatId, loading: true),
@@ -99,14 +95,18 @@ class ConversationSurface implements wire.TranscriptIntents {
     );
   }
 
-  /// Takes the conversation off the client.
-  void clear() {
+  void _reset(String? chatId) {
     _sent.clear();
     _rows.clear();
     _present.clear();
-    _sentFor = null;
-    _sentDetail = null;
+    _sentFor = chatId;
     _open = null;
+  }
+
+  /// Takes the conversation off the client.
+  void clear() {
+    _reset(null);
+    _sentDetail = null;
     _send(() => _client.conversation(wire.ConversationSnapshot()));
     _send(() => _client.detail(wire.DetailSnapshot()));
   }
@@ -215,13 +215,7 @@ class ConversationSurface implements wire.TranscriptIntents {
       );
     }
 
-    if (_sentFor != chatId) {
-      _sent.clear();
-      _rows.clear();
-      _present.clear();
-      _sentFor = chatId;
-      _open = null;
-    }
+    if (_sentFor != chatId) _reset(chatId);
     final order = <String>[];
     final changed = <wire.RowSnapshot>[];
     for (final row in transcript.rows) {

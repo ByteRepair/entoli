@@ -102,8 +102,30 @@ abstract class AppPage {
     String id,
     String text, {
     NoticeTone tone = NoticeTone.plain,
-  }) => PageSection(id, "", [
-    NoticeController(part(id, ""), tone: tone, lines: [NoticeLine(text)]),
+  }) => PageSection(id, "", [noticeRow(id, text, tone: tone)]);
+
+  /// A row that says [text].
+  NoticeController noticeRow(
+    String id,
+    String text, {
+    NoticeTone tone = NoticeTone.plain,
+  }) => NoticeController(part(id, ""), tone: tone, lines: [NoticeLine(text)]);
+
+  /// A section saying what failed, [title] and [error], with a way to try
+  /// again.
+  PageSection failed(
+    String title,
+    Object error, {
+    required Future<void> Function() retry,
+  }) => PageSection("failed", title, [
+    noticeRow("failed", "$error", tone: NoticeTone.warning),
+    ActionController(
+      part("retry", "Try Again"),
+      run: () async {
+        await retry();
+        return null;
+      },
+    ),
   ]);
 
   /// A row that opens [page] over this one.

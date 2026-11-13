@@ -64,11 +64,7 @@ class SetupAppPage extends AppPage {
           "failed",
           "${step.name} could not be installed",
           [
-            NoticeController(
-              part("failure", ""),
-              tone: NoticeTone.warning,
-              lines: [NoticeLine(failure)],
-            ),
+            noticeRow("failure", failure, tone: NoticeTone.warning),
             ActionController(
               part("retry", "Retry"),
               run: () async {

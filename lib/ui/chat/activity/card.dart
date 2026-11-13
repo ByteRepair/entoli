@@ -14,8 +14,6 @@ import "../../app_pages.dart";
 import "../../widgets/dialogs.dart" show say;
 import "../plan_page.dart" as plan_page;
 import "../widgets/browser_strip.dart" show openBrowserTab;
-import "../../app_chrome.dart";
-import "../../widgets/page_bar.dart";
 import "../../widgets/scrolling.dart" show ScrollFollow;
 import "../widgets/code_block.dart" show codeBlockDecoration, codeBlockStyle;
 import "../widgets/message_text.dart" show StreamingCaret;
@@ -45,8 +43,7 @@ class ActivitySource extends InheritedWidget {
 /// The drawer behind a label as a sheet, opened at most of the screen. A
 /// modal route, so the back key closes it; on a wide window as wide as a
 /// reading column, not Material's 640. On the surface a dialog sits on, which
-/// is what it is drawn after. Under the native shell a drawer is a page
-/// instead; see [openActivityCard].
+/// is what it is drawn after.
 Future<T?> showActivityCard<T>(BuildContext context, WidgetBuilder builder) =>
     showModalBottomSheet<T>(
       context: context,
@@ -58,25 +55,6 @@ Future<T?> showActivityCard<T>(BuildContext context, WidgetBuilder builder) =>
       builder: builder,
     );
 
-/// A label's drawer, opened the way this window opens one: under the native
-/// shell a page, not a sheet — the composer is the shell's, over the Flutter
-/// view a sheet is drawn in, and a page is what it steps aside for, the
-/// page's bar then the window's, with its back. [card] is told which.
-Future<void> openActivityCard(
-  BuildContext context,
-  Widget Function(bool page) card,
-) {
-  final page = ProviderScope.containerOf(
-    context,
-    listen: false,
-  ).read(appChromeProvider).drawersArePages;
-  Widget build(BuildContext _) => card(page);
-  if (page) {
-    return Navigator.of(context).push(MaterialPageRoute<void>(builder: build));
-  }
-  return showActivityCard<void>(context, build);
-}
-
 /// What a drawer draws, whoever is feeding it. Sections with nothing in them
 /// are left out, so a tool that returned nothing does not show an empty
 /// heading. [command] is set the way a `!` message is, under the title.
@@ -84,25 +62,15 @@ Future<void> openActivityCard(
 /// As a sheet it opens at most of the screen and grows to the whole of it: a
 /// drawer sized to a one-line output was a strip at the bottom of the window,
 /// and a fraction of the height left empty below a long one is a fraction of
-/// the output not read. As a [page] — under the native shell, whose composer
-/// a sheet would be drawn under — the title and actions are the page's bar,
-/// which is the window's. While [live] it keeps to the end of what is
+/// the output not read. While [live] it keeps to the end of what is
 /// arriving until the reader scrolls back.
 class ActivityCard extends StatefulWidget {
-  const ActivityCard({
-    super.key,
-    required this.detail,
-    this.below,
-    this.page = false,
-  });
+  const ActivityCard({super.key, required this.detail, this.below});
 
   final ActivityDetail detail;
 
   /// Drawn under the sections: a sub-agent's transcript.
   final Widget? below;
-
-  /// Drawn as a pushed page rather than a sheet.
-  final bool page;
 
   @override
   State<ActivityCard> createState() => _ActivityCardState();
@@ -116,9 +84,6 @@ class _ActivityCardState extends State<ActivityCard> {
   /// more.
   static const _openAt = 0.6;
 
-  /// A page's column on a wide window: the sheet's width.
-  static const _pageWidth = 960.0;
-
   @override
   void dispose() {
     _scroll.dispose();
@@ -130,40 +95,8 @@ class _ActivityCardState extends State<ActivityCard> {
   @override
   Widget build(BuildContext context) {
     if (_detail.live) _follow.jumpIfFollowing();
-    return widget.page ? _page(context) : _sheet(context);
+    return _sheet(context);
   }
-
-  Widget _page(BuildContext context) => Scaffold(
-    appBar: PageBar(
-      title: _detail.title,
-      actions: [
-        for (final action in _detail.actions)
-          PageAction.text(
-            label: action.label,
-            onPressed: switch (action.run) {
-              final run? => () => run(ContextHandOff(context)),
-              null => null,
-            },
-          ),
-      ],
-    ),
-    body: Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: _pageWidth),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 12, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ?_status(context, spinner: true),
-              Expanded(child: _content(context, bottom: 24)),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
 
   Widget _sheet(BuildContext context) {
     final theme = Theme.of(context);
@@ -205,7 +138,7 @@ class _ActivityCardState extends State<ActivityCard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               header,
-              ?_status(context, spinner: false),
+              ?_status(context),
               const SizedBox(height: 8),
               Flexible(child: _content(context, bottom: 0)),
             ],
@@ -231,26 +164,22 @@ class _ActivityCardState extends State<ActivityCard> {
     child: CircularProgressIndicator(strokeWidth: 2, color: color),
   );
 
-  /// The line under the title: how the run stands, and on a page, whose bar
-  /// has no room for it, the spinner saying it is still going.
-  Widget? _status(BuildContext context, {required bool spinner}) {
+  /// The line under the title: how the run stands.
+  Widget? _status(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
     final status = _detail.status;
-    final spin = spinner && _detail.live;
-    if (status == null && !spin) return null;
+    if (status == null) return null;
     return Row(
       children: [
-        if (spin) ...[_spinner(muted), const SizedBox(width: 8)],
-        if (status != null)
-          Flexible(
-            child: Text(
-              status.text,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: status.isError ? theme.colorScheme.error : muted,
-              ),
+        Flexible(
+          child: Text(
+            status.text,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: status.isError ? theme.colorScheme.error : muted,
             ),
           ),
+        ),
       ],
     );
   }
@@ -403,9 +332,9 @@ class ContextHandOff implements TranscriptHandOff {
   }
 
   @override
-  Future<void> openDetail(OpensDetail detail) => openActivityCard(
+  Future<void> openDetail(OpensDetail detail) => showActivityCard<void>(
     context,
-    (page) => _DetailCard(
+    (_) => _DetailCard(
       opens: detail.source == null
           ? OpensDetail(
               detail.activity,
@@ -413,7 +342,6 @@ class ContextHandOff implements TranscriptHandOff {
               source: ActivitySource.of(context),
             )
           : detail,
-      page: page,
     ),
   );
 
@@ -432,10 +360,9 @@ class ContextHandOff implements TranscriptHandOff {
 }
 
 class _DetailCard extends ConsumerWidget {
-  const _DetailCard({required this.opens, required this.page});
+  const _DetailCard({required this.opens});
 
   final OpensDetail opens;
-  final bool page;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -444,7 +371,6 @@ class _DetailCard extends ConsumerWidget {
     final nested = detail.transcript;
     return ActivityCard(
       detail: detail,
-      page: page,
       below: nested == null
           ? null
           : Padding(

@@ -487,15 +487,12 @@ its own for the shell.
 
 ### The layout
 
-**The chat page knows nothing of the shell.** What differs is a
-`ChatChrome` (`lib/ui/chat/chat_chrome.dart`): the composer, the turn
-surface, the question, the chat's and the new-chat screen's bars and the
-new-chat screen itself, and whether the frontend's bar and composer lie over
-the page. `FlutterChatChrome` leaves all of it to the page; `ShellChatChrome`
-(`lib/ui/shell/`) draws it natively, bound in `main`. The rest of the app's
-is an `AppChrome`
-(`lib/ui/app_chrome.dart`) — the `MaterialApp` builder, whether a drawer
-opens as a page, the reaction strip, voice mode's page — and the look the
+**The chat page knows nothing of the shell.** The one thing that differs
+is `drawsOpenChatProvider` (`lib/ui/chat/chat_chrome.dart`): under the shell
+it is true and the page draws nothing for the open chat or the new-chat
+screen, which `ShellChat` publishes from the app's state. The rest of the
+app's is an `AppChrome`
+(`lib/ui/app_chrome.dart`) — the `MaterialApp` builder, the reaction strip, voice mode's page — and the look the
 pages wear `appLookOverrideProvider`, the shell's `ShellAppChrome` and
 `shellLook` bound beside them. The window's root is `main`'s to pick. So nothing
 in `lib/ui` outside `lib/ui/shell/` imports the shell; `main` binds it.
