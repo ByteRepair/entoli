@@ -1,5 +1,8 @@
+import "package:flutter_riverpod/flutter_riverpod.dart";
+
 import "../../../domain/plan.dart";
 import "../../../domain/tool_arg.dart";
+import "../../plan.dart" show planProgressLine, planProvider;
 import "../../settings/spec.dart" show SettingReader;
 import "../activity.dart";
 import "tool_run.dart";
@@ -35,10 +38,15 @@ final class PresentPlanActivity extends ToolActivity {
   ActivityNode node(SettingReader reader, Run run) {
     final call = run.call;
     if (run.failed || call == null) return super.node(reader, run);
+    // Read off the file rather than the call, so it shows where the work
+    // stands now, and is built again as the plan moves.
+    final plan = reader.watch(planProvider(run.chatId));
     return PlanNode(
       this,
       run,
       title: stringArg(call.argumentsJson, "title") ?? "Plan",
+      sections: plan.value,
+      progress: planProgressLine(plan.value, loading: plan.isLoading),
     );
   }
 }

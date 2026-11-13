@@ -2,7 +2,18 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
+import "package:path/path.dart" as p;
+
+import "../../../app/pages/marketplace.dart";
+import "../../../app/pages/text_file.dart";
+import "../../../app/settings/spec.dart" show WidgetReader;
 import "../../../app/transcript/activity.dart";
+import "../../../domain/agent_browser.dart" show AgentBrowser, BrowserTab;
+import "../../../providers.dart";
+import "../../app_pages.dart";
+import "../../widgets/dialogs.dart" show say;
+import "../plan_page.dart" as plan_page;
+import "../widgets/browser_strip.dart" show openBrowserTab;
 import "../../app_chrome.dart";
 import "../../widgets/page_bar.dart";
 import "../../widgets/scrolling.dart" show ScrollFollow;
@@ -10,7 +21,6 @@ import "../widgets/code_block.dart" show codeBlockDecoration, codeBlockStyle;
 import "../widgets/message_text.dart" show StreamingCaret;
 import "../widgets/shell_run.dart" show ShellCommandText;
 import "glyphs.dart";
-import "hand_off.dart";
 
 export "../../../app/transcript/activity.dart" show LiveMessage, liveMessageOf;
 
@@ -340,3 +350,121 @@ class _ActivityCardState extends State<ActivityCard> {
     );
   }
 }
+
+/// The conversation's hand-off as the Flutter frontend makes it: a page
+/// pushed over the [context] of what was tapped.
+class ContextHandOff implements TranscriptHandOff {
+  const ContextHandOff(this.context);
+
+  final BuildContext context;
+
+  ProviderContainer get _container =>
+      ProviderScope.containerOf(context, listen: false);
+
+  @override
+  Future<void> openFile(String path) async => openAppPage(
+    context,
+    TextFileAppPage(path: path, name: p.basename(path), handsOff: false),
+  );
+
+  @override
+  Future<void> openArtifact(
+    String chatId,
+    String artifactId, {
+    required String entryFile,
+    String? title,
+  }) => _container
+      .read(linkOpenerProvider)
+      .openArtifact(
+        context,
+        chatId,
+        artifactId,
+        entryFile: entryFile,
+        title: title,
+      );
+
+  @override
+  Future<void> installSkill(String chatId, String installId) async =>
+      openAppPage(
+        context,
+        SkillInstallAppPage(chatId: chatId, installId: installId),
+      );
+
+  @override
+  Future<void> openPlan(String chatId) async =>
+      plan_page.openPlan(context, chatId);
+
+  @override
+  Future<void> openLink(String href) async {
+    final uri = Uri.tryParse(href);
+    if (uri != null) {
+      await _container.read(linkOpenerProvider).open(context, uri);
+    }
+  }
+
+  @override
+  Future<void> openDetail(OpensDetail detail) => openActivityCard(
+    context,
+    (page) => _DetailCard(
+      opens: detail.source == null
+          ? OpensDetail(
+              detail.activity,
+              detail.run,
+              source: ActivitySource.of(context),
+            )
+          : detail,
+      page: page,
+    ),
+  );
+
+  @override
+  Future<void> openBrowser(AgentBrowser browser, BrowserTab tab) async =>
+      openBrowserTab(context, browser, tab);
+
+  @override
+  Future<void> attempt(Future<void> Function() action) async {
+    try {
+      await action();
+    } on Object catch (error) {
+      if (context.mounted) say(context, error);
+    }
+  }
+}
+
+class _DetailCard extends ConsumerWidget {
+  const _DetailCard({required this.opens, required this.page});
+
+  final OpensDetail opens;
+  final bool page;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final detail = opens.detail(WidgetReader(ref));
+    if (detail == null) return const SizedBox.shrink();
+    final nested = detail.transcript;
+    return ActivityCard(
+      detail: detail,
+      page: page,
+      below: nested == null
+          ? null
+          : Padding(
+              padding: const EdgeInsets.only(top: 12),
+              // Its own source, so a label in the transcript opens a detail
+              // that follows the sub-agent rather than the parent's reply.
+              child: ActivitySource(
+                live: nested.source,
+                child: ref.watch(nestedTranscriptViewProvider)(nested),
+              ),
+            ),
+    );
+  }
+}
+
+/// Draws a transcript held inside a detail — a sub-agent's reply — the way
+/// the conversation draws a message. A detail is inside a message and a
+/// message is made of details' nodes, so the bubble is bound at the root
+/// (`main`) rather than imported here.
+final nestedTranscriptViewProvider =
+    Provider<Widget Function(NestedTranscript)>(
+      (ref) => throw UnimplementedError("bound where the app is assembled"),
+    );

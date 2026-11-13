@@ -68,7 +68,9 @@ class ContextAppPage extends AppPage {
               return CollectionItem(
                 author,
                 subtitle: "$percent% · ${_k(used)} of ${_k(window)}",
-                face: name == null ? null : (project: project, name: name),
+                face: name == null
+                    ? null
+                    : AgentRowFace(project: project, name: name),
                 editable: false,
                 takesImage: false,
                 meters: [

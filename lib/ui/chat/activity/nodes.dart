@@ -1,13 +1,9 @@
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../app/plan.dart" show planProgressLine, planProvider;
 import "../../../app/transcript/activity.dart";
 import "../../fonts.dart";
-import "../plan_page.dart" show openPlan;
 import "../widgets/plan_view.dart" show PlanTaskList;
 import "glyphs.dart";
-import "hand_off.dart";
 import "label.dart";
 
 /// A [LabelNode]: the one line, and while a thought is being written its
@@ -140,19 +136,17 @@ class DiffNodeView extends StatelessWidget {
 }
 
 /// A [PlanNode]: the plan put to the user, every task, each opening to its
-/// details. Read off the file rather than the call, so it shows where the
-/// work stands now.
-class PlanNodeView extends ConsumerWidget {
-  const PlanNodeView(this.node, {super.key});
+/// details.
+class PlanNodeView extends StatelessWidget {
+  const PlanNodeView(this.node, {super.key, required this.onTap});
 
   final PlanNode node;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final chatId = node.run.chatId;
-    final plan = ref.watch(planProvider(chatId));
-    final sections = plan.value;
+    final sections = node.sections;
     // The whole width of the reply's column, like the reply itself: task
     // details are prose, and a narrow card wrapped them into a ribbon.
     return Card.outlined(
@@ -164,13 +158,13 @@ class PlanNodeView extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.checklist),
             title: Text(node.title, style: theme.textTheme.titleMedium),
-            subtitle: Text(planProgressLine(sections, loading: plan.isLoading)),
+            subtitle: Text(node.progress),
             trailing: sections == null
                 ? null
                 : IconButton(
                     tooltip: "Open the plan",
                     icon: const Icon(Icons.open_in_full),
-                    onPressed: () => openPlan(context, chatId),
+                    onPressed: onTap,
                   ),
           ),
           if (sections != null) PlanTaskList(sections: sections),
@@ -182,9 +176,10 @@ class PlanNodeView extends ConsumerWidget {
 
 /// An [OutputNode]: a card the user taps to open what the turn made.
 class OutputNodeView extends StatelessWidget {
-  const OutputNodeView(this.node, {super.key});
+  const OutputNodeView(this.node, {super.key, required this.onTap});
 
   final OutputNode node;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -213,7 +208,7 @@ class OutputNodeView extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: () => node.open(ContextHandOff(context)),
+            onTap: onTap,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(

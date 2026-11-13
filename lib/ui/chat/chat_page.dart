@@ -10,11 +10,9 @@ import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:super_sliver_list/super_sliver_list.dart";
 
 import "../../domain/agent_backend.dart";
-import "../../domain/agent_face.dart";
 import "../../domain/models.dart";
 import "../../domain/room/room_state.dart";
 import "../../domain/project.dart";
-import "../../domain/prompt_library.dart" show nameOf;
 import "../../providers.dart";
 import "../fonts.dart";
 import "../theme.dart";
@@ -1163,22 +1161,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       mirrorChatControllerProvider(widget.chatId),
       (_, _) => _follow.jumpIfFollowing(),
     );
-    // One pass over the Remotes list for the two things drawn from it, so the
-    // page rebuilds when they change rather than whenever anything does.
-    final (:online, :deviceName, :deviceId) = ref.watch(
-      remoteChatsProvider.select((chats) {
-        for (final entry in chats) {
-          if (entry.chatId == widget.chatId) {
-            return (
-              online: entry.online,
-              deviceName: entry.deviceName,
-              deviceId: entry.deviceId,
-            );
-          }
-        }
-        return (online: false, deviceName: "the home device", deviceId: null);
-      }),
-    );
+    final MirrorHome(:online, name: deviceName, :deviceId) =
+        ref.watch(mirrorHomeProvider(widget.chatId)) ?? MirrorHome.unknown;
     final chat = view.chat;
     if (_chrome.drawsOpenChat) return const SizedBox.expand();
     if (chat == null) return _waiting();
@@ -1374,16 +1358,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
 
   /// The face beside a reply's author: their photo or Bot Avatar. Null for
   /// the user's own message, which names no author.
-  AgentFace? _avatarOf(Chat chat, Message message) {
-    final member = nameOf(message.author);
-    if (member == null) return null;
-    return ref
-        .watch(
-          agentPictureProvider((project: chat.state.project, name: member)),
-        )
-        .value;
-  }
-
   Widget _conversation(
     Chat chat,
     Transcript transcript,
@@ -1448,12 +1422,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                         child: MessageBubble(
                           chatId: widget.chatId,
                           message: message,
-                          avatar: _avatarOf(chat, message),
-                          isWaiting: view.isRunning && last,
+                          avatar: row.face(
+                            WidgetReader(ref),
+                            project: chat.state.project,
+                          ),
+                          moment: row.moment(view, editing),
                           latest: last,
-                          waitingNotice: view.retry,
-                          waitingStatus: view.status,
-                          shellOutput: view.shellOutput[message.id],
                           onTapLink: (href) => _openLink(context, href),
                           onReply: (quote) => _reply(QuoteEmbed(quote)),
                           reactions: reactions,

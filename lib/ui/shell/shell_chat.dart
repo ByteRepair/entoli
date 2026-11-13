@@ -155,14 +155,14 @@ final class _OpenChat implements _Screen {
       clipboardFiles: () => _container.read(clipboardFilesProvider).read(),
     );
     conversation = ConversationSurface(
+      _container,
       context: _shell._context,
       onReply: (quote) => composer.embed(QuoteEmbed(quote)),
       republish: () => _conversationReader.refresh(),
     );
     turn = TurnRunner(
-      context: _shell._context,
+      handOff: () => conversation.handOff,
       onWithdrawn: composer.restore,
-      openDetail: (detail) => conversation.openRun(detail),
     );
     _conversationReader = TrackingReader(_container, conversationPass);
     _barReader = TrackingReader(_container, barPass);
@@ -209,8 +209,7 @@ final class _OpenChat implements _Screen {
   /// change to either — a mirror going offline — runs the pass again.
   ({ChatViewState view, TurnDriver? driver}) _state(TrackingReader reader) {
     final view = reader.watch(chatViewProvider(id));
-    reader.watch(isMirroredChatProvider(id));
-    reader.watch(remoteChatsProvider);
+    reader.watch(mirrorHomeProvider(id));
     return (view: view, driver: _session.driver);
   }
 
@@ -306,11 +305,7 @@ final class _OpenChat implements _Screen {
     if (_closed) return;
     _composerReader.pass(() {
       final (:view, :driver) = _state(_composerReader);
-      final device = _composerReader
-          .watch(remoteChatsProvider)
-          .where((c) => c.chatId == id)
-          .firstOrNull
-          ?.deviceId;
+      final device = _composerReader.watch(mirrorHomeProvider(id))?.deviceId;
       final slot = _session.slot(_composerReader, view, driver, device: device);
       if (slot is! ComposerReady) {
         if (_answers.composer.release(composer)) {
@@ -343,10 +338,7 @@ final class _OpenChat implements _Screen {
       final (:view, :driver) = _state(_footReader);
       final chat = view.chat;
       if (chat == null) return;
-      final remote = _footReader
-          .watch(remoteChatsProvider)
-          .where((c) => c.chatId == id)
-          .firstOrNull;
+      final home = _footReader.watch(mirrorHomeProvider(id));
       final mirrored = _session.mirrored;
       final bar = _barOf(_session.slot(_footReader, view, driver));
       final browser = browserOf(
@@ -366,8 +358,8 @@ final class _OpenChat implements _Screen {
       final credentials = tab?.credentialRequest.value;
       _outbox.foot(
         ChatFootSnapshot(
-          device: mirrored ? remote?.deviceName ?? "the home device" : null,
-          deviceOffline: mirrored && !(remote?.online ?? false),
+          device: mirrored ? (home ?? MirrorHome.unknown).name : null,
+          deviceOffline: mirrored && !(home?.online ?? false),
           bar: bar,
           hold: tab?.hold.value?.reason,
           upload: upload == null

@@ -1430,11 +1430,59 @@ final projectFrozenProvider = Provider.family<bool, ProjectRef>(
           PeerStatus.online,
 );
 
-final isMirroredChatProvider = Provider.family<bool, String>((ref, chatId) {
-  return ref.watch(
-    remoteChatsProvider.select((chats) => chats.any((c) => c.chatId == chatId)),
+/// Where a mirrored chat lives: its home device, and whether that device is
+/// online now. A value, so a change elsewhere in the list is not one here.
+class MirrorHome {
+  const MirrorHome({
+    required this.deviceId,
+    required this.name,
+    required this.online,
+  });
+
+  /// A mirror whose entry has not arrived yet.
+  static const unknown = MirrorHome(
+    deviceId: null,
+    name: "the home device",
+    online: false,
   );
-});
+
+  final String? deviceId;
+  final String name;
+  final bool online;
+
+  @override
+  bool operator ==(Object other) =>
+      other is MirrorHome &&
+      other.deviceId == deviceId &&
+      other.name == name &&
+      other.online == online;
+
+  @override
+  int get hashCode => Object.hash(deviceId, name, online);
+}
+
+/// [chatId]'s home device where it is a mirror; null for this device's own.
+final mirrorHomeProvider = Provider.family<MirrorHome?, String>(
+  (ref, chatId) => ref.watch(
+    remoteChatsProvider.select((chats) {
+      for (final c in chats) {
+        if (c.chatId == chatId) {
+          return MirrorHome(
+            deviceId: c.deviceId,
+            name: c.deviceName,
+            online: c.online,
+          );
+        }
+      }
+      return null;
+    }),
+  ),
+);
+
+final isMirroredChatProvider = Provider.family<bool, String>(
+  (ref, chatId) =>
+      ref.watch(mirrorHomeProvider(chatId).select((home) => home != null)),
+);
 
 /// The single owner of the platform's download slot — see [DownloadHold]. Every
 /// catalog's notifier reports through it rather than to [BackgroundWork].

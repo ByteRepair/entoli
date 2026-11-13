@@ -86,7 +86,7 @@ abstract class AppPage {
     String? description,
     SettingGlyph? glyph,
   }) => SettingSpec(
-    id: "page:$address/$id",
+    id: "$_parts$address/$id",
     path: (page: null, section: ""),
     weight: 0,
     title: title,
@@ -168,7 +168,7 @@ abstract class AppPage {
   ) {
     final spec = reader.read(settingsSchemaProvider).settings[id]!;
     return spec.build(
-      SettingContext(reader, scope, spec.withId("page:$address/$id")),
+      SettingContext(reader, scope, spec.withId("$_parts$address/$id")),
     );
   }
 
@@ -197,6 +197,12 @@ abstract class AppPage {
           ], detail: section.describe?.call(reader) ?? section.description),
     ];
   }
+
+  /// What every part's id starts with, apart from the settings' own.
+  static const _parts = "page:";
+
+  /// Whether [id] names a part of an app page rather than a setting.
+  static bool owns(String id) => id.startsWith(_parts);
 
   static SettingController _unfiled(SettingContext _) =>
       throw StateError("a page's part is built by the page");

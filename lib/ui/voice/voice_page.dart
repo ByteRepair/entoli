@@ -3,7 +3,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
-import "../../domain/room/room_state.dart";
 import "../../providers.dart";
 import "../../app/chat_controller.dart";
 import "../chat/widgets/turn_surface.dart";
@@ -13,6 +12,7 @@ import "../widgets/dialogs.dart";
 import "../widgets/native_surfaces.dart";
 import "../widgets/nav_drawer.dart";
 import "transcript.dart";
+import "../../app/turn_surface.dart";
 import "../../app/voice_controller.dart";
 import "widgets/transcript_window.dart";
 import "widgets/voice_bloom.dart";
@@ -238,7 +238,7 @@ class _ScriptState extends ConsumerState<_Script> {
         const SizedBox(height: 12),
         if (chat != null && driver != null) ...[
           TurnSurface(view: chat, notifier: driver),
-          if (chat.roomPhase == RoomPhase.waitingOnYou)
+          if (TurnSurfaceModel(chat).asked != null)
             TurnQuestions(view: chat, notifier: driver),
         ],
       ],

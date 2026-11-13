@@ -827,7 +827,6 @@ class CollectionItem {
     this.tap,
     this.badge,
     this.face,
-    this.bot,
     this.editable = true,
     this.takesImage = true,
     this.meters = const [],
@@ -867,11 +866,8 @@ class CollectionItem {
   /// "Bundled", "Inherited".
   final String? badge;
 
-  /// The agent whose face leads the row.
-  final ({String? project, String name})? face;
-
-  /// A Bot Avatar that leads the row itself, worn by no agent yet.
-  final BotAvatarSpec? bot;
+  /// Who leads the row, where someone does.
+  final RowFace? face;
 
   /// Whether it is edited through the list's form: an entry of another
   /// level's is shown and not changed.
@@ -883,6 +879,28 @@ class CollectionItem {
   /// The item action a tap on the row runs, where the row is not edited
   /// through a form: a device's own page.
   final String? tap;
+}
+
+/// Who leads a collection's row: an agent in their face, or a Bot Avatar
+/// worn by no agent yet.
+sealed class RowFace {
+  const RowFace();
+}
+
+final class AgentRowFace extends RowFace {
+  const AgentRowFace({required this.project, required this.name});
+
+  final String? project;
+  final String name;
+
+  /// The agent as the picture providers name one.
+  ({String? project, String name}) get agent => (project: project, name: name);
+}
+
+final class AvatarRowFace extends RowFace {
+  const AvatarRowFace(this.spec);
+
+  final BotAvatarSpec spec;
 }
 
 /// One thing an item has spent, said; [fraction] of it gone where it is

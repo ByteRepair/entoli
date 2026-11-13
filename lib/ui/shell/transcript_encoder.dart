@@ -2,11 +2,9 @@ import "dart:io";
 import "dart:typed_data";
 
 import "package:entoli_glass/entoli_glass.dart" as wire;
-import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:path/path.dart" as p;
 
-import "../../app/plan.dart" show planProgressLine, planProvider;
 import "../../app/settings/spec.dart" show SettingReader;
 import "../../app/transcript/activity.dart";
 import "../../app/transcript/message.dart";
@@ -54,11 +52,10 @@ class TranscriptEncoder {
   /// naming a file finds it by.
   final blocks = <String, List<MessageBlock>>{};
 
-  wire.RowSnapshot row(
-    TranscriptRow row, {
-    required wire.MessageSnapshot Function(MessageRow row) message,
-  }) => switch (row) {
-    MessageRow() => wire.RowSnapshot(key: row.key, message: message(row)),
+  /// A row that is not a message — a mode line, a compaction, a goal — as
+  /// the client draws it; null for a message, which [message] encodes.
+  wire.RowSnapshot? row(TranscriptRow row) => switch (row) {
+    MessageRow() => null,
     ModeRow() => wire.RowSnapshot(
       key: row.key,
       kind: wire.RowKind.mode,
@@ -247,27 +244,21 @@ class TranscriptEncoder {
     };
   }
 
-  /// Read through the reader as the Flutter card reads it, so the row is
-  /// sent again as the plan moves.
-  wire.NodeSnapshot _plan(PlanNode node, String id) {
-    final plan = reader.watch(planProvider(node.run.chatId));
-    final sections = plan.value;
-    return wire.NodeSnapshot(
-      id: id,
-      kind: wire.NodeKind.plan,
-      icon: wire.TranscriptIcon.plan,
-      text: node.title,
-      progress: planProgressLine(sections, loading: plan.isLoading),
-      tasks: [
-        for (final section in sections ?? const <PlanSection>[])
-          for (final task in section.tasks)
-            wire.PlanTaskSnapshot(
-              title: task.text,
-              done: task.status == PlanTaskStatus.done,
-            ),
-      ],
-    );
-  }
+  wire.NodeSnapshot _plan(PlanNode node, String id) => wire.NodeSnapshot(
+    id: id,
+    kind: wire.NodeKind.plan,
+    icon: wire.TranscriptIcon.plan,
+    text: node.title,
+    progress: node.progress,
+    tasks: [
+      for (final section in node.sections ?? const <PlanSection>[])
+        for (final task in section.tasks)
+          wire.PlanTaskSnapshot(
+            title: task.text,
+            done: task.status == PlanTaskStatus.done,
+          ),
+    ],
+  );
 
   /// A detail as the client draws it, a nested transcript's nodes under
   /// ids of their own.

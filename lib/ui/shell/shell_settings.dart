@@ -24,7 +24,6 @@ import "../../domain/bot_avatar/import.dart";
 import "../../domain/bot_avatar/pose.dart";
 import "../../domain/bot_avatar/spec.dart";
 import "../../domain/model_registry.dart" show ModelCatalog;
-import "../../domain/models.dart" show ModelChoice;
 import "../../providers.dart";
 import "../../app/prompts/skill_files.dart";
 import "shell_cli_account.dart";
@@ -129,9 +128,6 @@ class _Encoder {
   final Ref ref;
   final Map<String, SettingController> controllers;
 
-  late final _providers = ref.watch(appSettingsProvider).llmProviders;
-  late final _models = ref.watch(sortedModelsProvider);
-  late final _serving = ref.watch(modelProvidersProvider);
   late final _stage = ref.watch(botStageProvider);
 
   SettingsSectionData section(PageSection section) => SettingsSectionData(
@@ -250,10 +246,10 @@ class _Encoder {
           ..unit = c.unit
           ..prompt = c.prompt;
       case ModelPickController():
-        final field = label(c);
+        final field = modelField(c);
         row
           ..kind = SettingKind.modelPick
-          ..modelLabel = field.label
+          ..modelLabel = field.reads
           ..error = field.error
           ..noneLabel = c.nullLabel
           // A level that inherits its model: the null entry is Default, and a
@@ -289,10 +285,10 @@ class _Encoder {
           ]
           ..tone = _tone(c.tone);
       case CollectionController():
-        _Face? faceOf(CollectionItem item) => switch ((item.bot, item.face)) {
-          (final bot?, _) => _botFace(bot),
-          (null, final agent?) => _agentFace(agent),
-          _ => null,
+        _Face? faceOf(CollectionItem item) => switch (item.face) {
+          AvatarRowFace(:final spec) => _botFace(spec),
+          AgentRowFace(:final agent) => _agentFace(agent),
+          null => null,
         };
         row
           ..kind = SettingKind.collection
@@ -426,35 +422,14 @@ class _Encoder {
     return row;
   }
 
-  _ModelField label(ModelPickController c) {
-    final listed = _models.value ?? const [];
-    final error = modelFieldError(
-      choice: c.choice,
-      role: c.role,
-      loaded: _models.hasValue,
-      listed: listed,
-      serving: _serving,
-    );
-    String named(ModelChoice choice) => modelFieldLabel(
-      choice: choice,
-      role: c.role,
-      nullLabel: c.nullLabel,
-      defaultOf: c.defaultOf,
-      providers: _providers,
-      listed: listed,
-      serving: _serving,
-    );
-    final unset = c.choice.providerId == null && c.choice.modelId == null;
-    return (
-      label: error != null
-          ? missingModelLabel
-          // What Default stands for, where the level inherits one.
-          : unset && c.inherited?.providerId != null
-          ? "${c.nullLabel} (${named(c.inherited!)})"
-          : named(c.choice),
-      error: error,
-    );
-  }
+  ModelField modelField(ModelPickController c) => ModelField.watch(
+    RefReader(ref),
+    choice: c.choice,
+    role: c.role,
+    nullLabel: c.nullLabel,
+    defaultOf: c.defaultOf,
+    inherited: c.inherited,
+  );
 
   /// A Bot Avatar is drawn live by the client from its rig; a photo is sent.
   _Face _botFace(BotAvatarSpec bot) =>
@@ -471,9 +446,6 @@ class _Encoder {
         null => (photo: null, bot: null, colour: null),
       };
 }
-
-/// What a model pick's field reads as, and why it is wrong.
-typedef _ModelField = ({String label, String? error});
 
 /// An agent's face: a photo's bytes, or a Bot Avatar as the stage's key and
 /// its colour; all null for none, or not read yet.
@@ -727,9 +699,7 @@ class SettingsBridge implements SettingsIntents {
   T? _at<T extends SettingController>(String id) {
     final c = _container
         .read(
-          id.startsWith("page:")
-              ? nativeAppPagesProvider
-              : nativeSettingsProvider,
+          AppPage.owns(id) ? nativeAppPagesProvider : nativeSettingsProvider,
         )
         .controllers[id];
     return c is T ? c : null;

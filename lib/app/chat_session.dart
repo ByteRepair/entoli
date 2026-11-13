@@ -62,9 +62,7 @@ class ChatSession {
   /// home device is offline, which can be read and not written to.
   TurnDriver? get driver {
     if (!mirrored) return _ref.read(chatControllerProvider(chatId).notifier);
-    final online = _ref
-        .read(remoteChatsProvider)
-        .any((c) => c.chatId == chatId && c.online);
+    final online = _ref.read(mirrorHomeProvider(chatId))?.online ?? false;
     return online
         ? _ref.read(mirrorChatControllerProvider(chatId).notifier)
         : null;

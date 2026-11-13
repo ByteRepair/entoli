@@ -5,7 +5,8 @@ import "../app/transcript/activities/catalog.dart";
 import "../app/transcript/activity.dart" show activityCatalogProvider;
 import "../app/transcript/code.dart";
 import "../app/transcript/formula.dart";
-import "../ui/chat/activity/activity.dart" show nestedTranscriptViewProvider;
+import "../app/transcript/message.dart" show MessageMoment;
+import "../ui/chat/activity/card.dart" show nestedTranscriptViewProvider;
 import "../ui/chat_session_host.dart";
 import "../ui/chat/widgets/message_bubble.dart";
 import "code_grammars.dart";
@@ -25,7 +26,7 @@ final transcriptOverrides = <Override>[
     (nested) => MessageBubble(
       chatId: nested.chatId,
       message: nested.message,
-      isWaiting: nested.running,
+      moment: MessageMoment(waiting: nested.running),
     ),
   ),
 ];

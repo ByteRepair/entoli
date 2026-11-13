@@ -5,7 +5,6 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/agent_face.dart";
-import "../../../domain/bot_avatar/pose.dart" show BotMood;
 import "../../../domain/models.dart";
 import "../../../domain/quote.dart";
 import "../../../app/settings/spec.dart" show WidgetReader;
@@ -36,11 +35,8 @@ class MessageBubble extends ConsumerStatefulWidget {
     required this.chatId,
     required this.message,
     this.avatar,
-    this.isWaiting = false,
+    this.moment = MessageMoment.still,
     this.latest = false,
-    this.waitingNotice,
-    this.waitingStatus,
-    this.shellOutput,
     this.actions,
     this.onSpeak,
     this.isSpeaking = false,
@@ -64,30 +60,14 @@ class MessageBubble extends ConsumerStatefulWidget {
   /// cost nothing, since an avatar that is not painted stops its ticker.
   final AgentFace? avatar;
 
-  /// This message is the one being generated right now.
-  final bool isWaiting;
+  /// The turn state it is drawn against: whether it is being written, what
+  /// the turn says beside the spinner, what a running command has printed.
+  final MessageMoment moment;
 
   /// The newest message of the thread: its author's Bot Avatar is the one
   /// live in the conversation, the rest drawing stills — one avatar moving
   /// per chat rather than one per reply. A tap still wakes any of them.
   final bool latest;
-
-  /// Trouble reported while the turn is still running, e.g. a retry after a
-  /// rate limit. Shown in red beside the spinner.
-  final String? waitingNotice;
-
-  /// What the turn is doing — "Thinking", "Reading the prompt · 43%". Beside
-  /// the spinner like [waitingNotice] and in the ordinary muted colour, because
-  /// it is the answer to "is this alive" rather than a problem.
-  final String? waitingStatus;
-
-  /// What a running command has printed so far, shown as a live block under
-  /// the tool label (an agent's `bash` call) or under the spinner (the user's
-  /// own `!` command, whose reply is still empty). Trailing state like
-  /// [waitingStatus]: it is gone the moment the call's result lands, which is
-  /// the point at which the conversation's own output takes over — the label's
-  /// drawer, or the `!` bubble.
-  final String? shellOutput;
 
   /// What can be done to the message, and when: threads, delete, edit,
   /// regenerate, react. Null is a transcript shown read-only.
@@ -271,9 +251,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                               size: 45,
                               animate: widget.latest,
                               reactToTap: true,
-                              mood: widget.isWaiting
-                                  ? BotMood.thinking
-                                  : BotMood.idle,
+                              mood: widget.moment.mood,
                             ),
                             const SizedBox(width: 6),
                           ],
@@ -438,16 +416,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   /// The message as the core lays it out, each block drawn its own way.
   List<Widget> _rows(BuildContext context, Color? bg) {
     final theme = Theme.of(context);
-    final blocks = _layout.blocks(
-      WidgetReader(ref),
-      MessageMoment(
-        waiting: widget.isWaiting,
-        status: widget.waitingStatus,
-        notice: widget.waitingNotice,
-        shellOutput: widget.shellOutput,
-        canRetry: _can.canRegenerate,
-      ),
-    );
+    final blocks = _layout.blocks(WidgetReader(ref), widget.moment);
     return [
       for (final block in blocks)
         switch (block) {
@@ -505,14 +474,14 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
       ProseSaid(:final markdown, :final caret) => MessageText(
         text: markdown,
         isError: false,
-        isWaiting: widget.isWaiting,
+        isWaiting: widget.moment.waiting,
         caret: caret,
         onTapLink: widget.onTapLink,
       ),
       ErrorSaid() => MessageText(
         text: said.text,
         isError: true,
-        isWaiting: widget.isWaiting,
+        isWaiting: widget.moment.waiting,
         caret: false,
         onTapLink: widget.onTapLink,
       ),

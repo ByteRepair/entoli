@@ -47,9 +47,8 @@ class BotAvatarInstallAppPage extends AppPage {
           removable: false,
           describe: (d) => CollectionItem(
             d.name,
-            bot: BotAvatarSpec(
-              definition: d,
-              colour: BotPalette.ownColour(d.id),
+            face: AvatarRowFace(
+              BotAvatarSpec(definition: d, colour: BotPalette.ownColour(d.id)),
             ),
             editable: false,
             takesImage: false,

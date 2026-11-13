@@ -179,12 +179,8 @@ class ChatSettingsAppPage extends ChatSettingsFields {
   @override
   String title(SettingReader reader) => "Chat Settings";
 
-  ({String name, bool online})? _device(SettingReader reader) {
-    for (final c in reader.watch(remoteChatsProvider)) {
-      if (c.chatId == chatId) return (name: c.deviceName, online: c.online);
-    }
-    return null;
-  }
+  MirrorHome? _device(SettingReader reader) =>
+      reader.watch(mirrorHomeProvider(chatId));
 
   @override
   List<PageSection> sections(SettingReader reader) {

@@ -10,6 +10,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "package:agent_chat/app/chat_controller.dart" show TurnDriver;
+import "package:agent_chat/app/transcript/message.dart" show MessageMoment;
 import "package:agent_chat/app/transcript/transcript.dart" show MessageActions;
 import "package:agent_chat/domain/agent_face.dart";
 import "package:agent_chat/domain/ask.dart";
@@ -102,49 +103,55 @@ void main() {
     ValueChanged<Reaction>? onReact,
     List<String> reactions = const [],
     bool running = false,
-  }) => app.pump(
-    tester,
-    Scaffold(
-      body: MessageBubble(
-        chatId: chatId,
-        message: message,
-        avatar: avatar,
-        isWaiting: isWaiting,
-        waitingNotice: waitingNotice,
-        waitingStatus: waitingStatus,
-        shellOutput: shellOutput,
-        actions:
-            [
-                  onThreadStep,
-                  onDelete,
-                  onEdit,
-                  onRegenerate,
-                  onReact,
-                ].any((c) => c != null) ||
-                running
-            ? MessageActions(
-                message: message,
-                driver: _Driver(
-                  onStep: onThreadStep,
-                  onDelete: onDelete,
-                  onEdit: onEdit,
-                  onRegenerate: onRegenerate,
-                  onReact: onReact,
-                ),
-                running: running,
-                last: true,
-                threads: threads,
-              )
-            : null,
-        onSpeak: onSpeak,
-        isSpeaking: isSpeaking,
-        onTapLink: onTapLink,
-        onReply: onReply,
-        reactions: reactions,
+  }) {
+    final actions =
+        [
+              onThreadStep,
+              onDelete,
+              onEdit,
+              onRegenerate,
+              onReact,
+            ].any((c) => c != null) ||
+            running
+        ? MessageActions(
+            message: message,
+            driver: _Driver(
+              onStep: onThreadStep,
+              onDelete: onDelete,
+              onEdit: onEdit,
+              onRegenerate: onRegenerate,
+              onReact: onReact,
+            ),
+            running: running,
+            last: true,
+            threads: threads,
+          )
+        : null;
+    return app.pump(
+      tester,
+      Scaffold(
+        body: MessageBubble(
+          chatId: chatId,
+          message: message,
+          avatar: avatar,
+          moment: MessageMoment(
+            waiting: isWaiting,
+            notice: waitingNotice,
+            status: waitingStatus,
+            shellOutput: shellOutput,
+            canRetry: actions?.canRegenerate ?? false,
+          ),
+          actions: actions,
+          onSpeak: onSpeak,
+          isSpeaking: isSpeaking,
+          onTapLink: onTapLink,
+          onReply: onReply,
+          reactions: reactions,
+        ),
       ),
-    ),
-    settle: !isWaiting,
-  );
+      settle: !isWaiting,
+    );
+  }
 
   /// Touch the message, which is how the actions under it are uncovered where
   /// there is no pointer to hover with.
@@ -244,7 +251,6 @@ void main() {
             message: _message(MessageRole.user, [
               const TextPart(text: "hello"),
             ]),
-            isWaiting: false,
           ),
         ),
       ),
@@ -2362,7 +2368,7 @@ void main() {
             child: MessageBubble(
               chatId: "chat-1",
               message: ref.watch(live).message!,
-              isWaiting: true,
+              moment: const MessageMoment(waiting: true),
             ),
           ),
         ),
@@ -2453,7 +2459,7 @@ void main() {
           child: MessageBubble(
             chatId: "chat-1",
             message: parent,
-            isWaiting: true,
+            moment: const MessageMoment(waiting: true),
           ),
         ),
       ),

@@ -192,10 +192,11 @@ private extension View {
 
 /// A row by its kind: a message, or a line between them.
 private struct RowView: View {
-  let row: RowSnapshot
+  let entry: RowEntry
   let model: TranscriptModel
 
   var body: some View {
+    let row = entry.snapshot
     switch row.kind {
     case .message:
       if let message = row.message {
@@ -357,8 +358,8 @@ private struct Rows: View {
   private var rows: some View {
     let chapters = Set(model.chapters.map(\.row))
     return ForEach(model.order, id: \.self) { key in
-      if let row = model.rows[key] {
-        RowView(row: row, model: model).id(key)
+      if let entry = model.rows[key] {
+        RowView(entry: entry, model: model).id(key)
           .modifier(TopReport(key: key, reports: chapters.contains(key), report: chapterTop))
       }
     }

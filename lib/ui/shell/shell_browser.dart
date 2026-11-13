@@ -50,9 +50,7 @@ class BrowserWindowSession implements BrowserIntents {
   Object? _opened;
   bool _closed = false;
 
-  /// The presses still held, by key code, so a release names the key its
-  /// press did.
-  final _held = <int, BrowserKey>{};
+  late final _keys = BrowserKeyboard(() => tab);
 
   static bool get _mac => defaultTargetPlatform == TargetPlatform.macOS;
 
@@ -153,37 +151,19 @@ class BrowserWindowSession implements BrowserIntents {
     ),
   );
 
-  /// The platform's key, read as Flutter reads it: paste is the user's
-  /// clipboard, copy and cut fill it and still reach the page, and every
-  /// other key is the page's.
+  /// The platform's key, read as Flutter reads it and routed as the
+  /// Flutter card routes it.
   @override
   void key(bool down, int keyCode, String? characters, int modifiers) {
-    if (!down) {
-      final pressed = _held.remove(keyCode);
-      if (pressed != null) {
-        _send(() => tab.key(browserKeyUp(pressed, modifiers: modifiers)));
-      }
-      return;
-    }
+    if (!down) return _keys.up(keyCode, modifiers: modifiers);
     final event = _flutterKey(keyCode, characters);
     if (event == null) return;
-    final shortcut = _mac ? modifiers & 4 != 0 : modifiers & 2 != 0;
-    if (shortcut && event.logicalKey == LogicalKeyboardKey.keyV) {
-      return edit(BrowserEdit.paste);
-    }
-    if (shortcut &&
-        (event.logicalKey == LogicalKeyboardKey.keyC ||
-            event.logicalKey == LogicalKeyboardKey.keyX)) {
-      _send(tab.copySelection);
-    }
-    final pressed = browserKeyDown(
+    _keys.down(
+      keyCode,
       event,
       modifiers: modifiers,
-      shortcut: shortcut,
+      shortcut: _mac ? modifiers & 4 != 0 : modifiers & 2 != 0,
     );
-    if (pressed == null) return;
-    _held[keyCode] = pressed;
-    _send(() => tab.key(pressed));
   }
 
   /// [keyCode] as the platform's key tables name it, with the characters it
@@ -210,19 +190,8 @@ class BrowserWindowSession implements BrowserIntents {
   }
 
   @override
-  void edit(BrowserEdit action) {
-    switch (action) {
-      case BrowserEdit.paste:
-        _send(tab.pasteClipboard);
-      case BrowserEdit.copy:
-        _send(tab.copySelection);
-      case BrowserEdit.cut:
-        _send(tab.copySelection);
-        _send(() => tab.pressShortcut("x", mac: _mac));
-      case BrowserEdit.selectAll:
-        _send(() => tab.pressShortcut("a", mac: _mac));
-    }
-  }
+  void edit(BrowserEdit action) =>
+      _keys.edit(PageEdit.values.byName(action.name));
 
   void dispose() {
     if (_closed) return;

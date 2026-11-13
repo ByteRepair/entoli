@@ -5,22 +5,9 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../../domain/room/room_state.dart" show ChatViewState;
 import "../../../app/running.dart";
 import "../../../app/settings/spec.dart" show WidgetReader;
-import "../activity/activity.dart" show openRunDetail;
+import "../activity/card.dart" show ContextHandOff;
 import "../activity/format.dart" show plural;
-import "browser_strip.dart" show openBrowserTab;
 import "running_pill.dart";
-
-/// Opens [thing] as the Flutter frontend does: the activity's detail card,
-/// or the browser's live view.
-void openRunning(BuildContext context, RunningThing thing) =>
-    switch (thing.opens) {
-      final OpensDetail detail => openRunDetail(context, detail),
-      OpensBrowser(:final browser, :final tab) => openBrowserTab(
-        context,
-        browser,
-        tab,
-      ),
-    };
 
 /// What a pill shows in place of its spinner: the browser's state.
 IconData? _iconOf(RunningThing thing) => thing.kind == RunningKind.browser
@@ -73,14 +60,18 @@ class _RunningStripState extends ConsumerState<RunningStrip> {
     final view = widget.view;
     final chatId = view.chat?.state.id;
     if (chatId == null) return const SizedBox.shrink();
-    final (:alone, :groups) = runningOf(WidgetReader(ref), view, chatId);
+    final RunningNow(:alone, :groups) = runningOf(
+      WidgetReader(ref),
+      view,
+      chatId,
+    );
     Widget pill(RunningThing thing) => Builder(
       builder: (context) => RunningPill(
         label: thing.label,
         tooltip: thing.tooltip,
         icon: _iconOf(thing),
         mono: thing.mono,
-        onPressed: () => openRunning(context, thing),
+        onPressed: () => thing.opens.open(ContextHandOff(context)),
       ),
     );
     return Listener(

@@ -1,13 +1,18 @@
 import "package:collection/collection.dart";
 
+import "../../domain/agent_face.dart";
 import "../../domain/goal.dart";
 
 import "../../domain/end_turn.dart" show drawnAsRow;
 import "../../domain/models.dart";
+import "../../domain/prompt_library.dart" show nameOf;
 import "../../domain/reaction.dart";
 import "../../domain/room/room_state.dart" show ChatViewState;
+import "../../providers.dart" show agentPictureProvider;
 import "../chat_controller.dart" show TurnDriver;
+import "../settings/spec.dart" show SettingReader;
 import "activity.dart";
+import "message.dart" show MessageMoment;
 
 /// The conversation as rows, the core's account of what is on the page:
 /// each frontend draws these, and nothing it draws decides what a row is.
@@ -88,6 +93,26 @@ final class MessageRow extends TranscriptRow {
 
   /// The key of message [id]'s row.
   static String keyOf(String id) => "message:$id";
+
+  /// The turn state it is laid out against in [view], acted on through
+  /// [driver].
+  MessageMoment moment(ChatViewState view, TurnDriver? driver) => MessageMoment(
+    waiting: view.isRunning && last,
+    status: view.status,
+    notice: view.retry,
+    shellOutput: view.shellOutput[message.id],
+    canRetry: MessageActions.of(this, view, driver).canRegenerate,
+  );
+
+  /// Its author's face in [project], where it names an addressed member;
+  /// null for the main agent, or until the picture is read.
+  AgentFace? face(SettingReader reader, {String? project}) {
+    final member = nameOf(message.author);
+    if (member == null) return null;
+    return reader
+        .watch(agentPictureProvider((project: project, name: member)))
+        .value;
+  }
 }
 
 /// A line saying the room's mode changed before message [at].

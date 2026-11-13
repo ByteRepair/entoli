@@ -1,4 +1,5 @@
 import "../../../app/approvals.dart";
+import "../../../app/turn_surface.dart";
 import "package:flutter/material.dart";
 
 import "../../../domain/goal.dart" show ChatGoals;
@@ -44,17 +45,16 @@ class TurnSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final chat = view.chat;
+    final surface = TurnSurfaceModel(view);
     final restore = onWithdrawn;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Only while nothing is running: the turn being carried on is the one
-        // at the end, so the offer and the work are never both on screen.
-        if (chat != null && chat.unfinished && !view.isRunning)
+        if (surface.resume case (:final startedAt, :final notice))
           ResumeBar(
-            startedAt: chat.messages.last.createdAt,
+            startedAt: startedAt,
             onContinue: notifier.resume,
-            notice: view.unfinishedNotice,
+            notice: notice,
           ),
         if (chat != null) BrowserPrompts(chatId: chat.state.id),
         GoalStrip(goal: chat?.goal, onCommand: notifier.send),
@@ -69,28 +69,27 @@ class TurnSurface extends StatelessWidget {
                   if (said != null) restore(said);
                 },
         ),
-        for (final approvals in view.approvals.values)
-          for (final approval in approvals)
-            if (approvalAnswers(notifier, approval) case final offers)
-              ApprovalBanner(
-                approval: approval,
-                onAllow: !offers.allow
-                    ? null
-                    : () => notifier.answer(approval, ApprovalResponse.allow),
-                onDeny: () => notifier.answer(approval, ApprovalResponse.deny),
-                onAlwaysAllowChat: !offers.always
-                    ? null
-                    : () => notifier.answer(
-                        approval,
-                        ApprovalResponse.alwaysAllowChat,
-                      ),
-                onAlwaysAllowProject: !offers.always
-                    ? null
-                    : () => notifier.answer(
-                        approval,
-                        ApprovalResponse.alwaysAllowProject,
-                      ),
-              ),
+        for (final approval in surface.approvals)
+          if (approvalAnswers(notifier, approval) case final offers)
+            ApprovalBanner(
+              approval: approval,
+              onAllow: !offers.allow
+                  ? null
+                  : () => notifier.answer(approval, ApprovalResponse.allow),
+              onDeny: () => notifier.answer(approval, ApprovalResponse.deny),
+              onAlwaysAllowChat: !offers.always
+                  ? null
+                  : () => notifier.answer(
+                      approval,
+                      ApprovalResponse.alwaysAllowChat,
+                    ),
+              onAlwaysAllowProject: !offers.always
+                  ? null
+                  : () => notifier.answer(
+                      approval,
+                      ApprovalResponse.alwaysAllowProject,
+                    ),
+            ),
       ],
     );
   }
@@ -107,10 +106,8 @@ class TurnQuestions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // One panel, the first turn waiting on answers: a room with two asking
-    // is a round that misfired — nobody answers two panels at once, and the
-    // second question is still there when the first is answered.
-    final asked = view.questions.values.expand((q) => q).first;
+    final asked = TurnSurfaceModel(view).asked;
+    if (asked == null) return const SizedBox.shrink();
     return QuestionPanel(
       key: ValueKey(asked.id),
       request: asked,

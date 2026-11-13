@@ -9,6 +9,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/app/chat_controller.dart";
 import "package:agent_chat/app/settings/spec.dart" show ContainerReader;
+import "package:agent_chat/ui/chat/activity/card.dart" show ContextHandOff;
 import "package:agent_chat/ui/shell/shell_answers.dart";
 import "package:agent_chat/ui/shell/shell_outbox.dart";
 import "package:agent_chat/ui/shell/shell_turn.dart";
@@ -66,7 +67,7 @@ void main() {
       ),
     );
     final runner = TurnRunner(
-      context: () => tester.element(find.byType(SizedBox)),
+      handOff: () => ContextHandOff(tester.element(find.byType(SizedBox))),
       onWithdrawn: null,
     );
     container
@@ -169,11 +170,11 @@ void main() {
   ) async {
     final answers = ShellAnswers();
     final chat = TurnRunner(
-      context: () => throw StateError(""),
+      handOff: () => throw StateError(""),
       onWithdrawn: null,
     );
     final voice = TurnRunner(
-      context: () => throw StateError(""),
+      handOff: () => throw StateError(""),
       onWithdrawn: null,
     );
     var told = 0;
