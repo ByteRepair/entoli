@@ -553,7 +553,7 @@ this device's, with room beside it for a domain per synced device. The tree
 is the disk's: the root is every project, a project is its workspace, and its
 `chats/` is a Chats folder holding a folder per chat named by its title. So a
 title can collide only with another chat's, never with what the workspace
-holds; two chats of one title get as much of their ids as tells them apart,
+holds; chats that share a title each get their id in brackets after it,
 Files keeping one name per folder. Chats holds only the app's chats: an item
 added to it stays on the device.
 

@@ -205,23 +205,17 @@ struct WorkspaceTree {
   private func chats(_ segments: [String]) throws -> [WorkspaceItem] {
     let dir = try resolve(segments)
     let workspace = try resolve(Array(segments.prefix(3)))
-    var items: [WorkspaceItem] = []
-    var taken: Set<String> = []
-    for chat in list(dir) where isDirectory(chat) && contains(workspace, chat) {
-      let chatId = chat.lastPathComponent
-      // Two chats may share a title, and Files keeps one name per folder,
-      // ignoring case. More of the id until it is free; the whole id is.
-      let title = chatTitle(project: segments[1], chatId: chatId)
-      var name = title
-      var length = 8
-      while taken.contains(name.lowercased()) && length <= chatId.count {
-        name = "\(title) (\(chatId.prefix(length)))"
-        length += 4
-      }
-      taken.insert(name.lowercased())
-      items.append(WorkspaceItem(node: .path(segments + [chatId]), name: name, url: chat))
+    let chats = list(dir)
+      .filter { isDirectory($0) && contains(workspace, $0) }
+      .map { (url: $0, title: chatTitle(project: segments[1], chatId: $0.lastPathComponent)) }
+    // Files keeps one name per folder, ignoring case, so every chat whose
+    // title another shares takes its id too.
+    let counts = Dictionary(chats.map { ($0.title.lowercased(), 1) }, uniquingKeysWith: +)
+    return chats.map { chat in
+      let chatId = chat.url.lastPathComponent
+      let name = counts[chat.title.lowercased()]! > 1 ? "\(chat.title) (\(chatId))" : chat.title
+      return WorkspaceItem(node: .path(segments + [chatId]), name: name, url: chat.url)
     }
-    return items
   }
 
   // `everyProject`, in lib/domain/project.dart: the default one first, the
