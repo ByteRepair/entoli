@@ -3,6 +3,7 @@ import "dart:io";
 import "../../domain/builtin_project.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
+import "../../domain/sandbox_grant.dart";
 import "../../domain/settings/keys.dart";
 import "../../domain/shell.dart" show isTildePath;
 import "../../domain/tristate.dart";
@@ -221,6 +222,8 @@ class ProjectSettingsAppPage extends AppPage {
         shared(reader, scope, "environment"),
         shared(reader, scope, "permissions"),
         shared(reader, scope, "sandbox"),
+        for (final grant in SandboxGrant.values)
+          shared(reader, scope, grant.settingId),
       ]),
       // Folders on this machine, granted to the host's sandbox: not a paired
       // device's, and not where nothing is confined.

@@ -689,6 +689,7 @@ class BuiltinAgent implements Turn {
             dir,
       ],
       sandboxed: read.sandboxed,
+      grants: read.grants,
       approveMode: read.approveMode,
     );
   }
@@ -741,9 +742,18 @@ class BuiltinAgent implements Turn {
         ]
         .takeWhile((call) => call.id != callId)
         .where((call) => seen.add(call.id))
-        .map((call) => (tool: call.name, argumentsJson: call.argumentsJson))
+        .map(
+          (call) => (
+            tool: call.name,
+            argumentsJson: call.argumentsJson,
+            refused: _refused[call.id] ?? const <String>[],
+          ),
+        )
         .toList();
   }
+
+  /// What the sandbox refused each call of this session, by call id.
+  final Map<String, List<String>> _refused = {};
 
   /// The running step's calls, which the session holds only once the next
   /// request is built.
@@ -1313,7 +1323,13 @@ class BuiltinAgent implements Turn {
           : tool.run(call, this);
       final jobs = backgroundJobs;
       final saved = _savingLarge(tool?.inlineLimit, {call.id}, ran);
-      yield* jobs == null ? saved : _withJobNotes(jobs, call, saved);
+      await for (final event
+          in jobs == null ? saved : _withJobNotes(jobs, call, saved)) {
+        if (event is ToolResultEvent && event.result.violations.isNotEmpty) {
+          _refused[event.result.callId] = event.result.violations;
+        }
+        yield event;
+      }
     }
     for (final MapEntry(key: tool, value: batch) in batches.entries) {
       if (tool.runningLabel case final label?) yield StatusEvent(label);

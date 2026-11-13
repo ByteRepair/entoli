@@ -534,14 +534,14 @@ ShellResult ok(String output, {String? cwd}) =>
 
 /// A classifier that answers from a table instead of reaching a model.
 class FakeClassifier implements PermissionClassifier {
-  FakeClassifier({this.decision = PermissionDecision.allow});
+  FakeClassifier({this.decision = ClassifierVerdict.allow});
 
   /// What every call returns. Tests that need per-command decisions swap this
   /// out between turns.
-  PermissionDecision Function(String toolName, String arguments)? decide;
+  ClassifierVerdict Function(String toolName, String arguments)? decide;
 
   /// The default decision when [decide] is not set.
-  PermissionDecision decision;
+  ClassifierVerdict decision;
 
   final List<({String tool, String args})> classified = [];
 
@@ -555,7 +555,7 @@ class FakeClassifier implements PermissionClassifier {
   final List<ClassifierRequest?> requests = [];
 
   @override
-  Future<PermissionDecision> classify(
+  Future<ClassifierVerdict> classify(
     String toolName,
     String argumentsJson, {
     required String workspace,

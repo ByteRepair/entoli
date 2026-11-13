@@ -376,10 +376,11 @@ optional `description`, five to ten words on what the command does, and the
 reply draws it as the row's label in place of "Used tool: bash" — Claude
 Code's design: no second model reads the command to name it, so the label
 costs nothing. It is the agent's claim about its command and nothing checks
-it, which is why it stops at the label: the approval banner shows the command
-itself, and the classifier reads only `command`, so a call cannot argue its
-way past the gate in the words beside it. A call without one, and the user's
-`!`, keep the tool's name.
+it. It is shown beside the command, never in its place: the approval banner
+draws it above the command (`approvalPurpose`), so the user sees the intent
+and what will run, and the classifier reads it labelled as the agent's
+claim, judging the command and asking where the two disagree. A call without
+one, and the user's `!`, keep the tool's name.
 
 **How long a command may run is Claude Code's two minutes and ten.**
 `BuiltinOptions.commandTimeout` is what a call naming no `timeout` gets, two
@@ -654,10 +655,19 @@ back, and at least one segment must match — and `writes` are the union of
 the matched rules'. The turn's grant is the chat's workspace, its tmp, the
 project's workspace beside it, and the tiers' `writableDirs`.
 
-Beside those, three grants a build needs and a user should never have had
-to make (`sandbox_grants.dart`), each into the sandbox's `extraWrites` from
-`_sandboxFor`, so a `CommandSandbox` is always the whole write set and a
-helper renders it and adds nothing of its own. **The system's temp
+Beside those, the grants ordinary work needs and a user should never have
+had to make, each a `SandboxGrant` (`lib/domain/sandbox_grant.dart`): on
+unless switched off, per project over the default project's
+(`sandboxTemps`, `sandboxCaches`, `sandboxToolchains`, `sandboxGit` in
+`project.json`), and drawn as their own toggles on Terminal > Permissions
+and a project's page rather than as work folders, being the app's defaults
+and not the user's additions. The policy carries the ones on
+(`StandingPermissions.grants`). Each goes into the sandbox's `extraWrites`
+from `_sandboxFor` (`sandbox_grants.dart` finds the folders), so a
+`CommandSandbox` is always the whole write set and a helper renders it and
+adds nothing of its own. The sandbox is there to bound the damage a turn can
+do, not to stop it working: every grant that was missing sent the model out
+of the sandbox altogether, which grants everything. **The system's temp
 folders** (`systemTemps`): on macOS `/private/tmp` and the per-user folder
 `getconf DARWIN_USER_TEMP_DIR` names (Seatbelt's helper resolves it to the
 real path, like every grant), on Linux `/tmp` and `/var/tmp` where they
@@ -692,11 +702,20 @@ of the Flutter SDK on `PATH`, resolved through Homebrew's link, where every
 ran a test and the only way on was leaving the sandbox entirely, which grants
 everything a cache does not need. The cost is that a confined command can
 write a cache a later build reads; that is the bargain every build tool's
-sandbox makes. **A worktree's repository**: where the chat stands in a git
-worktree inside the grant whose repository is outside it, that repository's
-git directory is granted — read off the worktree's `.git` file and its
-`commondir`, not by running git — so a commit in a worktree the chat made
-lands; the repository's own files stay as they were. A setuid program such as
+sandbox makes. **The toolchains' stores** (`toolchainHomes`): uv's
+interpreters and tool environments and rustup's toolchains, which a
+`uv run --python 3.12` or a new target downloads into. Nothing on `PATH` is
+granted — `~/.cargo/bin`, nvm's, pyenv's or Bun's homes — since a program a
+command swapped there would be run later by the user, unsandboxed; an
+install onto `PATH` still leaves the sandbox and is judged. **A repository's
+git directory** (`repositoryGitDirs`): for each place the command works —
+where it stands, each `cd` and each `git -C` in its plain words
+(`commandDirs`) — the repository's `.git`, or for a worktree its
+repository's, read off the `.git` file and its `commondir` rather than by
+running git, so a commit lands anywhere; the repository's own files stay
+read-only. Its hooks and config are inside it and are not carved out — a
+user can ask for a hook — so the classifier asks before a command that
+changes them unless the user asked for that change. A setuid program such as
 `/bin/ps` cannot be exec'd under Seatbelt at all, whatever the profile says,
 and the `unsandboxed` argument's description says so and points at `pgrep`.
 
@@ -842,7 +861,17 @@ In `auto` mode, a `PermissionClassifier` (the `LlmClassifier` impl, or
 `NoClassifier` when no classifier model is configured) is asked before each
 `bash` and `webfetch` call. `allow` runs silently, `deny` refuses with a
 message that says not to retry it, `ask` escalates to the same banner `ask`
-mode uses. A command with parse findings reaches it with them, and its deny
+mode uses. `sandbox` (`ClassifierVerdict.sandbox`) answers only an
+unsandboxed call: the classifier judged the sandbox can run it, and the
+agent is told to run it again without `unsandboxed`, where it is judged as
+any command. It is the classifier's verdict alone; a deny of an unsandboxed
+call stays a deny, so nothing turns a refusal into a rerun the classifier
+did not choose. To judge it, the classifier is told the call asked to leave
+(the `Tool:` line says `unsandboxed: true`; it once saw only the command),
+the sandbox's whole write set as its "Also writable" paths, and what the
+sandbox refused each earlier call (`ClassifierCall.refused`, the result's
+`violations` — paths the sandbox reported, not output), so a command that
+hit the sandbox's wall is judged on its merits rather than sent back. A command with parse findings reaches it with them, and its deny
 carries the split advice instead (see "A command the parse cannot check"
 above). The classifier's rubric is workspace-anchored: reads of anything
 and writes inside the workspace allow, anything modifying state past it (the
@@ -853,8 +882,8 @@ times over. The ask list gives way to the request: an install, a commit or a
 write past the workspace that the user's words name, or the reply they
 agreed to names, is an allow, since asking about what was just asked for is
 the prompt that trips the circuit breaker below. A push, a delete outside
-the workspace, `sudo`, sending on the user's behalf and an unsandboxed write
-ask however plainly they were requested. A circuit
+the workspace, `sudo` and sending on the user's behalf ask however plainly
+they were requested. A circuit
 breaker pauses auto mode after 3 consecutive or 20 total escalations in one
 turn, falling back to `ask` for the rest — emitted as an `InfoEvent` so the
 UI can say "auto mode paused." `NoClassifier` always asks, which is why the
@@ -868,7 +897,7 @@ messages before it since the last compaction, the reply that message answers,
 and what they steered in while the turn ran — with the chat's active `/goal`
 objective, the plan's task in progress (`planInProgress` over `readPlan`), and
 the calls the agent made before this one since the last compaction, their
-arguments and never their results. That is Claude Code's choice and for its
+arguments and what the sandbox refused them, never their output. That is Claude Code's choice and for its
 reasons: the agent's prose is left out so it cannot argue the classifier into
 a call, the tool results because they are where injected text arrives, and
 the earlier messages and calls are what a "yes, go ahead" agrees to and what a

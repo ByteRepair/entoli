@@ -12,6 +12,7 @@ import "model_capability.dart";
 import "models.dart";
 import "permission.dart";
 import "provider_usage.dart";
+import "sandbox_grant.dart";
 import "profile.dart";
 import "sub_agent_log.dart";
 import "tone.dart";
@@ -545,6 +546,7 @@ class StandingPermissions {
     this.permissions = const [],
     this.writableDirs = const [],
     this.sandboxed = true,
+    this.grants = const {...SandboxGrant.values},
     this.approveMode = ApproveMode.ask,
   });
 
@@ -558,6 +560,10 @@ class StandingPermissions {
 
   /// Whether commands run under Landlock.
   final bool sandboxed;
+
+  /// The folders granted beside the workspaces that nobody named, those the
+  /// user left on.
+  final Set<SandboxGrant> grants;
 
   /// How a call the rules leave uncovered is decided: the chat's mode over
   /// the app's.

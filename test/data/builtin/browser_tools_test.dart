@@ -241,11 +241,11 @@ class FakeBrowserTab implements BrowserTab {
 class _StubClassifier implements PermissionClassifier {
   _StubClassifier(this.decision);
 
-  final PermissionDecision decision;
+  final ClassifierVerdict decision;
   final asked = <(String, String)>[];
 
   @override
-  Future<PermissionDecision> classify(
+  Future<ClassifierVerdict> classify(
     String toolName,
     String argumentsJson, {
     required String workspace,
@@ -412,7 +412,7 @@ void main() {
   group("gating", () {
     test("opening a page is a fetch of its URL to the classifier", () async {
       final tab = FakeBrowserTab();
-      final classifier = _StubClassifier(PermissionDecision.deny);
+      final classifier = _StubClassifier(ClassifierVerdict.deny);
       final events = await agentOver(
         FakeLlmClient([
           [
@@ -451,7 +451,7 @@ void main() {
     });
 
     test("the classifier reads the described action", () async {
-      final classifier = _StubClassifier(PermissionDecision.allow);
+      final classifier = _StubClassifier(ClassifierVerdict.allow);
       await agentOver(
         FakeLlmClient([
           [
@@ -776,7 +776,7 @@ void main() {
       "by default the classifier sees the whole path and the page",
       () async {
         final tab = FakeBrowserTab();
-        final classifier = _StubClassifier(PermissionDecision.deny);
+        final classifier = _StubClassifier(ClassifierVerdict.deny);
         final events = await agentOver(
           FakeLlmClient([
             [upload()],
@@ -803,7 +803,7 @@ void main() {
       "it is its own scope: clicks unasked, an upload still asked",
       () async {
         final tab = FakeBrowserTab();
-        final classifier = _StubClassifier(PermissionDecision.allow);
+        final classifier = _StubClassifier(ClassifierVerdict.allow);
         await agentOver(
           FakeLlmClient([
             [
@@ -828,7 +828,7 @@ void main() {
 
     test("Don't ask uploads with nobody asked", () async {
       final tab = FakeBrowserTab();
-      final classifier = _StubClassifier(PermissionDecision.deny);
+      final classifier = _StubClassifier(ClassifierVerdict.deny);
       await agentOver(
         FakeLlmClient([
           [upload()],

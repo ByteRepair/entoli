@@ -5,6 +5,7 @@ import "../../domain/agent_backend.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
+import "../../domain/sandbox_grant.dart";
 import "../../domain/safe_command.dart" show SegmentReach, profileSegment;
 import "../../domain/shell.dart";
 import "../../domain/shell_command_analysis.dart";
@@ -120,6 +121,7 @@ class ApprovalGate {
         ..._runtimeDirs,
       ],
       sandboxed: read.sandboxed,
+      grants: read.grants,
       approveMode: read.approveMode,
     );
   }
@@ -138,12 +140,15 @@ class ApprovalGate {
   /// is already the boundary, and Android's per-app sandbox is the OS's.
   SandboxHelper? get helper => sandboxHelper ?? shell.driverSandboxHelper;
 
-  /// The toolchain caches, looked up once per turn rather than per command:
-  /// home, `PATH` and the environment do not move under a turn.
+  /// The toolchain caches and homes, looked up once per turn rather than
+  /// per command: home, `PATH` and the environment do not move under a turn.
   late final List<String> _toolchainCaches = toolchainCaches(
     home: shell.machineHome,
     path: Platform.environment["PATH"] ?? "",
     environment: Platform.environment,
+  );
+  late final List<String> _toolchainHomes = toolchainHomes(
+    home: shell.machineHome,
   );
 
   /// Whether a command runs confined under [permissions]: the switch on and
@@ -155,11 +160,12 @@ class ApprovalGate {
   /// The sandbox a command runs in under [permissions]: the chat's workspace,
   /// its tmp, the project's workspace beside it — where work another
   /// conversation should find goes — the granted directories, and the
-  /// machine's [systemTemps].
+  /// [SandboxGrant]s the user left on. [dirs] are where the command works,
+  /// for the git grant.
   CommandSandbox? _sandboxFor(
     StandingPermissions permissions,
     List<String> systemTemps, {
-    String? standing,
+    List<String> dirs = const [],
   }) {
     if (!confines(permissions)) return null;
     final granted = [
@@ -167,23 +173,18 @@ class ApprovalGate {
       if (projectWorkspace != workspace) projectWorkspace,
       ...permissions.writableDirs,
     ];
-    final gitDir = worktreeGitDir(
-      standing ?? shell.standingIn(workspace) ?? workspace,
-      granted,
-    );
+    bool on(SandboxGrant grant) => permissions.grants.contains(grant);
     return CommandSandbox(
       workspace: workspace,
       tmp: shell.tmpDirFor(workspace),
       home: shell.machineHome,
       extraWrites: [
         ...granted.skip(1),
-        // What developer tools write in the ordinary course of a build, and
-        // the repository a worktree the chat owns commits into: denied, they
-        // sent every build out of the sandbox altogether.
-        ..._toolchainCaches,
-        // The machine's temp folders, for the tools that do not ask TMPDIR.
-        ...systemTemps,
-        ?gitDir,
+        // Denied, each sent ordinary work out of the sandbox altogether.
+        if (on(SandboxGrant.caches)) ..._toolchainCaches,
+        if (on(SandboxGrant.toolchains)) ..._toolchainHomes,
+        if (on(SandboxGrant.systemTemps)) ...systemTemps,
+        if (on(SandboxGrant.git)) ...repositoryGitDirs(dirs, granted),
       ],
     );
   }
@@ -218,7 +219,15 @@ class ApprovalGate {
     // command of a process pays one `getconf`, and it overlaps the read.
     final temps = systemTemps();
     final permissions = await this.permissions();
-    final sandbox = _sandboxFor(permissions, await temps, standing: standing);
+    final sandbox = _sandboxFor(
+      permissions,
+      await temps,
+      dirs: commandDirs(
+        analysis.modelableSegments,
+        standing ?? shell.standingIn(workspace) ?? workspace,
+        _tilde,
+      ),
+    );
     if (sandbox == null) return null;
     final ruled = rulesSandbox(
       permissions.permissions,
@@ -280,6 +289,10 @@ class ApprovalGate {
       return;
     }
     final callMode = mode ?? turnMode;
+    // What the sandbox would let this command write, for the classifier to
+    // weigh: a write there is one the sandbox holds, however it is asked.
+    final sandbox = analysis == null ? null : await confinementOf(analysis);
+    final sandboxWrites = sandbox?.writes.skip(1).toList();
     // A command the parse has findings on, where a sandbox would hold the
     // run to them: decided here, once, for every rule and mode short of a
     // deny. An allow rule is a standing decision only for commands the parse
@@ -303,6 +316,7 @@ class ApprovalGate {
             argumentsText,
             analysis,
             rules,
+            sandboxWrites,
           );
       }
       return;
@@ -351,6 +365,7 @@ class ApprovalGate {
           outcome,
           argumentsText,
           unsandboxed: unsandboxed,
+          sandboxWrites: sandboxWrites,
         );
       case ApproveMode.never when unsandboxed:
         // Nobody to ask, and the sandbox is the one guard an unwatched turn
@@ -466,6 +481,7 @@ class ApprovalGate {
     String? argumentsText,
     ShellCommandAnalysis analysis,
     List<PermissionRule> rules,
+    List<String>? sandboxWrites,
   ) async* {
     final segments = analysis.modelableSegments;
     if (rulesBlindTo(rules, segments, PermissionDecision.deny)) {
@@ -486,6 +502,7 @@ class ApprovalGate {
       argumentsText,
       findings: [...analysis.unmodelableReasons, ...analysis.escalationReasons],
       refusal: analysis.escalationNoteBecause(_classifierDenied),
+      sandboxWrites: sandboxWrites,
     );
   }
 
@@ -503,6 +520,7 @@ class ApprovalGate {
     bool unsandboxed = false,
     List<String> findings = const [],
     String? refusal,
+    List<String>? sandboxWrites,
   }) async* {
     if (_autoPaused) {
       yield* _ask(
@@ -529,39 +547,43 @@ class ApprovalGate {
         toolName,
         call.argumentsJson,
         workspace: workspace,
-        alsoWritable: [
-          if (projectWorkspace != workspace) projectWorkspace,
-          ...policy.writableDirs,
-        ],
+        alsoWritable:
+            sandboxWrites ??
+            [
+              if (projectWorkspace != workspace) projectWorkspace,
+              ...policy.writableDirs,
+            ],
         findings: findings,
         request: asked,
       ),
-      stopped.then((_) => PermissionDecision.ask),
+      stopped.then((_) => ClassifierVerdict.ask),
     ]);
     if (cancelled()) {
       outcome.result = const ShellResult.failed(notExecuted);
       return;
     }
 
-    if (decision != PermissionDecision.ask) {
+    if (decision != ClassifierVerdict.ask) {
       _consecutiveAsks = 0;
       outcome.decision = (
         source: PermissionSource.classifier,
         tiers: const [],
-        decided: decision,
+        decided: decision.decision,
       );
     }
     switch (decision) {
-      case PermissionDecision.allow:
+      case ClassifierVerdict.allow:
         outcome.result = await run();
-      case PermissionDecision.deny:
+      case ClassifierVerdict.sandbox when unsandboxed:
+        outcome.result = const ShellResult.failed(_stayInSandbox);
+      case ClassifierVerdict.deny || ClassifierVerdict.sandbox:
         outcome.result = ShellResult.failed(
           refusal ??
               "Denied by auto mode as dangerous. Do not retry this command; "
                   "tell the user what you were trying to do and let them "
                   "decide.",
         );
-      case PermissionDecision.ask:
+      case ClassifierVerdict.ask:
         _consecutiveAsks++;
         _totalAsks++;
         if (_consecutiveAsks >= 3 || _totalAsks >= 20) {
@@ -585,6 +607,13 @@ class ApprovalGate {
   static const _deniedByUser =
       "The user denied this command. Ask them what "
       "to do instead, or try something else.";
+
+  /// What the classifier's sandbox verdict says: it judged the sandbox can
+  /// run the call, and the rerun is judged as any command.
+  static const _stayInSandbox =
+      "Auto mode refused to run this outside the sandbox: it judged the "
+      "sandbox can run it. Run it again without `unsandboxed`. If the sandbox "
+      "then refuses a write, ask to leave it again.";
 
   static const _unsandboxedRefused =
       "Running this outside the sandbox needs "

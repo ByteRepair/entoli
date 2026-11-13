@@ -3,7 +3,8 @@ import "dart:io";
 import "package:path/path.dart" as p;
 
 import "../../core/log.dart";
-import "../../domain/shell.dart" show repositoryRootOf;
+import "../../domain/shell.dart" show isTildePath, repositoryRootOf;
+import "../../domain/shell_command_analysis.dart" show plainCommand;
 import "local_shell.dart" show LocalShell;
 
 /// The caches developer tools write to as a matter of course, under the
@@ -81,43 +82,96 @@ String? _flutterCache(String path) {
   return null;
 }
 
-/// Where a git worktree under [granted] keeps its objects and refs, where
-/// that is outside every one of them: a worktree made in the chat's
-/// workspace from a repository elsewhere writes its commits into that
-/// repository's `.git`, so a sandboxed `git commit` in a worktree the chat
-/// owns failed on a directory it was never meant to own. Only the repository
-/// metadata is granted, never the repository's own files.
+/// The git directories of the repositories [dirs] stand in, those outside
+/// [granted]: a checkout's own `.git`, and a worktree's repository, which
+/// its commits land in. Only the metadata is granted, never the
+/// repository's own files, so a sandboxed `git commit` lands where the
+/// tree it commits stays read-only.
 ///
-/// [dir] is where the commands stand. Read from the files git leaves — the
-/// worktree's `.git` file names its gitdir, and that gitdir's `commondir`
-/// names the repository's — rather than by running git per command.
-String? worktreeGitDir(String dir, List<String> granted) {
+/// Read from the files git leaves — a worktree's `.git` file names its
+/// gitdir, and that gitdir's `commondir` names the repository's — rather
+/// than by running git per command.
+List<String> repositoryGitDirs(Iterable<String> dirs, List<String> granted) {
   bool inGrant(String path) =>
       granted.any((g) => p.equals(g, path) || p.isWithin(g, path));
-  final at = repositoryRootOf(dir);
-  if (at == null) return null;
-  final dotGit = p.join(at, ".git");
-  // A checkout's `.git` is a directory, and its metadata is its own.
-  if (FileSystemEntity.typeSync(dotGit, followLinks: false) !=
-          FileSystemEntityType.file ||
-      !inGrant(at)) {
-    return null;
+  final found = <String>{};
+  for (final dir in dirs) {
+    final at = repositoryRootOf(dir);
+    if (at == null) continue;
+    final gitDir = _gitDirOf(p.join(at, ".git"));
+    if (gitDir != null && !inGrant(gitDir)) found.add(gitDir);
   }
-  try {
-    final line = File(
-      dotGit,
-    ).readAsLinesSync().firstWhere((l) => l.startsWith("gitdir:"));
-    final gitdir = p.normalize(
-      p.join(at, line.substring("gitdir:".length).trim()),
-    );
-    final common = File(p.join(gitdir, "commondir"));
-    final root = common.existsSync()
-        ? p.normalize(p.join(gitdir, common.readAsStringSync().trim()))
-        : gitdir;
-    return inGrant(root) ? null : root;
-  } on Object {
-    return null;
+  return found.toList();
+}
+
+String? _gitDirOf(String dotGit) {
+  switch (FileSystemEntity.typeSync(dotGit, followLinks: false)) {
+    case FileSystemEntityType.directory:
+      return dotGit;
+    case FileSystemEntityType.file:
+      try {
+        final line = File(
+          dotGit,
+        ).readAsLinesSync().firstWhere((l) => l.startsWith("gitdir:"));
+        final gitdir = p.normalize(
+          p.join(p.dirname(dotGit), line.substring("gitdir:".length).trim()),
+        );
+        final common = File(p.join(gitdir, "commondir"));
+        return common.existsSync()
+            ? p.normalize(p.join(gitdir, common.readAsStringSync().trim()))
+            : gitdir;
+      } on Object {
+        return null;
+      }
+    default:
+      return null;
   }
+}
+
+/// Where a command works: [standing], each `cd` it makes, and each
+/// `git -C` it names, read off [segments]' plain words and resolved against
+/// the directory the command stands in at that point. [resolve] reads `~`.
+List<String> commandDirs(
+  List<String>? segments,
+  String standing,
+  String Function(String path) resolve,
+) {
+  var at = standing;
+  String full(String path) => isTildePath(path)
+      ? resolve(path)
+      : p.normalize(p.isAbsolute(path) ? path : p.join(at, path));
+  final dirs = [standing];
+  for (final segment in segments ?? const <String>[]) {
+    final words = plainCommand(segment)?.words;
+    if (words == null || words.isEmpty) continue;
+    if (words.length == 2 && words[0] == "cd") {
+      at = full(words[1]);
+      dirs.add(at);
+    } else if (words[0] == "git") {
+      for (var i = 1; i < words.length - 1; i++) {
+        if (words[i] == "-C") dirs.add(full(words[i + 1]));
+      }
+    }
+  }
+  return dirs;
+}
+
+/// Where toolchains keep what they download under the machine user's
+/// [home], those that exist: uv's interpreters and tool environments, and
+/// rustup's toolchains. A `uv run --python 3.12` fetches its interpreter
+/// here, and denied it, the run left the sandbox for a download. Nothing on
+/// `PATH` is here — `~/.cargo/bin`, nvm's or pyenv's shims — since a
+/// program swapped there would be run later, unsandboxed, by the user.
+List<String> toolchainHomes({required String? home}) {
+  if (home == null) return const [];
+  return [
+    for (final dir in const [
+      [".local", "share", "uv"],
+      [".rustup"],
+    ])
+      if (Directory(p.joinAll([home, ...dir])).existsSync())
+        p.joinAll([home, ...dir]),
+  ];
 }
 
 /// The machine's own temp folders, which every confined command may write:

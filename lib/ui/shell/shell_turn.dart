@@ -171,6 +171,7 @@ class TurnRunner implements TurnIntents {
       glyph: glyphOf(icon) ?? Glyph.shield,
       tool: approval.toolName,
       detail: approval.argumentsText ?? approval.argumentsJson,
+      purpose: approvalPurpose(approval),
       allow: offers.allow,
       chat: offers.always,
       project: offers.always,

@@ -145,6 +145,27 @@ void main() {
     });
   });
 
+  testWidgets("the agent's description of the call is shown above it", (
+    tester,
+  ) async {
+    await app.pump(
+      tester,
+      ApprovalBanner(
+        approval: const ToolApproval(
+          id: "call-1",
+          toolName: "bash",
+          argumentsJson:
+              '{"command": "git commit -m wip", "description": "Commit the fix"}',
+          argumentsText: "git commit -m wip",
+        ),
+        onAllow: () {},
+        onDeny: () {},
+      ),
+    );
+    expect(find.text("Commit the fix"), findsOneWidget);
+    expect(find.text("git commit -m wip"), findsOneWidget);
+  });
+
   group("where the rule would be written", () {
     testWidgets("a mirrored chat hides them", (tester) async {
       tester.view.physicalSize = const Size(1400, 1200);

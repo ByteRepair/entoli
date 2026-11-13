@@ -295,6 +295,9 @@ struct TurnSurfaceView: View {
         Spacer(minLength: 8)
         Text(approval.tool).font(.caption.monospaced()).foregroundStyle(.secondary)
       }
+      if let purpose = approval.purpose {
+        Text(purpose).font(.callout).foregroundStyle(.secondary)
+      }
       if let detail = approval.detail {
         ScrollView {
           Text(detail)

@@ -59,7 +59,22 @@ void main() {
     }, skip: Platform.isWindows ? "a link on PATH is the POSIX shape" : null);
   });
 
-  group("a worktree's repository", () {
+  group("toolchain homes", () {
+    test("names the version managers' folders that exist", () {
+      final home = p.join(tmp.path, "home");
+      Directory(
+        p.join(home, ".local", "share", "uv"),
+      ).createSync(recursive: true);
+      Directory(p.join(home, ".rustup")).createSync(recursive: true);
+
+      expect(toolchainHomes(home: home), [
+        p.join(home, ".local", "share", "uv"),
+        p.join(home, ".rustup"),
+      ]);
+    });
+  });
+
+  group("a repository's git directory", () {
     late String workspace;
     late String repo;
 
@@ -76,26 +91,42 @@ void main() {
       ).writeAsStringSync("gitdir: $gitdir\n");
     });
 
-    test("is granted where the worktree is the chat's", () {
+    test("a worktree's is its repository's", () {
       expect(
-        worktreeGitDir(p.join(workspace, "tree", "lib"), [workspace]),
+        repositoryGitDirs([p.join(workspace, "tree", "lib")], [workspace]),
+        [p.join(repo, ".git")],
+      );
+    });
+
+    test("a checkout outside the grant is granted its .git alone", () {
+      expect(repositoryGitDirs([p.join(repo, "src")], [workspace]), [
         p.join(repo, ".git"),
-      );
+      ]);
     });
 
-    test("is not, where the worktree is outside the grant", () {
-      expect(
-        worktreeGitDir(p.join(workspace, "tree", "lib"), [
-          p.join(tmp.path, "other"),
-        ]),
-        isNull,
-      );
-    });
-
-    test("an ordinary checkout grants nothing beyond itself", () {
+    test("a checkout inside the grant needs nothing more", () {
       final checkout = p.join(workspace, "plain");
       Directory(p.join(checkout, ".git")).createSync(recursive: true);
-      expect(worktreeGitDir(checkout, [workspace]), isNull);
+      expect(repositoryGitDirs([checkout], [workspace]), isEmpty);
+    });
+  });
+
+  group("where a command works", () {
+    String resolve(String path) => path.replaceFirst("~", "/home/u");
+
+    test("where it stands, each cd, and each git -C", () {
+      expect(
+        commandDirs(
+          ["cd sub", "git -C ../other status", "git -C ~/repo log"],
+          "/ws",
+          resolve,
+        ),
+        ["/ws", "/ws/sub", "/ws/other", "/home/u/repo"],
+      );
+    });
+
+    test("a segment that is not plain text names nothing", () {
+      expect(commandDirs([r"cd $DIR"], "/ws", resolve), ["/ws"]);
     });
   });
 }
