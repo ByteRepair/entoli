@@ -12,6 +12,8 @@ import "../../domain/models.dart";
 import "../../domain/project.dart" show projectLabel;
 import "../../domain/prompt_library.dart";
 import "../../providers.dart";
+import "../../domain/bot_avatar/spec.dart";
+import "../marketplace/face.dart";
 import "../marketplace/groups.dart";
 import "../prompts/agent_files.dart";
 import "../prompts/skill_files.dart";
@@ -39,6 +41,19 @@ final marketplaceEntriesProvider = FutureProvider.autoDispose
 /// The rows both marketplace lists draw: an entry opening its preview, and a
 /// collection opening its page.
 mixin ListsMarketplaceEntries on AppPage {
+  /// The presets the rows' faces are picked from; none while they load, when
+  /// the rows keep their glyphs.
+  List<BotAvatarSpec> _presets = const [];
+
+  /// Read once per build, before the lists.
+  void watchFaces(SettingReader reader) =>
+      _presets = reader.watch(botAvatarPresetsProvider).value ?? const [];
+
+  RowFace? _face(String key) => switch (marketplaceFace(key, _presets)) {
+    final spec? => AvatarRowFace(spec, animate: false),
+    null => null,
+  };
+
   SettingController entryList(
     CompletionKind kind,
     String id,
@@ -54,7 +69,11 @@ mixin ListsMarketplaceEntries on AppPage {
         if (entry.description.isNotEmpty) entry.description,
         if (entry.metaLine.isNotEmpty) entry.metaLine,
       ].join("\n"),
-      glyph: kind == CompletionKind.skill
+      face: _face(entry.slug),
+      // Native draws a glyph beside a face, so a face replaces it.
+      glyph: _presets.isNotEmpty
+          ? null
+          : kind == CompletionKind.skill
           ? SettingGlyph.skill
           : SettingGlyph.agent,
       editable: false,
@@ -80,7 +99,8 @@ mixin ListsMarketplaceEntries on AppPage {
         if (collection.summary.isNotEmpty) collection.summary,
         _count(kind, collection.members.length),
       ].join("\n"),
-      glyph: SettingGlyph.folder,
+      face: _face(collection.slug),
+      glyph: _presets.isNotEmpty ? null : SettingGlyph.folder,
       editable: false,
       takesImage: false,
       tap: "open",
@@ -160,6 +180,7 @@ class MarketplaceAppPage extends AppPage with ListsMarketplaceEntries {
 
   @override
   List<PageSection> sections(SettingReader reader) {
+    watchFaces(reader);
     final listed = reader.watch(marketplaceEntriesProvider(_kind));
     final tagged = _tagged[_kind]!;
     final grouped = switch (listed.value) {
@@ -279,29 +300,32 @@ class MarketplaceCollectionAppPage extends AppPage
   String? subtitle(SettingReader reader) => "Marketplace · ${kind.label}";
 
   @override
-  List<PageSection> sections(SettingReader reader) => [
-    if (collection.summary.isNotEmpty) notice("about", collection.summary),
-    PageSection("browse", "", [
-      searchRow(_query, (text) => _query = text),
-      tagsRow(
-        kind,
-        _tagged,
-        // Every remote entry carries it, so it filters nothing here.
-        [
-          for (final tag in tagsOf(collection.members))
-            if (tag.$1 != externalTag) tag,
-        ],
-        scope: collection.slug,
-      ),
-    ]),
-    PageSection("members", _count(kind, collection.members.length), [
-      entryList(
-        kind,
-        "members",
-        entriesMatching(collection.members, _query, _tagged),
-      ),
-    ]),
-  ];
+  List<PageSection> sections(SettingReader reader) {
+    watchFaces(reader);
+    return [
+      if (collection.summary.isNotEmpty) notice("about", collection.summary),
+      PageSection("browse", "", [
+        searchRow(_query, (text) => _query = text),
+        tagsRow(
+          kind,
+          _tagged,
+          // Every remote entry carries it, so it filters nothing here.
+          [
+            for (final tag in tagsOf(collection.members))
+              if (tag.$1 != externalTag) tag,
+          ],
+          scope: collection.slug,
+        ),
+      ]),
+      PageSection("members", _count(kind, collection.members.length), [
+        entryList(
+          kind,
+          "members",
+          entriesMatching(collection.members, _query, _tagged),
+        ),
+      ]),
+    ];
+  }
 }
 
 /// The tag the site puts on every remote entry.

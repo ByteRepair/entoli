@@ -35,6 +35,15 @@ the empty-index line. The picker lists the section's tags with each one's
 entry count, and Clear when anything is ticked; the row that opens it is
 dead while the list has not landed.
 
+**Every row wears a Bot Avatar picked from its key** (`face.dart`): the
+preset at `hashString(key) % presets.length`, coloured `ownColour(key)`, so a
+row looks the same on every device with nothing fetched. It follows the
+bundled presets' order, so reordering them changes every row's face; that is
+accepted. The faces are stills (`AvatarRowFace(animate: false)`, `botLive` on
+the wire): a collection of hundreds of live faces is a ticker per row. Until
+the presets load the rows keep their glyph, and a row with a face has none,
+since the native row draws both.
+
 The list is the site's `index.json` per section
 (`byterepair.github.io/entoli-marketplace`). The URL is
 `marketplaceBaseUrl`, a const — promoted to a setting if it ever needs to be

@@ -4,6 +4,8 @@ import "package:agent_chat/app/settings/hand_off.dart";
 import "package:agent_chat/app/settings/spec.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/app_theme.dart";
+import "package:agent_chat/domain/bot_avatar/spec.dart";
+import "package:agent_chat/providers.dart" show botAvatarPresetsProvider;
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/ui/shell/shell_settings.dart";
@@ -87,6 +89,34 @@ class _Page extends AppPage {
           count = value;
           changed();
         },
+      ),
+    ]),
+  ];
+}
+
+/// Two rows wearing [spec], one live and one still.
+class _FacesPage extends AppPage {
+  _FacesPage(this.spec);
+
+  final BotAvatarSpec spec;
+
+  @override
+  String get address => "faces";
+
+  @override
+  String title(SettingReader reader) => "Faces";
+
+  @override
+  List<PageSection> sections(SettingReader reader) => [
+    PageSection("s", "", [
+      CollectionController<bool>(
+        part("faces", "Faces", hint: UiHint.info),
+        items: const [true, false],
+        removable: false,
+        describe: (live) => CollectionItem(
+          live ? "live" : "still",
+          face: AvatarRowFace(spec, animate: live),
+        ),
       ),
     ]),
   ];
@@ -290,6 +320,23 @@ void main() {
       await settleIo(tester);
       expect(page.on, isTrue);
       expect(native.stacks.last.single.guarded, isTrue);
+    });
+
+    testWidgets("a still face is sent as not live", (tester) async {
+      final presets = await io(
+        tester,
+        () => app.container.read(botAvatarPresetsProvider.future),
+      );
+      app.container
+          .read(appPagesProvider.notifier)
+          .open(_FacesPage(presets.first));
+      await settleIo(tester);
+
+      final row = native.stacks.last.single.sections.single!.rows.single!;
+      expect(row.items.map((i) => (i!.title, i.bot != null, i.botLive)), [
+        ("live", true, true),
+        ("still", true, false),
+      ]);
     });
 
     testWidgets("a number on a page is set by its intent", (tester) async {

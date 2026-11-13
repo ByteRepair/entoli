@@ -337,6 +337,10 @@ class _Encoder {
                   image: face?.photo,
                   bot: face?.bot,
                   botColour: face?.colour,
+                  botLive: switch (item.face) {
+                    AvatarRowFace(:final animate) => animate,
+                    _ => true,
+                  },
                   actions: [
                     for (final action in c.actionsOf(item))
                       SettingItemActionData(

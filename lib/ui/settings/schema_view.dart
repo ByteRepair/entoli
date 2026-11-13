@@ -1422,11 +1422,13 @@ class _Collection<T> extends StatelessWidget {
           if (c.actionsOf(row) case final actions)
             ListTile(
               leading: switch ((row.face, settingIcon(row.glyph))) {
-                (AvatarRowFace(:final spec), _) => BotAvatarView(
-                  spec: spec,
-                  size: 40,
-                  reactToTap: true,
-                ),
+                (AvatarRowFace(:final spec, :final animate), _) =>
+                  BotAvatarView(
+                    spec: spec,
+                    size: 40,
+                    animate: animate,
+                    reactToTap: true,
+                  ),
                 // Live, and happy at a tap: a row scrolled out of view is not
                 // painted, which stops its ticker until it is back.
                 (AgentRowFace(:final project, :final name), _) => AgentPicture(

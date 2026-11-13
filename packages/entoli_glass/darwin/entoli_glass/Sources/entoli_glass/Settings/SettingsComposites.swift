@@ -36,7 +36,7 @@ struct CollectionRow: View {
           if let bot = item.bot {
             BotFaceView(
               model: model, key: bot, colour: Int(item.botColour ?? 0xff6a1a), size: 32,
-              reactToTap: true)
+              live: item.botLive, reactToTap: true)
           } else if let data = item.image?.data, let image = PlatformImage(data: data) {
             Image(platformImage: image).resizable().scaledToFill()
               .frame(width: 32, height: 32).clipShape(Circle())

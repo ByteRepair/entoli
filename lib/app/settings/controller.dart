@@ -953,9 +953,12 @@ final class AgentRowFace extends RowFace {
 }
 
 final class AvatarRowFace extends RowFace {
-  const AvatarRowFace(this.spec);
+  const AvatarRowFace(this.spec, {this.animate = true});
 
   final BotAvatarSpec spec;
+
+  /// False draws a still: a long list of live faces is a ticker per row.
+  final bool animate;
 }
 
 /// One thing an item has spent, said; [fraction] of it gone where it is

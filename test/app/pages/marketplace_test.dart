@@ -12,6 +12,7 @@ import "package:agent_chat/app/pages/marketplace.dart";
 import "package:agent_chat/app/settings/controller.dart";
 import "package:agent_chat/data/prompts/skill_import.dart";
 import "package:agent_chat/data/prompts/skill_package.dart";
+import "package:agent_chat/domain/bot_avatar/spec.dart";
 import "package:agent_chat/domain/models.dart";
 
 import "../../data/fake_network.dart";
@@ -52,6 +53,8 @@ const upstreamSkillDir = "skills/red-letter";
 const upstreamAgentDir = "agents/letter-writer";
 
 void main() {
+  // The rows' faces are picked from the presets, an asset read.
+  TestWidgetsFlutterBinding.ensureInitialized();
   late TestApp app;
   late FakeNetwork network;
 
@@ -268,6 +271,18 @@ Frame it, from upstream.
     await page.until(() => names(page, "front").contains("diary"));
     expect(names(page, "front"), ["diary", "letter-writer"]);
     expect(collectionNames(page), isEmpty);
+  });
+
+  test("rows wear a still face of their key once presets load", () async {
+    start();
+    final page = await list();
+    CollectionItem first() =>
+        page.at<CollectionController<MarketplaceEntry>>("front").rows.first;
+    await page.until(() => first().face != null);
+    final face = first().face! as AvatarRowFace;
+    expect(face.animate, isFalse);
+    expect(face.spec.colour, BotPalette.ownColour("letterbox"));
+    expect(first().glyph, isNull);
   });
 
   test("a site with no collections lists every entry up front", () async {

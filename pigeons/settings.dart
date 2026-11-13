@@ -291,6 +291,7 @@ class SettingItemData {
     this.opens,
     this.bot,
     this.botColour,
+    this.botLive = true,
     this.tap,
     this.badge,
     this.editable = true,
@@ -314,6 +315,9 @@ class SettingItemData {
   /// colour as 0xRRGGBB.
   String? bot;
   int? botColour;
+
+  /// False draws [bot] still.
+  bool botLive;
 
   /// A page of the app's that tells more of it.
   TextPageData? opens;
