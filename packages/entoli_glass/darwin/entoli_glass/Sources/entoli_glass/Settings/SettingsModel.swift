@@ -187,6 +187,10 @@ import SwiftUI
     say.deviceShown(id: id, completion: ignore)
   }
 
+  func appPages(stack: [SettingsPageData]) throws {
+    AppPagesModel.shared?.update(stack)
+  }
+
   func device(id: String, device: PairedDeviceData?, readError: String?) throws {
     self.device = ShownDevice(id: id, record: device, readError: readError)
     if opening == id {
@@ -321,12 +325,16 @@ extension SettingsModel {
   }
 }
 
-/// What an intent [call] answers, or nil where it failed.
+/// What an intent [call] answers, or nil where it failed. On the main
+/// actor: an async caller runs off the main thread, and a channel's message
+/// must leave from the platform thread.
+@MainActor
 func reply<T>(_ call: (@escaping (Result<T, PigeonError>) -> Void) -> Void) async -> T? {
   await withCheckedContinuation { done in call { done.resume(returning: try? $0.get()) } }
 }
 
 /// What an intent [call] answers, or [fallback] where it failed.
+@MainActor
 func reply<T>(or fallback: T, _ call: (@escaping (Result<T, PigeonError>) -> Void) -> Void)
   async -> T
 {
@@ -376,4 +384,6 @@ enum SettingsRoute: Hashable {
   case models(OpenedModels)
   /// A paired device's page, by its id.
   case device(String)
+  /// One of the app's pages, by its address.
+  case app(String)
 }

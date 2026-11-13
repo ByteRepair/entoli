@@ -15,6 +15,9 @@ struct ModelList: View {
   /// every key.
   @State private var cards: [ModelCardData] = []
   @State private var search = ""
+  @FocusState private var searching: Bool
+  @Environment(\.dismiss) private var dismiss
+  @Environment(\.ownBar) private var ownBar
   @State private var reasoning = false
   @State private var seesImages = false
   @State private var provider: String?
@@ -77,20 +80,7 @@ struct ModelList: View {
       }
     }
     .formStyle(.grouped)
-    .searchable(text: $search, prompt: "Search \(cards.count) models")
-    .topBar { filters }
-    .navigationTitle(data?.title ?? "")
-    .toolbar {
-      if data?.canAdd == true {
-        ToolbarItem(placement: .primaryAction) {
-          Button {
-            editing = Editing(providerId: provider, modelId: nil)
-          } label: {
-            Label("Add model", systemImage: "plus")
-          }
-        }
-      }
-    }
+    .modifier(Chrome(list: self))
     .sheet(item: $editing, onDismiss: reload) { editing in
       FormSheet(
         load: { await model.modelForm(row.id, editing.providerId, editing.modelId, $0) },
@@ -164,6 +154,91 @@ struct ModelList: View {
         ForEach(matching, id: \.key) { card($0) }
       }
     }
+  }
+
+  private var prompt: String { "Search \(cards.count) models" }
+
+  private func add() { editing = Editing(providerId: provider, modelId: nil) }
+
+  /// The system's bar where the window's toolbar is the page's: the title, a
+  /// search in the toolbar, the add button an item of it. In a Mac's sheet,
+  /// whose toolbar sets the title and back button on a row under the search,
+  /// the list draws one row of its own instead (`bar`) and the toolbar goes.
+  private struct Chrome: ViewModifier {
+    let list: ModelList
+
+    func body(content: Content) -> some View {
+      if list.ownBar {
+        content
+          .topBar {
+            VStack(spacing: 0) {
+              list.bar
+              list.filters
+            }
+          }
+          .toolbar(removing: .title)
+          .navigationBarBackButtonHidden()
+          #if os(macOS)
+            .toolbar(.hidden, for: .windowToolbar)
+            // Escape clears the search, then goes back.
+            .onExitCommand {
+              if list.search.isEmpty { list.dismiss() } else { list.search = "" }
+            }
+          #endif
+      } else {
+        content
+          .searchable(text: list.$search, prompt: list.prompt)
+          .topBar { list.filters }
+          .navigationTitle(list.data?.title ?? "")
+          .toolbar {
+            if list.data?.canAdd == true {
+              ToolbarItem(placement: .primaryAction) {
+                Button(action: list.add) { Label("Add model", systemImage: "plus") }
+              }
+            }
+          }
+      }
+    }
+  }
+
+  /// Back, the title and the search on one row, in the system's glass.
+  private var bar: some View {
+    HStack(spacing: 12) {
+      Button { dismiss() } label: {
+        Image(systemName: "chevron.backward").frame(width: 20, height: 20)
+      }
+      .modifier(GlassButton())
+      .buttonBorderShape(.circle)
+      .help("Back")
+      Text(data?.title ?? "").font(.headline).lineLimit(1)
+      Spacer(minLength: 12)
+      HStack(spacing: 6) {
+        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+        TextField(prompt, text: $search)
+          .textFieldStyle(.plain)
+          .focused($searching)
+        if !search.isEmpty {
+          Button { search = "" } label: {
+            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+          }
+          .buttonStyle(.plain)
+          .help("Clear")
+        }
+      }
+      .padding(.horizontal, 10)
+      .padding(.vertical, 6)
+      .frame(maxWidth: 260)
+      .modifier(GlassSurface(shape: Capsule(), tint: nil))
+      if data?.canAdd == true {
+        Button(action: add) { Image(systemName: "plus").frame(width: 20, height: 20) }
+          .modifier(GlassButton())
+          .buttonBorderShape(.circle)
+          .help("Add model")
+      }
+    }
+    .padding(.horizontal, 16)
+    .padding(.top, 14)
+    .padding(.bottom, 6)
   }
 
   /// The filters over the list: what the model does, and whose it is.
@@ -343,6 +418,7 @@ extension View {
   /// [bar] over the top of a scrolling page, with the system's scroll edge
   /// under it where there is one, so the page scrolls away beneath it.
   @ViewBuilder func topBar(@ViewBuilder _ bar: () -> some View) -> some View {
+    // (A Mac's sheet draws its own bar over the list: see `ModelList.Chrome`.)
     if #available(macOS 26, iOS 26, *) {
       safeAreaBar(edge: .top, spacing: 0, content: bar)
     } else {

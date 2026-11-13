@@ -1,8 +1,11 @@
+import "../../app/pages/welcome.dart" show WelcomeAppPage;
+import "../app_pages.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/settings/settings.dart" show pageOffered;
 import "../../app/settings/spec.dart";
+import "../widgets/native_surfaces.dart";
 
 /// The page's categories, in the order they are offered and the groups they
 /// are offered in. General, Providers, On-device, LLMs and Image Generation
@@ -62,10 +65,6 @@ const settingsRoute = "/settings";
 /// setup row or a bar points at one thing to set.
 typedef SettingsArgs = ({SettingsCategory? category, bool focus});
 
-/// The native settings' way in, while the SwiftUI frontend is up: set by its
-/// bridge, which sends them every page. Null under the Flutter frontend.
-Future<void> Function(SettingsPageId? page)? nativeSettingsOpener;
-
 /// Open Settings, at [category] where there is one: the native settings
 /// where the frontend has its own, Flutter's page otherwise. The welcome tour
 /// is not settings, and is Flutter's on every frontend.
@@ -74,9 +73,13 @@ Future<void> openSettings(
   SettingsCategory? category,
   bool focus = false,
 }) {
-  final native = nativeSettingsOpener;
-  if (native != null && category != SettingsCategory.welcome) {
-    return native(category?.page);
+  // The tour is a page of the app's, not a settings page.
+  if (category == SettingsCategory.welcome) {
+    openAppPage(context, WelcomeAppPage(replay: true));
+    return Future.value();
+  }
+  if (nativeSurfacesOf(context) case final native?) {
+    return native.openSettings(category?.page);
   }
   return Navigator.of(
     context,

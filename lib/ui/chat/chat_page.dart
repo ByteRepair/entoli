@@ -2,29 +2,21 @@ import "dart:async";
 import "dart:math" as math;
 
 import "package:flutter/foundation.dart" show listEquals;
-import "package:collection/collection.dart" show IterableExtension;
 import "package:flutter/material.dart";
-import "package:flutter/rendering.dart"
-    show RenderAbstractViewport, RenderProxyBox;
+import "package:flutter/rendering.dart" show RenderAbstractViewport;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:super_sliver_list/super_sliver_list.dart";
 
 import "../../domain/agent_backend.dart";
-import "../../domain/agent_face.dart";
-import "../../domain/chat_meta.dart";
-import "../../domain/end_turn.dart";
 import "../../domain/models.dart";
-import "../../domain/reaction.dart" show Reactions, reactionsOn;
 import "../../domain/room/room_state.dart";
 import "../../domain/project.dart";
-import "../../domain/prompt_library.dart" show nameOf;
 import "../../providers.dart";
 import "../fonts.dart";
 import "../theme.dart";
 import "../selection.dart";
 import "../voice/read_aloud.dart";
-import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/chip_row.dart";
 import "../widgets/completion_field.dart";
@@ -33,13 +25,26 @@ import "../widgets/scrolling.dart";
 import "chat_chrome.dart";
 import "chat_settings_page.dart";
 import "../../app/chat_controller.dart";
-import "../../app/composer.dart" show ComposerBinding, ComposerModel;
+import "../../app/chat_session.dart";
+import "../../app/settings/spec.dart" show WidgetReader;
+import "../../app/new_chat_session.dart";
+import "chat_expiry.dart";
+import "../../app/composer.dart"
+    show
+        ComposerAnswering,
+        ComposerModel,
+        ComposerNeedsSetup,
+        ComposerReady,
+        ComposerStarting,
+        ComposerViewOnly;
 import "../../app/mirror_controller.dart";
 import "plan_page.dart" show PlanButton;
+import "../../app/transcript/transcript.dart";
 import "activity/card.dart" show ActivitySource, liveMessageOf;
-import "activity/format.dart" show formatRemaining;
+import "../../core/formatting.dart" show formatRemaining;
 import "widgets/chapter_rail.dart";
 import "widgets/composer.dart";
+import "widgets/turn_surface.dart";
 import "widgets/composer_controller.dart";
 import "widgets/goal_mark_row.dart";
 import "widgets/composer_embed.dart";
@@ -49,6 +54,7 @@ import "widgets/message_text.dart";
 import "widgets/omada_separator.dart" show ConversationSeparator;
 import "widgets/needs_setup_bar.dart";
 import "widgets/view_only_bar.dart";
+import "../widgets/dialogs.dart" show notify;
 
 class ChatPage extends ConsumerWidget {
   const ChatPage({super.key});
@@ -82,7 +88,6 @@ class _ReadableColumn extends StatelessWidget {
   const _ReadableColumn({
     required this.child,
     required this.bottom,
-    this.bar,
     this.banner,
     this.side,
     this.sideWidth = 0,
@@ -90,15 +95,6 @@ class _ReadableColumn extends StatelessWidget {
 
   final Widget child;
   final Widget bottom;
-
-  /// What publishes the native shell's toolbar for this page, drawing nothing
-  /// on screen; only inside the shell, whose toolbar is over the top of the
-  /// page and whose composer is over the bottom of it. The conversation then
-  /// scrolls under both, and what is at the bottom floats over it, above the
-  /// composer.
-  final Widget? bar;
-
-  bool get _shell => bar != null;
   final Widget? banner;
   final Widget? side;
   final double sideWidth;
@@ -107,36 +103,7 @@ class _ReadableColumn extends StatelessWidget {
   static const _sideGap = 16.0;
 
   @override
-  Widget build(BuildContext context) {
-    final insets = MediaQuery.paddingOf(context);
-    final page = _column(context);
-    if (!_shell) return page;
-    // Expanded to the page: the bar draws nothing, and a stack sized by its
-    // children would size itself to that. A tooltip on this page opens above
-    // what it is about: the page runs under the composer, and a tooltip only
-    // knows the room the Flutter view has, so below would be behind it.
-    final tooltips = TooltipTheme.of(context);
-    return TooltipTheme(
-      data: tooltips.copyWith(preferBelow: false),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          ?bar,
-          // A banner is not scrolled under: it sits below the toolbar.
-          MediaQuery.removePadding(
-            context: context,
-            removeTop: banner != null,
-            child: Padding(
-              padding: EdgeInsets.only(top: banner != null ? insets.top : 0),
-              child: page,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _column(BuildContext context) => Column(
+  Widget build(BuildContext context) => Column(
     children: [
       ?banner,
       Expanded(
@@ -145,14 +112,12 @@ class _ReadableColumn extends StatelessWidget {
             final column = Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: _readableWidth),
-                child: _shell
-                    ? _FloatingBottom(bottom: bottom, child: child)
-                    : Column(
-                        children: [
-                          Expanded(child: child),
-                          bottom,
-                        ],
-                      ),
+                child: Column(
+                  children: [
+                    Expanded(child: child),
+                    bottom,
+                  ],
+                ),
               ),
             );
             final margin = (constraints.maxWidth - _readableWidth) / 2;
@@ -181,96 +146,6 @@ class _ReadableColumn extends StatelessWidget {
   );
 }
 
-/// The native shell's arrangement of the column: [child] the whole height,
-/// and [bottom] — the turn surface, a question, a bar saying why there is no
-/// composer — over its foot, just above the shell's composer. The
-/// conversation is told both as its bottom padding, so it scrolls under them
-/// and its last message still clears them.
-class _FloatingBottom extends StatefulWidget {
-  const _FloatingBottom({required this.bottom, required this.child});
-
-  final Widget bottom;
-  final Widget child;
-
-  @override
-  State<_FloatingBottom> createState() => _FloatingBottomState();
-}
-
-class _FloatingBottomState extends State<_FloatingBottom> {
-  /// [_FloatingBottom.bottom]'s height as last laid out.
-  double _height = 0;
-
-  void _measured(Size size) {
-    if (size.height == _height) return;
-    // After this layout: the padding it changes is the list's, laid out in
-    // the same pass.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) setState(() => _height = size.height);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final composer = media.padding.bottom;
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: MediaQuery(
-            data: media.copyWith(
-              padding: media.padding.copyWith(bottom: composer + _height),
-            ),
-            child: widget.child,
-          ),
-        ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: composer,
-          child: MediaQuery.removePadding(
-            context: context,
-            removeBottom: true,
-            child: _SizeReporter(onSize: _measured, child: widget.bottom),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Tells [onSize] the size [child] was laid out at, each time it changes.
-class _SizeReporter extends SingleChildRenderObjectWidget {
-  const _SizeReporter({required this.onSize, required super.child});
-
-  final ValueChanged<Size> onSize;
-
-  @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderSizeReporter(onSize);
-
-  @override
-  void updateRenderObject(
-    BuildContext context,
-    _RenderSizeReporter renderObject,
-  ) => renderObject.onSize = onSize;
-}
-
-class _RenderSizeReporter extends RenderProxyBox {
-  _RenderSizeReporter(this.onSize);
-
-  ValueChanged<Size> onSize;
-  Size? _reported;
-
-  @override
-  void performLayout() {
-    super.performLayout();
-    if (size != _reported) {
-      _reported = size;
-      onSize(size);
-    }
-  }
-}
-
 /// Nothing selected: the chat that has not been made yet. Nothing here is keyed
 /// on a chat, because there is none — the project is `selectedProjectProvider`'s
 /// and the settings are this screen's own, until the first message makes one
@@ -283,166 +158,89 @@ class _NewChat extends ConsumerStatefulWidget {
 }
 
 class _NewChatState extends ConsumerState<_NewChat> {
-  final ComposerController _controller = ComposerController();
-  late final ComposerModel _model = ComposerModel(
-    _controller,
-    pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
-  );
+  /// The screen's session: its composer, its settings, and how the first
+  /// message makes a chat. Watched in the build, which keeps it.
+  NewChatSession get _session => ref.read(newChatSessionProvider);
+  ComposerController get _controller => _session.text as ComposerController;
+  ComposerModel get _model => _session.composer;
+  bool get _starting => _session.starting.value;
 
-  /// What the chat this screen makes will run its first turn under. Held here
-  /// rather than in a provider so that it dies with the screen: armed
-  /// app-wide it would land on whatever chat happened to be created next,
-  /// including one started from somewhere else entirely.
-  ChatMeta _meta = ChatMeta();
-
-  /// A chat being made on a paired device, until it has answered.
-  bool _starting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    ref.listenManual(newChatPromptProvider, (_, prompt) {
-      if (prompt == null) return;
-      _controller.message = prompt;
-      // Cleared after the frame: a provider is not written while one builds.
-      Future(() {
-        if (mounted) ref.read(newChatPromptProvider.notifier).set(null);
-      });
-    }, fireImmediately: true);
-  }
-
-  @override
-  void dispose() {
-    _model.dispose();
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _openSettings() async {
-    final picked = await Navigator.of(context).push<ChatMeta>(
-      MaterialPageRoute(
-        builder: (_) => NewChatSettingsPage(
-          initial: _meta,
-          project: ref.read(selectedProjectProvider).project,
-        ),
-      ),
+  void _openSettings() {
+    final session = _session;
+    openNewChatSettings(
+      context,
+      initial: session.meta.value,
+      project: ref.read(selectedProjectProvider).project,
+      onSave: (meta) => session.meta.value = meta,
     );
-    // Null is a page backed out of rather than saved.
-    if (picked != null && mounted) setState(() => _meta = picked);
   }
 
-  /// The composer has already cleared itself, so a chat that could not be made
-  /// would take the message with it silently. Put it back instead — the reason
-  /// is logged, and this is the only thing left on screen to say so.
-  Future<void> _send(String text, List<Attachment> attachments) async {
-    setState(() => _starting = true);
-    final made = await startChatWith(
-      ref,
-      text,
-      attachments: attachments,
-      meta: _meta,
-    );
-    if (!mounted) return;
-    setState(() => _starting = false);
-    if (!made) {
-      _controller.message = text;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Could not start a chat.")));
-    }
-  }
-
-  /// The composer, or a "setup required" bar where the project needs setup
-  /// and has not been set up yet. The bar replaces the composer entirely,
-  /// the way `ViewOnlyBar` does for a mirrored chat.
+  /// The composer, or what the session's slot puts in its place.
   Widget _bottomBar() {
-    final at = ref.watch(selectedProjectProvider);
-    final project = at.project;
-    final chrome = ref.watch(chatChromeProvider);
-    if (_starting) return const SizedBox.shrink();
-    Widget composer(ComposerBinding binding) => chrome.composer(
-      controller: _controller,
-      model: _model,
-      binding: binding,
+    final slot = _session.slot(
+      WidgetReader(ref),
+      ref.watch(selectedProjectProvider),
     );
+    if (slot is ComposerStarting) return const SizedBox.shrink();
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // The shell's own composer says it.
-        if (!chrome.overPage) const _CommandHint(),
-        if (at.device != null)
-          // A paired device's project: its setup and its voice are that
-          // device's.
-          ref.watch(projectFrozenProvider(at))
-              ? const ViewOnlyBar()
-              : composer(
-                  ComposerBinding(
-                    agentSpeaking: false,
-                    onSend: _send,
-                    onAbort: () {},
-                    project: project,
-                    device: at.device,
-                  ),
-                )
-        else if (ref.watch(setupCompleteProvider(project)))
-          composer(
-            ComposerBinding(
-              agentSpeaking: false,
-              onSend: _send,
-              onAbort: () {},
-              project: project,
-              onVoice: () => startVoiceChat(context, ref, meta: _meta),
-            ),
-          )
-        else
-          const NeedsSetupBar(),
+        const _CommandHint(),
+        switch (slot) {
+          ComposerReady(:final binding) => Composer(
+            controller: _controller,
+            model: _model,
+            binding: binding,
+          ),
+          ComposerViewOnly() => const ViewOnlyBar(),
+          _ => const NeedsSetupBar(),
+        },
       ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.watch(newChatSessionProvider);
+    // The frontend draws this screen itself.
+    if (ref.watch(drawsOpenChatProvider)) return const SizedBox.expand();
+    return ListenableBuilder(
+      listenable: session.starting,
+      builder: (context, _) => _screen(context),
+    );
+  }
+
+  Widget _screen(BuildContext context) {
     final at = ref.watch(selectedProjectProvider);
-    final chrome = ref.watch(chatChromeProvider);
     return Scaffold(
-      appBar: chrome.overPage
-          ? null
-          : AppBar(
-              leading: SidePanelButton.leadingOf(context),
-              title: const _AppBrand(),
-              actions: [
-                // A paired device's chat takes its settings once it is there:
-                // these name this device's models.
-                if (at.device == null)
-                  IconButton(
-                    icon: const Icon(Icons.tune),
-                    tooltip: "Chat settings",
-                    onPressed: _openSettings,
-                  ),
-              ],
+      appBar: AppBar(
+        leading: SidePanelButton.leadingOf(context),
+        title: const _AppBrand(),
+        actions: [
+          // A paired device's chat takes its settings once it is there:
+          // these name this device's models.
+          if (at.device == null)
+            IconButton(
+              icon: const Icon(Icons.tune),
+              tooltip: "Chat settings",
+              onPressed: _openSettings,
             ),
+        ],
+      ),
       body: _ReadableColumn(
-        bar: chrome.newChatBar(at: at, onSettings: _openSettings),
         bottom: _bottomBar(),
-        // Where the frontend draws the screen itself, spinner and all.
-        child:
-            chrome.newChat(
-              at: at,
-              controller: _controller,
-              starting: _starting,
-            ) ??
-            (_starting
-                ? const Center(child: CircularProgressIndicator())
-                : _EmptyChat(
-                    project: at.project,
-                    device: at.device,
-                    controller: _controller,
-                    // The paired devices' badges are the new-chat screen's own — a
-                    // chat that exists with nothing said in it yet is mid-turn at
-                    // worst, and a list of other devices under its question would
-                    // say nothing true about it.
-                    showSyncedCards: true,
-                  )),
+        child: (_starting
+            ? const Center(child: CircularProgressIndicator())
+            : _EmptyChat(
+                project: at.project,
+                device: at.device,
+                controller: _controller,
+                // The paired devices' badges are the new-chat screen's own — a
+                // chat that exists with nothing said in it yet is mid-turn at
+                // worst, and a list of other devices under its question would
+                // say nothing true about it.
+                showSyncedCards: true,
+              )),
       ),
     );
   }
@@ -795,103 +593,6 @@ class _ChatBody extends ConsumerStatefulWidget {
   ConsumerState<_ChatBody> createState() => _ChatBodyState();
 }
 
-/// One row of the conversation: a message, or a line saying the room's mode
-/// changed before it. Each row owns its own alignment — the bubble aligns
-/// itself, the separator is full width — so the list renders entries and
-/// nothing wraps anything.
-sealed class ConversationEntry {
-  const ConversationEntry();
-}
-
-class MessageEntry extends ConversationEntry {
-  const MessageEntry(
-    this.message, {
-    required this.last,
-    this.reactions = const [],
-  });
-
-  final Message message;
-
-  /// The emoji it has been reacted with, shown in its action row.
-  final List<String> reactions;
-
-  /// The newest message of the thread, which is the one a running turn
-  /// appends to — the spinner and the caret live on it.
-  final bool last;
-}
-
-class SectionEntry extends ConversationEntry {
-  const SectionEntry(this.omada);
-
-  /// The mode the room entered at this boundary.
-  final bool omada;
-}
-
-/// The divider after the message a compaction's boundary names. [summary] is
-/// what the drawer behind it shows.
-class CompactionEntry extends ConversationEntry {
-  const CompactionEntry(this.summary);
-
-  /// What the model reads in place of the messages above this line.
-  final String summary;
-}
-
-/// The divider an automatic compaction would have left, saying in red why
-/// it did not — [ChatViewState.compactFailure], at the end of the thread.
-class CompactionFailedEntry extends ConversationEntry {
-  const CompactionFailedEntry(this.reason);
-
-  final String reason;
-}
-
-/// A change to the chat's goal, after the message its record names.
-class GoalEntry extends ConversationEntry {
-  const GoalEntry(this.mark);
-
-  final GoalMark mark;
-}
-
-/// The conversation as rows, walked off the thread in order. A turn opener
-/// carrying a mode that differs from the running one emits a [SectionEntry]
-/// first — both flips are rows, the off-flip bounding an on-section. A
-/// compaction boundary is said after
-/// the message it covers: the divider is where the summary took over, and a
-/// goal's change after the message its record names. A reply
-/// that ended with `end_turn` is not a row: it is on the log, not the page.
-/// Nor is a reaction: it shows on the message it answers.
-List<ConversationEntry> entriesOf(Chat chat) {
-  final entries = <ConversationEntry>[];
-  var on = false;
-  final byBoundary = {for (final c in chat.compactions) c.upToMessageId: c};
-  final goals = chat.goals.groupListsBy((g) => g.afterMessageId);
-  final reactions = reactionsOn(chat.messages);
-  // What a running turn appends to: the newest message that is not a
-  // reaction, which a reaction queued behind the turn must not displace.
-  final newest = chat.messages.lastWhereOrNull((m) => m.reaction == null);
-  for (final m in chat.messages) {
-    final opener = m.omadaOn;
-    if (opener != null && opener != on) {
-      on = opener;
-      entries.add(SectionEntry(on));
-    }
-    if (drawnAsRow(m)) {
-      entries.add(
-        MessageEntry(
-          m,
-          last: identical(m, newest),
-          reactions: reactions[m.id] ?? const [],
-        ),
-      );
-    }
-    final marker = byBoundary[m.id];
-    if (marker != null) entries.add(CompactionEntry(marker.summary));
-    for (final mark in goals[m.id] ?? const <GoalMark>[]) {
-      entries.add(GoalEntry(mark));
-    }
-  }
-  return entries;
-}
-
 /// The conversation as the chapter rail reads it: its prompts, and every row
 /// by message id — null where a row is not a message — which is how going to
 /// a prompt finds its row.
@@ -901,8 +602,8 @@ class _Outline {
   _Outline.of(Chat chat)
     : chapters = chaptersOf(chat),
       rows = [
-        for (final e in entriesOf(chat))
-          e is MessageEntry ? e.message.id : null,
+        for (final row in Transcript.of("", chat).rows)
+          row is MessageRow ? row.message.id : null,
       ];
 
   static const empty = _Outline([], []);
@@ -941,13 +642,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   static const _slack = 200.0;
 
   /// Inside the native shell: settled at launch, so read once.
-  late final ChatChrome _chrome = ref.read(chatChromeProvider);
+  late final bool _drawsOpenChat = ref.read(drawsOpenChatProvider);
 
-  final ComposerController _controller = ComposerController();
-  late final ComposerModel _model = ComposerModel(
-    _controller,
-    pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
-  );
+  /// The chat's session: its composer, and how a message is sent. Watched in
+  /// the build, which keeps it while the page is up.
+  ChatSession get _session => ref.read(chatSessionProvider(widget.chatId));
+  ComposerController get _controller => _session.text as ComposerController;
+  ComposerModel get _model => _session.composer;
 
   /// What a steer taken back is put back into, attachments and all.
   final GlobalKey _composer = GlobalKey();
@@ -1018,9 +719,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         .where((note) => note.chatId == widget.chatId)
         .listen((note) {
           if (!mounted) return;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(note.text)));
+          notify(context, note.text);
         });
   }
 
@@ -1070,8 +769,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     _outline.dispose();
     _memoryNotes?.cancel();
     _scroll.removeListener(_readPosition);
-    _model.dispose();
-    _controller.dispose();
     _glide.dispose();
     _list.dispose();
     _scroll.dispose();
@@ -1259,46 +956,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// Ask whether to keep an expired temporary chat (turning its TTL off) or
   /// delete it. The sweep handles non-open chats silently; this is the one
   /// case where the chat being deleted is the one the user is looking at.
-  Future<void> _checkExpiry(BuildContext context, ChatState state) async {
-    if (!state.isExpired()) return;
-    if (!mounted) return;
-    final keep = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text("Temporary chat expired"),
-        content: const Text(
-          "This temporary chat has passed its expiry. Turn temporary chat off "
-          "to keep it, or delete it now.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text("Keep"),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text("Delete"),
-          ),
-        ],
-      ),
-    );
-    if (!mounted) return;
-    final repo = ref.read(chatRepositoryProvider);
-    if (keep == true) {
-      final written = await repo.keepExpiredChat(widget.chatId, state);
-      ref
-          .read(chatControllerProvider(widget.chatId).notifier)
-          .applyState(written);
-    } else {
-      ref.read(selectedChatIdProvider.notifier).select(null);
-      await repo.deleteChat(widget.chatId);
-    }
-    ref.invalidate(chatListProvider);
-  }
+  Future<void> _checkExpiry(BuildContext context, ChatState state) =>
+      checkChatExpiry(context, widget.chatId, state);
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(chatSessionProvider(widget.chatId));
     // A mirrored chat is read through the hub's mirror rather than the local
     // store, so it is a different controller and a different bottom of the
     // page. Everything between those two is the same page — see [_page].
@@ -1315,6 +978,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       (_, _) => _follow.jumpIfFollowing(),
     );
     final chat = view.chat;
+    // The frontend draws this chat itself, and asks about its expiry.
+    if (_drawsOpenChat) return const SizedBox.expand();
     if (chat == null) return _waiting();
     _opening(chat);
     // Check expiry once per open: a temporary chat whose window has passed is
@@ -1335,20 +1000,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
         project: chat.state.project,
         controller: _controller,
       ),
-      bottom: ref.watch(setupCompleteProvider(chat.state.project))
-          ? _turnBar(
-              view: view,
-              driver: notifier,
-              project: chat.state.project,
-              onVoice: () => openVoice(context, ref, widget.chatId),
-              workspace: ref
-                  .watch(appConfigProvider)
-                  .workspaceDir(widget.chatId, project: chat.state.project),
-              workspaceHome: ref
-                  .watch(appConfigProvider)
-                  .projectWorkspaceDir(project: chat.state.project),
-            )
-          : const NeedsSetupBar(),
+      bottom: _turnBar(view: view, driver: notifier),
     );
   }
 
@@ -1365,23 +1017,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       mirrorChatControllerProvider(widget.chatId),
       (_, _) => _follow.jumpIfFollowing(),
     );
-    // One pass over the Remotes list for the two things drawn from it, so the
-    // page rebuilds when they change rather than whenever anything does.
-    final (:online, :deviceName, :deviceId) = ref.watch(
-      remoteChatsProvider.select((chats) {
-        for (final entry in chats) {
-          if (entry.chatId == widget.chatId) {
-            return (
-              online: entry.online,
-              deviceName: entry.deviceName,
-              deviceId: entry.deviceId,
-            );
-          }
-        }
-        return (online: false, deviceName: "the home device", deviceId: null);
-      }),
-    );
+    final (:online, name: deviceName, :deviceId) =
+        ref.watch(mirrorHomeProvider(widget.chatId)) ?? unknownMirrorHome;
     final chat = view.chat;
+    if (_drawsOpenChat) return const SizedBox.expand();
     if (chat == null) return _waiting();
     _opening(chat);
 
@@ -1397,15 +1036,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       banner: online
           ? MirrorStrip.remote(deviceName: deviceName)
           : MirrorStrip.offline(deviceName: deviceName),
-      bottom: online
-          ? _turnBar(
-              view: view,
-              driver: driver,
-              project: chat.state.project,
-              device: deviceId,
-              workspace: null,
-            )
-          : const ViewOnlyBar(),
+      bottom: _turnBar(
+        view: view,
+        driver: online ? driver : null,
+        device: deviceId,
+      ),
     );
   }
 
@@ -1436,11 +1071,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   }) {
     final lines = [..._details(chat.state), ...details];
     final barHeight = _barHeight(context, lines.length);
-    final failure = view.compactFailure;
-    final entries = [
-      ...entriesOf(chat),
-      if (failure != null) CompactionFailedEntry(failure),
-    ];
+    final transcript = Transcript.of(
+      widget.chatId,
+      chat,
+      compactFailure: view.compactFailure,
+    );
     final title = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -1458,40 +1093,37 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       ),
     );
     return Scaffold(
-      appBar: _chrome.overPage
-          ? null
-          : AppBar(
-              leading: SidePanelButton.leadingOf(context),
-              titleSpacing: 0,
-              toolbarHeight: barHeight,
-              title: InkWell(
-                onTap: () => openChatSettings(context, widget.chatId),
-                // Fills the bar between leading and actions so the whole strip
-                // opens the chat's settings, not just the text.
-                child: SizedBox(
-                  height: barHeight,
-                  width: double.infinity,
-                  child: Align(alignment: Alignment.centerLeft, child: title),
+      appBar: AppBar(
+        leading: SidePanelButton.leadingOf(context),
+        titleSpacing: 0,
+        toolbarHeight: barHeight,
+        title: InkWell(
+          onTap: () => openChatSettings(context, widget.chatId),
+          // Fills the bar between leading and actions so the whole strip
+          // opens the chat's settings, not just the text.
+          child: SizedBox(
+            height: barHeight,
+            width: double.infinity,
+            child: Align(alignment: Alignment.centerLeft, child: title),
+          ),
+        ),
+        actions: [
+          if (view.isRunning)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
-              actions: [
-                if (view.isRunning)
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                  ),
-                PlanButton(chatId: widget.chatId),
-              ],
             ),
+          PlanButton(chatId: widget.chatId),
+        ],
+      ),
       body: _ReadableColumn(
-        bar: _chrome.chatBar(state: chat.state, view: view),
         banner: banner,
         bottom: bottom,
         side: ValueListenableBuilder<_Outline>(
@@ -1503,7 +1135,14 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
           ),
         ),
         sideWidth: ChapterRail.width,
-        child: _conversation(chat, entries, view, source, editing, whenEmpty),
+        child: _conversation(
+          chat,
+          transcript,
+          view,
+          source,
+          editing,
+          whenEmpty,
+        ),
       ),
     );
   }
@@ -1518,75 +1157,40 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// beside it, what the bar's fallback words in the guest's vocabulary.
   Widget _turnBar({
     required ChatViewState view,
-    required TurnDriver driver,
-    required String? project,
+    required TurnDriver? driver,
     String? device,
-    VoidCallback? onVoice,
-    String? workspace,
-    String? workspaceHome,
   }) {
-    Future<void> send(
-      String text,
-      List<Attachment> attachments, {
-      bool queue = false,
-    }) async {
-      // Something said over an upload waiting on the user is their answer to
-      // it: the page's chooser is cancelled, as dismissing its dialog would,
-      // and the agent is told.
-      final browser = ref.read(agentBrowserProvider);
-      if (browser.available && browser.configured) {
-        browser
-            .tab(widget.chatId)
-            .cancelUpload(
-              why: "The user sent a message instead of choosing a file.",
-            );
-      }
-      _follow.attach();
-      try {
-        await driver.send(text, attachments: attachments, queue: queue);
-      } on Undelivered catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(e.message)));
-        }
-      }
-    }
-
-    return Column(
+    final slot = _session.slot(
+      WidgetReader(ref),
+      view,
+      driver,
+      device: device,
+      sent: _follow.attach,
+    );
+    Widget over(Widget below) => Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _chrome.turnSurface(
+        TurnSurface(
           view: view,
-          driver: driver,
+          notifier: driver!,
           onWithdrawn: (said) => _handle?.restore(said),
         ),
-        switch (view.roomPhase) {
-          RoomPhase.waitingOnYou => _chrome.questions(
-            view: view,
-            driver: driver,
-          ),
-          _ => _chrome.composer(
-            key: _composer,
-            controller: _controller,
-            model: _model,
-            binding: ComposerBinding(
-              agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
-              onSend: send,
-              onQueue: (text, attachments) =>
-                  send(text, attachments, queue: true),
-              steers: driver.steers,
-              onAbort: driver.abort,
-              project: project,
-              device: device,
-              onVoice: onVoice,
-              workspace: workspace,
-              workspaceHome: workspaceHome,
-            ),
-          ),
-        },
+        below,
       ],
     );
+    return switch (slot) {
+      ComposerReady(:final binding) => over(
+        Composer(
+          key: _composer,
+          controller: _controller,
+          model: _model,
+          binding: binding,
+        ),
+      ),
+      ComposerAnswering() => over(TurnQuestions(view: view, notifier: driver!)),
+      ComposerNeedsSetup() => const NeedsSetupBar(),
+      ComposerViewOnly() || ComposerStarting() => const ViewOnlyBar(),
+    };
   }
 
   /// A passage being answered, into the composer — or, while a question
@@ -1605,19 +1209,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
 
   /// The face beside a reply's author: their photo or Bot Avatar. Null for
   /// the user's own message, which names no author.
-  AgentFace? _avatarOf(Chat chat, Message message) {
-    final member = nameOf(message.author);
-    if (member == null) return null;
-    return ref
-        .watch(
-          agentPictureProvider((project: chat.state.project, name: member)),
-        )
-        .value;
-  }
-
   Widget _conversation(
     Chat chat,
-    List<ConversationEntry> entries,
+    Transcript transcript,
     ChatViewState view,
     ProviderListenable<ChatViewState> source,
     TurnDriver? editing,
@@ -1626,8 +1220,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
     if (chat.messages.isEmpty) return whenEmpty;
-    // While a turn runs, the controller refuses every edit.
-    final mutable = editing != null && !view.isRunning;
     return Stack(
       children: [
         Listener(
@@ -1640,14 +1232,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                 controller: _scroll,
                 listController: _list,
                 extentPrecalculationPolicy: _measureAll,
-                itemCount: entries.length,
-                itemBuilder: (context, i) => switch (entries[i]) {
-                  SectionEntry(:final omada) => ConversationSeparator(
-                    text: omada ? "Omada is turned on" : "Omada is turned off",
-                  ),
-                  GoalEntry(:final mark) => GoalMarkRow(mark: mark),
-                  CompactionEntry(:final summary) => ConversationSeparator(
-                    text: "Compact Conversation",
+                itemCount: transcript.rows.length,
+                itemBuilder: (context, i) => switch (transcript.rows[i]) {
+                  final ModeRow row => ConversationSeparator(text: row.text),
+                  final GoalRow row => GoalMarkRow(row: row),
+                  CompactionRow(:final summary) => ConversationSeparator(
+                    text: CompactionRow.text,
                     body: MessageText(
                       text: summary,
                       isError: false,
@@ -1656,8 +1246,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                       onTapLink: (href) => _openLink(context, href),
                     ),
                   ),
-                  CompactionFailedEntry(:final reason) => ConversationSeparator(
-                    text: "Could not compact the conversation",
+                  CompactionFailedRow(:final reason) => ConversationSeparator(
+                    text: CompactionFailedRow.text,
                     body: MessageText(
                       text: reason,
                       isError: true,
@@ -1666,7 +1256,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                       onTapLink: (href) => _openLink(context, href),
                     ),
                   ),
-                  MessageEntry(:final message, :final last, :final reactions) =>
+                  final MessageRow row &&
+                      MessageRow(
+                        :final message,
+                        :final last,
+                        :final reactions,
+                      ) =>
                     KeyedSubtree(
                       key: message.role == MessageRole.user
                           ? _chapterKeys.putIfAbsent(message.id, GlobalKey.new)
@@ -1678,37 +1273,16 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
                         child: MessageBubble(
                           chatId: widget.chatId,
                           message: message,
-                          avatar: _avatarOf(chat, message),
-                          isWaiting: view.isRunning && last,
+                          avatar: row.face(
+                            WidgetReader(ref),
+                            project: chat.state.project,
+                          ),
+                          moment: row.moment(view, editing),
                           latest: last,
-                          waitingNotice: view.retry,
-                          waitingStatus: view.status,
-                          shellOutput: view.shellOutput[message.id],
                           onTapLink: (href) => _openLink(context, href),
                           onReply: (quote) => _reply(QuoteEmbed(quote)),
                           reactions: reactions,
-                          // Any message, the user's own included; not the reply
-                          // still being written. While a turn runs it waits.
-                          onReact: editing != null && !(view.isRunning && last)
-                              ? (reaction) =>
-                                    editing.react(message.id, reaction)
-                              : null,
-                          threads: editing == null
-                              ? null
-                              : chat.branches[message.id],
-                          onThreadStep: mutable
-                              ? (step) => editing.stepThread(message.id, step)
-                              : null,
-                          onDelete: mutable
-                              ? () => editing.deleteThread(message.id)
-                              : null,
-                          onEdit: mutable && message.role == MessageRole.user
-                              ? (text) =>
-                                    editing.editAndResend(message.id, text)
-                              : null,
-                          onRegenerate: mutable
-                              ? () => editing.regenerate(message.id)
-                              : null,
+                          actions: MessageActions.of(row, view, editing),
                           onSpeak: speechReady && message.hasText
                               ? () => readAloud(
                                   context,
@@ -1729,13 +1303,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
           ),
         ),
         // Only once the reader has left the end: up there a turn no longer
-        // follows itself, and this is the way back. Above the native shell's
-        // composer, which the list runs under.
+        // follows itself, and this is the way back.
         Positioned(
           right: 16,
-          bottom:
-              12 +
-              (_chrome.overPage ? MediaQuery.paddingOf(context).bottom : 0),
+          bottom: 12,
           child: ValueListenableBuilder<bool>(
             valueListenable: _atBottom,
             builder: (context, atBottom, child) =>

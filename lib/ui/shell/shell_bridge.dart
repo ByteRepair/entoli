@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
@@ -8,13 +10,23 @@ import "../app_menu.dart";
 import "../command_intents.dart";
 import "../commands.dart";
 import "../chat/chat_page.dart";
+import "shell_chat.dart";
 import "shell_palette.dart";
 import "shell_publisher.dart";
-import "../settings/settings_category.dart" show nativeSettingsOpener;
+import "../../app/pages/app_page.dart" show appPagesProvider;
+import "../../app/pages/welcome.dart" show openFirstRun;
+import "../../app/settings/spec.dart" show ContainerReader;
 import "../settings/settings_hand_off.dart";
 import "shell_settings.dart";
 import "shell_sidebar.dart";
 import "shell_window.dart";
+import "shell_outbox.dart";
+import "../../app/settings/spec.dart" show SettingsPageId;
+import "../../domain/agent_browser.dart" show BrowserTab;
+import "../../domain/chat_meta.dart";
+import "../widgets/native_surfaces.dart";
+import "shell_documents.dart";
+import "shell_dialogs.dart";
 
 /// The app under the native shell, in `AppShell`'s place: the Flutter half of
 /// a window SwiftUI owns. It asks the Swift to take the window, sends it the
@@ -41,6 +53,9 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
   /// Every settings page, sent to the client's own settings as it changes.
   late final SettingsBridge _settings;
 
+  /// The open chat's surfaces, sent as the app's state changes.
+  late final ShellChat _chat;
+
   /// The bridge the shell's events reach, which is the last one mounted. A
   /// restart builds the next session's before it takes this one down, so the
   /// one going unbinds them only while they are still its own.
@@ -53,19 +68,46 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
     _scope.attach(_commands);
     _listening = this;
     _bind(this);
-    final container = ProviderScope.containerOf(context, listen: false);
+    final container = _container = ProviderScope.containerOf(
+      context,
+      listen: false,
+    );
     _publisher = ShellPublisher(container);
     _settings = SettingsBridge(container);
-    nativeSettingsOpener = _settings.show;
+    _chat = ShellChat(container, () => context);
+    _surfaces = _ShellSurfaces(
+      container.read(shellOutboxProvider).notice,
+      _chat,
+      _settings,
+    );
+    container.read(nativeSurfacesProvider).bind(_surfaces);
+    DocumentIntents.setUp(ShellDocuments(container, () => context));
+    // Opening a page notifies the stack, which a build may not do.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) openFirstRun(ContainerReader(container));
+    });
+    _said = container
+        .read(appPagesProvider.notifier)
+        .said
+        .listen(container.read(shellOutboxProvider).notice);
   }
+
+  late final ProviderContainer _container;
+  late final _ShellSurfaces _surfaces;
+
+  /// What a page that closed itself had to say, in passing.
+  late final StreamSubscription<String> _said;
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_key);
+    _said.cancel();
     _scope.detach(_commands);
     _publisher.close();
     _settings.close();
-    if (nativeSettingsOpener == _settings.show) nativeSettingsOpener = null;
+    _chat.close();
+    _container.read(nativeSurfacesProvider).unbind(_surfaces);
+    if (identical(_listening, this)) DocumentIntents.setUp(null);
     if (identical(_listening, this)) {
       _listening = null;
       _bind(null);
@@ -93,8 +135,14 @@ class _ShellBridgeState extends ConsumerState<ShellBridge> {
 
   @override
   Widget build(BuildContext context) => SettingsHandOffs(
-    // A paired device's page is the native settings' own.
-    own: _settings.bindDevicePage,
+    // A paired device's page is the native settings' own, and the camera
+    // the platform's.
+    own: (handOff) {
+      _settings.bindDevicePage(handOff);
+      handOff
+        ..scanCode = NativeShell().scanCode
+        ..openSettings = _settings.show;
+    },
     child: const AppMenuSync(navigate: shellNavigate, child: ChatPage()),
   );
 }
@@ -122,4 +170,33 @@ Future<void> shellNavigate(Commands c, Destination to) async {
         Destination.projectSettings:
       await flutterNavigate(c, to);
   }
+}
+
+/// Notices, dialogs, voice, the browser and Settings as the shell draws them.
+final class _ShellSurfaces implements NativeSurfaces {
+  _ShellSurfaces(this._notice, this._chat, this._settings);
+
+  final void Function(String) _notice;
+  final ShellChat _chat;
+  final SettingsBridge _settings;
+
+  @override
+  final NativeDialogs dialogs = ShellDialogs();
+
+  @override
+  void notice(String message) => _notice(message);
+
+  @override
+  void openVoice(String? chatId, ChatMeta? meta) =>
+      _chat.openVoice(chatId, meta);
+
+  @override
+  void openBrowser(
+    BrowserTab tab, {
+    required Future<void> Function() onQuit,
+    required bool window,
+  }) => _chat.openBrowser(tab, onQuit: onQuit, window: window);
+
+  @override
+  Future<void> openSettings(SettingsPageId? page) => _settings.show(page);
 }

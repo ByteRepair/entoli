@@ -40,15 +40,12 @@ import "domain/prompt_library.dart";
 import "domain/sync/identity.dart";
 import "providers.dart";
 import "ui/bot_avatar/licence.dart";
-import "ui/chat/activity/activities.dart" show ChatActivities;
-import "ui/chat/activity/activity.dart" show activityCatalogProvider;
 import "app/remote_turns.dart";
+import "core/transcript_bindings.dart";
 import "ui/app_licence.dart" show registerAppLicence, registerBlinkLicence;
 import "app/chat_edits.dart" show chatEditsProvider;
 import "ui/command_intents.dart";
-import "ui/initial_setup_gate.dart";
 import "ui/routes.dart";
-import "ui/welcome_gate.dart";
 import "app/chat_controller.dart";
 import "app/frontend.dart";
 import "ui/app_shell.dart";
@@ -342,7 +339,7 @@ class AppSession {
       overrides: [
         chatStoreProvider.overrideWithValue(store),
         agentBackendProvider.overrideWithValue(backend),
-        activityCatalogProvider.overrideWithValue(const ChatActivities()),
+        ...transcriptOverrides,
         shellProvider.overrideWithValue(backend.shell),
         appConfigProvider.overrideWithValue(config),
         appSecretsProvider.overrideWithValue(secrets),
@@ -666,18 +663,11 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       // shared has to be offered a workspace over whatever is on screen, an
       // entoli:// link has to open what it names over it and the assistant
       // gesture has to open a chat over it, all of which want a
-      // Navigator that only exists below here; the first run is met with the
-      // welcome tour (a phone's initial setup ahead of it) over the same, under
-      // whatever those arrive with; and
-      // the keyboard is the app's to answer for, over whichever field had it.
+      // Navigator that only exists below here; and the keyboard is the app's to answer for, over whichever field had it.
       home: const FocusFollowsKeyboard(
         child: IncomingAssistant(
           child: IncomingShares(
-            child: IncomingLinks(
-              child: IncomingTriggerOpen(
-                child: InitialSetupGate(child: WelcomeGate(child: _Shell())),
-              ),
-            ),
+            child: IncomingLinks(child: IncomingTriggerOpen(child: _Shell())),
           ),
         ),
       ),

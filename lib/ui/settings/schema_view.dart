@@ -1,3 +1,6 @@
+import "../bot_avatar/bot_avatar_view.dart";
+import "../widgets/document_view.dart";
+import "../widgets/web_view.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -129,6 +132,11 @@ class SettingRow extends StatelessWidget {
       ),
       final GroupController c => _Group(c),
       final TextController c => _Text(c),
+      final DocumentController c => SizedBox(
+        height: 480,
+        child: DocumentView(c),
+      ),
+      final WebController c => SizedBox(height: 480, child: WebPageView(c)),
       final NoticeController c => switch (c.hint) {
         UiHint.banner => _Banner(c),
         UiHint.installed || UiHint.field => LabelledField(
@@ -196,14 +204,23 @@ class SettingRow extends StatelessWidget {
   static Widget _choice<T>(ChoiceController<T> c) => switch (c.hint) {
     UiHint.segmented => _Segmented<T>(c),
     UiHint.swatches || UiHint.corners => _Looks<T>(c),
-    UiHint.levels when c.value != null => LabelledField(
+    // Unset at a level that inherits, it stands where the level above does,
+    // with the reset back to it once this level picks.
+    UiHint.levels when (c.value ?? c.inherited) != null => LabelledField(
       label: c.title,
-      child: ThinkingSlider<T>(
+      child: switch (ThinkingSlider<T>(
         stops: {for (final o in c.options) o.value: o.label},
-        value: c.value as T,
+        value: (c.value ?? c.inherited) as T,
         onChanged: c.set,
         help: c.description,
-      ),
+      )) {
+        final slider when c.unsettable => ResettableField(
+          onReset: () => c.set(null),
+          resetLabel: c.inheritedLabel ?? defaultOptionLabel,
+          child: slider,
+        ),
+        final slider => slider,
+      },
     ),
     // Every other hint is another kind's; a choice is a dropdown.
     _ => _Dropdown<T>(c),
@@ -212,6 +229,9 @@ class SettingRow extends StatelessWidget {
 
 /// Runs [c], asking first what it asks: a confirm, a passing note that
 /// stops it, or nothing at all where what it opened was dismissed.
+Future<void> runSettingAction(BuildContext context, ActionController c) =>
+    _run(context, c);
+
 Future<void> _run(BuildContext context, ActionController c) async {
   final ask = await c.confirm();
   if (!context.mounted || !await _agreed(context, ask)) return;
@@ -640,6 +660,24 @@ class _Action extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (c.hint == UiHint.open) {
+      final description = c.description;
+      final icon = settingIcon(c.glyph);
+      return ListTile(
+        leading: icon == null ? null : Icon(icon),
+        title: Text(c.title),
+        subtitle: description == null ? null : Text(description),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (c.label.isNotEmpty) Text(c.label),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
+        enabled: c.enabled,
+        onTap: () => _press(context),
+      );
+    }
     if (c.hint == UiHint.permission) {
       final description = c.description;
       return ListTile(
@@ -1354,9 +1392,14 @@ class _Collection<T> extends StatelessWidget {
           if (c.actionsOf(row) case final actions)
             ListTile(
               leading: switch ((row.face, settingIcon(row.glyph))) {
+                (AvatarRowFace(:final spec), _) => BotAvatarView(
+                  spec: spec,
+                  size: 40,
+                  reactToTap: true,
+                ),
                 // Live, and happy at a tap: a row scrolled out of view is not
                 // painted, which stops its ticker until it is back.
-                ((:final project, :final name)?, _) => AgentPicture(
+                (AgentRowFace(:final project, :final name), _) => AgentPicture(
                   name: name,
                   project: project,
                   animate: true,
@@ -1460,12 +1503,12 @@ class _Collection<T> extends StatelessWidget {
     int index,
     CollectionItem row,
   ) async {
-    final face = row.face;
-    final worn = face == null
-        ? null
-        : await ProviderScope.containerOf(
-            context,
-          ).read(agentPictureProvider(face).future);
+    final worn = switch (row.face) {
+      AgentRowFace(:final agent) => await ProviderScope.containerOf(
+        context,
+      ).read(agentPictureProvider(agent).future),
+      _ => null,
+    };
     if (!context.mounted) return;
     final spec = await Navigator.of(context).push<BotAvatarSpec>(
       MaterialPageRoute(
@@ -1484,9 +1527,11 @@ class _Collection<T> extends StatelessWidget {
     if (row.opens case final page?) {
       return () => openTextPage(context, page);
     }
-    final tap = row.actions.where((a) => a.id == row.tap).firstOrNull;
-    if (tap != null) return () => _act(context, index, tap);
-    return null;
+    final tap = row.tap;
+    if (tap == null) return null;
+    // A tap need not be in the row's menu: opening a folder is the row itself.
+    final listed = row.actions.where((a) => a.id == tap).firstOrNull;
+    return () => _act(context, index, listed ?? ItemAction(tap, row.title));
   }
 
   Widget? _words(BuildContext context, CollectionItem row) {
@@ -1542,6 +1587,17 @@ void openTextPage(BuildContext context, TextPage page) => switch (page) {
       child: AppMark(size: 48),
     ),
     applicationLegalese: madeBy,
+  ),
+  InlinePage(:final text) => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => Scaffold(
+        appBar: AppBar(),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: SelectableText(text),
+        ),
+      ),
+    ),
   ),
   SkillPage(:final name, :final project, :final origin) =>
     Navigator.of(context).push(

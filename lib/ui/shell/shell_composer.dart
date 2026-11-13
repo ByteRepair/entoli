@@ -8,6 +8,7 @@ import "../../domain/goal.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart" show ProjectRef;
 import "../../domain/wired_skill.dart";
+import "../../app/settings/spec.dart" show SettingReader, WidgetReader;
 import "../../providers.dart";
 import "../chat/widgets/composer.dart";
 import "../chat/widgets/composer_controller.dart";
@@ -59,10 +60,249 @@ CallbackKind callbackKindOf(WiredCall wired) => switch (wired.skill) {
   },
 };
 
-/// The composer, drawn by the native shell: the page's [model], bound to
-/// its turn by [binding], with no Flutter of its own on screen. It sends the
-/// shell what to draw and runs what the user did there; the text is Dart's,
-/// in [controller], as it is for the Flutter [Composer].
+/// The composer as the shell draws it, apart from any widget: [model] over
+/// [controller]'s text, bound to its turn by [binding], sent as a snapshot
+/// and run from what the client says. The new-chat screen's widget and the
+/// open chat's publisher (`ShellChat`) each hold one.
+class ComposerSurface implements ComposerHandle, ComposerIntents {
+  ComposerSurface({
+    required this.outbox,
+    required this.model,
+    required this.controller,
+    required this.clipboardFiles,
+    this.focus,
+  }) {
+    focus?.addListener(_sendFocus);
+    model.state.addListener(_follow);
+    _follow();
+  }
+
+  final ShellOutbox outbox;
+  final ComposerModel model;
+  final ComposerController controller;
+
+  /// What the clipboard holds as files, for a paste.
+  final Future<List<Attachment>> Function() clipboardFiles;
+
+  /// The native field's focus in Dart's focus tree, where there is one, so
+  /// what takes focus away there takes the keyboard away from the field.
+  final FocusNode? focus;
+
+  ComposerBinding? _binding;
+
+  /// The last revision of the model's state sent.
+  int? _sentRevision;
+
+  /// Whether the field has the keyboard, as it last said: a change of
+  /// [focus] that agrees with it came from there and is not sent back.
+  bool _fieldFocused = false;
+
+  /// The menu as last drawn, which a `pick` names a row of.
+  List<CompletionOption> _matches = const [];
+
+  /// The model bound to [binding]'s turn, as it is now.
+  void bind(ComposerBinding binding) {
+    _binding = binding;
+    model.bind(binding);
+  }
+
+  void dispose() {
+    model.state.removeListener(_follow);
+    focus?.removeListener(_sendFocus);
+  }
+
+  @override
+  void restore(Draft said) => model.restore(said);
+
+  /// Add [embed] and put the caret in the field, as [Composer.embed] does.
+  @override
+  void embed(ComposerEmbed embed) {
+    controller.append(embed);
+    final node = focus;
+    node == null ? outbox.composerFocus(true) : node.requestFocus();
+  }
+
+  void _sendFocus() {
+    final node = focus!;
+    if (node.hasFocus != _fieldFocused) outbox.composerFocus(node.hasFocus);
+  }
+
+  @override
+  void focused(bool focused) {
+    _fieldFocused = focused;
+    final node = focus;
+    if (node == null) return;
+    focused ? node.requestFocus() : node.unfocus();
+  }
+
+  /// What the core set goes to the shell's field, once per revision.
+  void _follow() {
+    final state = model.state.value;
+    if (state.revision == _sentRevision) return;
+    _sentRevision = state.revision;
+    final (:text, :start, :end) = state.value;
+    outbox.composerValue(
+      ComposerValueSnapshot(
+        text: text,
+        start: start,
+        end: end,
+        revision: state.revision,
+      ),
+    );
+  }
+
+  @override
+  Future<void> edited(String text, int start, int end) async =>
+      model.edited((text: text, start: start, end: end));
+
+  @override
+  Future<void> run(shell.ComposerAction action) async {
+    await model.run(composerActionOf(action));
+  }
+
+  /// A row of the menu as last drawn.
+  @override
+  Future<void> pick(int index) async {
+    if (index >= 0 && index < _matches.length) {
+      model.acceptCompletion(_matches[index].name);
+    }
+  }
+
+  @override
+  Future<void> dismiss() async => model.dismissCompletion();
+
+  @override
+  void unattach(int index) => model.unattach(index);
+
+  @override
+  Future<void> unembed(int code) async {
+    final embed = controller.embedsByCode[code];
+    if (embed != null) controller.remove(embed);
+  }
+
+  /// Whether a paste took files from the clipboard.
+  @override
+  Future<bool> paste() async {
+    final files = await clipboardFiles();
+    model.attach(files);
+    return files.isNotEmpty;
+  }
+
+  /// The snapshot as things stand, what it reads watched through [reader]:
+  /// the menus' entries, every agent's face for the `@` menu, where a `!`
+  /// command would run. [pixelRatio] and [outline] are how a face is drawn.
+  ComposerSnapshot snapshot(
+    SettingReader reader, {
+    required double pixelRatio,
+    required Color outline,
+  }) {
+    final binding = _binding;
+    if (binding == null) return ComposerSnapshot(present: false);
+    final ProjectRef project = (
+      device: binding.device,
+      project: binding.project,
+    );
+    // Held while the composer is up, so a paired device's menu is there by
+    // the time a `/` is typed.
+    if (binding.device != null) reader.watch(promptLibraryOf(project));
+    final offered = {
+      for (final kind in CompletionKind.values)
+        kind: reader.watch(completionsProvider((project: project, kind: kind))),
+    };
+    // Every agent's face, drawn while the composer is up so the `@` menu has
+    // them as it opens; a paired device's agents have none here.
+    final faces = {
+      if (binding.device == null)
+        for (final agent in offered[CompletionKind.agent]!)
+          agent.name: reader
+              .watch(
+                agentFacePngProvider((
+                  project: binding.project,
+                  name: agent.name,
+                  size: _menuFace,
+                  pixelRatio: pixelRatio,
+                  outline: outline,
+                )),
+              )
+              .value,
+    };
+    final token = model.completion;
+    _matches = token == null
+        ? const []
+        : matchingCompletions(offered[token.kind]!, token.query);
+    final mode = model.mode;
+    return ComposerSnapshot(
+      present: true,
+      mode: switch (mode) {
+        ComposerMode.message => InputMode.message,
+        ComposerMode.shell => InputMode.shell,
+        ComposerMode.callback => InputMode.callback,
+      },
+      callback: switch (model.callback) {
+        final wired? => callbackKindOf(wired),
+        null => null,
+      },
+      canSend: model.canSend.value,
+      queues: model.queues.value,
+      speaking: model.speaking,
+      voice: model.voice,
+      attachments: [
+        for (final a in model.attachments)
+          ComposerAttachment(
+            name: a.filename,
+            image: a.mimeType.startsWith("image/"),
+          ),
+      ],
+      menu: [
+        for (final option in _matches)
+          ComposerMenuItem(
+            name: option.name,
+            trigger: triggerOf(token!.kind),
+            hint: option.argumentHint,
+            detail: option.description,
+            picture: token.kind == CompletionKind.agent
+                ? faces[option.name]
+                : null,
+          ),
+      ],
+      cwd: mode == ComposerMode.shell ? _cwd(reader, binding) : null,
+      cards: {
+        for (final MapEntry(:key, :value) in controller.embedsByCode.entries)
+          key: ComposerCard(title: value.card.title, body: value.card.body),
+      },
+    );
+  }
+
+  /// Where a `!` command is about to run: the shell's own report where it
+  /// has made one, else the workspace in the guest's own words. See
+  /// `Composer._cwdBar`.
+  static String? _cwd(SettingReader reader, ComposerBinding binding) {
+    final workspace = binding.workspace;
+    if (workspace == null) return null;
+    final live = reader
+        .watch(
+          chatShellCwdProvider((
+            workspace: workspace,
+            workspaceHome: binding.workspaceHome,
+          )),
+        )
+        ?.value;
+    return live ??
+        workingDirectoryFallback(
+          workspace: workspace,
+          guestRoot: reader.read(shellProvider).guestRoot,
+          home: binding.workspaceHome,
+        );
+  }
+
+  /// What a snapshot is redrawn for besides what it watches: the model and
+  /// the text.
+  Listenable get shape =>
+      Listenable.merge([model, model.canSend, model.queues, controller]);
+}
+
+/// The new-chat screen's composer, drawn by the native shell: a
+/// [ComposerSurface] over the page's [model], bound by [binding].
 class ShellComposer extends ConsumerStatefulWidget {
   const ShellComposer({
     super.key,
@@ -80,272 +320,83 @@ class ShellComposer extends ConsumerStatefulWidget {
 }
 
 class ShellComposerState extends ConsumerState<ShellComposer>
-    implements ComposerHandle, ComposerIntents {
+    implements ComposerHandle {
   late final ShellOutbox _outbox = ref.read(shellOutboxProvider);
   late final ShellAnswers _answers = ref.read(shellAnswersProvider);
-  ComposerModel get _model => widget.model;
-  ComposerBinding get _binding => widget.binding;
-  late final Listenable _shape = Listenable.merge([
-    _model,
-    _model.canSend,
-    _model.queues,
-    widget.controller,
-  ]);
-
-  /// The last revision of the model's state sent.
-  int? _sentRevision;
-
-  /// The native field's focus in Dart's focus tree, so what takes focus away
-  /// here — a drag back through the conversation, a page pushed — takes the
-  /// keyboard away there, as it would from a Flutter field.
   final FocusNode _focus = FocusNode(debugLabel: "ShellComposer");
+  late ComposerSurface surface = _surface();
 
-  /// Whether the field has the keyboard, as it last said: a change of
-  /// [_focus] that agrees with it came from there and is not sent back.
-  bool _fieldFocused = false;
-
-  /// The menu as last drawn, which a `pick` names a row of.
-  List<CompletionOption> _matches = const [];
+  ComposerSurface _surface() => ComposerSurface(
+    outbox: _outbox,
+    model: widget.model,
+    controller: widget.controller,
+    clipboardFiles: () => ref.read(clipboardFilesProvider).read(),
+    focus: _focus,
+  )..bind(widget.binding);
 
   @override
   void initState() {
     super.initState();
-    _answers.composer.take(this);
-    _focus.addListener(_sendFocus);
-    _configure();
-    _model.state.addListener(_follow);
-    _follow();
+    _answers.composer.take(surface);
   }
 
   @override
   void didUpdateWidget(ShellComposer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.model != widget.model) {
-      oldWidget.model.state.removeListener(_follow);
-      widget.model.state.addListener(_follow);
-      _sentRevision = null;
+      final owned = _answers.composer.release(surface);
+      surface.dispose();
+      surface = _surface();
+      if (owned) _answers.composer.take(surface);
     }
-    _configure();
+    surface.bind(widget.binding);
   }
 
   @override
   void dispose() {
-    _model.state.removeListener(_follow);
-    if (_answers.composer.release(this)) {
+    surface.dispose();
+    if (_answers.composer.release(surface)) {
       _outbox.composer(ComposerSnapshot(present: false));
     }
     _focus.dispose();
     super.dispose();
   }
 
-  void _configure() => _model.bind(_binding);
+  @override
+  void restore(Draft said) => surface.restore(said);
 
   @override
-  void restore(Draft said) => _model.restore(said);
-
-  /// Add [embed] and put the caret in the field, as [Composer.embed] does.
-  @override
-  void embed(ComposerEmbed embed) {
-    widget.controller.append(embed);
-    _focus.requestFocus();
-  }
-
-  void _sendFocus() {
-    if (_focus.hasFocus != _fieldFocused) {
-      _outbox.composerFocus(_focus.hasFocus);
-    }
-  }
-
-  @override
-  void focused(bool focused) {
-    _fieldFocused = focused;
-    focused ? _focus.requestFocus() : _focus.unfocus();
-  }
-
-  /// What the core set goes to the shell's field, once per revision.
-  void _follow() {
-    final state = _model.state.value;
-    if (state.revision != _sentRevision) {
-      _sentRevision = state.revision;
-      final (:text, :start, :end) = state.value;
-      _outbox.composerValue(
-        ComposerValueSnapshot(
-          text: text,
-          start: start,
-          end: end,
-          revision: state.revision,
-        ),
-      );
-    }
-  }
-
-  void _add(List<Attachment> files) {
-    if (mounted) _model.attach(files);
-  }
-
-  ComposerController get _controller => widget.controller;
-
-  @override
-  Future<void> edited(String text, int start, int end) async =>
-      _model.edited((text: text, start: start, end: end));
-
-  @override
-  Future<void> run(shell.ComposerAction action) async {
-    await _model.run(composerActionOf(action));
-  }
-
-  /// A row of the menu as last drawn.
-  @override
-  Future<void> pick(int index) async {
-    if (index >= 0 && index < _matches.length) {
-      _model.acceptCompletion(_matches[index].name);
-    }
-  }
-
-  @override
-  Future<void> dismiss() async => _model.dismissCompletion();
-
-  @override
-  void unattach(int index) => _model.unattach(index);
-
-  @override
-  Future<void> unembed(int code) async {
-    final embed = _controller.embedsByCode[code];
-    if (embed != null) _controller.remove(embed);
-  }
-
-  /// Whether a paste took files from the clipboard.
-  @override
-  Future<bool> paste() async {
-    final files = await ref.read(clipboardFilesProvider).read();
-    _add(files);
-    return files.isNotEmpty;
-  }
-
-  /// Where a `!` command is about to run: the shell's own report where it has
-  /// made one, else the workspace in the guest's own words. See
-  /// `Composer._cwdBar`.
-  String? _cwd() {
-    final workspace = _binding.workspace;
-    if (workspace == null) return null;
-    final live = ref
-        .read(
-          chatShellCwdProvider((
-            workspace: workspace,
-            workspaceHome: _binding.workspaceHome,
-          )),
-        )
-        ?.value;
-    return live ??
-        workingDirectoryFallback(
-          workspace: workspace,
-          guestRoot: ref.read(shellProvider).guestRoot,
-          home: _binding.workspaceHome,
-        );
-  }
+  void embed(ComposerEmbed embed) => surface.embed(embed);
 
   @override
   Widget build(BuildContext context) {
-    final ProjectRef project = (
-      device: _binding.device,
-      project: _binding.project,
-    );
-    // Held while the composer is up, so a paired device's menu is there by
-    // the time a `/` is typed.
-    if (_binding.device != null) ref.watch(promptLibraryOf(project));
-    final cwd = _binding.workspace == null
+    final binding = widget.binding;
+    final cwd = binding.workspace == null
         ? null
         : ref.watch(
             chatShellCwdProvider((
-              workspace: _binding.workspace,
-              workspaceHome: _binding.workspaceHome,
+              workspace: binding.workspace,
+              workspaceHome: binding.workspaceHome,
             )),
           );
-    final theme = Theme.of(context);
-    // Both menus' entries, read here in the build rather than in the builder
-    // below, which only knows which is open.
-    final offered = {
-      for (final kind in CompletionKind.values)
-        kind: ref.watch(completionsProvider((project: project, kind: kind))),
-    };
-    // Every agent's face, drawn while the composer is up so the `@` menu has
-    // them as it opens; a paired device's agents have none here.
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
-    final outline = theme.colorScheme.outline;
-    final faces = {
-      if (_binding.device == null)
-        for (final agent in offered[CompletionKind.agent]!)
-          agent.name: ref
-              .watch(
-                agentFacePngProvider((
-                  project: _binding.project,
-                  name: agent.name,
-                  size: _menuFace,
-                  pixelRatio: pixelRatio,
-                  outline: outline,
-                )),
-              )
-              .value,
-    };
-    final composer = ListenableBuilder(
-      listenable: Listenable.merge([_shape, ?cwd]),
-      builder: (context, _) {
-        final controller = widget.controller;
-        final token = _model.completion;
-        _matches = token == null
-            ? const []
-            : matchingCompletions(offered[token.kind]!, token.query);
-        final mode = _model.mode;
-        _outbox.composer(
-          ComposerSnapshot(
-            present: true,
-            mode: switch (mode) {
-              ComposerMode.message => InputMode.message,
-              ComposerMode.shell => InputMode.shell,
-              ComposerMode.callback => InputMode.callback,
-            },
-            callback: switch (_model.callback) {
-              final wired? => callbackKindOf(wired),
-              null => null,
-            },
-            canSend: _model.canSend.value,
-            queues: _model.queues.value,
-            speaking: _model.speaking,
-            voice: _model.voice,
-            attachments: [
-              for (final a in _model.attachments)
-                ComposerAttachment(
-                  name: a.filename,
-                  image: a.mimeType.startsWith("image/"),
-                ),
-            ],
-            menu: [
-              for (final option in _matches)
-                ComposerMenuItem(
-                  name: option.name,
-                  trigger: triggerOf(token!.kind),
-                  hint: option.argumentHint,
-                  detail: option.description,
-                  picture: token.kind == CompletionKind.agent
-                      ? faces[option.name]
-                      : null,
-                ),
-            ],
-            cwd: mode == ComposerMode.shell ? _cwd() : null,
-            cards: {
-              for (final MapEntry(:key, :value)
-                  in controller.embedsByCode.entries)
-                key: ComposerCard(
-                  title: value.card.title,
-                  body: value.card.body,
-                ),
-            },
-          ),
-        );
-        return const SizedBox.shrink();
-      },
+    final outline = Theme.of(context).colorScheme.outline;
+    return Focus(
+      focusNode: _focus,
+      child: ListenableBuilder(
+        listenable: Listenable.merge([surface.shape, ?cwd]),
+        builder: (context, _) {
+          _outbox.composer(
+            surface.snapshot(
+              WidgetReader(ref),
+              pixelRatio: pixelRatio,
+              outline: outline,
+            ),
+          );
+          return const SizedBox.shrink();
+        },
+      ),
     );
-    return Focus(focusNode: _focus, child: composer);
   }
 }
 

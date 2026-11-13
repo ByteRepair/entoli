@@ -1430,11 +1430,35 @@ final projectFrozenProvider = Provider.family<bool, ProjectRef>(
           PeerStatus.online,
 );
 
-final isMirroredChatProvider = Provider.family<bool, String>((ref, chatId) {
-  return ref.watch(
-    remoteChatsProvider.select((chats) => chats.any((c) => c.chatId == chatId)),
-  );
-});
+/// Where a mirrored chat lives: its home device, and whether that device is
+/// online now. A value, so a change elsewhere in the list is not one here.
+typedef MirrorHome = ({String? deviceId, String name, bool online});
+
+/// A mirror whose entry has not arrived yet.
+const MirrorHome unknownMirrorHome = (
+  deviceId: null,
+  name: "the home device",
+  online: false,
+);
+
+/// [chatId]'s home device where it is a mirror; null for this device's own.
+final mirrorHomeProvider = Provider.family<MirrorHome?, String>(
+  (ref, chatId) => ref.watch(
+    remoteChatsProvider.select((chats) {
+      for (final c in chats) {
+        if (c.chatId == chatId) {
+          return (deviceId: c.deviceId, name: c.deviceName, online: c.online);
+        }
+      }
+      return null;
+    }),
+  ),
+);
+
+final isMirroredChatProvider = Provider.family<bool, String>(
+  (ref, chatId) =>
+      ref.watch(mirrorHomeProvider(chatId).select((home) => home != null)),
+);
 
 /// The single owner of the platform's download slot — see [DownloadHold]. Every
 /// catalog's notifier reports through it rather than to [BackgroundWork].

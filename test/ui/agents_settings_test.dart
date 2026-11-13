@@ -13,8 +13,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/project.dart" show localProject;
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/sidebar/project_settings_page.dart"
-    show ProjectSettingsPage;
+import "package:agent_chat/app/pages/project_settings.dart";
 import "package:agent_chat/ui/widgets/agent_picture.dart";
 
 import "../fakes.dart" show onePixelPng, testAttachment;
@@ -346,7 +345,7 @@ void main() {
         "---\ndescription: desc\n---\n\nBody.",
       );
 
-      await app.pump(tester, const ProjectSettingsPage(project: "work"));
+      await app.pumpPage(tester, ProjectSettingsAppPage("work"));
       await scrollTo(tester, find.text("Agents"));
       await tester.tap(find.text("Agents"));
       await settleIo(tester);
@@ -448,7 +447,7 @@ void main() {
       // One project's directory is one project's tier rung, so the reload a
       // project page does is enough — pinned here so it stays that way.
       await io(tester, () => app.repo.createProject("work"));
-      await app.pump(tester, const ProjectSettingsPage(project: "work"));
+      await app.pumpPage(tester, ProjectSettingsAppPage("work"));
       await scrollTo(tester, find.text("Agents"));
       await tester.tap(find.text("Agents"));
       await settleIo(tester);

@@ -1,10 +1,5 @@
-import "../../../app/running.dart";
-
-export "../../../app/running.dart";
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../domain/room/room_state.dart" show ChatViewState;
 import "../../fonts.dart";
 
 /// One thing the chat has running, as a pill in the row above the composer:
@@ -63,52 +58,3 @@ Widget runningSpinner(Color colour) => SizedBox(
   height: 12,
   child: CircularProgressIndicator(strokeWidth: 1.5, color: colour),
 );
-
-/// One thing a chat has running beside the reply, as the row above the
-/// composer draws it.
-class RunningThing {
-  const RunningThing({
-    required this.kind,
-    required this.name,
-    required this.label,
-    required this.tooltip,
-    required this.open,
-    this.hidden = false,
-    this.group,
-    this.icon,
-    this.mono = false,
-  });
-
-  /// What it is, and its name — the page's host, the job's command, the
-  /// sub-agent — for a frontend that words it itself.
-  final RunningKind kind;
-  final String name;
-
-  /// The browser is hidden from the agent.
-  final bool hidden;
-
-  /// What it is gathered under with the rest of its kind, as a singular noun
-  /// ("background task"); null for one that stands alone, ahead of the
-  /// groups.
-  final String? group;
-  final String label;
-  final String tooltip;
-
-  /// Shown in place of the spinner.
-  final IconData? icon;
-  final bool mono;
-
-  /// Opens what it is, from the pill's [BuildContext].
-  final void Function(BuildContext context) open;
-}
-
-/// A kind of thing a chat can have running: what [chatId] has of it now,
-/// watching through [ref] whatever it reads beyond [view]. The row asks each
-/// for what it has, in the order they are listed, and knows nothing of what
-/// they are.
-typedef RunningSource =
-    List<RunningThing> Function(
-      WidgetRef ref,
-      ChatViewState view,
-      String chatId,
-    );

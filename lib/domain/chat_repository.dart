@@ -625,13 +625,11 @@ class ChatRepository {
     final meta = await loadMeta(chatId);
     if (meta.tempChatTtl != null) return meta.tempChatTtl!;
     final proj = project ?? await projectOf(chatId);
-    final projectSettings = ProjectSettings.load(_config, project: proj);
-    if (projectSettings.tempChatTtl != null) {
-      return projectSettings.tempChatTtl!;
-    }
-    final builtInTtl = builtinProjectOf(proj)?.tempChatTtl;
-    if (builtInTtl != null) return builtInTtl;
-    return _settings().tempChatTtl;
+    return inheritedTempTtl(
+      proj,
+      own: ProjectSettings.load(_config, project: proj).tempChatTtl,
+      app: _settings().tempChatTtl,
+    );
   }
 
   /// Which project a chat's files are in.

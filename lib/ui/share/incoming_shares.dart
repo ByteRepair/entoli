@@ -4,7 +4,8 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../providers.dart";
-import "share_target_page.dart";
+import "../../app/pages/share_target.dart";
+import "../app_pages.dart";
 
 /// Wraps the app so a share from another app can be offered a workspace over
 /// whatever is on screen. Android's, and only Android's: everywhere else
@@ -54,9 +55,9 @@ class _IncomingSharesState extends ConsumerState<IncomingShares> {
     try {
       final files = await ref.read(fileHandoffProvider).takeShare();
       if (files.isEmpty || !mounted) return;
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => ShareTargetPage(files: files)));
+      final page = ShareTargetAppPage(files);
+      openAppPage(context, page);
+      await page.done;
     } finally {
       _asking = false;
     }

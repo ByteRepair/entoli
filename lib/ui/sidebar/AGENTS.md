@@ -77,7 +77,7 @@ and `off` is the honest answer for a chat that was just unpinned.
 ## The bottom block
 
 Profile, Marketplace and Settings are the tiles under the list: plain
-`ListTile`s that push their pages; see `lib/ui/marketplace/AGENTS.md` for what
+`ListTile`s that open their pages; see `lib/app/marketplace/AGENTS.md` for what
 Marketplace's opens onto. New chat is the round button beside the search field,
 above.
 

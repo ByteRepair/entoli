@@ -1,3 +1,5 @@
+import "package:agent_chat/app/pages/app_page.dart";
+import "package:agent_chat/app/settings/controller.dart";
 import "package:agent_chat/app/settings/hand_off.dart";
 import "package:agent_chat/app/settings/spec.dart";
 import "package:agent_chat/domain/app_settings.dart";
@@ -32,8 +34,62 @@ class _FakeNativeSettings implements TestNativeSettings {
   void device(String id, PairedDeviceData? device, String? readError) =>
       devices.add((id, device, readError));
 
+  /// The app's pages as each stack was sent.
+  final stacks = <List<SettingsPageData>>[];
+
+  @override
+  void appPages(List<SettingsPageData> stack) => stacks.add(stack);
+
   @override
   void cliAccount(CliAccountData account) {}
+}
+
+/// A page with one toggle, which leaving asks about once it is flipped.
+class _Page extends AppPage {
+  bool on = false;
+  int count = 1;
+
+  @override
+  String get address => "test";
+
+  @override
+  String title(SettingReader reader) => "Test";
+
+  @override
+  SettingConfirm? leaving(SettingReader reader) => on
+      ? const SettingConfirm(
+          title: "Discard?",
+          message: "It was flipped.",
+          confirmLabel: "Discard",
+        )
+      : null;
+
+  @override
+  List<PageSection> sections(SettingReader reader) => [
+    PageSection("s", "", [
+      ToggleController(
+        part("flip", "Flip", hint: UiHint.toggle),
+        value: on,
+        effective: on,
+        onSet: (value) async {
+          on = value ?? false;
+          changed();
+          return null;
+        },
+      ),
+      NumberController(
+        part("count", "Count"),
+        value: count,
+        fallback: 1,
+        min: 1,
+        max: 9,
+        onSet: (value) async {
+          count = value;
+          changed();
+        },
+      ),
+    ]),
+  ];
 }
 
 void main() {
@@ -202,6 +258,65 @@ void main() {
       );
       expect(notice, isNull);
       expect((await io(tester, () => devices.byId("peer")))!.name, "Desk");
+    });
+  });
+
+  group("the app's pages", () {
+    late _FakeNativeSettings native;
+    late SettingsBridge bridge;
+
+    setUp(() {
+      native = _FakeNativeSettings();
+      TestNativeSettings.setUp(native);
+      addTearDown(() => TestNativeSettings.setUp(null));
+      bridge = SettingsBridge(app.container);
+      addTearDown(bridge.close);
+    });
+
+    testWidgets("a page opened is sent as the stack, its rows its own", (
+      tester,
+    ) async {
+      final page = _Page();
+      app.container.read(appPagesProvider.notifier).open(page);
+      await settleIo(tester);
+
+      final sent = native.stacks.last.single;
+      expect(sent.key, SettingsPageKey.app);
+      expect(sent.address, "test");
+      final row = sent.sections.single!.rows.first!;
+      expect(row.id, "page:test/flip");
+
+      bridge.toggle(row.id, true);
+      await settleIo(tester);
+      expect(page.on, isTrue);
+      expect(native.stacks.last.single.guarded, isTrue);
+    });
+
+    testWidgets("a number on a page is set by its intent", (tester) async {
+      final page = _Page();
+      app.container.read(appPagesProvider.notifier).open(page);
+      await settleIo(tester);
+
+      bridge.setNumber("page:test/count", 4);
+      await settleIo(tester);
+      expect(page.count, 4);
+    });
+
+    testWidgets("leaving asks what the page asks, and closing takes it", (
+      tester,
+    ) async {
+      final page = _Page()..on = true;
+      app.container.read(appPagesProvider.notifier).open(page);
+      await settleIo(tester);
+
+      final ask = await io(tester, () => bridge.leavePage("test"));
+      expect(ask?.confirmLabel, "Discard");
+      expect(app.container.read(appPagesProvider), [page]);
+
+      bridge.closePage("test");
+      await settleIo(tester);
+      expect(app.container.read(appPagesProvider), isEmpty);
+      expect(native.stacks.last, isEmpty);
     });
   });
 }

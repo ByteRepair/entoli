@@ -4,7 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/goal.dart";
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/ui/chat/chat_page.dart" show GoalEntry, entriesOf;
+import "package:agent_chat/app/transcript/transcript.dart";
 import "package:agent_chat/ui/chat/widgets/goal_mark_row.dart";
 
 import "../harness.dart" show makeState;
@@ -21,7 +21,9 @@ void main() {
   Future<void> pumpRow(WidgetTester tester, GoalMark mark) => tester.pumpWidget(
     ProviderScope(
       child: MaterialApp(
-        home: Scaffold(body: GoalMarkRow(mark: mark)),
+        home: Scaffold(
+          body: GoalMarkRow(row: GoalRow(mark, key: "g")),
+        ),
       ),
     ),
   );
@@ -80,8 +82,8 @@ void main() {
       goals: const [paused],
     );
 
-    final entries = entriesOf(chat);
-    expect(entries[1], isA<GoalEntry>());
-    expect((entries[1] as GoalEntry).mark, paused);
+    final entries = Transcript.of("", chat).rows;
+    expect(entries[1], isA<GoalRow>());
+    expect((entries[1] as GoalRow).mark, paused);
   });
 }

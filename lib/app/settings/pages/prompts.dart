@@ -301,7 +301,7 @@ final promptSettings = [
           agent.name,
           id: agent.name,
           subtitle: agent.description?.nullIfEmpty,
-          face: local ? (project: project, name: agent.name) : null,
+          face: local ? AgentRowFace(project: project, name: agent.name) : null,
           editable: owned(agent),
           takesImage: owned(agent),
           badge: own == null || own.contains(agent.name)

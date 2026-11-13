@@ -77,6 +77,40 @@ abstract interface class ComposerText implements Listenable {
   void clear();
 }
 
+/// What stands where a chat's composer goes, decided once for every
+/// frontend: the composer itself, or what is drawn in its place.
+sealed class ComposerSlot {
+  const ComposerSlot();
+}
+
+/// The composer, sending through [binding].
+final class ComposerReady extends ComposerSlot {
+  const ComposerReady(this.binding);
+
+  final ComposerBinding binding;
+}
+
+/// The project has a setup step still to take before anything is sent.
+final class ComposerNeedsSetup extends ComposerSlot {
+  const ComposerNeedsSetup();
+}
+
+/// Read, and nothing to type into: a mirror whose home device is away, or a
+/// paired device's project gone frozen.
+final class ComposerViewOnly extends ComposerSlot {
+  const ComposerViewOnly();
+}
+
+/// The turn waits on the user's answers, asked in the composer's place.
+final class ComposerAnswering extends ComposerSlot {
+  const ComposerAnswering();
+}
+
+/// A chat being made from the first message: nothing until it is.
+final class ComposerStarting extends ComposerSlot {
+  const ComposerStarting();
+}
+
 /// What a page binds its composer to: the turn it sends into and where it
 /// is. One per page, which every frontend's composer is given.
 class ComposerBinding {

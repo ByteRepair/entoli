@@ -4,6 +4,7 @@ import "package:entoli_glass/entoli_glass.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../app/pages/app_page.dart";
 import "../../app/settings/controller.dart";
 import "../../app/bot_avatar/library.dart";
 import "../../app/bot_avatar/stage.dart";
@@ -58,46 +59,7 @@ final nativeSettingsProvider = Provider.autoDispose<NativeSettingsPages>((ref) {
   final shown = ref.watch(nativeShownPagesProvider);
   final schema = ref.watch(settingsSchemaProvider);
   final controllers = <String, SettingController>{};
-  final providers = ref.watch(appSettingsProvider).llmProviders;
-  final models = ref.watch(sortedModelsProvider);
-  final listed = models.value ?? const [];
-  final serving = ref.watch(modelProvidersProvider);
-  _ModelField label(ModelPickController c) {
-    final error = modelFieldError(
-      choice: c.choice,
-      role: c.role,
-      loaded: models.hasValue,
-      listed: listed,
-      serving: serving,
-    );
-    return (
-      label: error != null
-          ? missingModelLabel
-          : modelFieldLabel(
-              choice: c.choice,
-              role: c.role,
-              nullLabel: c.nullLabel,
-              defaultOf: c.defaultOf,
-              providers: providers,
-              listed: listed,
-              serving: serving,
-            ),
-      error: error,
-    );
-  }
-
-  final stage = ref.watch(botStageProvider);
-  // A Bot Avatar is drawn live by the client from its rig; a photo is sent.
-  _Face face(({String? project, String name}) agent) =>
-      switch (ref.watch(agentPictureProvider(agent)).value) {
-        AgentPhoto(:final bytes) => (photo: bytes, bot: null, colour: null),
-        AgentBot(:final spec) => (
-          photo: null,
-          bot: stage.keyOf(spec.definition),
-          colour: spec.colour,
-        ),
-        null => (photo: null, bot: null, colour: null),
-      };
+  final encode = _Encoder(ref, controllers);
   final pages = [
     for (final page in SettingsPageId.values)
       if (page.settings && (!page.listed || pageOffered(reader, page)))
@@ -117,14 +79,13 @@ final nativeSettingsProvider = Provider.autoDispose<NativeSettingsPages>((ref) {
                 page,
                 const AppAddress(),
               ))
-                SettingsSectionData(
-                  id: section.spec.id,
-                  title: section.spec.title,
-                  detail: section.description,
-                  rows: [
-                    for (final setting in section.settings)
-                      ..._rows(setting, controllers, label, face),
-                  ],
+                encode.section(
+                  PageSection(
+                    section.spec.id,
+                    section.spec.title,
+                    section.settings,
+                    detail: section.description,
+                  ),
                 ),
           ],
         ),
@@ -132,34 +93,363 @@ final nativeSettingsProvider = Provider.autoDispose<NativeSettingsPages>((ref) {
   return (snapshot: SettingsSnapshot(pages: pages), controllers: controllers);
 });
 
-/// What a model pick's field reads as, and why it is wrong.
-typedef _ModelField = ({String label, String? error});
+/// The app's pages open, each as a settings page drawn over the window, and
+/// their controllers by id.
+final nativeAppPagesProvider = Provider.autoDispose<NativeSettingsPages>((ref) {
+  final reader = RefReader(ref);
+  final open = ref.watch(appPagesProvider);
+  final controllers = <String, SettingController>{};
+  final encode = _Encoder(ref, controllers);
+  final pages = [
+    for (final page in open)
+      SettingsPageData(
+        key: SettingsPageKey.app,
+        address: page.address,
+        title: page.title(reader),
+        subtitle: page.subtitle(reader),
+        guarded: page.leaving(reader) != null,
+        held: page.held(reader),
+        sections: [for (final s in page.sections(reader)) encode.section(s)],
+        toolbar: [
+          for (final action in page.toolbar(reader))
+            if (action.visible) ...encode.rows(action),
+        ],
+      ),
+  ];
+  return (snapshot: SettingsSnapshot(pages: pages), controllers: controllers);
+});
+
+/// Sections as rows, reading what a row draws — a model pick's label, an
+/// agent's face — through the provider's ref, and keeping each controller
+/// sent under its id.
+class _Encoder {
+  _Encoder(this.ref, this.controllers);
+
+  final Ref ref;
+  final Map<String, SettingController> controllers;
+
+  late final _stage = ref.watch(botStageProvider);
+
+  SettingsSectionData section(PageSection section) => SettingsSectionData(
+    id: section.id,
+    title: section.title,
+    detail: section.detail,
+    rows: [for (final c in section.controllers) ...rows(c)],
+    fills: section.fills,
+  );
+
+  /// [c] as the rows that carry it: its own, then a group's children and an
+  /// accessory, each naming it their parent.
+  List<SettingRowData> rows(
+    SettingController c, {
+    String? parent,
+    bool accessory = false,
+  }) {
+    controllers[c.id] = c;
+    return [
+      _row(c, parent: parent, accessory: accessory),
+      if (c case GroupController(:final children))
+        for (final child in children)
+          if (child.visible) ...rows(child, parent: c.id),
+      if (c.accessory case final action?)
+        ...rows(action, parent: c.id, accessory: true),
+    ];
+  }
+
+  SettingRowData _row(
+    SettingController c, {
+    String? parent,
+    bool accessory = false,
+  }) {
+    final row = SettingRowData(
+      id: c.id,
+      kind: SettingKind.toggle,
+      hint: SettingHint.values.byName(c.hint.name),
+      title: c.title,
+      detail: c.description,
+      footnote: c.footnote,
+      enabled: c.enabled,
+      icon: _icon(c.glyph),
+      parent: parent,
+      accessory: accessory,
+    );
+    switch (c) {
+      case ToggleController():
+        row
+          ..on = c.value
+          ..effective = c.effective
+          ..unsettable = c.unsettable;
+      case ChoiceController():
+        final options = c.options;
+        final index = options.indexWhere((o) => o.value == c.value);
+        row
+          ..kind = SettingKind.choice
+          ..options = [for (final o in options) _option(o)]
+          ..picked = index < 0 ? null : index
+          ..unsettable = c.unsettable
+          ..inheritedLabel = c.inheritedLabel
+          ..inheritedPick = switch (options.indexWhere(
+            (o) => o.value == c.inherited,
+          )) {
+            < 0 => null,
+            final at => at,
+          }
+          ..noneLabel = c.noneLabel
+          ..error = c.error;
+      case SlotsController():
+        final all = [for (final g in c.groups) ...g.options];
+        row
+          ..kind = SettingKind.slots
+          ..options = [for (final slot in c.slots) _option(slot)]
+          ..groups = [
+            for (final g in c.groups)
+              SettingGroupData(
+                label: g.label,
+                options: [for (final o in g.options) _option(o)],
+              ),
+          ]
+          ..slotPicks = [
+            for (final slot in c.slots)
+              all.indexWhere((o) => o.value == slot.value),
+          ];
+      case RangeController():
+        row
+          ..kind = SettingKind.range
+          ..value = c.value
+          ..inherited = c.inherited
+          ..stops = c.stops ?? const []
+          ..min = c.min
+          ..max = c.max
+          ..unsettable = c.unsettable;
+      case KeyValuesController():
+        row
+          ..kind = SettingKind.keyValues
+          ..entries = c.entries
+          ..masked = c.masked;
+      case ActionController():
+        row
+          ..kind = SettingKind.action
+          ..label = c.label
+          ..destructive = c.destructive
+          ..secondary = c.secondary;
+      case GroupController():
+        row
+          ..kind = SettingKind.group
+          ..busy = c.busy;
+      case NumberController():
+        row
+          ..kind = SettingKind.number
+          ..value = c.value
+          ..inherited = c.fallback
+          ..min = c.min
+          ..max = c.max
+          ..unit = c.unit
+          ..prompt = c.prompt;
+      case ModelPickController():
+        final field = modelField(c);
+        row
+          ..kind = SettingKind.modelPick
+          ..modelLabel = field.reads
+          ..error = field.error
+          ..noneLabel = c.nullLabel
+          // A level that inherits its model: the null entry is Default, and a
+          // pick of the level's own can be reset to it.
+          ..unsettable = c.inherited != null
+          ..effective = c.choice.providerId != null || c.choice.modelId != null;
+      case TextController():
+        row
+          ..kind = SettingKind.text
+          ..text = c.value
+          ..emptyLabel = c.emptyLabel
+          ..prompt = c.prompt
+          ..secret = c.secret
+          ..lines = c.lines
+          ..submitLabel = c.submitLabel
+          ..clearLabel = c.clearLabel;
+      case WebController():
+        row
+          ..kind = SettingKind.web
+          ..webUrl = c.url.toString();
+      case DocumentController():
+        row
+          ..kind = SettingKind.document
+          ..text = c.text
+          ..markdown = c.markdown
+          ..editing = c.editing;
+      case NoticeController():
+        row
+          ..kind = SettingKind.notice
+          ..notice = [
+            for (final line in c.lines)
+              SettingLineData(text: line.text, url: line.url?.toString()),
+          ]
+          ..tone = _tone(c.tone);
+      case CollectionController():
+        _Face? faceOf(CollectionItem item) => switch (item.face) {
+          AvatarRowFace(:final spec) => _botFace(spec),
+          AgentRowFace(:final agent) => _agentFace(agent),
+          null => null,
+        };
+        row
+          ..kind = SettingKind.collection
+          ..items = [
+            for (final item in c.rows)
+              if (faceOf(item) case final face)
+                SettingItemData(
+                  title: item.title,
+                  subtitle: item.subtitle,
+                  error: item.error,
+                  icon: _icon(item.glyph),
+                  tone: _tone(item.tone),
+                  on: item.on,
+                  opens: _textPage(item.opens),
+                  tap: item.tap,
+                  badge: item.badge,
+                  meters: [
+                    for (final meter in item.meters)
+                      SettingMeterData(
+                        text: meter.text,
+                        fraction: meter.fraction,
+                      ),
+                  ],
+                  editable: item.editable,
+                  image: face?.photo,
+                  bot: face?.bot,
+                  botColour: face?.colour,
+                  actions: [
+                    for (final action in c.actionsOf(item))
+                      SettingItemActionData(
+                        kind: SettingActionKind.values.byName(action.kind.name),
+                        id: action.id,
+                        label: action.label,
+                        enabled: action.enabled,
+                        destructive: action.destructive,
+                        confirm: _confirm(action.confirm),
+                        handsOff: action.handsOff,
+                      ),
+                  ],
+                ),
+          ]
+          ..addLabel = c.addLabel
+          ..removeLabel = c.removeLabel
+          ..removable = c.removable
+          ..editable = c.editable
+          ..emptyItems = c.emptyLabel;
+      case CatalogController():
+        row
+          ..kind = SettingKind.catalog
+          ..catalog = [
+            for (final item in c.items)
+              SettingCatalogData(
+                id: item.id,
+                title: item.title,
+                summary: item.summary,
+                note: item.note,
+                badge: item.badge,
+                tags: [
+                  if (item.facts case final f?)
+                    for (final (_, text) in modelFactTags(f)) text,
+                ],
+                failure: item.failure,
+                received: item.progress?.received,
+                total: item.progress?.total,
+                unpacking: item.progress?.unpacking ?? false,
+                installed: item.installed,
+                downloadable: item.downloadable,
+                updatable: item.updatable,
+                deleteConfirm: _confirm(item.deleteConfirm),
+              ),
+          ]
+          ..addLabel = c.addLabel;
+      case InfoController():
+        row
+          ..kind = SettingKind.info
+          ..info = [
+            for (final info in c.rows)
+              SettingInfoData(
+                title: info.title,
+                subtitle: info.subtitle,
+                icon: _icon(info.glyph),
+                keyChar: info.keys?.char,
+                keyShift: info.keys?.shift ?? false,
+                keyAlt: info.keys?.alt ?? false,
+                link: info.link?.toString(),
+                opens: _textPage(info.opens),
+              ),
+          ];
+      case SubpageController():
+        row
+          ..kind = SettingKind.subpage
+          ..page = SettingsPageKey.values.byName(c.page.name)
+          ..summary = c.summary;
+      case PairingController():
+        final activity = c.activity;
+        row
+          ..kind = SettingKind.pairing
+          ..canScan = c.canScan
+          ..pairing = activity == null
+              ? null
+              : SettingPairingData(
+                  stage: SettingPairingStage.values.byName(activity.stage.name),
+                  qr: activity.qr,
+                  code: activity.code,
+                  sas: activity.sas,
+                  peerName: activity.peerName,
+                  error: activity.error,
+                );
+      case SetupController():
+        final tools = c.tools;
+        row
+          ..kind = SettingKind.setup
+          ..blocked = c.blocked
+          ..setupNotice = c.notice
+          ..prerequisiteWhy = c.prerequisite?.why
+          ..prerequisiteCommand = c.prerequisite?.command
+          ..tools = tools == null
+              ? null
+              : [
+                  for (final MapEntry(key: name, value: version)
+                      in tools.entries)
+                    SettingToolData(name: name, version: version),
+                ]
+          ..running = c.running
+          ..error = c.error
+          ..deleteConfirm = _confirm(c.deleteConfirm)
+          ..setUpLabel = c.setUpLabel
+          ..importLabel = c.importLabel
+          ..deleteLabel = c.deleteLabel;
+    }
+    return row;
+  }
+
+  ModelField modelField(ModelPickController c) => ModelField.watch(
+    RefReader(ref),
+    choice: c.choice,
+    role: c.role,
+    nullLabel: c.nullLabel,
+    defaultOf: c.defaultOf,
+    inherited: c.inherited,
+  );
+
+  /// A Bot Avatar is drawn live by the client from its rig; a photo is sent.
+  _Face _botFace(BotAvatarSpec bot) =>
+      (photo: null, bot: _stage.keyOf(bot.definition), colour: bot.colour);
+
+  _Face _agentFace(({String? project, String name}) agent) =>
+      switch (ref.watch(agentPictureProvider(agent)).value) {
+        AgentPhoto(:final bytes) => (photo: bytes, bot: null, colour: null),
+        AgentBot(:final spec) => (
+          photo: null,
+          bot: _stage.keyOf(spec.definition),
+          colour: spec.colour,
+        ),
+        null => (photo: null, bot: null, colour: null),
+      };
+}
 
 /// An agent's face: a photo's bytes, or a Bot Avatar as the stage's key and
 /// its colour; all null for none, or not read yet.
 typedef _Face = ({Uint8List? photo, String? bot, int? colour});
-
-/// [c] as the rows that carry it: its own, then a group's children and an
-/// accessory, each naming it their parent.
-List<SettingRowData> _rows(
-  SettingController c,
-  Map<String, SettingController> controllers,
-  _ModelField Function(ModelPickController c) label,
-  _Face Function(({String? project, String name}) agent) face, {
-  String? parent,
-  bool accessory = false,
-}) {
-  controllers[c.id] = c;
-  return [
-    _row(c, label, face, parent: parent, accessory: accessory),
-    if (c case GroupController(:final children))
-      for (final child in children)
-        if (child.visible)
-          ..._rows(child, controllers, label, face, parent: c.id),
-    if (c.accessory case final action?)
-      ..._rows(action, controllers, label, face, parent: c.id, accessory: true),
-  ];
-}
 
 SettingIcon? _icon(SettingGlyph? glyph) =>
     glyph == null ? null : SettingIcon.values.byName(glyph.name);
@@ -203,250 +493,6 @@ SettingOptionData _option(SettingOption option) => SettingOptionData(
   },
 );
 
-SettingRowData _row(
-  SettingController c,
-  _ModelField Function(ModelPickController c) label,
-  _Face Function(({String? project, String name}) agent) face, {
-  String? parent,
-  bool accessory = false,
-}) {
-  final row = SettingRowData(
-    id: c.id,
-    kind: SettingKind.toggle,
-    hint: SettingHint.values.byName(c.hint.name),
-    title: c.title,
-    detail: c.description,
-    footnote: c.footnote,
-    enabled: c.enabled,
-    icon: _icon(c.glyph),
-    parent: parent,
-    accessory: accessory,
-  );
-  switch (c) {
-    case ToggleController():
-      row
-        ..on = c.value
-        ..effective = c.effective
-        ..unsettable = c.unsettable;
-    case ChoiceController():
-      final options = c.options;
-      final index = options.indexWhere((o) => o.value == c.value);
-      row
-        ..kind = SettingKind.choice
-        ..options = [for (final o in options) _option(o)]
-        ..picked = index < 0 ? null : index
-        ..unsettable = c.unsettable
-        ..inheritedLabel = c.inheritedLabel
-        ..noneLabel = c.noneLabel
-        ..error = c.error;
-    case SlotsController():
-      final all = [for (final g in c.groups) ...g.options];
-      row
-        ..kind = SettingKind.slots
-        ..options = [for (final slot in c.slots) _option(slot)]
-        ..groups = [
-          for (final g in c.groups)
-            SettingGroupData(
-              label: g.label,
-              options: [for (final o in g.options) _option(o)],
-            ),
-        ]
-        ..slotPicks = [
-          for (final slot in c.slots)
-            all.indexWhere((o) => o.value == slot.value),
-        ];
-    case RangeController():
-      row
-        ..kind = SettingKind.range
-        ..value = c.value
-        ..inherited = c.inherited
-        ..stops = c.stops ?? const []
-        ..min = c.min
-        ..max = c.max
-        ..unsettable = c.unsettable;
-    case KeyValuesController():
-      row
-        ..kind = SettingKind.keyValues
-        ..entries = c.entries
-        ..masked = c.masked;
-    case ActionController():
-      row
-        ..kind = SettingKind.action
-        ..label = c.label
-        ..destructive = c.destructive
-        ..secondary = c.secondary;
-    case GroupController():
-      row
-        ..kind = SettingKind.group
-        ..busy = c.busy;
-    case NumberController():
-      row
-        ..kind = SettingKind.number
-        ..value = c.value
-        ..inherited = c.fallback
-        ..min = c.min
-        ..max = c.max
-        ..unit = c.unit
-        ..prompt = c.prompt;
-    case ModelPickController():
-      final field = label(c);
-      row
-        ..kind = SettingKind.modelPick
-        ..modelLabel = field.label
-        ..error = field.error
-        ..noneLabel = c.nullLabel;
-    case TextController():
-      row
-        ..kind = SettingKind.text
-        ..text = c.value
-        ..emptyLabel = c.emptyLabel
-        ..prompt = c.prompt
-        ..secret = c.secret
-        ..lines = c.lines
-        ..submitLabel = c.submitLabel
-        ..clearLabel = c.clearLabel;
-    case NoticeController():
-      row
-        ..kind = SettingKind.notice
-        ..notice = [
-          for (final line in c.lines)
-            SettingLineData(text: line.text, url: line.url?.toString()),
-        ]
-        ..tone = _tone(c.tone);
-    case CollectionController():
-      _Face? faceOf(CollectionItem item) =>
-          item.face == null ? null : face(item.face!);
-      row
-        ..kind = SettingKind.collection
-        ..items = [
-          for (final item in c.rows)
-            if (faceOf(item) case final face)
-              SettingItemData(
-                title: item.title,
-                subtitle: item.subtitle,
-                error: item.error,
-                icon: _icon(item.glyph),
-                tone: _tone(item.tone),
-                on: item.on,
-                opens: _textPage(item.opens),
-                tap: item.tap,
-                badge: item.badge,
-                meters: [
-                  for (final meter in item.meters)
-                    SettingMeterData(
-                      text: meter.text,
-                      fraction: meter.fraction,
-                    ),
-                ],
-                editable: item.editable,
-                image: face?.photo,
-                bot: face?.bot,
-                botColour: face?.colour,
-                actions: [
-                  for (final action in c.actionsOf(item))
-                    SettingItemActionData(
-                      kind: SettingActionKind.values.byName(action.kind.name),
-                      id: action.id,
-                      label: action.label,
-                      enabled: action.enabled,
-                      destructive: action.destructive,
-                      confirm: _confirm(action.confirm),
-                      handsOff: action.handsOff,
-                    ),
-                ],
-              ),
-        ]
-        ..addLabel = c.addLabel
-        ..removeLabel = c.removeLabel
-        ..removable = c.removable
-        ..editable = c.editable
-        ..emptyItems = c.emptyLabel;
-    case CatalogController():
-      row
-        ..kind = SettingKind.catalog
-        ..catalog = [
-          for (final item in c.items)
-            SettingCatalogData(
-              id: item.id,
-              title: item.title,
-              summary: item.summary,
-              note: item.note,
-              badge: item.badge,
-              tags: [
-                if (item.facts case final f?)
-                  for (final (_, text) in modelFactTags(f)) text,
-              ],
-              failure: item.failure,
-              received: item.progress?.received,
-              total: item.progress?.total,
-              unpacking: item.progress?.unpacking ?? false,
-              installed: item.installed,
-              downloadable: item.downloadable,
-              updatable: item.updatable,
-              deleteConfirm: _confirm(item.deleteConfirm),
-            ),
-        ]
-        ..addLabel = c.addLabel;
-    case InfoController():
-      row
-        ..kind = SettingKind.info
-        ..info = [
-          for (final info in c.rows)
-            SettingInfoData(
-              title: info.title,
-              subtitle: info.subtitle,
-              icon: _icon(info.glyph),
-              keyChar: info.keys?.char,
-              keyShift: info.keys?.shift ?? false,
-              keyAlt: info.keys?.alt ?? false,
-              link: info.link?.toString(),
-              opens: _textPage(info.opens),
-            ),
-        ];
-    case SubpageController():
-      row
-        ..kind = SettingKind.subpage
-        ..page = SettingsPageKey.values.byName(c.page.name)
-        ..summary = c.summary;
-    case PairingController():
-      final activity = c.activity;
-      row
-        ..kind = SettingKind.pairing
-        ..canScan = c.canScan
-        ..pairing = activity == null
-            ? null
-            : SettingPairingData(
-                stage: SettingPairingStage.values.byName(activity.stage.name),
-                qr: activity.qr,
-                code: activity.code,
-                sas: activity.sas,
-                peerName: activity.peerName,
-                error: activity.error,
-              );
-    case SetupController():
-      final tools = c.tools;
-      row
-        ..kind = SettingKind.setup
-        ..blocked = c.blocked
-        ..setupNotice = c.notice
-        ..prerequisiteWhy = c.prerequisite?.why
-        ..prerequisiteCommand = c.prerequisite?.command
-        ..tools = tools == null
-            ? null
-            : [
-                for (final MapEntry(key: name, value: version) in tools.entries)
-                  SettingToolData(name: name, version: version),
-              ]
-        ..running = c.running
-        ..error = c.error
-        ..deleteConfirm = _confirm(c.deleteConfirm)
-        ..setUpLabel = c.setUpLabel
-        ..importLabel = c.importLabel
-        ..deleteLabel = c.deleteLabel;
-  }
-  return row;
-}
-
 /// [options] as sent; a multi's [picked] each with its flip.
 List<FormOptionData> _formOptions(
   List<FormOption> options, {
@@ -481,6 +527,10 @@ List<FormOptionData> _formOptions(
 TextPageData? _textPage(TextPage? page) => switch (page) {
   null => null,
   PolicyPage() => TextPageData(kind: TextPageKind.privacyPolicy),
+  InlinePage(:final text) => TextPageData(
+    kind: TextPageKind.inline,
+    text: text,
+  ),
   LicencesPage() => TextPageData(kind: TextPageKind.licences),
   SkillPage(:final name, :final project) => TextPageData(
     kind: TextPageKind.skill,
@@ -512,6 +562,11 @@ FormSaveData _refusal(Object e) => switch (e) {
 class SettingsBridge implements SettingsIntents {
   SettingsBridge(this._container) {
     SettingsIntents.setUp(this);
+    _opened = _container.listen<List<AppPage>>(
+      appPagesProvider,
+      (_, open) => _follow(open),
+      fireImmediately: true,
+    );
   }
 
   final ProviderContainer _container;
@@ -538,14 +593,65 @@ class SettingsBridge implements SettingsIntents {
   /// The pages as they change, while the settings are on screen.
   ProviderSubscription<NativeSettingsPages>? _sending;
 
+  late final ProviderSubscription<List<AppPage>> _opened;
+
+  /// The app's pages as they change, while any is open.
+  ProviderSubscription<NativeSettingsPages>? _sendingPages;
+
+  void _follow(List<AppPage> open) {
+    if (open.isEmpty) {
+      _sendingPages?.close();
+      _sendingPages = null;
+      _sendPages(const []);
+      return;
+    }
+    _sendingPages ??= _container.listen<NativeSettingsPages>(
+      nativeAppPagesProvider,
+      (_, pages) => _sendPages(pages.snapshot.pages.nonNulls.toList()),
+      onError: (e, _) => logFailure("pages", "building a page", e),
+      fireImmediately: true,
+    );
+  }
+
+  /// What was last sent of each, which a rebuild that changed nothing the
+  /// client draws does not send again.
+  List<SettingsPageData>? _sentPages;
+  SettingsSnapshot? _sentSettings;
+
+  void _sendPages(List<SettingsPageData> stack) {
+    if (_sentPages case final sent? when listEquals(sent, stack)) return;
+    _sentPages = stack;
+    unawaited(
+      _native.appPages(stack).catchError((Object e) {
+        logFailure("pages", "sending the pages", e);
+      }),
+    );
+  }
+
+  AppPages get _pages => _container.read(appPagesProvider.notifier);
+
+  @override
+  Future<SettingConfirmData?> leavePage(String address) async {
+    final page = _pages.find(address);
+    if (page == null) return null;
+    final ask = page.leaving(_reader);
+    if (ask == null) _pages.close(address);
+    return _confirm(ask);
+  }
+
+  @override
+  void closePage(String address) => _pages.close(address);
+
   @override
   void shown(bool on, List<SettingsPageKey?> pages) {
     _container.read(nativeShownPagesProvider.notifier).show({
-      for (final key in pages.nonNulls) SettingsPageId.values.byName(key.name),
+      for (final key in pages.nonNulls)
+        if (key != SettingsPageKey.app) SettingsPageId.values.byName(key.name),
     });
     if (!on) {
       _sending?.close();
       _sending = null;
+      _sentSettings = null;
       return;
     }
     _sending ??= _container.listen<NativeSettingsPages>(
@@ -565,6 +671,8 @@ class SettingsBridge implements SettingsIntents {
   bool _failed = false;
 
   void _send(NativeSettingsPages pages) {
+    if (pages.snapshot == _sentSettings) return;
+    _sentSettings = pages.snapshot;
     unawaited(
       _native.settings(pages.snapshot).catchError((Object e) {
         // A client that is not listening — a test, a launch that never
@@ -581,13 +689,19 @@ class SettingsBridge implements SettingsIntents {
   );
 
   void close() {
+    _opened.close();
+    _sendingPages?.close();
     shown(false, const []);
     _device.close();
     SettingsIntents.setUp(null);
   }
 
   T? _at<T extends SettingController>(String id) {
-    final c = _container.read(nativeSettingsProvider).controllers[id];
+    final c = _container
+        .read(
+          AppPage.owns(id) ? nativeAppPagesProvider : nativeSettingsProvider,
+        )
+        .controllers[id];
     return c is T ? c : null;
   }
 
@@ -616,18 +730,27 @@ class SettingsBridge implements SettingsIntents {
 
   @override
   void setNumber(String id, int? value) {
-    final c = _container.read(nativeSettingsProvider).controllers[id];
-    switch (c) {
-      case RangeController():
+    switch (_at<SettingController>(id)) {
+      case final RangeController c:
         c.set(value);
-      case NumberController():
+      case final NumberController c:
         c.set(value ?? c.fallback);
       default:
     }
   }
 
   @override
-  void setText(String id, String text) => _at<TextController>(id)?.set(text);
+  void setText(String id, String text) => switch (_at<SettingController>(id)) {
+    final TextController c => c.set(text),
+    final DocumentController c => c.edit(text),
+    _ => null,
+  };
+
+  @override
+  void navigated(String id, String url, String? title) {
+    final at = Uri.tryParse(url);
+    if (at != null) _at<WebController>(id)?.navigated(at, title);
+  }
 
   @override
   void putEntry(String id, String name, String value, String? replacing) =>
@@ -1165,6 +1288,7 @@ class SettingsBridge implements SettingsIntents {
   @override
   Future<String> page(TextPageData opens) async => switch (opens.kind) {
     TextPageKind.privacyPolicy => bundledPrivacyPolicy,
+    TextPageKind.inline => opens.text ?? "",
     TextPageKind.licences => await _licences,
     TextPageKind.skill => await _skill(opens.name ?? "", opens.project),
   };

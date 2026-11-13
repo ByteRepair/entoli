@@ -41,8 +41,9 @@ struct ToggleRow: View {
             ? "\(row.title) — Default (\(row.effective ? "on" : "off"))" : row.title,
           detail: row.detail)
       }
-      if row.unsettable && row.on != nil {
+      if row.unsettable {
         ResetMenu(label: nil) { model.say.toggle(id: row.id, on: nil, completion: ignore) }
+          .disabled(row.on == nil)
       }
     }
   }
@@ -66,17 +67,29 @@ struct ChoiceRow: View {
 
   var body: some View {
     switch row.hint {
-    case .levels where row.picked != nil:
+    // Unset at a level that inherits, the slider stands where the level
+    // above does, and says so.
+    case .levels where (row.picked ?? row.inheritedPick) != nil:
       VStack(alignment: .leading, spacing: 8) {
-        Text(row.title)
-        ThinkingBar(labels: options.map(\.label), picked: Int(row.picked ?? 0)) { i in
+        HStack {
+          Text(unsetTitle)
+          Spacer()
+          reset
+        }
+        ThinkingBar(
+          labels: options.map(\.label), picked: Int(row.picked ?? row.inheritedPick ?? 0)
+        ) { i in
           picked.wrappedValue = i
         }
         if let detail = row.detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
       }
     case .segmented, .levels:
       VStack(alignment: .leading) {
-        Text(row.title)
+        HStack {
+          Text(unsetTitle)
+          Spacer()
+          reset
+        }
         Picker(row.title, selection: picked) {
           ForEach(Array(options.enumerated()), id: \.offset) { i, o in Text(o.label).tag(i) }
         }
@@ -105,8 +118,25 @@ struct ChoiceRow: View {
         } label: {
           Titled(title: row.title, detail: row.error ?? row.detail)
         }
+        reset
         if let accessory { AccessoryButton(model: model, row: accessory) }
       }
+    }
+  }
+
+  /// The title, saying where nothing of this level's is picked.
+  private var unsetTitle: String {
+    row.unsettable && row.picked == nil ? "\(row.title) — Default" : row.title
+  }
+
+  /// Back to what unset stands for, on every row of a level that inherits:
+  /// dimmed while nothing of this level's is picked.
+  @ViewBuilder private var reset: some View {
+    if row.unsettable {
+      ResetMenu(label: row.inheritedLabel) {
+        model.say.pick(id: row.id, option: nil, completion: ignore)
+      }
+      .disabled(row.picked == nil)
     }
   }
 }
@@ -237,10 +267,11 @@ struct RangeRow: View {
         Spacer()
         Text("\(dragging.map(at) ?? shown)")
           .monospacedDigit().foregroundStyle(.secondary)
-        if row.unsettable && row.value != nil {
+        if row.unsettable {
           ResetMenu(label: row.inherited.map { "\($0)" }) {
             model.say.setNumber(id: row.id, value: nil, completion: ignore)
           }
+          .disabled(row.value == nil)
         }
       }
       Slider(
@@ -349,39 +380,79 @@ struct KeyValuesRow: View {
   }
 }
 
-/// Something done rather than set: asked first where it asks, said after
-/// where it has something to say.
+/// Something done rather than set, drawn as its hint asks.
 struct ActionRow: View {
   let model: SettingsModel
   let row: SettingRowData
+
+  var body: some View {
+    if row.hint == .open {
+      // Opens another page, which Dart pushes over this one.
+      ActionPress(model: model, row: row) {
+        HStack {
+          if let icon = row.icon {
+            Label {
+              Titled(title: row.title, detail: row.detail)
+            } icon: {
+              Image(systemName: icon.symbol)
+            }
+          } else {
+            Titled(title: row.title, detail: row.detail)
+          }
+          Spacer(minLength: 4)
+          if let label = row.label { Text(label).foregroundStyle(.secondary) }
+          Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+            .foregroundStyle(.tertiary)
+        }
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+    } else if row.hint == .row || row.hint == .permission {
+      HStack {
+        if row.hint == .permission, let icon = row.icon {
+          Image(systemName: icon.symbol).foregroundStyle(.secondary)
+        }
+        Titled(title: row.title, detail: row.detail)
+        Spacer()
+        ActionPress(model: model, row: row) { Text(row.label ?? row.title) }
+      }
+    } else {
+      ActionPress(model: model, row: row, role: row.destructive ? .destructive : nil) {
+        ActionLabel(row: row)
+      }
+    }
+  }
+}
+
+/// An action's words, with its icon where it has one.
+struct ActionLabel: View {
+  let row: SettingRowData
+
+  var body: some View {
+    if let icon = row.icon {
+      Label(row.label ?? row.title, systemImage: icon.symbol)
+    } else {
+      Text(row.label ?? row.title)
+    }
+  }
+}
+
+/// A button for [row]'s action: asked first where it asks, said after
+/// where it has something to say.
+struct ActionPress<Content: View>: View {
+  let model: SettingsModel
+  let row: SettingRowData
+  var role: ButtonRole? = nil
+  @ViewBuilder let label: () -> Content
   @State private var confirm: SettingConfirmData?
   @State private var notice: SettingNoticeData?
 
   var body: some View {
-    Group {
-      if row.hint == .row || row.hint == .permission {
-        HStack {
-          if row.hint == .permission, let icon = row.icon {
-            Image(systemName: icon.symbol).foregroundStyle(.secondary)
-          }
-          Titled(title: row.title, detail: row.detail)
-          Spacer()
-          Button(row.label ?? row.title, action: press)
-        }
-      } else {
-        Button(role: row.destructive ? .destructive : nil, action: press) {
-          if let icon = row.icon {
-            Label(row.label ?? row.title, systemImage: icon.symbol)
-          } else {
-            Text(row.label ?? row.title)
-          }
-        }
-      }
-    }
-    .asking($confirm, $notice) { run() }
+    Button(role: role, action: press, label: label)
+      .asking($confirm, $notice) { run() }
   }
 
-  func press() {
+  private func press() {
     Task { @MainActor in
       guard let ask = await model.ask(row.id) else { return run() }
       if ask.cancelled { return }
@@ -393,7 +464,7 @@ struct ActionRow: View {
     }
   }
 
-  func run() {
+  private func run() {
     Task { @MainActor in notice = await model.run(row.id) }
   }
 }
@@ -628,9 +699,10 @@ struct TextPage: View {
 
   var body: some View {
     ScrollView {
-      MarkdownBlocks(text: text ?? "")
-        .textSelection(.enabled)
-        .frame(maxWidth: .infinity, alignment: .leading)
+      Group {
+        if let text { DocumentMarkdown(text: text) }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
     }
     // Opaque, as a grouped page is: a page sliding in is drawn over the one
@@ -648,14 +720,23 @@ struct ModelPickRow: View {
   let row: SettingRowData
 
   var body: some View {
-    PushRow(model: model, to: .models(OpenedModels(row: row.id))) {
-      VStack(alignment: .leading, spacing: 2) {
-        LabeledContent(row.title, value: row.modelLabel ?? "")
-        if let error = row.error {
-          Text(error).font(.caption).foregroundStyle(.red)
-        } else if let detail = row.detail {
-          Text(detail).font(.caption).foregroundStyle(.secondary)
+    HStack {
+      PushRow(model: model, to: .models(OpenedModels(row: row.id))) {
+        VStack(alignment: .leading, spacing: 2) {
+          LabeledContent(row.title, value: row.modelLabel ?? "")
+          if let error = row.error {
+            Text(error).font(.caption).foregroundStyle(.red)
+          } else if let detail = row.detail {
+            Text(detail).font(.caption).foregroundStyle(.secondary)
+          }
         }
+      }
+      // A level's own pick, back to the one it inherits.
+      if row.unsettable {
+        ResetMenu(label: row.noneLabel) {
+          model.say.setModel(id: row.id, providerId: nil, modelId: nil, completion: ignore)
+        }
+        .disabled(!row.effective)
       }
     }
   }
@@ -704,89 +785,3 @@ struct PushRow<Label: View>: View {
   }
 }
 
-/// Markdown by its blocks — headings, list items, code fences, paragraphs —
-/// each block's inline syntax left to AttributedString, which reads no
-/// blocks itself.
-struct MarkdownBlocks: View {
-  let text: String
-
-  private enum Block: Hashable {
-    case heading(Int, String)
-    case item(Int, String)
-    case code(String)
-    case paragraph(String)
-  }
-
-  private var blocks: [Block] {
-    var blocks: [Block] = []
-    var paragraph: [String] = []
-    var code: [String]?
-    func flush() {
-      if !paragraph.isEmpty { blocks.append(.paragraph(paragraph.joined(separator: " "))) }
-      paragraph = []
-    }
-    for line in text.components(separatedBy: "\n") {
-      let trimmed = line.trimmingCharacters(in: .whitespaces)
-      if trimmed.hasPrefix("```") {
-        if let open = code {
-          blocks.append(.code(open.joined(separator: "\n")))
-          code = nil
-        } else {
-          flush()
-          code = []
-        }
-      } else if code != nil {
-        code!.append(line)
-      } else if trimmed.isEmpty {
-        flush()
-      } else if let hashes = trimmed.firstIndex(where: { $0 != "#" }), hashes != trimmed.startIndex,
-        trimmed[hashes] == " "
-      {
-        flush()
-        let level = trimmed.distance(from: trimmed.startIndex, to: hashes)
-        blocks.append(.heading(level, String(trimmed[hashes...]).trimmingCharacters(in: .whitespaces)))
-      } else if let marker = ["- ", "* ", "+ "].first(where: trimmed.hasPrefix) {
-        flush()
-        let indent = line.prefix(while: { $0 == " " }).count / 2
-        blocks.append(.item(indent, String(trimmed.dropFirst(marker.count))))
-      } else {
-        paragraph.append(trimmed)
-      }
-    }
-    if let open = code { blocks.append(.code(open.joined(separator: "\n"))) }
-    flush()
-    return blocks
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-        switch block {
-        case .heading(let level, let words):
-          inline(words).font(level == 1 ? .title2.bold() : level == 2 ? .title3.bold() : .headline)
-            .padding(.top, 4)
-        case .item(let indent, let words):
-          HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text("•")
-            inline(words)
-          }
-          .padding(.leading, CGFloat(indent) * 16)
-        case .code(let source):
-          ScrollView(.horizontal) {
-            Text(source).font(.callout.monospaced()).padding(10)
-          }
-          .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-        case .paragraph(let words):
-          inline(words)
-        }
-      }
-    }
-  }
-
-  private func inline(_ words: String) -> Text {
-    Text(
-      (try? AttributedString(
-        markdown: words, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-        ?? AttributedString(words))
-  }
-}

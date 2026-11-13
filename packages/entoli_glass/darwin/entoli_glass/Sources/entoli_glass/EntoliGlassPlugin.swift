@@ -22,6 +22,10 @@ public final class EntoliGlassPlugin: NSObject, FlutterPlugin {
     let settings = SettingsModel(messenger: messenger)
     SettingsModel.shared = settings
     NativeSettingsSetup.setUp(binaryMessenger: messenger, api: settings)
+    AppPagesModel.shared = AppPagesModel(messenger: messenger)
+    let transcript = TranscriptModel(messenger: messenger)
+    TranscriptModel.shared = transcript
+    NativeTranscriptSetup.setUp(binaryMessenger: messenger, api: transcript)
   }
 }
 
@@ -70,6 +74,8 @@ public struct FrontendView: View {
       content.sheet(isPresented: $settings.presented) {
         // A page's room on an iPad, the whole screen on a phone.
         SettingsRoot(model: settings).presentationSizing(.page)
+          // A page opened from a setting comes up over the settings.
+          .modifier(AppPagesPresenter(inSettings: true))
       }
     }
   }

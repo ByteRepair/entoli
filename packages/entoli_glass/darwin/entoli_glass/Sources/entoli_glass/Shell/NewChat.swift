@@ -216,8 +216,9 @@ struct FlowLayout: Layout {
   }
 }
 
-/// The old question going: blurring and growing as it fades, so it reads as
-/// lifting off the glass rather than dissolving into it.
+/// Something going: blurring and growing as it fades, so it reads as lifting
+/// off the glass rather than dissolving into it. The new-chat screen's old
+/// question, and the conversation's jump button and chapter rail.
 private struct Lift: ViewModifier {
   let gone: Bool
 
@@ -230,7 +231,7 @@ private struct Lift: ViewModifier {
 }
 
 extension AnyTransition {
-  fileprivate static var lift: AnyTransition {
+  static var lift: AnyTransition {
     .modifier(active: Lift(gone: true), identity: Lift(gone: false))
   }
 }

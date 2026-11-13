@@ -1,4 +1,9 @@
+import "../app/pages/welcome.dart" show openFirstRun;
+import "../app/settings/spec.dart" show WidgetReader;
+import "app_pages.dart";
 import "package:flutter/material.dart";
+import "../app/chat_session.dart" show chatSessionHostProvider;
+import "chat_session_host.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -32,12 +37,26 @@ class _AppShellState extends ConsumerState<AppShell> {
     super.initState();
     HardwareKeyboard.instance.addHandler(_key);
     _scope.attach(_commands);
+    _host?.attach(context, ref);
+    // A first launch's setup and tour, over the shell once it is up.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) openFirstRun(WidgetReader(ref));
+    });
   }
+
+  /// The chat sessions say and open things over this page.
+  late final RootChatSessionHost? _host = switch (ref.read(
+    chatSessionHostProvider,
+  )) {
+    final RootChatSessionHost host => host,
+    _ => null,
+  };
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_key);
     _scope.detach(_commands);
+    _host?.detach(context);
     super.dispose();
   }
 
@@ -51,13 +70,15 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) => SettingsHandOffs(
-    child: AppMenuSync(
-      child: SidePanelFrame(
-        panel: const Sidebar(),
-        panelWidth: sidebarWidth,
-        shown: ref.watch(sidebarShownProvider),
-        onShow: () => ref.read(sidebarShownProvider.notifier).set(true),
-        child: const ChatPage(),
+    child: AppPagesFollower(
+      child: AppMenuSync(
+        child: SidePanelFrame(
+          panel: const Sidebar(),
+          panelWidth: sidebarWidth,
+          shown: ref.watch(sidebarShownProvider),
+          onShow: () => ref.read(sidebarShownProvider.notifier).set(true),
+          child: const ChatPage(),
+        ),
       ),
     ),
   );

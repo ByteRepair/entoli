@@ -19,21 +19,32 @@ import SwiftUI
   var window = WindowSnapshot.initial
   var sidebar = SidebarSnapshot.initial
   var chatBar = ChatBarSnapshot.initial
-  var pageBar = TitleBarSnapshot.absent
   var turn = TurnSnapshot.initial
   var newChat = NewChatSnapshot.initial
   var voice = VoiceSnapshot.initial
   var palette = PaletteSnapshot.initial
+  var foot = ChatFootSnapshot(deviceOffline: false, bar: .none)
+
+  /// The line said to the user now, if any: up for a few seconds, then gone,
+  /// a newer one taking its place.
+  var notice: Notice?
+
+  /// The agent's browser as the user watches it, and its latest frame.
+  var browser = BrowserViewSnapshot(present: false, title: "", open: false, hidden: false, window: false)
+  var browserFrame: BrowserFrame?
 
   /// What the user did, for Dart to run: one object per surface, each a
   /// method per intent it can send, answered by whichever widget draws that
   /// surface in Dart (`ShellAnswers`).
   let say: ShellIntents
 
-  /// A strip of choices over the Flutter view, and who waits on its answer:
-  /// see `Strip.swift`.
-  var strip: StripRequest?
-  @ObservationIgnored var stripReply: ((Int64?) -> Void)?
+  /// Whether the camera is up for a pairing code, and who waits on it.
+  var scanning = false
+  @ObservationIgnored var scanReply: ((String?) -> Void)?
+
+  /// The dialog Dart asked, and who waits on its answer.
+  var dialog: DialogRequest?
+  @ObservationIgnored var dialogReply: ((DialogAnswer) -> Void)?
 
   /// Which of the two an iPhone's drawer shows (`Drawer.swift`). The detail
   /// to begin with, nothing selected being the new-chat screen as it is in
@@ -65,25 +76,12 @@ import SwiftUI
   /// alone. Nil until Dart has said, the window showing only its colour.
   private(set) var frontend: Bool?
 
-  /// The app proper is up: its window snapshot has come, which Dart sends
-  /// only once the welcome tour and first-run setup are behind it. Until
-  /// then the chrome stays out of the way, so nothing of it bypasses them.
+  /// The app proper is up: its window snapshot has come. Until then the
+  /// chrome stays out of the way, there being nothing yet to draw it from.
   private(set) var ready = false
 
   init(messenger: FlutterBinaryMessenger) {
     say = ShellIntents(messenger: messenger)
-  }
-
-  @ObservationIgnored private var reported: EdgeInsets?
-
-  /// How much of the Flutter view the shell's own bars cover, which Dart
-  /// hands the conversation as padding so it scrolls under them.
-  func insets(_ insets: EdgeInsets) {
-    guard insets != reported else { return }
-    reported = insets
-    say.window.insets(
-      left: insets.leading, top: insets.top, right: insets.trailing, bottom: insets.bottom
-    ) { _ in }
   }
 }
 
@@ -101,20 +99,69 @@ extension ShellModel: NativeShell {
 
   func sidebar(snapshot: SidebarSnapshot) throws { sidebar = snapshot }
   func chatBar(snapshot: ChatBarSnapshot) throws { chatBar = snapshot }
-  func pageBar(snapshot: TitleBarSnapshot) throws { pageBar = snapshot }
   func composer(snapshot: ComposerSnapshot) throws { composer.apply(snapshot) }
   func composerValue(snapshot: ComposerValueSnapshot) throws { composer.apply(snapshot) }
   func turn(snapshot: TurnSnapshot) throws { turn = snapshot }
   func newChat(snapshot: NewChatSnapshot) throws { newChat = snapshot }
   func voice(snapshot: VoiceSnapshot) throws { voice = snapshot }
   func palette(snapshot: PaletteSnapshot) throws { palette = snapshot }
+  func foot(snapshot: ChatFootSnapshot) throws { foot = snapshot }
+
+  func browser(snapshot: BrowserViewSnapshot) throws {
+    browser = snapshot
+    if !snapshot.present { browserFrame = nil }
+  }
+
+  func browserFrame(frame: BrowserFrameSnapshot) throws {
+    guard browser.present, let decoded = BrowserFrame(frame) else { return }
+    browserFrame = decoded
+  }
+
+  func notice(message: String) throws {
+    let said = Notice(message: message)
+    withAnimation(.snappy) { notice = said }
+    Task { @MainActor [weak self] in
+      try? await Task.sleep(for: .seconds(4))
+      guard self?.notice?.id == said.id else { return }
+      withAnimation(.snappy) { self?.notice = nil }
+    }
+  }
 
   func voiceLevel(level: Double) throws { voiceLevel.set(level) }
 
   func composerFocus(focused: Bool) throws { composer.focus(focused) }
 
-  func strip(request: ChoiceStrip, completion: @escaping (Result<Int64?, Error>) -> Void) {
-    showStrip(request) { completion(.success($0)) }
+  func dialog(request: DialogRequest, completion: @escaping (Result<DialogAnswer, Error>) -> Void) {
+    // One at a time: the one open is answered as dismissed.
+    dialogReply?(DialogAnswer(agreed: false))
+    dialogReply = { completion(.success($0)) }
+    dialog = request
+  }
+
+  func scanCode(completion: @escaping (Result<String?, Error>) -> Void) {
+    #if os(iOS)
+      scanReply?(nil)
+      scanReply = { completion(.success($0)) }
+      scanning = true
+    #else
+      completion(.success(nil))
+    #endif
+  }
+
+  /// Answers the scan open, with the code read or nothing.
+  func scanned(_ code: String?) {
+    let reply = scanReply
+    scanReply = nil
+    scanning = false
+    reply?(code)
+  }
+
+  /// Answers the dialog open, and takes it down.
+  func answer(_ answer: DialogAnswer) {
+    let reply = dialogReply
+    dialogReply = nil
+    dialog = nil
+    reply?(answer)
   }
 }
 
@@ -130,7 +177,8 @@ struct ShellIntents {
   let voice: VoiceIntents
   /// The chat's title bar, and a Flutter page's: one view draws both.
   let chatBar: ChatBarPresses
-  let pageBar: TitleBarIntents
+  let foot: ChatFootIntents
+  let browser: BrowserIntents
 
   init(messenger: FlutterBinaryMessenger) {
     window = WindowEvents(binaryMessenger: messenger)
@@ -141,12 +189,13 @@ struct ShellIntents {
     newChat = NewChatIntents(binaryMessenger: messenger)
     voice = VoiceIntents(binaryMessenger: messenger)
     chatBar = ChatBarPresses(intents: ChatBarIntents(binaryMessenger: messenger))
-    pageBar = TitleBarIntents(binaryMessenger: messenger, messageChannelSuffix: "pageBar")
+    foot = ChatFootIntents(binaryMessenger: messenger)
+    browser = BrowserIntents(binaryMessenger: messenger)
   }
 }
 
 extension WindowSnapshot {
-  static let initial = WindowSnapshot(covered: false, sidebarShown: true)
+  static let initial = WindowSnapshot(sidebarShown: true)
 
   var colorScheme: ColorScheme? { dark.map { $0 ? .dark : .light } }
 }

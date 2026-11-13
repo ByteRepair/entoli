@@ -19,8 +19,6 @@ class ShellOutbox {
       _post("sidebar", snapshot, _shell.sidebar);
   void chatBar(ChatBarSnapshot snapshot) =>
       _post("chatBar", snapshot, _shell.chatBar);
-  void pageBar(TitleBarSnapshot snapshot) =>
-      _post("pageBar", snapshot, _shell.pageBar);
   void composer(ComposerSnapshot snapshot) =>
       _post("composer", snapshot, _shell.composer);
   void composerValue(ComposerValueSnapshot snapshot) =>
@@ -31,10 +29,21 @@ class ShellOutbox {
   void voice(VoiceSnapshot snapshot) => _post("voice", snapshot, _shell.voice);
   void palette(PaletteSnapshot snapshot) =>
       _post("palette", snapshot, _shell.palette);
+  void foot(ChatFootSnapshot snapshot) => _post("foot", snapshot, _shell.foot);
+  void browser(BrowserViewSnapshot snapshot) =>
+      _post("browser", snapshot, _shell.browser);
+
+  /// A frame of the browser's page: many a second, each new.
+  void browserFrame(BrowserFrameSnapshot frame) =>
+      _watch("browserFrame", _shell.browserFrame(frame));
 
   /// The microphone's level: many times a second, nothing to compare against.
   void voiceLevel(double level) =>
       _watch("voiceLevel", _shell.voiceLevel(level));
+
+  /// A line said to the user in passing: nothing to compare against, each one
+  /// said.
+  void notice(String message) => _watch("notice", _shell.notice(message));
 
   /// Give the composer's field the keyboard, or take it away.
   void composerFocus(bool focused) =>

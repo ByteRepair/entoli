@@ -5,26 +5,22 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:path/path.dart" as p;
 
-import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_meta.dart";
-import "package:agent_chat/domain/confinement.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
-import "package:agent_chat/domain/work_folders.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/sidebar/chat_headings.dart";
 import "package:agent_chat/ui/sidebar/project_palette.dart";
-import "package:agent_chat/ui/sidebar/project_settings_page.dart";
+import "package:agent_chat/app/pages/project_settings.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/widgets/search_field.dart";
-import "package:agent_chat/ui/workspace/workspace_page.dart";
+import "package:agent_chat/app/pages/workspace.dart";
 
 import "../harness.dart";
 
@@ -314,7 +310,7 @@ void main() {
       await settleIo(tester);
 
       // That it is the right root is workspace_page_test's.
-      expect(find.byType(WorkspacePage), findsOneWidget);
+      expect(findPage<WorkspaceAppPage>(), findsOneWidget);
     });
 
     // A built-in project is in the menu like any other, but it is not one the
@@ -605,7 +601,7 @@ void main() {
       await tester.tap(find.byTooltip("Project settings"));
       await settleIo(tester);
 
-      expect(find.byType(ProjectSettingsPage), findsOneWidget);
+      expect(findPage<ProjectSettingsAppPage>(), findsOneWidget);
     });
 
     testWidgets("a named project's still goes to its settings", (tester) async {
@@ -617,7 +613,7 @@ void main() {
       await tester.tap(find.byTooltip("Project settings"));
       await settleIo(tester);
 
-      expect(find.byType(ProjectSettingsPage), findsOneWidget);
+      expect(findPage<ProjectSettingsAppPage>(), findsOneWidget);
     });
 
     testWidgets("only the chats of the project shown are listed", (
@@ -828,190 +824,6 @@ void main() {
           )
           .first;
       expect(tester.widget<Text>(label).style?.fontStyle, FontStyle.italic);
-    });
-
-    testWidgets("the settings page's toggle reveals the ordering section", (
-      tester,
-    ) async {
-      await io(tester, () => app.repo.createProject("research"));
-      await app.pump(tester, ProjectSettingsPage(project: "research"));
-
-      expect(find.text("Round order"), findsNothing);
-      await tester.scrollUntilVisible(
-        find.text("Omada"),
-        200,
-        scrollable: find.byType(Scrollable).last,
-      );
-      await settleIo(tester);
-      await tester.tap(find.text("Omada"));
-      await settleIo(tester, least: 10);
-
-      expect(find.text("Round order"), findsOneWidget);
-      await tester.tap(find.byType(DropdownButtonFormField<OmadaOrdering?>));
-      await settleIo(tester);
-      await tester.tap(find.text("Crossfire").last);
-      await settleIo(tester, least: 10);
-
-      await io(tester, () async {});
-      final settings = ProjectSettings.load(app.config, project: "research");
-      expect(settings.omada, isTrue);
-      expect(settings.omadaOrdering, OmadaOrdering.parallel);
-    });
-
-    testWidgets(
-      "a built-in's settings page has no Omada toggle or Description row",
-      (tester) async {
-        await app.pump(
-          tester,
-          ProjectSettingsPage(project: byteRepairProjectLabel.toLowerCase()),
-        );
-
-        // A built-in's answer is its spec: the page says it, rather than
-        // offering a toggle to change it. The ordering rows ride the same
-        // answer — My Team's page shows them, Byte Repair's shows nothing.
-        expect(find.text("Omada"), findsOneWidget);
-        expect(find.text("Round order"), findsNothing);
-        // And the Description row is the named projects' alone.
-        expect(find.text("Description"), findsNothing);
-      },
-    );
-
-    testWidgets("My Team's settings page shows the Omada state, not a toggle", (
-      tester,
-    ) async {
-      await app.pump(tester, ProjectSettingsPage(project: "my-team"));
-
-      // The card sections sit above it, so the row is below the fold.
-      await tester.scrollUntilVisible(
-        find.text("Omada"),
-        200,
-        scrollable: find.byType(Scrollable).last,
-      );
-      await settleIo(tester);
-
-      // The one row, rendered with the switch disabled — a built-in's answer
-      // is its spec, so the state is shown, not offered. The ordering rows
-      // ride the same answer and are offered.
-      final toggle = tester.widget<SwitchListTile>(
-        find.widgetWithText(SwitchListTile, "Omada"),
-      );
-      expect(toggle.value, isTrue);
-      expect(toggle.onChanged, isNull);
-      expect(find.text("Round order"), findsOneWidget);
-    });
-
-    // The row is the description's own surface: open, edit, save, and the
-    // screen reads it back.
-    testWidgets("the Description row edits through its dialog", (tester) async {
-      await io(tester, () => app.repo.createProject("research"));
-      await app.pump(tester, const ProjectSettingsPage(project: "research"));
-
-      expect(find.text("Description"), findsOneWidget);
-      // Unset, it names what the screen would ask.
-      expect(find.text("What would you like to discuss?"), findsOneWidget);
-
-      await tester.tap(find.text("Description"));
-      await settleIo(tester);
-
-      expect(find.byType(AlertDialog), findsOneWidget);
-      expect(find.text("What would you like to discuss?"), findsNWidgets(2));
-
-      await tester.enterText(find.byType(TextField), "What are we building?");
-      await tester.tap(find.text("Save"));
-      await settleIo(tester, least: 10);
-
-      await io(tester, () async {});
-      expect(
-        ProjectSettings.load(app.config, project: "research").description,
-        "What are we building?",
-      );
-      expect(find.text("What are we building?"), findsOneWidget);
-    });
-
-    // Empty is saved as it stands — the screen asks nothing — and the reset
-    // button, not a blank save, is what puts the default back.
-    testWidgets("an empty save clears the question and reset restores it", (
-      tester,
-    ) async {
-      await io(tester, () async {
-        await app.repo.createProject("research");
-        await app.container
-            .read(projectSettingsProvider("research").notifier)
-            .setDescription("What are we building?");
-      });
-      await app.pump(tester, const ProjectSettingsPage(project: "research"));
-
-      await tester.tap(find.text("Description"));
-      await settleIo(tester);
-      await tester.enterText(find.byType(TextField), "");
-      await tester.tap(find.text("Save"));
-      await settleIo(tester, least: 10);
-
-      await io(tester, () async {});
-      expect(
-        ProjectSettings.load(app.config, project: "research").description,
-        "",
-      );
-      expect(find.text("Empty"), findsOneWidget);
-
-      await tester.tap(find.byTooltip("Reset to default"));
-      await settleIo(tester, least: 10);
-
-      await io(tester, () async {});
-      expect(
-        ProjectSettings.load(app.config, project: "research").description,
-        isNull,
-      );
-      expect(find.text("Empty"), findsNothing);
-      expect(find.text("What would you like to discuss?"), findsOneWidget);
-    });
-
-    testWidgets("deleting one takes its chats and goes back to the default", (
-      tester,
-    ) async {
-      await io(tester, () => app.seedChat(title: "at work", project: "work"));
-      await pumpBeside(tester);
-      await switchTo(tester, "work");
-
-      await tester.tap(find.byTooltip("Project settings"));
-      await settleIo(tester);
-      await tester.scrollUntilVisible(find.text("Delete project"), 200);
-      await tester.tap(find.text("Delete project"));
-      await settleIo(tester);
-      await tester.tap(find.text("Delete"));
-      await settleIo(tester, least: 20);
-
-      expect(app.container.read(selectedProjectProvider).project, isNull);
-      expect(await io(tester, () => app.repo.listChats()), isEmpty);
-      expect(
-        Directory(app.config.projectDir(project: "work")).existsSync(),
-        isFalse,
-      );
-    });
-
-    testWidgets("deleting one the assistant opens in unpicks it", (
-      tester,
-    ) async {
-      await io(tester, () async {
-        await app.repo.createProject("work");
-        await app.container
-            .read(appSettingsProvider.notifier)
-            .setAssistantProject("work");
-      });
-      await pumpBeside(tester);
-      await switchTo(tester, "work");
-
-      await tester.tap(find.byTooltip("Project settings"));
-      await settleIo(tester);
-      await tester.scrollUntilVisible(find.text("Delete project"), 200);
-      await tester.tap(find.text("Delete project"));
-      await settleIo(tester);
-      await tester.tap(find.text("Delete"));
-      await settleIo(tester, least: 20);
-
-      // Left written down it would be written back by the next save, and a
-      // project made under the same name again would re-arm the setting.
-      expect(AppSettings.load(app.config).assistantProject, isNull);
     });
 
     testWidgets("moving a chat follows it into the project it went to", (
@@ -1246,126 +1058,5 @@ void main() {
         );
       },
     );
-  });
-  group("a project's work folders", () {
-    late Directory outside;
-
-    setUp(() {
-      outside = Directory.systemTemp.createTempSync("work_folder_");
-      app = TestApp.create(hostConfinement: Confinement.seatbelt);
-    });
-    tearDown(() {
-      if (outside.existsSync()) outside.deleteSync(recursive: true);
-    });
-
-    Future<void> open(WidgetTester tester, {List<String>? folders}) async {
-      await io(tester, () async {
-        await app.repo.createProject("research");
-        if (folders != null) {
-          await app.container
-              .read(projectSettingsProvider("research").notifier)
-              .setWritableDirs(folders);
-        }
-      });
-      await app.pump(tester, const ProjectSettingsPage(project: "research"));
-      await tester.scrollUntilVisible(
-        find.text("Add folder"),
-        200,
-        scrollable: find.byType(Scrollable).last,
-      );
-      await settleIo(tester);
-    }
-
-    List<String> saved() =>
-        ProjectSettings.load(app.config, project: "research").writableDirs;
-
-    testWidgets("a picked folder is added as a row, and its cross removes "
-        "it", (tester) async {
-      await open(tester);
-
-      app.folders.scripted = outside.path;
-      await tester.tap(find.text("Add folder"));
-      await settleIo(tester, least: 10);
-      expect(saved(), [outside.path]);
-      expect(find.text(outside.path), findsOneWidget);
-      expect(find.text("Missing on this device"), findsNothing);
-
-      await tester.tap(find.byTooltip("Remove ${outside.path}"));
-      await settleIo(tester, least: 10);
-      expect(saved(), isEmpty);
-      expect(find.text(outside.path), findsNothing);
-    });
-
-    testWidgets("the app's own data directory is refused", (tester) async {
-      await open(tester);
-
-      app.folders.scripted = app.config.dataDir;
-      await tester.tap(find.text("Add folder"));
-      await settleIo(tester, least: 10);
-      expect(saved(), isEmpty);
-      expect(find.text(FolderRefusal.appData.message), findsOneWidget);
-    });
-
-    testWidgets("a folder gone from this device says so in its row", (
-      tester,
-    ) async {
-      final gone = p.join(outside.path, "gone");
-      await open(tester, folders: [gone]);
-
-      expect(find.text(gone), findsOneWidget);
-      expect(find.text("Missing on this device"), findsOneWidget);
-    });
-
-    for (final confinement in [Confinement.none, Confinement.appSandbox]) {
-      testWidgets("${confinement.name} confines nothing the list could open, "
-          "so there is no list", (tester) async {
-        app = TestApp.create(hostConfinement: confinement);
-        await io(tester, () => app.repo.createProject("research"));
-        await app.pump(tester, const ProjectSettingsPage(project: "research"));
-        await settleIo(tester);
-
-        expect(find.text("Work folders"), findsNothing);
-        expect(find.text("Add folder"), findsNothing);
-      });
-    }
-  });
-
-  group("a project's permission pages", () {
-    Future<void> open(WidgetTester tester, String project) async {
-      await app.pump(tester, ProjectSettingsPage(project: project));
-      await tester.scrollUntilVisible(
-        find.text("Permissions"),
-        200,
-        scrollable: find.byType(Scrollable).last,
-      );
-      await settleIo(tester);
-      await tester.tap(find.text("Permissions"));
-      await settleIo(tester);
-    }
-
-    testWidgets("a built-in project has them too", (tester) async {
-      await open(tester, "byte-repair");
-
-      expect(find.text("Add rule"), findsOneWidget);
-    });
-
-    testWidgets("the sandbox switch overrides the app default", (tester) async {
-      await io(tester, () => app.repo.createProject("research"));
-      await open(tester, "research");
-
-      final row = find.text("Sandbox");
-      await tester.scrollUntilVisible(
-        row,
-        200,
-        scrollable: find.byType(Scrollable).last,
-      );
-      await tester.tap(row);
-      await settleIo(tester, least: 10);
-
-      expect(
-        ProjectSettings.load(app.config, project: "research").sandbox,
-        isFalse,
-      );
-    });
   });
 }

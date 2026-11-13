@@ -13,15 +13,10 @@ class AppRoutes extends NavigatorObserver {
   /// How many routes the Navigator holds, the conversation's included.
   int get depth => _stack.length;
 
-  /// A page over the conversation. A dialog is a route too and covers
-  /// nothing: it draws over the page under it.
-  final ValueNotifier<bool> covered = ValueNotifier(false);
-
   /// Told of every change to [depth].
   final ValueNotifier<int> _depth = ValueNotifier(0);
 
   void _changed() {
-    covered.value = _stack.skip(1).any((route) => route is PageRoute);
     _depth.value = _stack.length;
   }
 

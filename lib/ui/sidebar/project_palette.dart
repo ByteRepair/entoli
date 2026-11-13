@@ -17,6 +17,7 @@ import "../../app/remote_projects.dart";
 export "../../app/palette.dart";
 import "../app_routes.dart";
 import "../selection.dart";
+import "../widgets/dialogs.dart" show notify;
 
 /// What picking a row does. Run by whoever opened the palette, with its own
 /// context and ref: the palette's are disposed by the time the pick lands, and
@@ -594,9 +595,7 @@ class _NewProjectState extends State<_NewProject> {
       logFailure("palette", "could not create $dir", e);
       if (!mounted) return;
       setState(() => _making = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("The project could not be created.")),
-      );
+      notify(context, "The project could not be created.");
     }
   }
 

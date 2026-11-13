@@ -327,6 +327,13 @@ class FakeFolderPicker implements FolderPicker {
 
   @override
   Future<String?> pick({required String confirmLabel}) async => scripted;
+
+  /// What the next file pick returns. Empty is a cancelled dialog.
+  List<String> scriptedFiles = const [];
+
+  @override
+  Future<List<String>> pickFiles({required String confirmLabel}) async =>
+      scriptedFiles;
 }
 
 /// Stands in for the runner's clipboard channel.

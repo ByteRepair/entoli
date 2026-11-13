@@ -2,7 +2,9 @@ import "package:flutter/material.dart";
 
 import "../../../domain/models.dart";
 import "../../fonts.dart";
-import "../tool_ui/tools.dart";
+import "../../../app/transcript/activities/catalog.dart" show toolActivityFor;
+import "../../../app/transcript/activity.dart" show TranscriptGlyph;
+import "../activity/glyphs.dart";
 
 /// What the turn stops on: the agent wants to run something, and nothing moves
 /// until this is answered. It sits above the composer rather than in the
@@ -54,7 +56,10 @@ class ApprovalBanner extends StatelessWidget {
   static (IconData, String) headingOf(ToolApproval approval) =>
       approval.unsandboxed
       ? (Icons.shield_outlined, "Run without the sandbox?")
-      : toolUIFor(approval.toolName).approval;
+      : _asked(toolActivityFor(approval.toolName).approval);
+
+  static (IconData, String) _asked((TranscriptGlyph, String) asked) =>
+      (iconOf(asked.$1), asked.$2);
 
   @override
   Widget build(BuildContext context) {

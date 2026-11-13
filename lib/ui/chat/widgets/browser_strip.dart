@@ -9,34 +9,47 @@ import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../widgets/anchored_menu.dart";
+import "../../widgets/native_surfaces.dart";
 import "../../../core/log.dart";
 import "../../../domain/agent_browser.dart";
 import "../../../providers.dart";
 import "browser_input.dart";
-import "../../../domain/room/room_state.dart" show ChatViewState;
-import "running_pill.dart" show RunningKind, RunningThing;
+import "../../../app/running.dart" show OpensBrowser, browserTabOf;
 
 /// The chat's browser tab and the card that watches it, where there is one to
-/// show. Not on a mirrored chat, whose browser is the other device's.
-({BrowserTab tab, void Function(BuildContext context) open})? _browserOf(
+/// show.
+({BrowserTab tab, void Function(BuildContext context) open})? browserOf(
   AgentBrowser browser,
   bool mirrored,
   String chatId,
 ) {
-  // Not `configured`: that reads the disk, this rebuilds per streamed
-  // delta, and a tab with nothing to show draws nothing below anyway.
-  if (!browser.available || mirrored) return null;
-  final tab = browser.tab(chatId);
-  void open(BuildContext context) => showDialog<void>(
-    context: context,
-    builder: (_) => BrowserCard(
-      tab: tab,
-      onQuit: browser.close,
-      window: !browser.inApp || !tab.trustedInput,
-    ),
-  );
-  return (tab: tab, open: open);
+  final tab = browserTabOf(browser, mirrored, chatId);
+  if (tab == null) return null;
+  return (tab: tab, open: (context) => openBrowserTab(context, browser, tab));
 }
+
+/// [tab]'s live view: the native shell's where it is up, else the card.
+void openBrowserTab(
+  BuildContext context,
+  AgentBrowser browser,
+  BrowserTab tab,
+) {
+  final at = OpensBrowser(browser, tab);
+  if (nativeSurfacesOf(context) case final native?) {
+    return native.openBrowser(tab, onQuit: browser.close, window: at.window);
+  }
+  _openCard(context, browser, tab);
+}
+
+void _openCard(BuildContext context, AgentBrowser browser, BrowserTab tab) =>
+    showDialog<void>(
+      context: context,
+      builder: (_) => BrowserCard(
+        tab: tab,
+        onQuit: browser.close,
+        window: !browser.inApp || !tab.trustedInput,
+      ),
+    );
 
 /// What the chat's browser is waiting on the user for, across the whole bar
 /// above the pills: a file to upload, a sign-in, or the agent's own words for
@@ -48,7 +61,7 @@ class BrowserPrompts extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final of = _browserOf(
+    final of = browserOf(
       ref.watch(agentBrowserProvider),
       ref.watch(isMirroredChatProvider(chatId)),
       chatId,
@@ -120,60 +133,6 @@ class BrowserPrompts extends ConsumerWidget {
       },
     );
   }
-}
-
-/// The chat's tab as the running row reads it: the page it is on and whether
-/// it is hidden from the agent, null with no tab open. Rebuilt as the tab
-/// changes, which it says through listenables rather than providers.
-final _browserTabProvider = Provider.autoDispose
-    .family<
-      ({
-        BrowserPage page,
-        BrowserHold? hold,
-        void Function(BuildContext) open,
-      })?,
-      String
-    >((ref, chatId) {
-      final of = _browserOf(
-        ref.watch(agentBrowserProvider),
-        ref.watch(isMirroredChatProvider(chatId)),
-        chatId,
-      );
-      if (of == null) return null;
-      final changes = Listenable.merge([of.tab.page, of.tab.hold]);
-      changes.addListener(ref.invalidateSelf);
-      ref.onDispose(() => changes.removeListener(ref.invalidateSelf));
-      final page = of.tab.page.value;
-      if (page == null) return null;
-      return (page: page, hold: of.tab.hold.value, open: of.open);
-    });
-
-/// The chat's browser tab, while one is open: the first of the running pills,
-/// standing alone, opening a live view of the page. The view is the
-/// browser's own screencast, so it shows the page when the browser runs
-/// hidden too.
-List<RunningThing> browserRunning(
-  WidgetRef ref,
-  ChatViewState view,
-  String chatId,
-) {
-  final tab = ref.watch(_browserTabProvider(chatId));
-  if (tab == null) return const [];
-  final hold = tab.hold;
-  final where = _where(tab.page);
-  return [
-    RunningThing(
-      kind: RunningKind.browser,
-      name: where,
-      hidden: hold != null,
-      icon: hold == null ? Icons.travel_explore : Icons.visibility_off,
-      label:
-          "Browser · $where"
-          "${hold == null ? "" : " · hidden from the agent"}",
-      tooltip: "Watch the agent's browser",
-      open: tab.open,
-    ),
-  ];
 }
 
 /// A file chooser the page opened, waiting on the user: the agent is not
@@ -400,12 +359,6 @@ class _CredentialPanelState extends State<CredentialPanel> {
 }
 
 /// A page's host, or its title where it has none to show.
-String _where(BrowserPage page) {
-  final host = Uri.tryParse(page.url)?.host ?? "";
-  if (host.isNotEmpty) return host;
-  return page.title.isNotEmpty ? page.title : "blank page";
-}
-
 /// The live view: the page's title and address over its frames, for as long
 /// as the card is open, with the browser's own back, forward and reload, and
 /// the page itself under the user's mouse and keyboard. Listens again when the
@@ -439,9 +392,7 @@ class _BrowserCardState extends State<BrowserCard> {
   int? _opened;
   final _focus = FocusNode(debugLabel: "browser viewport");
 
-  /// The presses still held, by physical key, so a release names the key the
-  /// press did: a key's character is not reported on its way up.
-  final _held = <PhysicalKeyboardKey, BrowserKey>{};
+  late final _keys = BrowserKeyboard(() => widget.tab);
 
   /// The button a press went down with, which the release reports though the
   /// event no longer holds it.
@@ -535,59 +486,20 @@ class _BrowserCardState extends State<BrowserCard> {
     return _mac ? keys.isMetaPressed : keys.isControlPressed;
   }
 
-  /// The page's selection onto the user's clipboard. Asked before anything
-  /// else is sent, so a cut sent after still finds it selected.
-  void _copySelection() {
-    final text = widget.tab.selectedText();
-    _send(() async {
-      final selected = await text;
-      if (selected != null) {
-        await Clipboard.setData(ClipboardData(text: selected));
-      }
-    });
-  }
-
-  /// The user's clipboard typed at the caret, the page's not being theirs.
-  void _paste() => _send(() async {
-    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
-    if (text != null && text.isNotEmpty) await widget.tab.insertText(text);
-  });
-
-  /// Press and release the platform's shortcut for [letter], with the
-  /// editing command it names.
-  void _shortcutKey(String letter) {
-    final down = browserShortcut(letter, mac: _mac);
-    _send(() async {
-      await widget.tab.key(down);
-      await widget.tab.key(browserKeyUp(down, modifiers: down.modifiers));
-    });
-  }
-
   /// The menu a right click or a held finger opens: what the page's own
   /// would offer for editing, against the user's clipboard. Chrome draws its
   /// menu nowhere a hidden browser or the screencast could show it.
   Future<void> _menu(Offset global) async {
-    final choice = await showMenuAt<String>(context, global, const [
-      PopupMenuItem(value: "cut", child: Text("Cut")),
-      PopupMenuItem(value: "copy", child: Text("Copy")),
-      PopupMenuItem(value: "paste", child: Text("Paste")),
+    final choice = await showMenuAt<PageEdit>(context, global, const [
+      PopupMenuItem(value: PageEdit.cut, child: Text("Cut")),
+      PopupMenuItem(value: PageEdit.copy, child: Text("Copy")),
+      PopupMenuItem(value: PageEdit.paste, child: Text("Paste")),
       PopupMenuDivider(),
-      PopupMenuItem(value: "selectAll", child: Text("Select all")),
+      PopupMenuItem(value: PageEdit.selectAll, child: Text("Select all")),
     ]);
     if (!mounted || choice == null) return;
     _focus.requestFocus();
-    switch (choice) {
-      case "cut":
-        _copySelection();
-        _shortcutKey("x");
-      case "copy":
-        _copySelection();
-        _shortcutKey("c");
-      case "paste":
-        _paste();
-      case "selectAll":
-        _shortcutKey("a");
-    }
+    _keys.edit(choice);
   }
 
   void _wheel(Offset at, Offset delta) => _send(
@@ -785,34 +697,15 @@ class _BrowserCardState extends State<BrowserCard> {
   /// included, which would otherwise move focus or close the card.
   KeyEventResult _key(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) {
-      final down = _held.remove(event.physicalKey);
-      if (down != null) {
-        _send(() => widget.tab.key(browserKeyUp(down, modifiers: _modifiers)));
-      }
-      return KeyEventResult.handled;
+      _keys.up(event.physicalKey, modifiers: _modifiers);
+    } else {
+      _keys.down(
+        event.physicalKey,
+        event,
+        modifiers: _modifiers,
+        shortcut: _shortcut,
+      );
     }
-    final shortcut = _shortcut;
-    // Paste is the user's clipboard, not the page's.
-    if (shortcut && event.logicalKey == LogicalKeyboardKey.keyV) {
-      if (event is KeyDownEvent) _paste();
-      return KeyEventResult.handled;
-    }
-    // Copy and cut fill the user's clipboard too, and still reach the page,
-    // whose own handlers (an editor drawn on a canvas) may be all there is.
-    if (shortcut &&
-        event is KeyDownEvent &&
-        (event.logicalKey == LogicalKeyboardKey.keyC ||
-            event.logicalKey == LogicalKeyboardKey.keyX)) {
-      _copySelection();
-    }
-    final key = browserKeyDown(
-      event,
-      modifiers: _modifiers,
-      shortcut: shortcut,
-    );
-    if (key == null) return KeyEventResult.handled;
-    _held[event.physicalKey] = key;
-    _send(() => widget.tab.key(key));
     return KeyEventResult.handled;
   }
 

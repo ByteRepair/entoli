@@ -7,6 +7,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 import "package:super_sliver_list/super_sliver_list.dart";
 
+import "package:agent_chat/app/pages/plan.dart";
 import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
@@ -27,7 +28,6 @@ import "package:agent_chat/app/chat_controller.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/widgets/side_panel_frame.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
-import "package:agent_chat/ui/chat/plan_page.dart";
 import "package:agent_chat/ui/chat/widgets/chapter_rail.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/view_only_bar.dart";
@@ -556,7 +556,7 @@ void main() {
       testWidgets("land on the chat the first message makes", (tester) async {
         await openEmpty(tester);
         await pickNeverAsk(tester);
-        await tester.tap(find.byTooltip("Save"));
+        await tester.tap(find.widgetWithText(FilledButton, "Save"));
         await settleIo(tester);
 
         await sendMessage(tester, "hello");
@@ -580,6 +580,9 @@ void main() {
         await openEmpty(tester);
         await pickNeverAsk(tester);
         await tester.pageBack();
+        await settleIo(tester);
+        // Leaving with a change asks first.
+        await tester.tap(find.text("Discard"));
         await settleIo(tester);
 
         await sendMessage(tester, "hello");
@@ -1038,14 +1041,15 @@ void main() {
       },
     );
 
-    testWidgets("an existing chat with one prompt has its tick on open", (
+    testWidgets("an existing chat with two prompts has their ticks on open", (
       tester,
     ) async {
       useWindow(tester, const Size(1400, 900));
-      final chat = await seedLongChat(tester, messages: 2);
+      final chat = await seedLongChat(tester, messages: 4);
       await open(tester, chat.state.id);
 
       expect(find.byTooltip("line 0"), findsOneWidget);
+      expect(find.byTooltip("line 2"), findsOneWidget);
     });
 
     testWidgets("is gone where the margin has no room for it", (tester) async {
@@ -1777,10 +1781,10 @@ void main() {
     expect(button, findsOneWidget);
     await tester.tap(button);
     await settleIo(tester);
-    expect(find.byType(PlanPage), findsOneWidget);
+    expect(findPage<PlanAppPage>(), findsOneWidget);
     expect(
       find.descendant(
-        of: find.byType(PlanPage),
+        of: findPage<PlanAppPage>(),
         matching: find.text("1. read the parser"),
       ),
       findsOneWidget,

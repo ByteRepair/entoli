@@ -21,20 +21,26 @@ class FakeNativeShell implements TestNativeShell {
   }
 
   final Map<String, List<Object>> sent = {};
-  final List<ChoiceStrip> strips = [];
-  int? stripAnswer;
+
+  /// The dialogs asked, and what the next one is answered with.
+  final List<DialogRequest> dialogs = [];
+  DialogAnswer dialogAnswer = DialogAnswer();
+
+  /// What the camera reads next; null is a scan dismissed.
+  String? scanned;
 
   T? _last<T>(String concern) => sent[concern]?.last as T?;
   WindowSnapshot? get lastWindow => _last("window");
   SidebarSnapshot? get lastSidebar => _last("sidebar");
   ChatBarSnapshot? get lastChatBar => _last("chatBar");
-  TitleBarSnapshot? get lastPageBar => _last("pageBar");
   ComposerSnapshot? get lastComposer => _last("composer");
   ComposerValueSnapshot? get lastComposerValue => _last("composerValue");
   TurnSnapshot? get lastTurn => _last("turn");
   NewChatSnapshot? get lastNewChat => _last("newChat");
   VoiceSnapshot? get lastVoice => _last("voice");
   PaletteSnapshot? get lastPalette => _last("palette");
+  ChatFootSnapshot? get lastFoot => _last("foot");
+  BrowserViewSnapshot? get lastBrowser => _last("browser");
   List<double> get levels => [...?sent["voiceLevel"]?.cast<double>()];
 
   final _arrivals = StreamController<(String, Object)>.broadcast(sync: true);
@@ -55,13 +61,19 @@ class FakeNativeShell implements TestNativeShell {
   @override
   void shell(bool on) {}
   @override
+  void foot(ChatFootSnapshot snapshot) => _add("foot", snapshot);
+  @override
+  void notice(String message) => _add("notice", message);
+  @override
+  void browser(BrowserViewSnapshot snapshot) => _add("browser", snapshot);
+  @override
+  void browserFrame(BrowserFrameSnapshot frame) => _add("browserFrame", frame);
+  @override
   void window(WindowSnapshot snapshot) => _add("window", snapshot);
   @override
   void sidebar(SidebarSnapshot snapshot) => _add("sidebar", snapshot);
   @override
   void chatBar(ChatBarSnapshot snapshot) => _add("chatBar", snapshot);
-  @override
-  void pageBar(TitleBarSnapshot snapshot) => _add("pageBar", snapshot);
   @override
   void composer(ComposerSnapshot snapshot) => _add("composer", snapshot);
   @override
@@ -80,8 +92,11 @@ class FakeNativeShell implements TestNativeShell {
   @override
   void composerFocus(bool focused) => _add("composerFocus", focused);
   @override
-  Future<int?> strip(ChoiceStrip request) async {
-    strips.add(request);
-    return stripAnswer;
+  Future<DialogAnswer> dialog(DialogRequest request) async {
+    dialogs.add(request);
+    return dialogAnswer;
   }
+
+  @override
+  Future<String?> scanCode() async => scanned;
 }

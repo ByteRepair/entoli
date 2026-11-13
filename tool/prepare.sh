@@ -17,6 +17,7 @@ dart run pigeon --input pigeons/shell.dart
 # The menu bar's, which both frontends use: packages/entoli_menu.
 dart run pigeon --input pigeons/menu.dart
 dart run pigeon --input pigeons/settings.dart
+dart run pigeon --input pigeons/transcript.dart
 dart run tool/gen_bundled_skills.dart
 dart run tool/gen_prompts.dart
 dart run tool/gen_privacy_policy.dart

@@ -26,8 +26,8 @@ import "package:agent_chat/providers.dart"
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:agent_chat/app/chat_controller.dart";
 import "package:agent_chat/app/controller_turn_sender.dart";
-import "package:agent_chat/ui/chat/chat_page.dart"
-    show CompactionEntry, entriesOf, MessageEntry, SectionEntry;
+import "package:agent_chat/app/transcript/transcript.dart"
+    show Transcript, CompactionRow, MessageRow, ModeRow;
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -1813,7 +1813,8 @@ void main() {
         await controller.send("plain follow-up");
         await waitIdle(id, limit: const Duration(seconds: 5));
         List<bool> sections(Chat chat) => [
-          for (final s in entriesOf(chat).whereType<SectionEntry>()) s.omada,
+          for (final s in Transcript.of("", chat).rows.whereType<ModeRow>())
+            s.omada,
         ];
         // A repeat stamp of the same mode is not a flip.
         expect(sections(await app.repo.openChat(id)), [true]);
@@ -1861,7 +1862,10 @@ void main() {
               .argumentsJson,
           contains("Not for me."),
         );
-        expect(entriesOf(chatOf(id)).whereType<MessageEntry>(), hasLength(1));
+        expect(
+          Transcript.of(id, chatOf(id)).rows.whereType<MessageRow>(),
+          hasLength(1),
+        );
       },
     );
 
@@ -2892,10 +2896,10 @@ void main() {
       expect(app.backend.questions, isEmpty);
       expect(chat.unfinished, isFalse);
       // The marker is a divider after the boundary message it covers.
-      final entries = entriesOf(chat);
+      final entries = Transcript.of("", chat).rows;
       expect(
         entries.last,
-        isA<CompactionEntry>().having(
+        isA<CompactionRow>().having(
           (c) => c.summary,
           "summary",
           "The user said hello.",

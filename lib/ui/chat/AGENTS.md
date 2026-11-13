@@ -140,16 +140,11 @@ thinking block's drawer and every run's. A `bash` drawer sets the command apart 
 message is, keeps what else the call was given as its Arguments, and says
 the exit code in the status line.
 
-**Under the native shell the drawer is a page.** The composer there is the
-shell's, over the one Flutter view a sheet is drawn in, so a sheet came up
-under it. A pushed page is what the shell already steps its composer and
-turn surface aside for, and its `PageBar` is the window's title bar, so
-`openActivityCard` pushes `ActivityCard` as a page while Liquid Glass is
-on: the title and actions in the window's bar, its back the way out, the
-status line and the spinner at the top of the body. A sub-agent's activity
-opened from its transcript is a page over that one. Everywhere else it stays
-the sheet — Android's idiom for this. The actions are `DrawerAction`s,
-data rather than buttons, since a page's bar may be the window's.
+**Under the native shell the drawer is the conversation's detail sheet**:
+a node opens it, and so does a running pill (see "The conversation,
+natively"). The actions are the core's `DetailAction`s, data rather than
+buttons, which is what lets the native sheet draw them. Everywhere else it is
+the Flutter sheet — Android's idiom for this.
 
 **And it streams.** A label is the wrong thing to hold an open drawer's
 content: it is rebuilt per delta, folded into a collapsed run when its block
@@ -378,6 +373,15 @@ drawn as chrome a drag does not pick up, numbered on a numbered list. A page
 that built its own `MarkdownBody` got some of that and not the rest — the skill
 pages had no code-block bar, and every page but one re-parsed on each rebuild.
 
+The native frontend has the same rule. Markdown outside the conversation — a
+workspace file, a skill, the privacy policy, the licences — is drawn by
+`DocumentMarkdown`, the reply's `MarkdownView` over blocks the core parsed:
+the Swift asks `DocumentIntents.markdown` with the text and the appearance,
+`ShellDocuments` typesets the formulas, sends their pictures and answers with
+`MarkdownEncoder`'s blocks, the encoder a reply's are made by. Its links go
+back through `DocumentIntents.link` to the app's link opener. A formula's id
+is the process's, not its sheet's, so a document's and a reply's never meet.
+
 `replyStyleSheet` is the whole of the look, and it starts from
 `MarkdownStyleSheet.fromTheme` because most of what that answers is right. What
 gets overridden is where the defaults were written for a document rather than a
@@ -451,6 +455,19 @@ the weight of what holds it, and a heading with a `` `name` `` in it is a shape
 this app's replies take constantly.
 
 ### Formulas
+
+**Typesetting is the core's port, and its picture is a PNG.**
+`FormulaRenderer` (`lib/app/transcript/formula.dart`) takes TeX and a
+`FormulaStyle` — inline or display, size, ink, pixels a point — and answers a
+`FormulaImage`: PNG bytes, the size it laid out at, and the baseline that sets
+an inline one in its sentence. `MathPngRenderer` (`lib/core/formula_png.dart`)
+is the one implementation: `flutter_math_fork` in a render tree of its own,
+laid out and painted once off screen and read back, the baseline read by a
+proxy while it lays the formula out (the one moment a box may ask for one).
+TeX that does not parse is drawn as itself and says why. `CachedFormulaRenderer`
+wraps it, so a formula redrawn on every delta is typeset once and a request in
+flight is shared. The native conversation draws only these pictures; Flutter's
+page keeps drawing the vector widget below, which is selectable whole.
 
 TeX is drawn wherever `MarkdownText` is, by `flutter_math_fork` — KaTeX's layout in pure Dart,
 its fonts bundled, nothing native. `$…$` and `\(…\)` set a formula in the
@@ -626,62 +643,80 @@ opening clears it, and so does a marker landing.
 
 ## Activities, on screen
 
-**Everything above a reply is an `Activity`** (`activity/`): a tool run, a
-thinking block, an instruction read, a permission answered, an artifact or
-skill card. One stateless class per kind; the bubble asks the
-`ActivityCatalog` which kind a part is, builds the `Run` it is drawn from —
-the call and its result, or the part and where it sits — and draws what
-`build` returns. It asks `important` whether the activity stands on its own
-row. Nothing in the bubble names a kind.
+What a reply is made of is the core's: `lib/app/transcript/`, which imports
+no widget. Every frontend draws what it returns and decides nothing of what
+a row is. The layers, each knowing only the one below:
 
-**The catalogue is bound, not imported.** A reply is made of activities and
-a sub-agent's drawer draws a reply: a composite. With the bubble importing
-the kinds, the bubble, the catalogue and the sub-agent's view were one
-import cycle. So the bubble depends on the abstract `ActivityCatalog` beside
-`Activity`, `ChatActivities` (`activity/activities.dart`) implements it over
-every kind and the tools' catalogue (`tool_ui/tools.dart`, apart from the
-`ToolUI` base for the same reason), and `main` and the test harness bind it
-through `activityCatalogProvider`, the way the app's ports are bound.
+- **The kinds** (`activities/`). `Activity` is one stateless class per kind:
+  a tool run, a thinking block, an instruction read, a permission answered,
+  an artifact or skill card. It answers `important` (does it stand on its
+  own row), `node` (what it is on screen) and `detail` (what is behind it),
+  as data, read through a `SettingReader` — a widget's ref or a provider's,
+  the reader the settings use — so what changes while a turn runs, a job's
+  state or the plan, is watched by whoever draws it. `follow` is how an open
+  detail re-reads its message as the turn runs: a tool run by its call, a
+  thinking block by where it sits. **How a tool's calls look is its
+  `ToolActivity`**: the node and detail, what voice mode says of a call
+  (`spoken`, null for nothing) and the approval banner's glyph and question.
+  `toolActivityFor` gives every other name the defaults ("Used x", "Allow
+  x?"). `BashActivity` sets the command apart with the exit code under it, labels
+  it with the call's `description` where the model gave one (see "The
+  command's label" in `lib/data/builtin/AGENTS.md`), and
+  is the job once a call started one (`JobActivity`); `TaskActivity` is a
+  `SubAgentActivity`, whose detail holds the sub-agent's own transcript;
+  the web tools show the query or URL. `JobActivity` and `SubAgentActivity`
+  hold what they are drawn from, so a running pill opens the same detail
+  with no call in hand. A call is matched by the name the log recorded, never
+  by what this device offers; a test checks every `ToolActivity` names a
+  tool the registry has.
+- **The nodes** (`activity.dart`). A sealed set, each a kind of *drawing*
+  rather than a kind of activity, as the settings' controllers are kinds of
+  behaviour: `LabelNode` (the one muted line, a thought's tail streaming
+  under it), `DiffNode` (a small write or edit as its lines), `PlanNode`,
+  `OutputNode` (a card for what the turn made). A node knows its activity
+  and run, and what pressing it opens: `node.open(handOff, source:)` goes
+  through the frontend's `TranscriptHandOff` — the plan's page for a
+  `PlanNode`, the artifact or skill for an `OutputNode`, and otherwise an
+  `OpensDetail`, whose `detail(reader)` is the `ActivityDetail` — title,
+  glyph, command, status, sections, actions, and a sub-agent's
+  `NestedTranscript`. A running pill opens the same way (`Opens`), so no
+  frontend switches over what a press opens. A `PlanNode` carries the plan
+  as the file has it and its progress line, read where the node is built. A new node kind is a compile error in every
+  frontend until it draws it. Glyphs are `TranscriptGlyph`s, which each
+  frontend maps to its own pictures.
+- **The layout** (`message.dart`). `MessageLayout.blocks(reader, moment)` is
+  what `_rows` used to decide in the bubble: a `BubbleBlock` (its tint, files,
+  what was said, what trails it — the spinner with its line, a running
+  command's output, Retry), an `ActivityBlock`, an `ActivityRunBlock` of two or
+  more unimportant activities behind one toggle, a reply's file, a `!` run, a
+  steer. The caret-or-spinner rule, what breaks a run, and who the message
+  says spoke (`Speaker`) are all here.
+- **The rows** (`transcript.dart`). `Transcript.of` walks the thread into
+  `MessageRow`s and the lines between them — the mode flips, a compaction's
+  divider, a goal's mark (`GoalRow`, whose label and detail are the core's
+  too) — each under a `key` stable across a streamed delta.
+  `MessageActions` is what can be done to a message and does it: the
+  threads and the steps between them, delete and its question, edit,
+  regenerate, react — every rule of when each is on offer.
+- **Ports.** The core draws nothing, so typesetting and highlighting are
+  interfaces bound at the root (`core/transcript_bindings.dart`, which `main`
+  and the harness both spread): `FormulaRenderer` (see "Formulas"),
+  `CodeHighlighter` (tokens with highlight.js's scope names, the grammars in
+  `core/code_grammars.dart`), and `ActivityCatalog`, which
+  `TranscriptActivities` implements over every kind. The catalogue is bound
+  rather than imported because a sub-agent's detail holds a transcript that
+  is made of activities: the layout depends on the abstraction, and the
+  composite stays acyclic. The Flutter side has the same composite one level
+  up — a detail draws a `MessageBubble` — and binds it the same way
+  (`nestedTranscriptViewProvider`).
 
-**A labelled activity is one view.** A `LabelledActivity` returns a `RunView`
-from `view(ref, run)`: the label's icon and line, and a `drawer` builder for
-the drawer's title, command, status line, sections, actions and what goes
-below them. `RunLabel` draws the label from it and `open` the drawer, the one
-drawer every activity has. `follow` is how an open drawer re-reads its
-message as the turn runs: a tool run by its call, a thinking block by where
-it sits. The drawer is a builder, called only by the drawer with its own
-ref, so what only it reads — a sub-agent's transcript, a job's log — is never
-watched for a label, which is rebuilt for every activity in every visible
-reply. `Run.going` is set by the label and the drawer each: the label spins
-where the view says `busy`, and the drawer keeps to the end of what arrives;
-a view says `live` only for what goes on past its call, as a job does. A kind
-whose label is content — the diff of a small write or edit, a question, the
-plan — overrides `build` and still opens the same drawer; the artifact and
-skill cards are plain `Activity`s, opening what they stand for instead.
-
-**How a tool's calls look is its `ToolUI`** (`tool_ui/`), a `LabelledActivity`
-plus the rest of the UI's half of the tool's class: what voice mode says of a
-call (`spoken`, null for nothing) and the approval banner's icon and
-question. One class for each tool that shows anything of its own;
-`toolUIFor` gives every other name the defaults ("Used x", "Allow x?"). The
-bubble, the banner and the voice transcript ask it rather than switching on
-names. The default view is `toolRunView`, the tool's name and its arguments
-and output; `BashUI` sets the command apart with the exit code under it,
-labels it with the call's `description` where the model gave one (see "The
-command's label" in `lib/data/builtin/AGENTS.md`), and draws a call that
-started a job as a `JobActivity`; `TaskUI` is a
-`SubAgentActivity`, following the sub-agent's transcript; the web tools show
-the query or URL and what came back. `JobActivity` and `SubAgentActivity`
-hold what they are drawn from, so the running row's pills open the same
-drawer with no call in hand.
-
-A call is matched by the name the log recorded, never by what this device
-offers, so a mirrored chat or an old one draws the same. A view whose
-content changes while the turn runs watches what it reads through its ref,
-as the job's watches the room; a label of its own watches its own provider,
-as the plan's label watches `planProvider`; the `ToolUI` itself holds no state. A test checks
-every `ToolUI` names a tool the registry has, since the two are paired by
-that string alone.
+**The Flutter frontend** draws all of it in `activity/`: `ActivityNodeView`
+switches over the nodes (`nodes.dart`) and hands each press to the node, and
+`ContextHandOff` (`card.dart`) is the hand-off over the context of what was
+tapped, opening a detail as an `ActivityCard` that follows its source while
+it is open.
+`MessageBubble` keeps its public shape and lays its message out through
+`MessageLayout`, re-laid only when it is handed another message.
 
 ## A goal, on screen
 
@@ -698,8 +733,7 @@ resume and its clear, each sent as the `/goal` command it is. **Where it
 moved** is a `GoalMarkRow` in the conversation for each `goal` record, after
 the message it names: an activity label in the reply's gutter, "Goal set: …",
 "Goal paused: …", "Goal met: …", and "Goal answered: …" for a command that
-changed nothing, opening the same kind of drawer every activity has (a sheet,
-a page under the native shell). The drawer says the state the goal was left
+changed nothing, opening the same kind of drawer every activity has. The drawer says the state the goal was left
 in, why — the user's pause, the reviewer's verdict — and the goal prompt as
 the model was given it. Off the log, so a restart
 draws the same rows and a rewind takes them away with their message.
@@ -710,7 +744,8 @@ A `present_plan` call is drawn as the plan it put to the user (`PresentPlanUI`):
 every task with whether it is done, each opening to its details as markdown.
 It is not a slim activity label, since the plan is what the turn stopped to
 show. The bar carries a checklist button beside the running-turn spinner for
-as long as the chat has a plan, and it opens `PlanPage`, the same list with
+as long as the chat has a plan, and it opens the plan's `AppPage`, the same
+list with
 the progress over it.
 
 Both read `PLAN.md` off the chat's workspace through `planProvider`, not off
@@ -747,9 +782,11 @@ button, the empty-chat starter and the running-turn spinner.
 checks a `.setup-complete` marker in the project's directory — and, on the
 guests (Android and iOS), that a rootfs is picked, the same env check the
 settings page's banner asks. Where it is
-false, `_NewChat` and `_local` swap the composer for a `NeedsSetupBar` —
-the same full-swap pattern `ViewOnlyBar` uses for a mirrored chat — with a
-button that opens Settings at the project's category. The turn path no
+false, the session's `ComposerSlot` (`ChatSession.slot`,
+`NewChatSession.slot`) is `ComposerNeedsSetup`, which both frontends draw as
+the setup bar in the composer's place — as `ComposerViewOnly` is drawn for a
+mirrored chat offline — with a button that opens Settings at the project's
+category. The slot is decided once, in the core, for every frontend. The turn path no
 longer creates the rootfs lazily; "Run Setup" owns the full lifecycle.
 
 **A chat moved to another project reloads the controller, and the move
@@ -766,10 +803,12 @@ on the message, not looked up per turn.
 ## What is running, on screen
 
 `RunningStrip` is one row in `TurnSurface` above the composer. What is on it
-comes from `runningSources`, a `RunningSource` function per kind of thing a
-chat can have running — the browser's tab, background jobs, sub-agents — each
-supplying `RunningThing`s: a label, an icon or none, the group it is
-gathered under, and how to open it. The strip knows nothing of what they
+comes from `runningSources` in `lib/app/running.dart`, a `RunningSource`
+function per kind of thing a chat can have running — the browser's tab,
+background jobs, sub-agents — each supplying `RunningThing`s: a label, the
+group it is gathered under, and what it opens (`Opens`: an activity's
+detail or the browser's tab), which opens itself through the frontend's
+hand-off. The strip knows nothing of what they
 are; a new kind is a source added to the list. Things with no group stand
 alone ahead of the groups, which is where the browser's tab goes. It has no
 surface of its own; the pills are the row. It scrolls sideways, and a mouse
@@ -793,13 +832,13 @@ so a mirrored chat draws none.
 ### Background jobs, in the reply
 
 The `bash` call that started a job is drawn as the job (`JobActivity`, from
-`BashUI.view`), by its `JobState` from `ChatViewState.jobOf`: running, ended,
+`BashActivity`), by its `JobState` from `ChatViewState.jobOf`: running, ended,
 or lost. Running, the label says "Running in the background" and the drawer
 has the command, "Running · pid" under the title, Stop beside the close
 button, and the end of the log as it grows (re-read every half second while
 the file changes). Ended, it says how, from the log's `jobEnded` call event
 (see "The conversation log" in `lib/domain/AGENTS.md`), with the last lines
-the chat kept and an Open log button to the whole log in `TextFilePage`,
+the chat kept and an Open log button to the whole log in `TextFileAppPage`,
 disabled once the workspace no longer has the file and absent on a mirror,
 whose workspace is elsewhere. Lost, it ended with the app, or on a mirror,
 where only ends arrive, it is "not heard from". What marks a call as a job
@@ -869,6 +908,112 @@ Cancel cancels. **A message sent while one waits cancels it**, in the
 composer's `onSend` before the send: what the user said instead is their
 answer, the page's chooser is cancelled as a dismissed dialog would be, and
 the agent's call says so.
+
+## The conversation, natively
+
+Under the native shell the conversation is SwiftUI's
+(`packages/entoli_glass/.../Conversation/`), drawn from the same transcript
+over its own contract, `pigeons/transcript.dart`. `drawsOpenChatProvider`
+is the seam: false, the chat page draws the list; true, it draws nothing and
+`ShellChat` sends.
+
+**A row goes when it changed.** `TranscriptEncoder` turns each core row into
+its snapshot — markdown as the core's flat blocks (`MarkdownDocument`, read
+with the reply's grammar), code as tokens, every node under an id — and the
+conversation sends every key in order plus only the rows whose snapshot
+differs from what was sent, the contract's classes comparing by value; the
+client keeps the rest. A streamed delta is one row. **A formula goes once**:
+`FormulaSheet` gives each TeX an id, sends its picture the first time it is
+ready, and asks the renderer for what is not, sending the row again when the
+picture lands; a row carries the id. An author's face is drawn once
+(`agentFacePng`) and goes with the message.
+
+**What the user does comes back by key and id** (`TranscriptIntents`): a node
+opened is its detail, sent while it is up and redrawn as it follows its turn
+(a card instead opens what it stands for, the plan opens its page);
+a message's action runs through its `MessageActions`; copy writes the formatted
+text and HTML through the rich clipboard, as Flutter's button does; a link
+goes to the link opener. The detail is a native sheet. An empty chat is sent
+too, and the client says it has no messages.
+
+**The open chat is published from the app's state, not a build**
+(`ShellChat`, held by `ShellBridge`): its conversation, bar, turn surface and
+composer, each a pass over a `TrackingReader` — a widget's `ref.watch` with
+no widget, re-running that pass when anything it read changes — so they go
+out with no frame, the engine's view drawing nothing. The chat's
+composer and how it sends are its `ChatSession` (`lib/app/chat_session.dart`),
+one per chat and shared by both frontends' chat pages; the surfaces' logic is
+plain classes — `ConversationSurface`, `TurnRunner`, `ComposerSurface` — that
+`ShellChat` and the remaining widgets both hold. Under the shell the chat page
+draws nothing for an open chat (`drawsOpenChatProvider`), and a temporary
+chat's expiry is asked by `ShellChat` (`checkChatExpiry`). The chat's edges are a
+surface of their own (`ChatFootSnapshot`): the paired device a mirror lives
+on, as a strip over the conversation; what stands in the composer's place —
+a project still to be set up, a home device gone away; and what the agent's
+browser waits on, over the turn surface — the button that opens the page, a
+file to upload, a sign-in. The file is picked with the system's own chooser
+and the sign-in typed into native fields, each sent once, by
+`ChatFootIntents`, and kept nowhere else. A line said in passing — what
+Flutter shows as a snack bar — goes through `notify` (`widgets/dialogs.dart`),
+which under the shell is the window's own notice (`NativeShell.notice`, a
+glass capsule under the title bar), there being no Flutter view to show
+one. **The composer's menu lies over the chat**: the composer is master's,
+its menu in its own stack, and the conversation runs under the bottom edge,
+padding by what covers it less the menu's height (`ComposerView.menuLift`),
+so the menu opening does not lift the chat.
+
+**The new-chat screen is a `NewChatSession`** (`lib/app/new_chat_session.dart`)
+as an open chat is a `ChatSession`: its composer, the settings the chat it
+makes runs under, whether one is being made, and how the first message makes
+it, shared by the Flutter page and `ShellChat`, which publishes the screen,
+its bar, its composer and what stands in the composer's place while nothing
+is selected. **The browser's view is native too**: `browserOf`'s opener goes
+through the container's `NativeSurfaces` under the shell, and a `BrowserWindowSession`
+sends the page's title, address and hold and its frames as they come, and
+runs what the user does in the sheet on the tab. A key arrives as the
+platform's own key code and characters and is read through Flutter's key
+tables into a `KeyDownEvent` and routed by the same `BrowserKeyboard` the
+Flutter card uses, so what paste, copy and cut do and `browserKeyDown`'s
+mapping to the page's keys are written once. The sheet lies over the window, so nothing under it takes input while it is
+up. **A running pill
+opens the native detail**: a job's or a sub-agent's `RunningThing` opens an
+`OpensDetail`, its activity and run, through the conversation's hand-off,
+which opens it in the conversation's sheet. **A message row is encoded only
+when it changed** (`MessageRows`): each is built under a reader of its own,
+so what only it read re-encodes it alone, and one whose message and inputs
+are as they were is not laid out or compared again; the Swift observes each
+row on its own (`RowEntry`), so only that row redraws. **The chapter rail is native**: the chapters (`chaptersOf`, in the
+core) go with the conversation, and the Swift draws the ticks beside the
+column where the margin beside it has room, against the column, the current
+one read off the row at the top of the view. The jump to the latest sits in
+the same margin, gone at the end; both come and go as the new-chat screen's
+question does (`lift`).
+
+A message's reactions open the strip master drew under the shell, `GlassChoices`
+(`Strip.swift`), now a popover from the action row's smiley.
+
+**Prose is a text view of the platform's own** (`ProseText.swift`), not
+SwiftUI's `Text`: `.textSelection` offers Apple's whole menu and never says
+what is selected, so Reply could not be on it. A run of prose — paragraphs,
+headings, list items, quotes, formulas, code blocks and tables — is one
+`NSTextView` or `UITextView` over an attributed string (`ProseBuilder`), so a
+selection crosses all of it as Flutter's does. Code and tables are in it
+rather than beside it because a view beside it is a selection of its own;
+what the text cannot draw — a code block's rounded box and copy button, a
+table's grid, a quote's bar — the builder marks on the string and the view
+draws behind it (`ProseDecorations`, TextKit 1's geometry, which both
+platforms share). Code wraps rather than scrolls, a scroll being a selection
+apart too. Its menu is Copy and Reply alone. Both read a formula as its TeX,
+carried on its attachment, and code inside its fence, and
+Reply sends the passage back (`reply`), quoted under the author's handle as
+the Flutter selection's Reply quotes it.
+
+**A Bot Avatar is live.** The message carries its key in the core's
+`BotStage` and the native face is the settings' `BotFaceView`, asking for
+each frame over the settings' contract: live on the newest message, thinking
+while it is written, happy for a while when tapped. A photo is still sent as
+a picture.
+
 
 ## The chat page
 
@@ -955,20 +1100,22 @@ picked, nothing selected is the new-chat screen for that project, its question
 and starters that device's, and the first message asks the device to make the
 chat.
 
-`NewChatSettingsPage` is the settings of a chat that does not exist yet: the
-model, the approve mode, the memory switch and the TTL, which are values and
-need nothing to hang on. Save pops a `ChatMeta` back rather than writing a
-file, and `_NewChat` holds it until `createChat` spends it. It edits a copy,
-so a page backed out of leaves the screen with what it had.
+`NewChatSettingsAppPage` (`lib/app/pages/chat_settings.dart`) is the
+settings of a chat that does not exist yet: the model, the approve mode, the
+memory switch and the TTL, which are values and need nothing to hang on.
+Save hands a `ChatMeta` back rather than writing a file, and the new-chat
+session holds it until `createChat` spends it. It edits a copy, so a page
+backed out of leaves the screen with what it had.
 
-**A page of its own rather than a mode of `ChatSettingsPage`**, and `_NewChat`
+**A page of its own rather than a mode of `ChatSettingsAppPage`** — the two
+share their fields through `ChatSettingsFields` — and the session's state
 state rather than a provider — both for the same reason. Folded into the chat's
 own page it was five null checks and two `!`s through a page whose subject
 ordinarily exists, which is the shape this change spent its effort removing
 from the repository; and held in a provider the settings outlive the screen,
 staying armed to land on whatever chat is created next, in whatever project.
-The three fields are already standalone widgets, so the page that composes them
-is thirty lines.
+The fields are the base both pages extend, so the new chat's adds nothing
+but its Save.
 
 `_EmptyChat` is the body of both empty screens — `_NewChat`'s, and a chat that
 exists with nothing said in it yet, which is what voice mode and a trigger can
@@ -1122,7 +1269,9 @@ press.
 of the column, the one being read picked out, the first line of each on hover.
 It is laid over the margin rather than beside the column, so the column stays
 centred whether it is there or not, and it is drawn only where the margin has
-room for it — `_ReadableColumn`'s `side`. A chapter is a prompt and the turn
+room for it — `_ReadableColumn`'s `side` — and only with two chapters or
+more (`railShown`), as the native rail: one prompt has nowhere to jump to.
+A chapter is a prompt and the turn
 under it, so a branch anywhere in that turn — an edit at the prompt, a
 regenerate under it — puts a fork beside its tick (`chaptersOf`, off
 `Chat.branches`). A steer is a chapter too, with a tick of its own: it is

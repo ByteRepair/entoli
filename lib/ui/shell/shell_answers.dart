@@ -5,28 +5,54 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 /// Who answers one surface's intents: the widget drawing it now. One at a
 /// time, since what is on screen is decided by the app's state — the
 /// selection, whether voice mode is up — and not by which widget mounted
-/// last.
-class ShellAnswer<T extends Object> {
+/// last. A surface may [cover] the one that took it, which stands down
+/// until the cover goes and is told then, by a notification, to send again.
+class ShellAnswer<T extends Object> extends ChangeNotifier {
   ShellAnswer._(this._setUp);
 
   final void Function(T?) _setUp;
-  T? _owner;
+  T? _base;
+  final _covers = <T>[];
 
-  T? get owner => _owner;
+  /// The one answering, and drawn.
+  T? get owner => _covers.lastOrNull ?? _base;
 
-  void take(T surface) {
-    if (identical(_owner, surface)) return;
-    _owner = surface;
-    _setUp(surface);
+  void _answer(T? was) {
+    final now = owner;
+    if (identical(was, now)) return;
+    _setUp(now);
+    notifyListeners();
   }
 
-  /// Let go, where [surface] was answering. Answers whether it was, and so
-  /// has what the shell draws for it to take back.
+  /// Takes the surface beneath any cover. Answers whether [surface] is the
+  /// one drawn, and so whether what it sends is shown.
+  bool take(T surface) {
+    final was = owner;
+    _base = surface;
+    _answer(was);
+    return identical(owner, surface);
+  }
+
+  /// Answers over whatever took the surface, until [release]d.
+  void cover(T surface) {
+    final was = owner;
+    _covers
+      ..remove(surface)
+      ..add(surface);
+    _answer(was);
+  }
+
+  /// Let go, where [surface] was answering or covering. Answers whether it
+  /// was the one drawn, and so has what the shell draws for it to take back.
   bool release(T surface) {
-    if (!identical(_owner, surface)) return false;
-    _owner = null;
-    _setUp(null);
-    return true;
+    final was = owner;
+    if (identical(_base, surface)) {
+      _base = null;
+    } else if (!_covers.remove(surface)) {
+      return false;
+    }
+    _answer(was);
+    return identical(was, surface) && owner == null;
   }
 }
 
@@ -46,14 +72,9 @@ class ShellAnswers {
   late final newChat = _answer<NewChatIntents>(NewChatIntents.setUp);
   late final voice = _answer<VoiceIntents>(VoiceIntents.setUp);
   late final chatBar = _answer<ChatBarIntents>(ChatBarIntents.setUp);
-  late final pageBar = _answer<TitleBarIntents>(
-    (surface) =>
-        TitleBarIntents.setUp(surface, messageChannelSuffix: "pageBar"),
-  );
-
-  /// Voice mode is on screen: its turn surface is the one drawn, the chat
-  /// page's beneath it standing down until it goes.
-  final ValueNotifier<bool> voiceOn = ValueNotifier(false);
+  late final transcript = _answer<TranscriptIntents>(TranscriptIntents.setUp);
+  late final foot = _answer<ChatFootIntents>(ChatFootIntents.setUp);
+  late final browser = _answer<BrowserIntents>(BrowserIntents.setUp);
 
   ShellAnswer<T> _answer<T extends Object>(void Function(T?) setUp) =>
       ShellAnswer._((surface) {

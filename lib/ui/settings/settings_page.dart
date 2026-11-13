@@ -4,7 +4,8 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../widgets/side_panel_frame.dart";
 import "settings_category.dart";
 import "schema_view.dart";
-import "welcome_page.dart";
+import "../../app/pages/welcome.dart" show WelcomeAppPage;
+import "../app_pages.dart";
 import "../widgets/page_bar.dart";
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -75,10 +76,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 }
 
 /// What a category draws in either layout: its schema page. Welcome is the
-/// tour rather than a list of sections, a pager with its own bar.
+/// way to the tour, a page of the app's own.
 Widget _categoryBody(SettingsCategory category, {Key? key}) =>
     switch (category) {
-      SettingsCategory.welcome => const WelcomeTour(),
+      SettingsCategory.welcome => Builder(
+        key: key,
+        builder: (context) => Center(
+          child: FilledButton(
+            onPressed: () => openAppPage(context, WelcomeAppPage(replay: true)),
+            child: const Text("Take the Welcome Tour"),
+          ),
+        ),
+      ),
       _ => ListView(key: key, children: [SchemaSections(category.page)]),
     };
 

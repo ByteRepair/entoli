@@ -3,37 +3,16 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/room/room_state.dart" show ChatViewState;
-import "../tool_ui/command_ui.dart" show jobsRunning;
-import "../tool_ui/task_ui.dart" show subAgentsRunning;
-import "../activity/format.dart" show plural;
-import "browser_strip.dart" show browserRunning;
+import "../../../app/running.dart";
+import "../../../app/settings/spec.dart" show WidgetReader;
+import "../activity/card.dart" show ContextHandOff;
+import "../../../core/formatting.dart" show plural;
 import "running_pill.dart";
 
-/// Every kind of thing a chat can have running, in the order the row shows
-/// them: the browser's tab, standing alone, ahead of the groups.
-const runningSources = <RunningSource>[
-  browserRunning,
-  jobsRunning,
-  subAgentsRunning,
-];
-
-/// What [chatId] has running, from each of [runningSources] in turn: the
-/// things that stand alone, and the rest gathered by their group.
-({List<RunningThing> alone, Map<String, List<RunningThing>> groups}) runningOf(
-  WidgetRef ref,
-  ChatViewState view,
-  String chatId,
-) {
-  final alone = <RunningThing>[];
-  final groups = <String, List<RunningThing>>{};
-  for (final source in runningSources) {
-    for (final thing in source(ref, view, chatId)) {
-      final group = thing.group;
-      group == null ? alone.add(thing) : (groups[group] ??= []).add(thing);
-    }
-  }
-  return (alone: alone, groups: groups);
-}
+/// What a pill shows in place of its spinner: the browser's state.
+IconData? _iconOf(RunningThing thing) => thing.kind == RunningKind.browser
+    ? (thing.hidden ? Icons.visibility_off : Icons.travel_explore)
+    : null;
 
 /// What the chat has running beside the reply, as one row of pills that
 /// scrolls sideways: what each of [runningSources] has, those of a kind
@@ -81,14 +60,18 @@ class _RunningStripState extends ConsumerState<RunningStrip> {
     final view = widget.view;
     final chatId = view.chat?.state.id;
     if (chatId == null) return const SizedBox.shrink();
-    final (:alone, :groups) = runningOf(ref, view, chatId);
+    final RunningNow(:alone, :groups) = runningOf(
+      WidgetReader(ref),
+      view,
+      chatId,
+    );
     Widget pill(RunningThing thing) => Builder(
       builder: (context) => RunningPill(
         label: thing.label,
         tooltip: thing.tooltip,
-        icon: thing.icon,
+        icon: _iconOf(thing),
         mono: thing.mono,
-        onPressed: () => thing.open(context),
+        onPressed: () => thing.opens.open(ContextHandOff(context)),
       ),
     );
     return Listener(

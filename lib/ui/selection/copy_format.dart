@@ -5,21 +5,15 @@
 /// is the reply as it was written rather than the words with the rest gone.
 library;
 
-import "dart:convert";
 import "dart:math" as math;
 
 import "../../core/platform/rich_clipboard.dart";
 import "package:flutter/rendering.dart" show RenderObject;
 
+import "../../app/transcript/copy.dart" show formulaHtml, replyClipboard;
 import "../../domain/quote.dart" show blockquoted;
 import "../../domain/formatted_text.dart"
-    show
-        escapeHtml,
-        escapeHtmlAttribute,
-        formattedHtmlOf,
-        formattedTextOf,
-        htmlClipboardDocument,
-        htmlTagStyles;
+    show escapeHtml, escapeHtmlAttribute, htmlClipboardDocument, htmlTagStyles;
 import "copied_document.dart";
 import "selectable_formula.dart" show formulaPicturesUnder;
 
@@ -45,27 +39,12 @@ Future<ClipboardContent> clipboardContentOf(CopiedDocument document) async =>
 Future<ClipboardContent> replyContentOf(
   String markdown,
   RenderObject? drawn,
-) async {
-  final pictures = await formulaPicturesUnder(drawn);
-  return ClipboardContent(
-    plain: formattedTextOf(markdown),
-    html: htmlClipboardDocument(
-      formattedHtmlOf(
-        markdown,
-        formula: (written) => formulaHtml(written, pictures[written]),
-      ),
-    ),
-  );
-}
-
-/// A formula as HTML: its [picture], at the size it was on screen, or its
-/// TeX where it could not be drawn.
-String formulaHtml(String written, FormulaPicture? picture) => picture == null
-    ? escapeHtml(written)
-    : '<img src="data:image/png;base64,${base64Encode(picture.png)}" '
-          'alt="${escapeHtmlAttribute(written)}" '
-          'width="${picture.width.round()}" height="${picture.height.round()}" '
-          'style="vertical-align: middle">';
+) async => replyClipboard(markdown, {
+  for (final MapEntry(:key, :value) in (await formulaPicturesUnder(
+    drawn,
+  )).entries)
+    key: value.pasted,
+});
 
 /// An HTML fragment, blocks grouped back into the lists, tables and quotes
 /// they were drawn in. Styles are inline, since a word processor reads no
@@ -157,7 +136,7 @@ class HtmlCopyFormat implements CopyFormat {
     for (final inline in block.inlines) {
       switch (inline) {
         case CopiedFormula(:final written, :final picture):
-          out.write(formulaHtml(written, picture));
+          out.write(formulaHtml(written, picture?.pasted));
         case CopiedText(:final text, :final marks, :final href):
           final tags = [
             if (marks.contains(TextMark.code)) "code",

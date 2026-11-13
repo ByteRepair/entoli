@@ -53,14 +53,9 @@ enum Glyph {
   tune,
 }
 
-/// The window around everything: whether a Flutter page covers the
-/// conversation — the native chrome steps aside for it — whether the sidebar
-/// is shown, and which appearance the app wears, which may not be the
-/// system's.
+/// The window around everything: whether the sidebar is shown, and which
+/// appearance the app wears, which may not be the system's.
 class WindowSnapshot {
-  /// A page is pushed over the conversation: Settings, a chat's settings, a
-  /// drawer's page. A dialog is not; it draws over the Flutter view alone.
-  bool covered;
   bool sidebarShown;
 
   /// Whether the app is dark; null for the system's appearance.
@@ -264,10 +259,8 @@ class TitleBarItem {
 /// discards.
 enum TitleBarLeading { back, close }
 
-/// A title bar, whichever page it is for: one shape, so one view draws them
-/// all. The bar of the Flutter page over the conversation is
-/// [NativeShell.pageBar], not [present] where no page has one; the chat's own
-/// the client builds from [ChatBarSnapshot].
+/// A title bar, as one view draws them all: the chat's, which the client
+/// builds from [ChatBarSnapshot].
 class TitleBarSnapshot {
   TitleBarSnapshot({
     this.present = true,
@@ -758,27 +751,175 @@ class PaletteSnapshot {
 }
 
 /// One choice of a strip: its glyph, its name, and whether it is picked.
-class StripOption {
-  StripOption({required this.glyph, required this.name, this.chosen = false});
-
-  String glyph;
-  String name;
-  bool chosen;
-}
-
-/// A strip of choices over the Flutter view, just above the rect of what
-/// opened it, in the Flutter view's own coordinates.
-class ChoiceStrip {
-  double x;
-  double y;
-  double width;
-  double height;
-  List<StripOption> options;
-}
-
 /// What the app tells the client. A snapshot is a concern's whole state and
 /// replaces what the client held for it; the app sends one only when it
 /// changed.
+/// What sits where the composer does when there is nothing to type into.
+enum FootBar {
+  none,
+
+  /// The project requires setup first; Settings is where it is run.
+  needsSetup,
+
+  /// The chat's home device is away: a snapshot that has stopped moving.
+  offline,
+}
+
+/// A field a sign-in asks for, by its label.
+class CredentialField {
+  CredentialField({required this.label, this.secret = false});
+
+  String label;
+  bool secret;
+}
+
+/// The agent's browser asking to sign in: why, and the fields. What is typed
+/// is the client's until it is sent, once, by `submitCredentials`.
+class CredentialPrompt {
+  CredentialPrompt({required this.reason, this.fields = const []});
+
+  String reason;
+  List<CredentialField> fields;
+}
+
+/// The agent's browser asking for a file to upload to [host]: the user picks
+/// it with the system's own chooser, and sends it by `upload`.
+class UploadPrompt {
+  UploadPrompt({this.host = "", this.multiple = false});
+
+  String host;
+  bool multiple;
+}
+
+/// The open chat's edges: the paired device it lives on, over the top; and
+/// over the composer what the browser waits on — a sign-in, a file, the
+/// agent's words for what to do in the page — or, in the composer's place,
+/// why there is none.
+class ChatFootSnapshot {
+  ChatFootSnapshot({
+    this.device,
+    this.deviceOffline = false,
+    this.bar = FootBar.none,
+    this.hold,
+    this.upload,
+    this.credentials,
+  });
+
+  /// The paired device a mirrored chat lives on; null for this device's.
+  String? device;
+  bool deviceOffline;
+  FootBar bar;
+
+  /// What the agent needs done in the page, as the button that opens it.
+  String? hold;
+  UploadPrompt? upload;
+  CredentialPrompt? credentials;
+}
+
+/// The agent's browser as the user watches it: the page, whether the tab is
+/// open, and whether the agent is held off it. Its frames go apart, many a
+/// second, as `browserFrame`.
+class BrowserViewSnapshot {
+  BrowserViewSnapshot({
+    this.present = false,
+    this.title = "",
+    this.url,
+    this.open = false,
+    this.hidden = false,
+    this.window = false,
+  });
+
+  bool present;
+  String title;
+
+  /// Null once the tab has closed.
+  String? url;
+  bool open;
+
+  /// Held off the agent, by the user or at its asking.
+  bool hidden;
+
+  /// The page can be opened in a window of the browser's own: a user's
+  /// clicks there are a person's, where the view's are a script's.
+  bool window;
+}
+
+/// One frame of the page, in CSS pixels.
+/// What a dialog asks: something to say, a yes or no, a line or two of
+/// text, a name and its value, or one of several.
+enum DialogKind { tell, confirm, text, pair, choice }
+
+/// A dialog, drawn as the platform's own alert.
+class DialogRequest {
+  DialogRequest({
+    required this.kind,
+    required this.title,
+    this.message,
+    this.confirmLabel,
+    this.cancelLabel,
+    this.destructive = false,
+    this.initial,
+    this.hint,
+    this.lines = 1,
+    this.allowBlank = false,
+    this.label,
+    this.secondLabel,
+    this.secondInitial,
+    this.choices = const [],
+    this.picked,
+  });
+
+  DialogKind kind;
+  String title;
+  String? message;
+
+  /// Null for a confirm with nothing to confirm: only a way out.
+  String? confirmLabel;
+  String? cancelLabel;
+  bool destructive;
+
+  // text and pair: the field's, and a pair's second
+  String? initial;
+  String? hint;
+  int lines;
+  bool allowBlank;
+  String? label;
+  String? secondLabel;
+  String? secondInitial;
+
+  // choice: each by its place, and the one picked now
+  List<String> choices;
+  int? picked;
+}
+
+/// What the dialog was answered with: whether it was agreed to, the text,
+/// a pair's second, or the choice by its place.
+class DialogAnswer {
+  DialogAnswer({this.agreed = false, this.text, this.second, this.choice});
+
+  bool agreed;
+  String? text;
+  String? second;
+  int? choice;
+}
+
+class BrowserFrameSnapshot {
+  BrowserFrameSnapshot({
+    required this.jpeg,
+    required this.width,
+    required this.height,
+  });
+
+  Uint8List jpeg;
+  double width;
+  double height;
+}
+
+enum BrowserPointerAction { move, down, up, wheel }
+
+/// What the view's edit menu does to the page, against the user's clipboard.
+enum BrowserEdit { cut, copy, paste, selectAll }
+
 @HostApi(dartHostTestHandler: "TestNativeShell")
 abstract class NativeShell {
   /// Which frontend draws in the window: this one's chrome, or the Flutter
@@ -789,13 +930,20 @@ abstract class NativeShell {
   void window(WindowSnapshot snapshot);
   void sidebar(SidebarSnapshot snapshot);
   void chatBar(ChatBarSnapshot snapshot);
-  void pageBar(TitleBarSnapshot snapshot);
   void composer(ComposerSnapshot snapshot);
   void composerValue(ComposerValueSnapshot snapshot);
   void turn(TurnSnapshot snapshot);
   void newChat(NewChatSnapshot snapshot);
   void voice(VoiceSnapshot snapshot);
   void palette(PaletteSnapshot snapshot);
+  void foot(ChatFootSnapshot snapshot);
+
+  /// A line said to the user in passing, where Flutter would show a snack
+  /// bar: a failure caught, a thing copied.
+  void notice(String message);
+
+  void browser(BrowserViewSnapshot snapshot);
+  void browserFrame(BrowserFrameSnapshot frame);
 
   /// The microphone's level, from 0 to 1: many times a second, with nothing
   /// to compare against.
@@ -806,24 +954,21 @@ abstract class NativeShell {
   /// in step from the other side.
   void composerFocus(bool focused);
 
-  /// Show [request], answering the one already open as dismissed. Answers the
-  /// index picked, or null for a strip dismissed.
+  /// Asks [request] over the window, answering once it is.
   @async
-  int? strip(ChoiceStrip request);
+  DialogAnswer dialog(DialogRequest request);
+
+  /// The camera pointed at a pairing code another screen shows, answering
+  /// the code read; null where it was dismissed or there is no camera.
+  @async
+  String? scanCode();
 }
 
 /// The window's own state, which the client reports.
 @FlutterApi()
 abstract class WindowEvents {
-  /// How much of the Flutter view the client's bars cover from its edges, a
-  /// bar riding on the keyboard reaching over it; see `ShellInsets`.
-  void insets(double left, double top, double right, double bottom);
-
   /// The sidebar shown or hidden by the client's own control.
   void sidebarShown(bool shown);
-
-  /// The mouse position while it is over native chrome that covers Flutter.
-  void pointer(double x, double y);
 }
 
 /// The sidebar, which is always there.
@@ -940,10 +1085,54 @@ abstract class ChatBarIntents {
 }
 
 /// The title bar of a Flutter page over the conversation.
+/// What the user did at the open chat's edges.
 @FlutterApi()
-abstract class TitleBarIntents {
-  void back();
+abstract class ChatFootIntents {
+  /// Settings, where a project's setup is run.
+  void openSetup();
 
-  /// One of the bar's items, or one of a menu's choices, by its id.
-  void press(String id);
+  /// The browser's live view of the page.
+  void watchPage();
+
+  void cancelUpload();
+
+  /// The files the system's chooser picked, by path, given to the page.
+  void upload(List<String> paths);
+
+  /// What was typed, field by field, typed into the page by the app.
+  void submitCredentials(List<String> values);
+  void declineCredentials();
+}
+
+/// What the user did in the browser's view. A key is the platform's own —
+/// its key code and characters — which the app reads as it reads a Flutter
+/// key, so there is one mapping to the page's keys.
+@FlutterApi()
+abstract class BrowserIntents {
+  void close();
+  void back();
+  void forward();
+  void reload();
+  void window();
+  void hide();
+  void unhide();
+  void quit();
+
+  /// At a point of the page in CSS pixels; [button] `left`, `middle`,
+  /// `right` or `none`, [buttons] the held ones (1 left, 2 right, 4 middle),
+  /// [modifiers] the held keys (1 Alt, 2 Ctrl, 4 Meta, 8 Shift).
+  void pointer(
+    BrowserPointerAction action,
+    double x,
+    double y,
+    String button,
+    int buttons,
+    int clickCount,
+    double deltaX,
+    double deltaY,
+    int modifiers,
+  );
+
+  void key(bool down, int keyCode, String? characters, int modifiers);
+  void edit(BrowserEdit action);
 }

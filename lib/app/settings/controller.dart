@@ -76,6 +76,19 @@ class SettingSpec {
   final ScopeAddress? at;
 
   final SettingController Function(SettingContext context) build;
+
+  /// This setting under another [id], everything else kept.
+  SettingSpec withId(String id) => SettingSpec(
+    id: id,
+    path: path,
+    weight: weight,
+    title: title,
+    hint: hint,
+    build: build,
+    description: description,
+    glyph: glyph,
+    at: at,
+  );
 }
 
 /// What a change has to say back, for the frontend to show: a restart a
@@ -252,7 +265,8 @@ final class ChoiceController<T> extends SettingController {
     required this.value,
     required Future<SettingNotice?> Function(T? value) onSet,
     this.unsettable = false,
-    this.inheritedLabel,
+    this._inheritedLabel,
+    this.inherited,
     this.noneLabel,
     this.error,
     super.title,
@@ -270,9 +284,19 @@ final class ChoiceController<T> extends SettingController {
 
   final bool unsettable;
 
+  final String? _inheritedLabel;
+
   /// The label of what unset stands for — the "Relay" of "Default (Relay)" —
-  /// where it stands for an option.
-  final String? inheritedLabel;
+  /// given, or [inherited]'s option's.
+  String? get inheritedLabel =>
+      _inheritedLabel ??
+      (inherited == null
+          ? null
+          : options.where((o) => o.value == inherited).firstOrNull?.label);
+
+  /// What unset stands for, where it stands for an option: what a slider
+  /// shows while nothing is picked.
+  final T? inherited;
 
   /// What picking nothing is called where nothing is an answer of its own
   /// rather than an inherited one: "Device language".
@@ -390,7 +414,7 @@ final class KeyValuesController extends SettingController {
 final class ActionController extends SettingController {
   ActionController(
     super.spec, {
-    required this.label,
+    this._label,
     this.glyphOverride,
     required Future<SettingNotice?> Function() run,
     Future<SettingConfirm?> Function()? confirm,
@@ -405,7 +429,10 @@ final class ActionController extends SettingController {
   }) : _action = run,
        _ask = confirm;
 
-  final String label;
+  final String? _label;
+
+  /// The button's words, the row's title where not given.
+  String get label => _label ?? title;
 
   /// The picture where it is not the spec's: a play button that is a stop
   /// button while it plays.
@@ -570,6 +597,66 @@ final class TextController extends SettingController {
   final bool secret;
 
   final Future<SettingNotice?> Function(String value) set;
+}
+
+/// A file's text, the whole of a page: shown — markdown rendered, anything
+/// else as code highlighted by its [name] — and, where it can be, edited in
+/// place, each edit said back through [edit] so the page holds the draft.
+final class DocumentController extends SettingController {
+  DocumentController(
+    super.spec, {
+    required this.text,
+    required this.name,
+    this.editing = false,
+    void Function(String text)? onEdit,
+    super.title,
+    super.description,
+    super.footnote,
+    super.enabled,
+    super.visible,
+    super.accessory,
+  }) : _edit = onEdit;
+
+  final String text;
+
+  /// The file's name, which says how it is highlighted.
+  final String name;
+
+  /// Whether it is being edited now rather than read.
+  final bool editing;
+
+  final void Function(String text)? _edit;
+
+  bool get markdown {
+    final lower = name.toLowerCase();
+    return lower.endsWith(".md") || lower.endsWith(".markdown");
+  }
+
+  void edit(String text) => _edit?.call(text);
+}
+
+/// A web page, the whole of a page: an artifact served on loopback, a link
+/// opened in the app.
+final class WebController extends SettingController {
+  WebController(
+    super.spec, {
+    required this.url,
+    this.onNavigated,
+    super.title,
+    super.description,
+    super.footnote,
+    super.enabled,
+    super.visible,
+    super.accessory,
+  });
+
+  /// Where it starts; the view follows links from here on its own.
+  final Uri url;
+
+  final void Function(Uri url, String? title)? onNavigated;
+
+  /// Said by the view each time it lands somewhere, with that page's title.
+  void navigated(Uri url, String? title) => onNavigated?.call(url, title);
 }
 
 /// Something to read rather than set: lines of text, and links out.
@@ -779,8 +866,8 @@ class CollectionItem {
   /// "Bundled", "Inherited".
   final String? badge;
 
-  /// The agent whose face leads the row.
-  final ({String? project, String name})? face;
+  /// Who leads the row, where someone does.
+  final RowFace? face;
 
   /// Whether it is edited through the list's form: an entry of another
   /// level's is shown and not changed.
@@ -792,6 +879,28 @@ class CollectionItem {
   /// The item action a tap on the row runs, where the row is not edited
   /// through a form: a device's own page.
   final String? tap;
+}
+
+/// Who leads a collection's row: an agent in their face, or a Bot Avatar
+/// worn by no agent yet.
+sealed class RowFace {
+  const RowFace();
+}
+
+final class AgentRowFace extends RowFace {
+  const AgentRowFace({required this.project, required this.name});
+
+  final String? project;
+  final String name;
+
+  /// The agent as the picture providers name one.
+  ({String? project, String name}) get agent => (project: project, name: name);
+}
+
+final class AvatarRowFace extends RowFace {
+  const AvatarRowFace(this.spec);
+
+  final BotAvatarSpec spec;
 }
 
 /// One thing an item has spent, said; [fraction] of it gone where it is
@@ -826,6 +935,13 @@ final class SkillPage extends TextPage {
   final String name;
   final String? project;
   final String origin;
+}
+
+/// Markdown the page that opens it already holds: a plan task's own plan.
+final class InlinePage extends TextPage {
+  const InlinePage(this.text);
+
+  final String text;
 }
 
 /// What an item action is: [run] by the list, or a face picked by the

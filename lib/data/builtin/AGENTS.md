@@ -957,7 +957,8 @@ wording rides with it. Digging
 it back out of the JSON in the widget was the first version, and it meant a list
 of argument names — `command`, `url` — kept in a widget file, describing tools
 it is nowhere near. The raw JSON stays as the fallback for a tool that words
-nothing, which is what `toolRunView` does with the same field.
+nothing, which is what a `ToolActivity`'s default detail does with the same
+field.
 
 It is its own file rather than the end of `message_bubble.dart`, where it used
 to live: it is not a message, and the turn is what is asking.

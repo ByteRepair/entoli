@@ -46,6 +46,13 @@ struct ComposerView: View {
   private static let rowHeight: CGFloat = 36
   private static let visibleRows = 5
 
+  /// How much higher the composer stands while its menu of [rows] is up:
+  /// the menu and the gap under it. The native conversation discounts it,
+  /// so the menu lies over the chat rather than lifting it.
+  static func menuLift(rows: Int) -> CGFloat {
+    rows == 0 ? 0 : rowHeight * CGFloat(min(rows, visibleRows)) + 8 + 8
+  }
+
   /// An agent's face in a menu row: the size Dart draws it at, `_menuFace`
   /// in `shell_composer.dart`.
   private static let menuFace: CGFloat = 22

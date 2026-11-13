@@ -6,7 +6,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/prompts/skill_import.dart";
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/ui/sidebar/project_settings_page.dart";
+import "package:agent_chat/app/pages/project_settings.dart";
 
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
@@ -25,7 +25,7 @@ void main() {
         await writeSkill(app, "review", project: "work");
       });
 
-      await app.pump(tester, const ProjectSettingsPage(project: "work"));
+      await app.pumpPage(tester, ProjectSettingsAppPage("work"));
       await scrollTo(tester, find.text("Skills"));
       await tester.tap(find.text("Skills"));
       await settleIo(tester);
@@ -141,12 +141,13 @@ void main() {
         "library with it", (tester) async {
       await io(tester, () => app.repo.createProject("work"));
 
-      await app.pump(tester, const ProjectSettingsPage(project: "work"));
+      await app.pumpPage(tester, ProjectSettingsAppPage("work"));
       await scrollTo(tester, find.text("Agents"));
       await tester.tap(find.text("Agents"));
       await settleIo(tester);
       await reloadLibrary(tester, app, project: "work");
-
+      // The page's rows are a lazy list: the last is built once scrolled to.
+      await scrollTo(tester, find.text("Import agent"));
       expect(find.text("Import agent"), findsOneWidget);
       expect(find.text("Add agent"), findsOneWidget);
 

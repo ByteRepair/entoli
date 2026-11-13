@@ -1,7 +1,7 @@
 import "../../domain/models.dart";
 import "../../domain/speech_text.dart";
-import "../chat/tool_ui/command_ui.dart" show ranACommand;
-import "../chat/tool_ui/tools.dart";
+import "../../app/transcript/activities/catalog.dart" show toolActivityFor;
+import "../../app/transcript/activities/command.dart" show ranACommand;
 
 /// Who a transcript line belongs to. Three rather than the issue's two: a turn
 /// can spend half a minute inside a sub-agent, and a screen that says nothing
@@ -89,7 +89,7 @@ List<VoiceLine> linesOf(
           ? const []
           : [VoiceLine(VoiceLineKind.replied, spoken)];
     case ToolCallPart(:final toolCall):
-      final doing = toolUIFor(toolCall.name).spoken;
+      final doing = toolActivityFor(toolCall.name).spoken;
       return doing == null
           ? const []
           : [VoiceLine(VoiceLineKind.activity, doing)];

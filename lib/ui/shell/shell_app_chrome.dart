@@ -1,54 +1,33 @@
 import "package:flutter/widgets.dart";
 
 import "../../app/voice_controller.dart" show VoiceController, VoiceViewState;
-import "../../domain/reaction.dart";
 import "../../domain/corner_radius.dart";
+import "../../domain/reaction.dart";
 import "../../domain/theme_colour.dart";
 import "../app_chrome.dart";
 import "../theme.dart";
-import "shell_popup.dart";
-import "shell_voice.dart";
-import "shell_window.dart" show ShellInsets;
 
-/// The native shell's app: the window is SwiftUI's, the Flutter view inside
-/// it padded by the shell's bars, and the pages in Apple's own look.
+/// The native shell's app: every page is the platform's, so nothing of
+/// Flutter's chrome is drawn, and the look is Apple's own.
 class ShellAppChrome extends AppChrome {
   const ShellAppChrome();
 
   @override
-  TransitionBuilder? get builder =>
-      (context, child) => ShellInsets(child: child!);
+  TransitionBuilder? get builder => null;
 
-  /// The composer is the shell's, over the Flutter view a sheet is drawn in;
-  /// a page is what it steps aside for, its bar then the window's.
+  /// A message's reactions are the native conversation's own popover.
   @override
-  bool get drawersArePages => true;
+  Future<Reaction?>? pickReaction(BuildContext context, List<String> chosen) =>
+      null;
 
-  @override
-  Future<Reaction?>? pickReaction(BuildContext context, List<String> chosen) {
-    final anchor = anchorOf(context);
-    if (anchor == null) return null;
-    return showShellStrip(
-      anchor: anchor,
-      choices: [
-        for (final r in Reaction.values) (glyph: r.emoji, name: r.name),
-      ],
-      chosen: {
-        for (final (i, r) in Reaction.values.indexed)
-          if (chosen.contains(r.emoji)) i,
-      },
-    ).then((at) => at == null ? null : Reaction.values.elementAtOrNull(at));
-  }
-
-  /// Voice mode over the whole window, drawn by the shell; the route stays,
-  /// so leaving is still popping it and the session still lives as long as
-  /// the page.
+  /// Never a page under the shell: voice mode opens through
+  /// `NativeSurfaces.openVoice` as a `ShellVoiceSession`, with no route behind it.
   @override
   Widget? voice({
     required VoiceViewState voice,
     required VoiceController controller,
     required VoidCallback onDone,
-  }) => ShellVoice(voice: voice, controller: controller, onDone: onDone);
+  }) => null;
 }
 
 /// Apple's look, whatever was picked: the defaults, which are the iOS /

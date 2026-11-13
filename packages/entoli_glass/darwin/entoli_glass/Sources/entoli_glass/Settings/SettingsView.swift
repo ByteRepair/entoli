@@ -297,6 +297,8 @@ struct SettingRowView: View {
       }
     case .pairing: PairingRow(model: model, row: row)
     case .setup: SetupRow(model: model, row: row)
+    case .document: DocumentRow(model: model, row: row).frame(minHeight: 360)
+    case .web: WebRow(model: model, row: row).frame(minHeight: 360)
     }
   }
 
@@ -327,6 +329,7 @@ extension SettingsPageKey {
     case .about: "info"
     case .syncRelay, .syncTurn: "network"
     case .onDeviceLlm: "slider.horizontal.3"
+    case .app: "doc.fill"
     }
   }
 
@@ -349,6 +352,7 @@ extension SettingsPageKey {
     case .sync: .cyan
     case .data: .brown
     case .welcome: .yellow
+    case .app: .gray
     }
   }
 }
@@ -380,6 +384,21 @@ extension SettingIcon {
     case .computer: "desktopcomputer"
     case .terminal: "terminal"
     case .tune: "slider.horizontal.3"
+    case .taskDone: "checkmark.circle.fill"
+    case .taskActive: "circle.dotted.circle"
+    case .taskPending: "circle"
+    case .folder: "folder"
+    case .file: "doc"
+    case .chat: "bubble.left"
+    case .memory: "brain"
+    case .link: "link"
+    case .skill: "puzzlepiece.extension"
+    case .agent: "person.crop.circle"
+    case .edit: "pencil"
+    case .globe: "globe"
+    case .check: "checkmark"
+    case .info: "info.circle"
+    case .star: "star"
     }
   }
 }
@@ -542,7 +561,7 @@ extension View {
 #endif
 
 /// The page a pushed [route] opens.
-private struct SettingsDestination: View {
+struct SettingsDestination: View {
   var model: SettingsModel
   let route: SettingsRoute
 
@@ -559,6 +578,10 @@ private struct SettingsDestination: View {
         if let row = model.row(opened.row) { ModelList(model: model, row: row) }
       case .device(let id):
         PairedDevicePage(model: model, id: id)
+      case .app(let address):
+        if let pages = AppPagesModel.shared, let page = pages.page(address) {
+          AppPageView(model: pages, page: page)
+        }
       }
     }
   }
