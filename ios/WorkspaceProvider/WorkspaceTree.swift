@@ -22,10 +22,9 @@ let workspaceDataDir: URL? = FileManager.default
   .containerURL(forSecurityApplicationGroupIdentifier: workspaceAppGroup)?
   .appendingPathComponent("entoli", isDirectory: true)
 
-/// A place in the tree. Every project is the root; a project is its
-/// workspace, holding what its chats share and, by title, the folder each
-/// chat works in. Those are at `chats/<id>`, which the project's listing
-/// replaces: a title is what the user picks a chat by.
+/// A place in the tree, the disk's own layout: every project is the root, a
+/// project is its workspace, and its `chats/` is a Chats folder whose
+/// folders, one per chat, are named by the chat's title rather than its id.
 enum WorkspaceNode: Equatable {
   case projects
   case project(String)
@@ -64,9 +63,7 @@ enum WorkspaceNode: Equatable {
       let segments = raw.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
       guard segments.count > Self.workspaceDepth, segments[0] == "projects",
         Self.isProjectDir(segments[1]), segments[2] == "workspace",
-        !segments.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }),
-        // The chats' own folder is reached through the project, not here.
-        segments.count != Self.workspaceDepth + 1 || segments[3] != "chats"
+        !segments.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." })
       else { return nil }
       self = .path(segments)
     }
@@ -99,16 +96,16 @@ enum WorkspaceNode: Equatable {
     switch self {
     case .projects, .project: .projects
     case .path(let segments):
-      segments.count == Self.workspaceDepth + 1 || isChat
+      segments.count == Self.workspaceDepth + 1
         ? .project(segments[1]) : .path(Array(segments.dropLast()))
     }
   }
 
-  /// A place the layout makes rather than the user: the projects and a
-  /// chat's own folder, which Files may add to but not delete.
+  /// A place the layout makes rather than the user: the projects, the Chats
+  /// folder and a chat's own folder, which Files may not delete.
   var isFixed: Bool {
     guard case .path = self else { return true }
-    return isChat
+    return isChats || isChat
   }
 
   /// The directory on disk, relative to the data directory; nil for the
@@ -121,14 +118,21 @@ enum WorkspaceNode: Equatable {
     }
   }
 
-  /// Where a child named [name] would be, if this holds files at all.
+  /// Where a child named [name] would be, if this holds files at all. The
+  /// Chats folder holds only the app's chats.
   func child(_ name: String) -> WorkspaceNode? {
-    guard let segments, !name.isEmpty, !name.contains("/") else { return nil }
+    guard let segments, !isChats, !name.isEmpty, !name.contains("/") else { return nil }
     return WorkspaceNode(.init((segments + [name]).joined(separator: "/")))
   }
 
+  /// A project's `chats/`.
+  var isChats: Bool {
+    guard case .path(let segments) = self else { return false }
+    return segments.count == Self.workspaceDepth + 1 && segments[3] == "chats"
+  }
+
   /// A chat's own folder, `projects/<p>/workspace/chats/<id>`.
-  private var isChat: Bool {
+  var isChat: Bool {
     guard case .path(let segments) = self else { return false }
     return segments.count == Self.workspaceDepth + 2 && segments[3] == "chats"
   }
@@ -154,13 +158,13 @@ struct WorkspaceTree {
       return WorkspaceItem(node: node, name: projectLabel(name), url: nil)
     case .path(let segments):
       let url = try resolve(segments)
-      if node.parent != .path(Array(segments.dropLast())) {
-        // A chat's folder, whose name depends on its siblings'.
+      if node.isChat {
+        // Its name depends on its siblings'.
         guard let chat = try children(of: node.parent).first(where: { $0.node == node })
         else { throw Failure.noSuchItem }
         return chat
       }
-      return WorkspaceItem(node: node, name: url.lastPathComponent, url: url)
+      return WorkspaceItem(node: node, name: name(of: node, url), url: url)
     }
   }
 
@@ -169,14 +173,17 @@ struct WorkspaceTree {
     case .projects:
       return projectDirs().map { WorkspaceItem(node: .project($0), name: projectLabel($0), url: nil) }
     case .project(let name):
-      return projectChildren(name)
+      return (try? files(in: ["projects", name, "workspace"])) ?? []
     case .path(let segments):
-      return try files(in: segments)
+      return node.isChats ? try chats(segments) : try files(in: segments)
     }
   }
 
-  /// A folder's own files; a chat's folder in a project's is the project's
-  /// to list, by title.
+  /// `chats/` by the word the sidebar uses; anything else by its own name.
+  private func name(of node: WorkspaceNode, _ url: URL) -> String {
+    node.isChats ? "Chats" : url.lastPathComponent
+  }
+
   private func files(in segments: [String]) throws -> [WorkspaceItem] {
     let dir = try resolve(segments)
     let workspace = try resolve(Array(segments.prefix(3)))
@@ -186,7 +193,7 @@ struct WorkspaceTree {
       // these folders, so a link out of one is something it can have been
       // told to leave behind.
       guard let node, contains(workspace, child) else { return nil }
-      return WorkspaceItem(node: node, name: child.lastPathComponent, url: child)
+      return WorkspaceItem(node: node, name: name(of: node, child), url: child)
     }
   }
 
@@ -195,19 +202,24 @@ struct WorkspaceTree {
     return try resolve(segments)
   }
 
-  private func projectChildren(_ project: String) -> [WorkspaceItem] {
-    let id = ["projects", project, "workspace"]
-    guard let workspace = try? resolve(id) else { return [] }
-    var items = (try? files(in: id)) ?? []
-    var taken = Set(items.map { $0.filename.lowercased() })
-    let chats = workspace.appendingPathComponent("chats", isDirectory: true)
-    for chat in list(chats) where isDirectory(chat) && contains(workspace, chat) {
+  private func chats(_ segments: [String]) throws -> [WorkspaceItem] {
+    let dir = try resolve(segments)
+    let workspace = try resolve(Array(segments.prefix(3)))
+    var items: [WorkspaceItem] = []
+    var taken: Set<String> = []
+    for chat in list(dir) where isDirectory(chat) && contains(workspace, chat) {
       let chatId = chat.lastPathComponent
-      // Two chats may share a title, and Files keeps one name per folder.
-      var name = chatTitle(project: project, chatId: chatId)
-      if taken.contains(name.lowercased()) { name += " (\(chatId.prefix(8)))" }
+      // Two chats may share a title, and Files keeps one name per folder,
+      // ignoring case. More of the id until it is free; the whole id is.
+      let title = chatTitle(project: segments[1], chatId: chatId)
+      var name = title
+      var length = 8
+      while taken.contains(name.lowercased()) && length <= chatId.count {
+        name = "\(title) (\(chatId.prefix(length)))"
+        length += 4
+      }
       taken.insert(name.lowercased())
-      items.append(WorkspaceItem(node: .path(id + ["chats", chatId]), name: name, url: chat))
+      items.append(WorkspaceItem(node: .path(segments + [chatId]), name: name, url: chat))
     }
     return items
   }

@@ -549,11 +549,13 @@ Android's `WorkspaceProvider` (see "The workspaces in the Files app" in
 `android/AGENTS.md`) has a twin here: `ios/WorkspaceProvider/`, a File
 Provider extension (`NSFileProviderReplicatedExtension`) that puts the same
 tree under "Entoli" in Files' Locations, its domain named Local Workspaces:
-this device's, with room beside it for a domain per synced device. The root
-is every project, and a project is its workspace: what its chats share,
-loose, beside a folder per chat named by its title. `chats/` itself is not
-listed, the project's listing standing in for it; two chats of one title get
-their id's first eight characters, Files keeping one name per folder.
+this device's, with room beside it for a domain per synced device. The tree
+is the disk's: the root is every project, a project is its workspace, and its
+`chats/` is a Chats folder holding a folder per chat named by its title. So a
+title can collide only with another chat's, never with what the workspace
+holds; two chats of one title get as much of their ids as tells them apart,
+Files keeping one name per folder. Chats holds only the app's chats: an item
+added to it stays on the device.
 
 **The data directory lives in the App Group** (`group.io.byterepair.entoli`),
 because the extension is a process of its own and sees nothing of the app's
@@ -571,8 +573,8 @@ extension with its own before the export, as it does the app.
 workspace lands in it: `createItem` writes the file or folder, `modifyItem`
 swaps new contents in, `deleteItem` removes the item. The root has no
 directory to write to, so an item added there stays on the device
-(`excludedFromSync`), and the projects and the chats' own folders cannot be
-deleted (`isFixed`). Nothing can be renamed or moved: an
+(`excludedFromSync`), and the projects, Chats and the chats' own folders
+cannot be deleted (`isFixed`). Nothing can be renamed or moved: an
 identifier is the item's path, and the system wants it to outlive both.
 The root still says it takes children, because a replica
 folder the system may not add to is one it cannot fill (`cannotSetMetadata`,
