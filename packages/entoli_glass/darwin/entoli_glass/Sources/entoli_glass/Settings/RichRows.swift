@@ -34,7 +34,8 @@ struct SegmentedMeter: View {
               .alignmentGuide(.leading) { -(width - $0.width) * mark }
           }
           ZStack(alignment: .leading) {
-            Capsule().fill(.quaternary)
+            // Faint, so the grey segment still reads against it.
+            Capsule().fill(Color.secondary.opacity(0.15))
             HStack(spacing: 0) {
               ForEach(Array(segments.enumerated()), id: \.offset) { _, part in
                 Rectangle().fill(part.hue.colour)
