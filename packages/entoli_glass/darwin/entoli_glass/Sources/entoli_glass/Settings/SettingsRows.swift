@@ -528,16 +528,30 @@ struct TextRow: View {
   @State private var typed = ""
   @State private var editing = false
 
+  @ViewBuilder private var field: some View {
+    if row.secret {
+      SecureField(row.title, text: $typed, prompt: row.prompt.map(Text.init))
+    } else {
+      TextField(row.title, text: $typed, prompt: row.prompt.map(Text.init))
+    }
+  }
+
   var body: some View {
     switch row.hint {
     case .input:
       VStack(alignment: .leading) {
         HStack {
-          if row.secret {
-            SecureField(row.title, text: $typed, prompt: row.prompt.map(Text.init))
-          } else {
-            TextField(row.title, text: $typed, prompt: row.prompt.map(Text.init))
-          }
+          #if os(iOS)
+            // A form's field on iOS shows only its prompt: labelled as
+            // Settings labels one, the value trailing.
+            LabeledContent {
+              field.multilineTextAlignment(.trailing)
+            } label: {
+              Text(row.title)
+            }
+          #else
+            field
+          #endif
           if let submit = row.submitLabel {
             Button(submit) { model.say.setText(id: row.id, text: typed, completion: ignore) }
               .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
