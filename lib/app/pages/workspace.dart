@@ -142,13 +142,9 @@ class WorkspaceAppPage extends AppPage {
   List<ActionController> toolbar(SettingReader reader) {
     final handoff = reader.watch(fileHandoffProvider);
     return [
-      if (handoff.canReveal)
+      if (handoff.fileManager case final fileManager?)
         ActionController(
-          part(
-            "reveal",
-            "Show in ${handoff.fileManager}",
-            glyph: SettingGlyph.reveal,
-          ),
+          part("reveal", "Show in $fileManager", glyph: SettingGlyph.reveal),
           // Not the page's own: the folder is left as it is.
           secondary: true,
           run: () async {

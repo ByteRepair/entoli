@@ -566,18 +566,20 @@ final Future<String> _iosBase = _resolveIosBase();
 /// app still runs; the Files app then shows nothing until a launch where it
 /// lands.
 Future<String> _resolveIosBase() async {
-  final documents = (await getApplicationDocumentsDirectory()).path;
   final group = await PathProviderFoundation().getContainerPath(
     appGroupIdentifier: iosAppGroup,
   );
+  // Every launch after the move ends here, with no need of Documents.
+  if (group != null && Directory(p.join(group, _dirLeaf)).existsSync()) {
+    return group;
+  }
+  final documents = (await getApplicationDocumentsDirectory()).path;
   if (group == null) {
     logFailure("files", "no App Group container, data stays in Documents");
     return documents;
   }
   final from = Directory(p.join(documents, _dirLeaf));
-  if (!from.existsSync() || Directory(p.join(group, _dirLeaf)).existsSync()) {
-    return group;
-  }
+  if (!from.existsSync()) return group;
   try {
     // One volume, so a rename: a copy of a rootfs would be gigabytes.
     from.renameSync(p.join(group, _dirLeaf));

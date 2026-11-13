@@ -36,10 +36,7 @@ class AndroidFileHandoff implements FileHandoff {
   );
 
   @override
-  bool get canReveal => false;
-
-  @override
-  String get fileManager => "Files";
+  String? get fileManager => null;
 
   @override
   bool get canShare => true;

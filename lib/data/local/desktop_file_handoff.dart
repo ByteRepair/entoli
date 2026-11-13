@@ -15,9 +15,6 @@ class DesktopFileHandoff implements FileHandoff {
   const DesktopFileHandoff();
 
   @override
-  bool get canReveal => true;
-
-  @override
   String get fileManager => "File Manager";
 
   @override

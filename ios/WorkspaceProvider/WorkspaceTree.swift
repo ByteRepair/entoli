@@ -28,8 +28,10 @@ let workspaceDataDir: URL? = FileManager.default
 enum WorkspaceNode: Equatable {
   case projects
   case project(String)
-  /// Segments relative to the data directory, under
-  /// `projects/<name>/workspace`.
+  case chats(project: String)
+  case chat(project: String, id: String)
+  /// Anything else in a workspace, as segments relative to the data
+  /// directory.
   case path([String])
 
   // A project identifier is ":<name>"; anything else is a path relative to
@@ -47,7 +49,7 @@ enum WorkspaceNode: Equatable {
   static let unbrowsed: Set<String> = ["anonymous"]
 
   /// `projects/<name>/workspace`, which every path starts with.
-  private static let workspaceDepth = 3
+  static let workspaceDepth = 3
 
   /// Refuses what was never handed out: an identifier is composed by
   /// whoever asks, so `:..` or `projects/x/workspace/../../..` arrive too.
@@ -65,7 +67,16 @@ enum WorkspaceNode: Equatable {
         Self.isProjectDir(segments[1]), segments[2] == "workspace",
         !segments.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." })
       else { return nil }
-      self = .path(segments)
+      self = Self.at(segments)
+    }
+  }
+
+  /// The node a checked path names.
+  private static func at(_ segments: [String]) -> WorkspaceNode {
+    switch (segments.count - workspaceDepth, segments[workspaceDepth]) {
+    case (1, "chats"): .chats(project: segments[1])
+    case (2, "chats"): .chat(project: segments[1], id: segments[4])
+    default: .path(segments)
     }
   }
 
@@ -84,62 +95,58 @@ enum WorkspaceNode: Equatable {
     return .projects
   }
 
-  var identifier: NSFileProviderItemIdentifier {
-    switch self {
-    case .projects: .rootContainer
-    case .project(let name): .init(Self.project + name)
-    case .path(let segments): .init(segments.joined(separator: "/"))
-    }
-  }
-
-  var parent: WorkspaceNode {
-    switch self {
-    case .projects, .project: .projects
-    case .path(let segments):
-      segments.count == Self.workspaceDepth + 1
-        ? .project(segments[1]) : .path(Array(segments.dropLast()))
-    }
-  }
-
-  /// A place the layout makes rather than the user: the projects, the Chats
-  /// folder and a chat's own folder, which Files may not delete.
-  var isFixed: Bool {
-    guard case .path = self else { return true }
-    return isChats || isChat
-  }
-
   /// The directory on disk, relative to the data directory; nil for the
   /// root, which is every project rather than one.
   var segments: [String]? {
     switch self {
     case .projects: nil
     case .project(let name): ["projects", name, "workspace"]
+    case .chats(let name): ["projects", name, "workspace", "chats"]
+    case .chat(let name, let id): ["projects", name, "workspace", "chats", id]
     case .path(let segments): segments
     }
+  }
+
+  var identifier: NSFileProviderItemIdentifier {
+    switch self {
+    case .projects: .rootContainer
+    case .project(let name): .init(Self.project + name)
+    default: .init(segments!.joined(separator: "/"))
+    }
+  }
+
+  var parent: WorkspaceNode {
+    switch self {
+    case .projects, .project: .projects
+    case .chats(let name): .project(name)
+    case .chat(let name, _): .chats(project: name)
+    case .path(let segments):
+      segments.count == Self.workspaceDepth + 1
+        ? .project(segments[1]) : Self.at(Array(segments.dropLast()))
+    }
+  }
+
+  /// A place the layout makes rather than the user, which Files may not
+  /// delete.
+  var isFixed: Bool {
+    if case .path = self { return false }
+    return true
   }
 
   /// Where a child named [name] would be, if this holds files at all. The
   /// Chats folder holds only the app's chats.
   func child(_ name: String) -> WorkspaceNode? {
-    guard let segments, !isChats, !name.isEmpty, !name.contains("/") else { return nil }
-    return WorkspaceNode(.init((segments + [name]).joined(separator: "/")))
-  }
-
-  /// A project's `chats/`.
-  var isChats: Bool {
-    guard case .path(let segments) = self else { return false }
-    return segments.count == Self.workspaceDepth + 1 && segments[3] == "chats"
-  }
-
-  /// A chat's own folder, `projects/<p>/workspace/chats/<id>`.
-  var isChat: Bool {
-    guard case .path(let segments) = self else { return false }
-    return segments.count == Self.workspaceDepth + 2 && segments[3] == "chats"
+    switch self {
+    case .projects, .chats: return nil
+    default:
+      guard !name.contains("/") else { return nil }
+      return WorkspaceNode(.init((segments! + [name]).joined(separator: "/")))
+    }
   }
 
   // The shape rule, `isProjectDirName` in lib/domain/project.dart, bar
   // `default`, which is a directory like any other here.
-  private static func isProjectDir(_ name: String) -> Bool {
+  static func isProjectDir(_ name: String) -> Bool {
     !name.isEmpty && !name.hasPrefix(".") && !name.contains("/") && !unbrowsed.contains(name)
   }
 }
@@ -148,22 +155,20 @@ enum WorkspaceNode: Equatable {
 struct WorkspaceTree {
   let dataDir: URL
 
-  enum Failure: Error { case noSuchItem }
-
   func item(for node: WorkspaceNode) throws -> WorkspaceItem {
     switch node {
     case .projects:
       return WorkspaceItem(node: node, name: workspaceDomain.displayName, url: nil)
     case .project(let name):
       return WorkspaceItem(node: node, name: projectLabel(name), url: nil)
-    case .path(let segments):
-      let url = try resolve(segments)
-      if node.isChat {
-        // Its name depends on its siblings'.
-        guard let chat = try children(of: node.parent).first(where: { $0.node == node })
-        else { throw Failure.noSuchItem }
-        return chat
+    case .chat(let project, _):
+      // Its name depends on its siblings'.
+      guard let chat = try chats(project).first(where: { $0.node == node }) else {
+        throw NSFileProviderError(.noSuchItem)
       }
+      return chat
+    case .chats, .path:
+      let url = try resolve(node.segments!)
       return WorkspaceItem(node: node, name: name(of: node, url), url: url)
     }
   }
@@ -172,49 +177,40 @@ struct WorkspaceTree {
     switch node {
     case .projects:
       return projectDirs().map { WorkspaceItem(node: .project($0), name: projectLabel($0), url: nil) }
-    case .project(let name):
-      return (try? files(in: ["projects", name, "workspace"])) ?? []
-    case .path(let segments):
-      return node.isChats ? try chats(segments) : try files(in: segments)
-    }
-  }
-
-  /// `chats/` by the word the sidebar uses; anything else by its own name.
-  private func name(of node: WorkspaceNode, _ url: URL) -> String {
-    node.isChats ? "Chats" : url.lastPathComponent
-  }
-
-  private func files(in segments: [String]) throws -> [WorkspaceItem] {
-    let dir = try resolve(segments)
-    let workspace = try resolve(Array(segments.prefix(3)))
-    return list(dir).compactMap { child in
-      let node = WorkspaceNode(.init((segments + [child.lastPathComponent]).joined(separator: "/")))
-      // Resolved rather than trusted: the agent's own commands run in
-      // these folders, so a link out of one is something it can have been
-      // told to leave behind.
-      guard let node, contains(workspace, child) else { return nil }
-      return WorkspaceItem(node: node, name: name(of: node, child), url: child)
+    case .chats(let project):
+      return try chats(project)
+    default:
+      let segments = node.segments!
+      return try listed(segments).compactMap { child in
+        guard let node = WorkspaceNode(.init((segments + [child.lastPathComponent]).joined(separator: "/")))
+        else { return nil }
+        return WorkspaceItem(node: node, name: name(of: node, child), url: child)
+      }
     }
   }
 
   func url(of node: WorkspaceNode) throws -> URL {
-    guard let segments = node.segments else { throw Failure.noSuchItem }
+    guard let segments = node.segments else { throw NSFileProviderError(.noSuchItem) }
     return try resolve(segments)
   }
 
-  private func chats(_ segments: [String]) throws -> [WorkspaceItem] {
-    let dir = try resolve(segments)
-    let workspace = try resolve(Array(segments.prefix(3)))
-    let chats = list(dir)
-      .filter { isDirectory($0) && contains(workspace, $0) }
-      .map { (url: $0, title: chatTitle(project: segments[1], chatId: $0.lastPathComponent)) }
+  /// `chats/` by the word the sidebar uses; anything else by its own name.
+  private func name(of node: WorkspaceNode, _ url: URL) -> String {
+    if case .chats = node { return "Chats" }
+    return url.lastPathComponent
+  }
+
+  private func chats(_ project: String) throws -> [WorkspaceItem] {
+    let chats = try listed(WorkspaceNode.chats(project: project).segments!)
+      .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+      .map { (url: $0, title: chatTitle(project: project, chatId: $0.lastPathComponent)) }
     // Files keeps one name per folder, ignoring case, so every chat whose
     // title another shares takes its id too.
     let counts = Dictionary(chats.map { ($0.title.lowercased(), 1) }, uniquingKeysWith: +)
     return chats.map { chat in
-      let chatId = chat.url.lastPathComponent
-      let name = counts[chat.title.lowercased()]! > 1 ? "\(chat.title) (\(chatId))" : chat.title
-      return WorkspaceItem(node: .path(segments + [chatId]), name: name, url: chat.url)
+      let id = chat.url.lastPathComponent
+      let name = counts[chat.title.lowercased()]! > 1 ? "\(chat.title) (\(id))" : chat.title
+      return WorkspaceItem(node: .chat(project: project, id: id), name: name, url: chat.url)
     }
   }
 
@@ -222,9 +218,9 @@ struct WorkspaceTree {
   // rest by name.
   private func projectDirs() -> [String] {
     list(dataDir.appendingPathComponent("projects", isDirectory: true))
-      .filter(isDirectory)
+      .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
       .map(\.lastPathComponent)
-      .filter { WorkspaceNode(.init(":" + $0)) != nil }
+      .filter(WorkspaceNode.isProjectDir)
       .sorted { a, b in
         let first = WorkspaceNode.defaultProject
         return (a == first) != (b == first)
@@ -250,30 +246,46 @@ struct WorkspaceTree {
     return title.replacingOccurrences(of: "/", with: "-")
   }
 
+  /// The children of a folder [resolve] has checked. A link among them is
+  /// resolved rather than trusted: the agent's own commands run in these
+  /// folders, so a link out of one is something it can have been told to
+  /// leave behind. Anything else is inside, its folder being.
+  private func listed(_ segments: [String]) throws -> [URL] {
+    let dir = try resolve(segments)
+    let workspace = realPath(workspaceOf(segments))
+    return list(dir).filter { child in
+      (try? child.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) != true
+        || inside(workspace, child)
+    }
+  }
+
   /// [segments] joined onto the data directory, still inside the workspace
   /// they name once every link in them is followed.
   private func resolve(_ segments: [String]) throws -> URL {
     let url = dataDir.appendingPathComponent(segments.joined(separator: "/"))
-    let workspace = dataDir.appendingPathComponent(segments.prefix(3).joined(separator: "/"))
-    guard FileManager.default.fileExists(atPath: url.path), contains(workspace, url) else {
-      throw Failure.noSuchItem
-    }
+    guard FileManager.default.fileExists(atPath: url.path),
+      inside(realPath(workspaceOf(segments)), url)
+    else { throw NSFileProviderError(.noSuchItem) }
     return url
+  }
+
+  private func workspaceOf(_ segments: [String]) -> URL {
+    dataDir.appendingPathComponent(
+      segments.prefix(WorkspaceNode.workspaceDepth).joined(separator: "/"))
   }
 
   private func list(_ dir: URL) -> [URL] {
     (try? FileManager.default.contentsOfDirectory(
-      at: dir, includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey, .fileSizeKey]))
+      at: dir,
+      includingPropertiesForKeys: [
+        .isDirectoryKey, .isSymbolicLinkKey, .contentModificationDateKey, .fileSizeKey,
+      ]))
       ?? []
   }
 
-  private func isDirectory(_ url: URL) -> Bool {
-    (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
-  }
-
-  private func contains(_ dir: URL, _ url: URL) -> Bool {
-    guard let dir = realPath(dir), let path = realPath(url) else { return false }
-    return path == dir || path.hasPrefix(dir + "/")
+  private func inside(_ workspace: String?, _ url: URL) -> Bool {
+    guard let workspace, let path = realPath(url) else { return false }
+    return path == workspace || path.hasPrefix(workspace + "/")
   }
 
   // `realpath(3)` rather than `resolvingSymlinksInPath`, which strips
@@ -291,14 +303,19 @@ final class WorkspaceItem: NSObject, NSFileProviderItem {
   let filename: String
   let url: URL?
   private let values: URLResourceValues?
+  /// The modification time and size, which is all a copy of it could have
+  /// gone stale by.
+  private let stamp: String
 
   init(node: WorkspaceNode, name: String, url: URL?) {
     self.node = node
     self.filename = name
     self.url = url
-    self.values = try? url?.resourceValues(forKeys: [
+    let values = try? url?.resourceValues(forKeys: [
       .isDirectoryKey, .contentModificationDateKey, .fileSizeKey,
     ])
+    self.values = values
+    self.stamp = "\(values?.contentModificationDate?.timeIntervalSince1970 ?? 0):\(values?.fileSize ?? 0)"
   }
 
   var itemIdentifier: NSFileProviderItemIdentifier { node.identifier }
@@ -329,17 +346,12 @@ final class WorkspaceItem: NSObject, NSFileProviderItem {
   var documentSize: NSNumber? { isFolder ? nil : values?.fileSize.map(NSNumber.init) }
   var contentModificationDate: Date? { values?.contentModificationDate }
 
-  /// The modification time and size, which is all a copy of it could have
-  /// gone stale by. The name is metadata, a chat's title changing with no
-  /// change to its folder.
+  /// The name is metadata, a chat's title changing with no change to its
+  /// folder.
   var itemVersion: NSFileProviderItemVersion {
-    let stamp = "\(values?.contentModificationDate?.timeIntervalSince1970 ?? 0):\(values?.fileSize ?? 0)"
-    return NSFileProviderItemVersion(
-      contentVersion: Data(stamp.utf8), metadataVersion: Data("\(stamp):\(filename)".utf8))
+    NSFileProviderItemVersion(contentVersion: Data(stamp.utf8), metadataVersion: Data(versionKey.utf8))
   }
 
   /// What the working set compares to say whether this changed.
-  var versionKey: String {
-    String(decoding: itemVersion.metadataVersion, as: UTF8.self)
-  }
+  var versionKey: String { "\(stamp):\(filename)" }
 }

@@ -37,7 +37,7 @@ final class WorkspaceProvider: NSObject, NSFileProviderReplicatedExtension {
       let item = try lookUp(itemIdentifier)
       guard let source = item.url, !item.isFolder,
         let temp = try NSFileProviderManager(for: domain)?.temporaryDirectoryURL()
-      else { throw noSuchItem }
+      else { throw NSFileProviderError(.noSuchItem) }
       // A copy, which the system moves into place: a clone on APFS, so it
       // costs no space until the workspace file changes.
       let copy = temp.appendingPathComponent(UUID().uuidString)
@@ -95,7 +95,7 @@ final class WorkspaceProvider: NSObject, NSFileProviderReplicatedExtension {
         _ = try FileManager.default.replaceItemAt(target, withItemAt: staged)
       }
       // Anything else, a last-used date or a tag, is the system's to keep.
-      completionHandler(try lookUp(item.itemIdentifier), [], false, nil)
+      completionHandler(WorkspaceItem(node: current.node, name: current.filename, url: current.url), [], false, nil)
     } catch {
       completionHandler(nil, [], false, error)
     }
@@ -122,32 +122,41 @@ final class WorkspaceProvider: NSObject, NSFileProviderReplicatedExtension {
   func enumerator(
     for containerItemIdentifier: NSFileProviderItemIdentifier, request: NSFileProviderRequest
   ) throws -> NSFileProviderEnumerator {
-    guard let tree else { throw noSuchItem }
     switch containerItemIdentifier {
-    case .workingSet: return WorkingSet(tree: tree, known: known)
-    case .trashContainer: return Folder(tree: tree, node: nil, known: known)
+    case .trashContainer: return Trash()
+    case .workingSet:
+      guard let tree else { throw NSFileProviderError(.noSuchItem) }
+      return WorkingSet(tree: tree, known: known)
     default:
-      guard let node = WorkspaceNode(containerItemIdentifier) else { throw noSuchItem }
+      guard let tree, let node = WorkspaceNode(containerItemIdentifier) else {
+        throw NSFileProviderError(.noSuchItem)
+      }
       return Folder(tree: tree, node: node, known: known)
     }
   }
 
   private func lookUp(_ identifier: NSFileProviderItemIdentifier) throws -> WorkspaceItem {
-    guard let tree, let node = WorkspaceNode(identifier), let item = try? tree.item(for: node)
-    else { throw noSuchItem }
-    return item
+    guard let tree, let node = WorkspaceNode(identifier) else { throw NSFileProviderError(.noSuchItem) }
+    return try tree.item(for: node)
   }
-
-  private var noSuchItem: Error { NSFileProviderError(.noSuchItem) }
 }
 
-/// A folder's listing. The trash is one with nothing in it.
+/// Nothing is ever trashed: a delete removes the file.
+private final class Trash: NSObject, NSFileProviderEnumerator {
+  func invalidate() {}
+
+  func enumerateItems(for observer: NSFileProviderEnumerationObserver, startingAt page: NSFileProviderPage) {
+    observer.finishEnumerating(upTo: nil)
+  }
+}
+
+/// A folder's listing.
 private final class Folder: NSObject, NSFileProviderEnumerator {
   let tree: WorkspaceTree
-  let node: WorkspaceNode?
+  let node: WorkspaceNode
   let known: KnownFolders
 
-  init(tree: WorkspaceTree, node: WorkspaceNode?, known: KnownFolders) {
+  init(tree: WorkspaceTree, node: WorkspaceNode, known: KnownFolders) {
     self.tree = tree
     self.node = node
     self.known = known
@@ -156,7 +165,6 @@ private final class Folder: NSObject, NSFileProviderEnumerator {
   func invalidate() {}
 
   func enumerateItems(for observer: NSFileProviderEnumerationObserver, startingAt page: NSFileProviderPage) {
-    guard let node else { return observer.finishEnumerating(upTo: nil) }
     do {
       let children = try tree.children(of: node)
       known.saw(node, children)
@@ -215,30 +223,35 @@ private final class WorkingSet: NSObject, NSFileProviderEnumerator {
 /// set is a fresh listing of these, compared against the last.
 private final class KnownFolders {
   private let lock = NSLock()
-  private let file: URL? = FileManager.default
-    .urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-    .appendingPathComponent("known-folders.json")
+  private let file: URL?
 
   /// Folder identifier to its children's identifiers and version keys.
   private var folders: [String: [String: String]] = [:]
-  private var generation = 0
+  /// When a refresh last found a change; the system hands it back, but the
+  /// comparison is against [folders], so it only has to move.
+  private var changed = Date()
 
   init() {
-    guard let file, let data = try? Data(contentsOf: file),
-      let saved = try? JSONDecoder().decode(Saved.self, from: data)
-    else { return }
-    folders = saved.folders
-    generation = saved.generation
+    let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    if let dir { try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
+    file = dir?.appendingPathComponent("known-folders.json")
+    if let file, let data = try? Data(contentsOf: file),
+      let saved = try? JSONDecoder().decode([String: [String: String]].self, from: data)
+    {
+      folders = saved
+    }
   }
 
   var anchor: NSFileProviderSyncAnchor {
-    lock.withLock { NSFileProviderSyncAnchor(Data(String(generation).utf8)) }
+    lock.withLock { NSFileProviderSyncAnchor(Data("\(changed.timeIntervalSince1970)".utf8)) }
   }
 
   func saw(_ folder: WorkspaceNode, _ children: [WorkspaceItem]) {
     lock.withLock {
-      folders[folder.identifier.rawValue] = Dictionary(
+      let now = Dictionary(
         children.map { ($0.itemIdentifier.rawValue, $0.versionKey) }, uniquingKeysWith: { a, _ in a })
+      guard folders[folder.identifier.rawValue] != now else { return }
+      folders[folder.identifier.rawValue] = now
       save()
     }
   }
@@ -251,9 +264,11 @@ private final class KnownFolders {
     lock.withLock {
       var updated: [WorkspaceItem] = []
       var deleted: [NSFileProviderItemIdentifier] = []
+      var dirty = false
       for (id, before) in folders {
         guard let node = WorkspaceNode(.init(id)), let children = try? tree.children(of: node) else {
           folders[id] = nil
+          dirty = true
           continue
         }
         var now: [String: String] = [:]
@@ -263,23 +278,21 @@ private final class KnownFolders {
           if !changedOnly || before[key] != child.versionKey { updated.append(child) }
         }
         deleted += before.keys.filter { now[$0] == nil }.map { .init($0) }
-        folders[id] = now
+        if now != before {
+          folders[id] = now
+          dirty = true
+        }
       }
-      generation += 1
-      save()
+      if dirty {
+        changed = Date()
+        save()
+      }
       return (updated, deleted)
     }
   }
 
-  private struct Saved: Codable {
-    var folders: [String: [String: String]]
-    var generation: Int
-  }
-
   private func save() {
     guard let file else { return }
-    try? FileManager.default.createDirectory(
-      at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try? JSONEncoder().encode(Saved(folders: folders, generation: generation)).write(to: file, options: .atomic)
+    try? JSONEncoder().encode(folders).write(to: file, options: .atomic)
   }
 }

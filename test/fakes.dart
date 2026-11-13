@@ -557,10 +557,8 @@ class FakeReminderAlarms implements ReminderAlarms {
 /// the explorer draws a different toolbar on a desktop and on Android, and the
 /// named constructors are those two.
 class FakeFileHandoff implements FileHandoff {
-  FakeFileHandoff({this.canReveal = false, this.canShare = false});
-
-  @override
-  String get fileManager => "File Manager";
+  FakeFileHandoff({bool canReveal = false, this.canShare = false})
+    : fileManager = canReveal ? "File Manager" : null;
 
   /// A desktop: a file manager and a viewer, nothing else.
   factory FakeFileHandoff.desktop() => FakeFileHandoff(canReveal: true);
@@ -569,7 +567,7 @@ class FakeFileHandoff implements FileHandoff {
   factory FakeFileHandoff.android() => FakeFileHandoff(canShare: true);
 
   @override
-  final bool canReveal;
+  final String? fileManager;
   @override
   final bool canShare;
 

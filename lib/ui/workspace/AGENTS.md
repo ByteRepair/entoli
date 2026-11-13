@@ -84,9 +84,10 @@ every future member too.
   `open` opens a file, which is the same call on a different path. It needs no
   chooser of its own — the file manager is already pointed at the workspace —
   and it has no share sheet, so an entry there is only ever deleted.
-- **iOS** is a desktop bar the file manager, which is the Files app:
-  `IosFileHandoff` sends `reveal` to the Runner, which opens Files at the
-  folder through a File Provider. See "The workspaces in the Files app" in
+- **iOS** opens a file as a desktop does, and its file manager is the Files
+  app: `IosFileHandoff` sends `reveal` to the Runner, which opens Files at the
+  folder through a File Provider. `fileManager` names it on the button, and is
+  null on Android, which has no file manager to show a folder in. See "The workspaces in the Files app" in
   `ios/AGENTS.md`.
 - **Android** has the share sheet, both ways. `export` sends an entry through
   `Intent.createChooser`, so every app on the device is on offer rather than a

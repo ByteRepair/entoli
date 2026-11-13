@@ -6,9 +6,6 @@ import UIKit
 /// domain, tells the provider when to look again, and opens Files at a
 /// folder. See "The workspaces in the Files app" in ios/AGENTS.md.
 enum FilesChannel {
-  private static var channel: FlutterMethodChannel?
-  private static var background: NSObjectProtocol?
-
   static func register(with messenger: FlutterBinaryMessenger) {
     // Added on every launch, which is a no-op for a domain already there and
     // brings back one the user removed by reinstalling.
@@ -17,7 +14,7 @@ enum FilesChannel {
     }
     // Leaving the app is when Files is about to be opened, and nothing else
     // tells the provider a command changed a workspace.
-    background = NotificationCenter.default.addObserver(
+    _ = NotificationCenter.default.addObserver(
       forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
     ) { _ in signal() }
 
@@ -36,7 +33,6 @@ enum FilesChannel {
         result(FlutterMethodNotImplemented)
       }
     }
-    self.channel = channel
   }
 
   private static func signal() {
