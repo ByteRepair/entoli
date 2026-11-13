@@ -12,6 +12,7 @@ import "../../domain/agent_browser.dart";
 import "../../domain/ask.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/goal.dart";
+import "../../domain/todo.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../domain/plan.dart" show planInProgress, writesPlan;
@@ -696,6 +697,9 @@ class BuiltinAgent implements Turn {
   final GrantNudges grantNudges = GrantNudges();
 
   @override
+  TodoList? todos;
+
+  @override
   late final ApprovalGate gate = ApprovalGate(
     policy: _grantedPolicy,
     approveMode: approveMode,
@@ -939,8 +943,10 @@ class BuiltinAgent implements Turn {
         }
       };
 
-  /// How many times this turn was told it stopped with work unfinished.
+  /// How many times this turn was told it stopped with work unfinished, in
+  /// all and by each tool.
   int _nudges = 0;
+  final _nudgesBy = <String, int>{};
 
   /// How many times a turn is told its work is unfinished before a reply
   /// with no tool call ends it anyway: twice is room to carry on after a
@@ -953,8 +959,14 @@ class BuiltinAgent implements Turn {
   /// a reply it marked [LlmStop.unfinished].
   Future<String?> _unfinished(LlmStop stop) async {
     for (final tool in _tools) {
+      // By name: the tools are built afresh each step.
+      final told = _nudgesBy[tool.name] ?? 0;
+      if (told >= tool.stopNudges) continue;
       final left = await tool.beforeStop(this);
-      if (left != null) return left;
+      if (left != null) {
+        _nudgesBy[tool.name] = told + 1;
+        return left;
+      }
     }
     return stop == LlmStop.unfinished ? saidButNotDone : null;
   }

@@ -8,6 +8,7 @@ import "plan.dart";
 import "records.dart";
 import "task.dart";
 import "thinking.dart";
+import "todo.dart";
 import "tool_run.dart";
 import "web.dart";
 
@@ -26,6 +27,7 @@ const toolActivities = <ToolActivity>[
   QuietPlanActivity(planNextToolName),
   QuietPlanActivity(planDoneToolName),
   PresentPlanActivity(),
+  TodoActivity(),
   AddDirectoryActivity(),
 ];
 

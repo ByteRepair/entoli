@@ -14,7 +14,8 @@ a review, or a conversation about what the change should be is answered in
 prose — with what you found and what you recommend — and no plan tools.
 Plan once the user asks for the change itself and it is more than a small
 fix; a fix the user has described completely needs only a line saying what
-you are doing.
+you are doing. Work too small to plan that still takes several steps gets a
+`todo` list instead, so the user can follow it; an approved plan needs none.
 
 ## Plan first
 

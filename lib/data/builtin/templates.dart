@@ -243,10 +243,17 @@ String addressedUserTurnText(
 /// system prompt — but it has to be a message of the conversation to sit
 /// between the summarized span and the verbatim one, so it is worded here like
 /// a user turn and stamped with no moment: there was none it was said at.
-String summarizedTurnText(String summary) =>
-    "The earlier part of this conversation has been summarized to keep the "
-    "context small. It follows; everything after it is the conversation "
-    "itself, unchanged.\n\n<summary>\n$summary\n</summary>";
+///
+/// [carried] is state the summarized span left open that the model works
+/// on from as it was written, not as the summarizer's prose would word it:
+/// an unfinished task list.
+String summarizedTurnText(String summary, {String? carried}) {
+  final text =
+      "The earlier part of this conversation has been summarized to keep the "
+      "context small. It follows; everything after it is the conversation "
+      "itself, unchanged.\n\n<summary>\n$summary\n</summary>";
+  return carried == null ? text : "$text\n\n$carried";
+}
 
 /// A participant's [instructions] as its turn reads them. The first line is
 /// its handle: the room contract tells a participant not to write its own,

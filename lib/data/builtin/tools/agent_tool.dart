@@ -240,8 +240,13 @@ abstract class AgentTool {
   /// tool's work is unfinished, or null where a stop is an answer. The loop
   /// asks the tools it offered this turn, steers with the first answer, and
   /// keeps the budget of how often; the tool knows only what is unfinished.
-  /// The plan's is the one today: tasks left in a plan under way.
+  /// The plan's: tasks left in a plan under way; the task list's: tasks
+  /// left on it.
   Future<String?> beforeStop(Turn turn) async => null;
+
+  /// How many times in a turn [beforeStop] may send the turn back, within
+  /// the loop's own budget.
+  int get stopNudges => 2;
 
   /// Run [call], reporting it and answering it: every call is reported with
   /// a [ToolCallEvent] and answered with a [ToolResultEvent], whatever else

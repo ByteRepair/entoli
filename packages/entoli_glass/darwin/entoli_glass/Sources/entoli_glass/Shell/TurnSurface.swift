@@ -4,7 +4,7 @@ extension TurnSnapshot {
   static let initial = TurnSnapshot(running: [], steers: [], withdrawable: false, approvals: [])
 
   var isEmpty: Bool {
-    goal == nil && resume == nil && running.isEmpty && steers.isEmpty
+    goal == nil && todo == nil && resume == nil && running.isEmpty && steers.isEmpty
       && approvals.isEmpty && question == nil
   }
 }
@@ -30,6 +30,7 @@ struct TurnSurfaceView: View {
     VStack(spacing: 6) {
       if let resume = turn.resume { resumeRow(resume) }
       if let goal = turn.goal { goalRow(goal) }
+      if let todo = turn.todo { todoRow(todo) }
       if !turn.running.isEmpty { runningRow }
       if !turn.steers.isEmpty { steerCard }
       ForEach(turn.approvals) { approvalCard($0) }
@@ -126,6 +127,57 @@ struct TurnSurfaceView: View {
     .frame(minHeight: 34)
     .glassSurface(Capsule())
     .help([goal.label + ": " + goal.objective, goal.reason].compactMap { $0 }.joined(separator: " · "))
+    .transition(.opacity.combined(with: .move(edge: .bottom)))
+  }
+
+  // MARK: Task list
+
+  /// The task list's place in [open], beside the pill groups' kinds.
+  private static let todoKey = "todo list"
+
+  /// The latest turn's task list, as Flutter's `TodoStrip` draws it: how
+  /// far it is and the task under way, opening to every task.
+  private func todoRow(_ todo: TodoSnapshot) -> some View {
+    let finished = todo.done == todo.items.count
+    let todoOpen = open.contains(Self.todoKey)
+    return VStack(alignment: .leading, spacing: 4) {
+      Button {
+        if todoOpen { open.remove(Self.todoKey) } else { open.insert(Self.todoKey) }
+      } label: {
+        HStack(spacing: 8) {
+          Image(systemName: finished ? "checkmark.circle" : Glyph.checklist.systemImage)
+            .foregroundStyle(Color.accentColor)
+          (Text("\(todo.done)/\(todo.items.count)  ").foregroundStyle(.secondary)
+            + Text(todo.headline))
+            .font(.callout)
+            .lineLimit(1)
+          Spacer(minLength: 4)
+          Image(systemName: todoOpen ? "chevron.down" : "chevron.up")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .frame(minHeight: 34)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .help(todoOpen ? "Hide the tasks" : "Show the tasks")
+      if todoOpen {
+        ForEach(Array(todo.items.enumerated()), id: \.offset) { _, item in
+          HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: item.phase.symbol)
+              .foregroundStyle(item.phase.tint)
+              .accessibilityLabel(item.phase.spoken)
+            Text(item.content)
+              .font(.callout)
+              .fontWeight(item.phase == .inProgress ? .semibold : nil)
+              .foregroundStyle(item.phase == .completed ? .secondary : .primary)
+          }
+        }
+        .padding(.bottom, 8)
+      }
+    }
+    .padding(.horizontal, 14)
+    .glassSurface(RoundedRectangle(cornerRadius: 18, style: .continuous))
     .transition(.opacity.combined(with: .move(edge: .bottom)))
   }
 
@@ -291,6 +343,33 @@ extension GoalSnapshot {
     case .paused: "Goal paused"
     case .met: "Goal met"
     case .blocked: "Goal blocked"
+    }
+  }
+}
+
+extension TodoPhase {
+  /// The plan page's pictures for the same three states.
+  var symbol: String {
+    switch self {
+    case .completed: SettingIcon.taskDone.symbol
+    case .inProgress: SettingIcon.taskActive.symbol
+    case .pending: SettingIcon.taskPending.symbol
+    }
+  }
+
+  var tint: Color {
+    switch self {
+    case .completed: .accentColor
+    case .inProgress: .orange
+    case .pending: .secondary
+    }
+  }
+
+  var spoken: String {
+    switch self {
+    case .completed: "Done"
+    case .inProgress: "In progress"
+    case .pending: "To do"
     }
   }
 }
