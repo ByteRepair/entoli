@@ -327,7 +327,12 @@ is a migration as much as a move is, so the reader is never left holding a
 fallback for the old shape. 8.4.0's entry gathered what the readers had been
 holding: settings under the names they had before (`opencodeEnv`,
 `approveCommands`, `localModelKvCacheChats`, `useProjectMemory`), provider
-entries from 7.0.0 or older, and triggers in the reminder shape.
+entries from 7.0.0 or older, and triggers in the reminder shape. A command
+rule's old `writes` key, reset rather than carried over, it drops. Taking an
+old name out of a reader is safe against sync only because every build on the
+current `SyncIdentity.protocolVersion` already writes today's name: a peer
+sends `toJson`, never a file, so the day one does not, the protocol is bumped
+with the reader.
 
 ### Artifacts
 

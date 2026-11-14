@@ -203,8 +203,7 @@ class DefaultedSetting<T extends Object> extends Setting<T> {
 class SettingsDocument {
   /// [root] is the app's level, where nothing above inherits: a value equal
   /// to its setting's fallback is not written there, so a file that predates
-  /// a default says nothing and gets it. A file in an older shape was
-  /// rewritten by `migrations.dart` before this reads it.
+  /// a default says nothing and gets it.
   SettingsDocument({Map<String, Object?>? json, this.root = false})
     : _json = {...?json};
 
@@ -215,10 +214,7 @@ class SettingsDocument {
   /// What this level holds for [setting], or null where it holds nothing.
   T? read<T extends Object>(Setting<T> setting) {
     if (_cache.containsKey(setting)) return _cache[setting] as T?;
-    final raw = _json[setting.key];
-    final value = raw == null ? null : setting.codec.decode(raw);
-    _cache[setting] = value;
-    return value;
+    return _cache[setting] = setting.codec.decode(_json[setting.key]);
   }
 
   /// What this level holds for [setting], or its fallback.

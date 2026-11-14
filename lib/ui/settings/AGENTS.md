@@ -161,8 +161,8 @@ already running keeps what it started with. Settings wins over the process's
 own environment, but a key already exported is found without having to be
 pasted in. A project carries the same list of its own in `project.json`,
 edited from its settings page, and a name set there wins over one set in
-`settings.json`. Old files with the former `opencodeEnv` key still load, and
-rewrite themselves under the new name on the next save.
+`settings.json`. A file with the former `opencodeEnv` key had it moved under
+the new name by 8.4.0's migration.
 
 The settings page is fifteen categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own (see "Narrow, the categories are the

@@ -383,13 +383,11 @@ class Trigger {
   );
 
   factory Trigger.fromJson(Map<String, dynamic> json) {
-    final raw = json["source"];
-    final source = _sourceFrom(raw is Map<String, dynamic> ? raw : const {});
     return Trigger(
       id: json["id"] as String,
       name: json["name"] as String? ?? "",
       prompt: json["prompt"] as String? ?? "",
-      source: source,
+      source: _sourceFrom(json["source"]),
       chatId: json["chatId"] as String?,
       member: json["member"] as String?,
       project: json["project"] as String?,
@@ -402,26 +400,22 @@ class Trigger {
     );
   }
 
-  static TriggerSource _scheduleFrom(Map<String, dynamic> json) =>
-      ScheduleSource(
-        at: _date(json["at"]) ?? DateTime(2026),
-        // An unknown name is a later build's: fall back, not lose the list.
-        repeat:
-            ScheduleRepeat.values.asNameMap()[json["repeat"]] ??
-            ScheduleRepeat.off,
-      );
-
-  static TriggerSource _sourceFrom(Map<String, dynamic> json) {
-    final kind = json["kind"] as String?;
-    return switch (kind) {
+  static TriggerSource _sourceFrom(Object? raw) {
+    final json = raw is Map<String, dynamic> ? raw : const <String, dynamic>{};
+    return switch (json["kind"]) {
       "timer" => TimerSource(
         duration: Duration(seconds: json["seconds"] as int? ?? 0),
         registeredAt: _date(json["registeredAt"]) ?? DateTime(2026),
       ),
       "file" => _fileSourceFrom(json),
-      // An unknown kind is a file written by a later build: a schedule
-      // that falls back beats a lost list.
-      _ => _scheduleFrom(json),
+      // A schedule, or a kind a later build wrote: a schedule that falls
+      // back beats a lost list, as does an unknown repeat.
+      _ => ScheduleSource(
+        at: _date(json["at"]) ?? DateTime(2026),
+        repeat:
+            ScheduleRepeat.values.asNameMap()[json["repeat"]] ??
+            ScheduleRepeat.off,
+      ),
     };
   }
 

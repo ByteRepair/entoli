@@ -107,31 +107,29 @@ bool relocateDataDir({required String from, required String to}) {
 /// at the app's level, a project's and a chat's — provider entries from 7.0.0
 /// or older, and triggers in the reminder shape they began as.
 Future<void> _todaysShapes(String dataDir) async {
-  await _rewriteJson(p.join(dataDir, "settings.json"), (json) {
-    final renamed = _renameSettings(json);
-    final providers = _providerEntries(json);
-    return renamed || providers;
-  });
+  await _rewriteJson<Map<String, dynamic>>(
+    p.join(dataDir, "settings.json"),
+    (json) => _settingShapes(json) | _providerEntries(json),
+  );
+  await _rewriteJson<List<dynamic>>(
+    p.join(dataDir, "reminders.json"),
+    _triggerShapes,
+  );
   final projects = Directory(p.join(dataDir, "projects"));
-  if (projects.existsSync()) {
-    await for (final project in projects.list()) {
-      await _rewriteJson(p.join(project.path, "project.json"), _renameSettings);
-      final chats = Directory(p.join(project.path, "chats"));
-      if (!chats.existsSync()) continue;
-      await for (final chat in chats.list()) {
-        await _rewriteJson(p.join(chat.path, "meta.json"), _renameSettings);
-      }
+  if (!projects.existsSync()) return;
+  await for (final project in projects.list()) {
+    await _rewriteJson(p.join(project.path, "project.json"), _settingShapes);
+    final chats = Directory(p.join(project.path, "chats"));
+    if (!chats.existsSync()) continue;
+    await for (final chat in chats.list()) {
+      await _rewriteJson(p.join(chat.path, "meta.json"), _settingShapes);
     }
   }
-  await _rewriteTriggers(p.join(dataDir, "reminders.json"));
 }
 
-/// [change] edits the decoded map and says whether it did; a file that is
-/// not there, or not a JSON object, is left as it is.
-Future<void> _rewriteJson(
-  String path,
-  bool Function(Map<String, dynamic> json) change,
-) async {
+/// [change] edits the decoded [T] and says whether it did; a file that is not
+/// there, or does not decode to a [T], is left as it is.
+Future<void> _rewriteJson<T>(String path, bool Function(T json) change) async {
   final file = File(path);
   if (!file.existsSync()) return;
   final Object? json;
@@ -140,18 +138,25 @@ Future<void> _rewriteJson(
   } on FormatException {
     return;
   }
-  if (json is! Map<String, dynamic> || !change(json)) return;
+  if (json is! T || !change(json)) return;
   await writeThroughRename(path, jsonEncode(json));
 }
 
 /// Each setting under the key it had before, moved under today's: kept where
-/// today's key is already set, since that is the newer word.
-bool _renameSettings(Map<String, dynamic> json) {
+/// today's key is already set, since that is the newer word. And a command
+/// rule's `writes`, which granted every command in the turn rather than the
+/// rule's own, goes: such rules were reset rather than carried over.
+bool _settingShapes(Map<String, dynamic> json) {
   var changed = false;
-  void move(String old, String key, Object? Function(Object? value) convert) {
+  void move(
+    String old,
+    String key, [
+    Object? Function(Object? value)? convert,
+  ]) {
     if (!json.containsKey(old)) return;
-    final value = convert(json.remove(old));
-    if (value != null) json.putIfAbsent(key, () => value);
+    final value = json.remove(old);
+    final converted = convert == null ? value : convert(value);
+    if (converted != null) json.putIfAbsent(key, () => converted);
     changed = true;
   }
 
@@ -161,17 +166,25 @@ bool _renameSettings(Map<String, dynamic> json) {
     "environment",
     (v) => v is Map && v.isNotEmpty ? v : null,
   );
-  move("approveCommands", "approveMode", (v) {
-    return switch (v) {
+  move(
+    "approveCommands",
+    "approveMode",
+    (v) => switch (v) {
       true => "ask",
       false => "never",
       _ => null,
-    };
-  });
+    },
+  );
   // The picker counted prompts and said chats.
-  move("localModelKvCacheChats", "localModelKvCachePrompts", (v) => v);
+  move("localModelKvCacheChats", "localModelKvCachePrompts");
   // A bool before it could inherit: true was a store of the project's own.
   move("useProjectMemory", "memory", (v) => v == true ? "on" : null);
+  final rules = json["permissions"];
+  if (rules is List) {
+    for (final rule in rules) {
+      if (rule is Map && rule.remove("writes") != null) changed = true;
+    }
+  }
   return changed;
 }
 
@@ -198,18 +211,9 @@ bool _providerEntries(Map<String, dynamic> json) {
 /// A trigger began as a reminder: its schedule in flat `at` and `repeat` keys
 /// rather than a `source`, and a `temporary` bool where the TTL now is, false
 /// meaning the one TTL a bool could name.
-Future<void> _rewriteTriggers(String path) async {
-  final file = File(path);
-  if (!file.existsSync()) return;
-  final Object? list;
-  try {
-    list = jsonDecode(await file.readAsString());
-  } on FormatException {
-    return;
-  }
-  if (list is! List) return;
+bool _triggerShapes(List<dynamic> triggers) {
   var changed = false;
-  for (final trigger in list) {
+  for (final trigger in triggers) {
     if (trigger is! Map<String, dynamic>) continue;
     if (trigger["source"] is! Map) {
       final at = trigger.remove("at");
@@ -223,7 +227,7 @@ Future<void> _rewriteTriggers(String path) async {
       changed = true;
     }
   }
-  if (changed) await writeThroughRename(path, jsonEncode(list));
+  return changed;
 }
 
 /// Bring [dataDir] to the end of [chain]. Called at launch and

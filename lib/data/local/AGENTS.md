@@ -930,9 +930,10 @@ on: turn it off and the server runs f16, the behaviour it had before this.
 turn: `LocalClient.stream` saves after a reply that ends the turn, not after a
 step that ends in tool calls — the next step is served by what the model still
 holds, and a write of its whole state per tool round would hold each one up for
-nothing. The bound is over every chat at once rather than per chat. The setting is
-`localModelKvCachePrompts` now; 8.4.0's migration moved the old key's value
-under it, so nobody's choice is reset. Which bound actually bites is the disk budget more often than the count:
+nothing. The bound is over every chat at once rather than per chat. The
+setting is `localModelKvCachePrompts` now; 8.4.0's migration moved the old
+key's value under it, so nobody's choice is reset. Which bound actually bites
+is the disk budget more often than the count:
 at 128 KiB a token for the 4B, halved by `q8_0`, a 3,000-token prompt is around
 190 MB and four gigabytes holds about twenty.
 

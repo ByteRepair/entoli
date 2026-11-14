@@ -249,8 +249,6 @@ class PermissionRule {
   /// hand or read back alone.
   final PermissionTier? origin;
 
-  // The old `writes` key granted every command in the turn, not the rule's
-  // own; it is not read, rules from before being reset rather than migrated.
   factory PermissionRule.fromJson(Map<String, dynamic> json) => PermissionRule(
     tool: json["tool"] as String? ?? "*",
     pattern: json["pattern"] as String? ?? "",

@@ -28,7 +28,7 @@ void main() {
         ..createSync(recursive: true)
         ..writeAsStringSync(jsonEncode(json));
 
-  Object? read(File file) => jsonDecode(file.readAsStringSync());
+  T read<T>(File file) => jsonDecode(file.readAsStringSync()) as T;
 
   Future<void> migrate() => runMigrations(dataDir, fresh: false);
 
@@ -47,24 +47,18 @@ void main() {
 
     await migrate();
 
-    expect(read(app), {
+    expect(read<Object?>(app), {
       "environment": {"ANTHROPIC_API_KEY": "sk-old"},
       "approveMode": "never",
       "localModelKvCachePrompts": 30,
     });
-    final settings = AppSettings.fromJson(read(app)! as Map<String, dynamic>);
+    final settings = AppSettings.fromJson(read(app));
     expect(settings.environment, {"ANTHROPIC_API_KEY": "sk-old"});
     expect(settings.approveMode, ApproveMode.never);
     expect(settings.localModelKvCachePrompts, 30);
-    expect(
-      ProjectSettings.fromJson(read(project)! as Map<String, dynamic>).memory,
-      Tristate.on,
-    );
-    expect(read(chat), {"approveMode": "ask"});
-    expect(
-      ChatMeta.fromJson(read(chat)! as Map<String, dynamic>).approveMode,
-      ApproveMode.ask,
-    );
+    expect(ProjectSettings.fromJson(read(project)).memory, Tristate.on);
+    expect(read<Object?>(chat), {"approveMode": "ask"});
+    expect(ChatMeta.fromJson(read(chat)).approveMode, ApproveMode.ask);
   });
 
   test("a setting already under today's name keeps its value", () async {
@@ -78,9 +72,30 @@ void main() {
 
     await migrate();
 
-    expect(read(app), {"approveMode": "auto"});
+    expect(read<Object?>(app), {"approveMode": "auto"});
     // False was a store shared with the default project: inherit, unsaid.
-    expect(read(project), <String, dynamic>{});
+    expect(read<Object?>(project), <String, dynamic>{});
+  });
+
+  test("a command rule loses the writes key that was reset", () async {
+    final project = seed("projects/work/project.json", {
+      "permissions": [
+        {
+          "tool": "bash",
+          "pattern": "git *",
+          "decision": "allow",
+          "writes": ["/tmp"],
+        },
+      ],
+    });
+
+    await migrate();
+
+    expect(read<Object?>(project), {
+      "permissions": [
+        {"tool": "bash", "pattern": "git *", "decision": "allow"},
+      ],
+    });
   });
 
   test("a provider entry from 7.0.0 or older gets its name and its "
@@ -106,7 +121,7 @@ void main() {
 
     await migrate();
 
-    final entries = (read(app)! as Map)["llmProviders"] as List;
+    final entries = read<Map<String, dynamic>>(app)["llmProviders"] as List;
     expect(entries[0], {
       "id": "openrouter",
       "api": "openai",
@@ -123,7 +138,7 @@ void main() {
       "baseUrl": "https://example.com",
       "name": "Mine",
     });
-    final settings = AppSettings.fromJson(read(app)! as Map<String, dynamic>);
+    final settings = AppSettings.fromJson(read(app));
     expect(settings.llmProviders.first.displayName, "OpenRouter");
     expect(settings.llmProviders.first.catalogId, "openrouter");
   });
@@ -142,7 +157,7 @@ void main() {
 
     await migrate();
 
-    final entries = read(file)! as List;
+    final entries = read<List<dynamic>>(file);
     final triggers = [
       for (final entry in entries)
         Trigger.fromJson(entry as Map<String, dynamic>),
