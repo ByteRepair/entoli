@@ -61,7 +61,10 @@ private struct CliSignInSheet: View {
       case .waiting:
         if let page = account?.page.flatMap(URL.init(string:)) {
           waiting(page, plan: account?.plan ?? "")
+            .signInPage($signIn)
         }
+      case .finishing:
+        busy("Finishing the sign-in…", value: nil)
       case .failed:
         Label(account?.failure ?? "The sign-in did not finish.", systemImage: "xmark.octagon")
           .foregroundStyle(.red)
@@ -85,7 +88,6 @@ private struct CliSignInSheet: View {
       opened = page
       signIn = SignInPage(url: url)
     }
-    .signInPage($signIn)
   }
 
   @ViewBuilder private func busy(_ text: String, value: Double?) -> some View {

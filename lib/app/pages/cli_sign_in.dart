@@ -68,6 +68,7 @@ class CliSignInAppPage extends AppPage {
         noticeRow("checking", "Checking whether you are signed in…"),
       ],
       CliStarting() => [noticeRow("starting", "Starting the sign-in…")],
+      CliFinishing() => [noticeRow("finishing", "Finishing the sign-in…")],
       CliWaiting(:final page) => [
         noticeRow(
           "how",

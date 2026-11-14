@@ -1181,6 +1181,7 @@ enum CliAccountStep {
   installing,
   starting,
   waiting,
+  finishing,
   failed,
 }
 
