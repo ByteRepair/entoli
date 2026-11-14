@@ -49,6 +49,9 @@ struct CollectionRow: View {
           let actions = item.actions.compactMap { $0 }
           let words = VStack(alignment: .leading, spacing: 2) {
             Text(item.title)
+            if let byline = item.byline {
+              Text(byline).font(.caption.weight(.medium)).foregroundStyle(.tint)
+            }
             if let subtitle = item.subtitle, !subtitle.isEmpty {
               Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
@@ -227,14 +230,19 @@ struct CardsRow: View {
       }
       VStack(alignment: .leading, spacing: 4) {
         Text(item.title).font(.headline)
+        if let byline = item.byline {
+          Text(byline).font(.caption.weight(.medium)).foregroundStyle(.tint)
+        }
         if let subtitle = item.subtitle, !subtitle.isEmpty {
           Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(3)
         }
-        if let badge = item.badge {
-          Text(badge).font(.caption.weight(.medium)).foregroundStyle(.tint)
-        }
       }
       Spacer(minLength: 0)
+      if let badge = item.badge {
+        Text(badge).font(.caption2.weight(.medium))
+          .padding(.horizontal, 8).padding(.vertical, 3)
+          .background(.tint.opacity(0.15), in: Capsule())
+      }
     }
     .padding(14)
     .frame(maxWidth: .infinity, alignment: .leading)

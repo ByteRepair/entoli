@@ -307,6 +307,7 @@ class _Encoder {
               if (faceOf(item) case final face)
                 SettingItemData(
                   title: item.title,
+                  byline: item.byline,
                   subtitle: item.subtitle,
                   error: item.error,
                   icon: _icon(item.glyph),

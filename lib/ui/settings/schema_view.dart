@@ -1452,6 +1452,17 @@ class _Cards<T> extends StatelessWidget {
                                     row.title,
                                     style: theme.textTheme.titleMedium,
                                   ),
+                                  if (row.byline case final byline?)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text(
+                                        byline,
+                                        style: theme.textTheme.labelMedium
+                                            ?.copyWith(
+                                              color: theme.colorScheme.primary,
+                                            ),
+                                      ),
+                                    ),
                                   if (row.subtitle case final words?
                                       when words.isNotEmpty)
                                     Padding(
@@ -1468,20 +1479,21 @@ class _Cards<T> extends StatelessWidget {
                                             ),
                                       ),
                                     ),
-                                  if (row.badge case final badge?)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 8),
-                                      child: Text(
-                                        badge,
-                                        style: theme.textTheme.labelMedium
-                                            ?.copyWith(
-                                              color: theme.colorScheme.primary,
-                                            ),
-                                      ),
-                                    ),
                                 ],
                               ),
                             ),
+                            if (row.badge case final badge?)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Chip(
+                                  label: Text(badge),
+                                  labelStyle: theme.textTheme.labelSmall,
+                                  visualDensity: VisualDensity.compact,
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  padding: EdgeInsets.zero,
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -1680,17 +1692,31 @@ class _Collection<T> extends StatelessWidget {
 
   Widget? _words(BuildContext context, CollectionItem row) {
     final error = row.error;
-    if (row.subtitle == null && error == null && row.meters.isEmpty) {
+    if (row.byline == null &&
+        row.subtitle == null &&
+        error == null &&
+        row.meters.isEmpty) {
       return null;
     }
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (row.byline case final byline?)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Text(
+              byline,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ),
         if (row.subtitle case final subtitle?) Text(subtitle),
         if (error != null)
           SelectableText(
             error,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+            style: TextStyle(color: theme.colorScheme.error),
           ),
         for (final meter in row.meters)
           if (meter.segments.isNotEmpty)

@@ -36,6 +36,10 @@ class MarketplaceLocation {
     "https://raw.githubusercontent.com/$repo/${ref ?? "HEAD"}/$dir/$name",
   );
 
+  /// The entry's directory on GitHub, for a person to read.
+  Uri get page =>
+      Uri.parse("https://github.com/$repo/tree/${ref ?? "HEAD"}/$dir");
+
   /// Strict: [fetchMarketplaceEntries] throws on anything it cannot read, so
   /// an ext record missing a piece is an unreachable marketplace rather than
   /// an entry that half-works.
@@ -92,13 +96,23 @@ class MarketplaceEntry {
   final List<String> tags;
   final MarketplaceLocation? location;
 
-  /// The line under the description wherever the entry is drawn — the list's
-  /// row and the preview's header alike read it, so the two cannot drift.
-  String get metaLine => [
-    if (author.isNotEmpty) author,
-    if (version != null) "v$version",
-    ...tags,
-  ].join(" · ");
+  /// Whether its files are another repository's rather than the site's.
+  bool get external => location != null;
+
+  /// Its authors, as the site joins them: a remote entry's are its source's
+  /// contributors, up to ten.
+  late final List<String> authors = [
+    for (final name in author.split(","))
+      if (name.trim() case final name when name.isNotEmpty) name,
+  ];
+
+  /// Who made it, short enough for a row: the first author, and how many
+  /// more.
+  String? get byline => switch (authors) {
+    [] => null,
+    [final one] => "by $one",
+    [final first, ...final rest] => "by $first and ${rest.length} more",
+  };
 
   /// The name an agent installs under: the slug's last segment — an ext key
   /// carries its manifest's name ahead of the entry's own, and the
@@ -126,9 +140,13 @@ class MarketplaceEntry {
   );
 }
 
-/// What `ext/<folder>/collections.json` says of one manifest that publishes
-/// `<slug>/<sub>` entries: the name and summary its members are shown under.
-typedef CollectionRecord = ({String name, String summary});
+/// What `<folder>/collections.json` says of one collection: the name and
+/// summary its members are shown under, and the members by index key.
+typedef CollectionRecord = ({
+  String name,
+  String summary,
+  List<String> members,
+});
 
 /// A section as the site lists it: every entry, and the collection records
 /// that group the remote ones (see `groupIntoCollections`).
@@ -173,9 +191,7 @@ Future<Map<String, CollectionRecord>> _fetchCollections(
   http.Client client,
   CompletionKind kind,
 ) async {
-  final uri = Uri.parse(
-    "$marketplaceBaseUrl/ext/${kind.folder}/collections.json",
-  );
+  final uri = Uri.parse("$marketplaceBaseUrl/${kind.folder}/collections.json");
   final body = await _get(client, uri);
   if (body == null) return const {};
   final json = jsonDecode(utf8.decode(body)) as Map<String, Object?>;
@@ -188,6 +204,7 @@ Future<Map<String, CollectionRecord>> _fetchCollections(
 CollectionRecord _collectionRecord(String slug, Map<String, Object?> json) => (
   name: (json["name"] as String?) ?? slug,
   summary: (json["summary"] as String?) ?? "",
+  members: (json["members"] as List<Object?>?)?.cast<String>() ?? const [],
 );
 
 /// The site's ext index: where each remote entry's files live, keyed as the

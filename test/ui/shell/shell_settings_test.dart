@@ -115,6 +115,7 @@ class _FacesPage extends AppPage {
         removable: false,
         describe: (live) => CollectionItem(
           live ? "live" : "still",
+          byline: live ? "by Ana" : null,
           face: AvatarRowFace(spec, animate: live),
         ),
       ),
@@ -322,7 +323,9 @@ void main() {
       expect(native.stacks.last.single.guarded, isTrue);
     });
 
-    testWidgets("a still face is sent as not live", (tester) async {
+    testWidgets("a still face is sent as not live, a byline as it is", (
+      tester,
+    ) async {
       final presets = await io(
         tester,
         () => app.container.read(botAvatarPresetsProvider.future),
@@ -333,10 +336,10 @@ void main() {
       await settleIo(tester);
 
       final row = native.stacks.last.single.sections.single!.rows.single!;
-      expect(row.items.map((i) => (i!.title, i.bot != null, i.botLive)), [
-        ("live", true, true),
-        ("still", true, false),
-      ]);
+      expect(
+        row.items.map((i) => (i!.title, i.bot != null, i.botLive, i.byline)),
+        [("live", true, true, "by Ana"), ("still", true, false, null)],
+      );
     });
 
     testWidgets("a number on a page is set by its intent", (tester) async {

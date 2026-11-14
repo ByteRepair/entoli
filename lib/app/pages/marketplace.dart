@@ -63,15 +63,19 @@ mixin ListsMarketplaceEntries on AppPage {
     items: entries,
     removable: false,
     emptyLabel: "Nothing matches here.",
-    // The row is for scanning: the description cut short, the version
-    // beside it; the whole meta line is the preview's.
+    // The row is for scanning: who made it, the description cut short;
+    // the rest is the preview's.
     describe: (entry) => CollectionItem(
       entry.name,
-      subtitle: _short(entry.description),
-      badge: switch (entry.version) {
-        final version? => "v$version",
-        null => null,
+      byline: switch ([
+        ?entry.byline,
+        if (entry.version case final version?) "v$version",
+      ]) {
+        [] => null,
+        final parts => parts.join(" · "),
       },
+      subtitle: _short(entry.description),
+      badge: entry.external ? _external : null,
       face: _face(entry.slug),
       // Native draws a glyph beside a face, so a face replaces it.
       glyph: _presets.isNotEmpty
@@ -101,8 +105,9 @@ mixin ListsMarketplaceEntries on AppPage {
     removable: false,
     describe: (collection) => CollectionItem(
       collection.name,
+      byline: _count(kind, collection.members.length),
       subtitle: collection.summary,
-      badge: _count(kind, collection.members.length),
+      badge: collection.external ? _external : null,
       face: _face(collection.slug),
       glyph: _presets.isNotEmpty ? null : SettingGlyph.folder,
       editable: false,
@@ -120,30 +125,50 @@ mixin ListsMarketplaceEntries on AppPage {
     },
   );
 
-  /// The Tags row, opening [kind]'s picker over [tags]; [scope] keeps a
-  /// collection's picker apart from the front page's.
-  ActionController tagsRow(
-    CompletionKind kind,
-    Set<String> ticked,
-    List<(String, int)>? tags, {
-    String? scope,
-  }) => ActionController(
-    part("tags", "Tags", hint: UiHint.open, glyph: SettingGlyph.tune),
-    label: ticked.isEmpty ? "All" : "${ticked.length} ticked",
-    enabled: tags != null,
-    run: () async {
-      pages.open(
-        MarketplaceTagsAppPage(
-          kind: kind,
-          scope: scope,
-          tags: tags!,
-          ticked: ticked,
-          onTicked: changed,
+  /// One entry as the head of its own page: its face, who made it, and
+  /// whether it is another repository's.
+  SettingController entryCard(MarketplaceEntry entry) =>
+      CollectionController<MarketplaceEntry>(
+        part("card", entry.name, hint: UiHint.cards),
+        items: [entry],
+        removable: false,
+        describe: (entry) => CollectionItem(
+          entry.name,
+          byline: entry.byline,
+          badge: entry.external ? _external : null,
+          face: _face(entry.slug),
+          glyph: _presets.isNotEmpty ? null : SettingGlyph.skill,
+          editable: false,
+          takesImage: false,
         ),
       );
-      return null;
-    },
-  );
+
+  /// The Tags row, opening [kind]'s picker over [tags]; [scope] keeps a
+  /// collection's picker apart from the front page's. Null where no tag
+  /// would narrow the list.
+  ActionController? tagsRow(
+    CompletionKind kind,
+    Set<String> ticked,
+    List<(String, int)> tags, {
+    String? scope,
+  }) => tags.isEmpty && ticked.isEmpty
+      ? null
+      : ActionController(
+          part("tags", "Tags", hint: UiHint.open, glyph: SettingGlyph.tune),
+          label: ticked.isEmpty ? "All" : "${ticked.length} ticked",
+          run: () async {
+            pages.open(
+              MarketplaceTagsAppPage(
+                kind: kind,
+                scope: scope,
+                tags: tags,
+                ticked: ticked,
+                onTicked: changed,
+              ),
+            );
+            return null;
+          },
+        );
 
   TextController searchRow(String query, void Function(String) onQuery) =>
       TextController(
@@ -165,6 +190,9 @@ String _short(String text, [int max = 140]) {
   final cut = text.lastIndexOf(" ", max);
   return "${text.substring(0, cut > max ~/ 2 ? cut : max).trimRight()}…";
 }
+
+/// What a row of another repository's says it is.
+const _external = "External";
 
 /// A heading with how many sit under it.
 String _counted(String heading, int n) => "$heading · $n";
@@ -220,7 +248,6 @@ class MarketplaceAppPage extends AppPage with ListsMarketplaceEntries {
           },
         ),
         searchRow(_query, (text) => _query = text),
-        tagsRow(_kind, tagged, grouped == null ? null : tagsOf(grouped.$1)),
       ]),
       ...switch (listed) {
         AsyncValue(hasValue: true, :final value?) => _lists(
@@ -251,6 +278,12 @@ class MarketplaceAppPage extends AppPage with ListsMarketplaceEntries {
     }
     final (front, collections) = grouped;
     final shownFront = entriesMatching(front, _query, tagged);
+    // The tags filter these entries alone, so they sit over them rather
+    // than over the collections.
+    PageSection frontSection(String heading) => PageSection("front", heading, [
+      ?tagsRow(_kind, tagged, tagsOf(front)),
+      entryList(_kind, "front", shownFront),
+    ]);
     if (searchNeedle(_query).isEmpty) {
       return [
         if (collections.isNotEmpty)
@@ -260,11 +293,10 @@ class MarketplaceAppPage extends AppPage with ListsMarketplaceEntries {
             [collectionCards(_kind, collections)],
           ),
         // A heading that separates nothing is no heading at all.
-        PageSection(
-          "front",
-          collections.isEmpty ? "" : _counted(_kind.label, shownFront.length),
-          [entryList(_kind, "front", shownFront)],
-        ),
+        if (front.isNotEmpty)
+          frontSection(
+            collections.isEmpty ? "" : _counted(_kind.label, shownFront.length),
+          ),
       ];
     }
     // A search reaches into the collections: a matching collection, and
@@ -276,18 +308,16 @@ class MarketplaceAppPage extends AppPage with ListsMarketplaceEntries {
             case final hits when hits.isNotEmpty)
           (collection, hits),
     ];
-    if (shownFront.isEmpty && matched.isEmpty && members.isEmpty) {
-      return [notice("nomatch", "Nothing matches \"${_query.trim()}\".")];
-    }
+    final nothing = shownFront.isEmpty && matched.isEmpty && members.isEmpty;
     return [
+      if (nothing) notice("nomatch", "Nothing matches \"${_query.trim()}\"."),
       if (matched.isNotEmpty)
         PageSection("collections", _counted("Collections", matched.length), [
           collectionCards(_kind, matched),
         ]),
-      if (shownFront.isNotEmpty)
-        PageSection("front", _counted(_kind.label, shownFront.length), [
-          entryList(_kind, "front", shownFront),
-        ]),
+      // Kept while a tag is ticked, so the ticks can be undone.
+      if (shownFront.isNotEmpty || tagged.isNotEmpty)
+        frontSection(_counted(_kind.label, shownFront.length)),
       for (final (collection, hits) in members)
         PageSection(
           "in-${collection.slug}",
@@ -328,14 +358,10 @@ class MarketplaceCollectionAppPage extends AppPage
       ]),
       PageSection("browse", "", [
         searchRow(_query, (text) => _query = text),
-        tagsRow(
+        ?tagsRow(
           kind,
           _tagged,
-          // Every remote entry carries it, so it filters nothing here.
-          [
-            for (final tag in tagsOf(collection.members))
-              if (tag.$1 != externalTag) tag,
-          ],
+          tagsOf(collection.members),
           scope: collection.slug,
         ),
       ]),
@@ -350,11 +376,8 @@ class MarketplaceCollectionAppPage extends AppPage
   }
 }
 
-/// The tag the site puts on every remote entry.
-const externalTag = "external";
-
 /// A list's tags, each with how many entries carry it, ticked into the
-/// list's own set so going back is already filtered.
+/// list's own set so going back is already filtered, and searched by name.
 class MarketplaceTagsAppPage extends AppPage {
   MarketplaceTagsAppPage({
     required this.kind,
@@ -374,6 +397,8 @@ class MarketplaceTagsAppPage extends AppPage {
   /// Told as a tag is ticked, so the list behind redraws.
   final void Function() onTicked;
 
+  String _query = "";
+
   // Distinct per list: `open` raises a page already open at an address.
   @override
   String get address => switch (scope) {
@@ -385,27 +410,50 @@ class MarketplaceTagsAppPage extends AppPage {
   String title(SettingReader reader) => "Tags";
 
   @override
-  List<PageSection> sections(SettingReader reader) => [
-    PageSection("tags", "", [
-      if (tags.isEmpty) noticeRow("none", "Nothing here carries a tag."),
-      for (final (tag, count) in tags)
-        ToggleController(
-          part("tag-$tag", tag, hint: UiHint.toggle, description: "$count"),
-          value: ticked.contains(tag),
-          effective: ticked.contains(tag),
-          onSet: (on) async {
-            if (on ?? false) {
-              ticked.add(tag);
-            } else {
-              ticked.remove(tag);
-            }
+  List<PageSection> sections(SettingReader reader) {
+    final needle = searchNeedle(_query);
+    final shown = [
+      for (final tag in tags)
+        if (tag.$1.toLowerCase().contains(needle)) tag,
+    ];
+    return [
+      PageSection("search", "", [
+        TextController(
+          part("search", "Search", hint: UiHint.input),
+          value: _query,
+          prompt: "Search tags",
+          allowBlank: true,
+          onSet: (text) async {
+            _query = text;
             changed();
-            onTicked();
             return null;
           },
         ),
-    ]),
-  ];
+      ]),
+      PageSection("tags", "", [
+        if (tags.isEmpty)
+          noticeRow("none", "No tag narrows this list.")
+        else if (shown.isEmpty)
+          noticeRow("nomatch", "No tag matches \"${_query.trim()}\"."),
+        for (final (tag, count) in shown)
+          ToggleController(
+            part("tag-$tag", tag, hint: UiHint.toggle, description: "$count"),
+            value: ticked.contains(tag),
+            effective: ticked.contains(tag),
+            onSet: (on) async {
+              if (on ?? false) {
+                ticked.add(tag);
+              } else {
+                ticked.remove(tag);
+              }
+              changed();
+              onTicked();
+              return null;
+            },
+          ),
+      ]),
+    ];
+  }
 
   @override
   List<ActionController> toolbar(SettingReader reader) => [
@@ -571,7 +619,8 @@ mixin InstallsPrompts on AppPage {
 /// One marketplace entry before it is installed: who made it, what it says
 /// of itself, what it holds, and where it goes. Fetched at open, or handed
 /// whole by a link.
-class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
+class MarketplaceEntryAppPage extends AppPage
+    with InstallsPrompts, ListsMarketplaceEntries {
   MarketplaceEntryAppPage({
     required this.kind,
     required this.entry,
@@ -665,6 +714,7 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
 
   @override
   List<PageSection> sections(SettingReader reader) {
+    watchFaces(reader);
     final preview = this.preview;
     if (_failure case final failure?) {
       return [failed("Could not reach the marketplace", failure, retry: _load)];
@@ -673,23 +723,10 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
       return [notice("loading", "Reading the entry…")];
     }
     final package = preview.package;
+    final details = _details();
     return [
       PageSection("about", "", [
-        InfoController(
-          part("about", entry.name, hint: UiHint.info),
-          rows: [
-            InfoRow(
-              entry.name,
-              subtitle: [
-                if (entry.description.isNotEmpty) entry.description,
-                if (entry.metaLine.isNotEmpty) entry.metaLine,
-              ].join("\n"),
-              glyph: kind == CompletionKind.skill
-                  ? SettingGlyph.skill
-                  : SettingGlyph.agent,
-            ),
-          ],
-        ),
+        entryCard(entry),
         if (preview.packageProblem case final problem?)
           noticeRow("problem", problem, tone: NoticeTone.warning),
         if (kind == CompletionKind.agent &&
@@ -701,6 +738,14 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
             tone: NoticeTone.warning,
           ),
       ]),
+      if (entry.description.isNotEmpty)
+        PageSection("description", "Description", [
+          NoticeController(
+            part("description", "", hint: UiHint.paragraph),
+            lines: [NoticeLine(entry.description)],
+          ),
+        ]),
+      if (details.isNotEmpty) PageSection("details", "Details", details),
       if (preview.readme case final readme? when readme.trim().isNotEmpty)
         PageSection("readme", "README", [
           DocumentController(
@@ -713,6 +758,40 @@ class MarketplaceEntryAppPage extends AppPage with InstallsPrompts {
         PageSection("files", "Files", [packageFiles(package)]),
       if (preview.installable(kind))
         PageSection("install", "", [destinationField(reader)]),
+    ];
+  }
+
+  /// What is known of the entry, a labelled row each; an entry a link
+  /// carried knows little.
+  List<SettingController> _details() {
+    NoticeController field(String id, String label, String value) =>
+        NoticeController(
+          part(id, label, hint: UiHint.field),
+          lines: [NoticeLine(value)],
+        );
+    final authors = entry.authors;
+    return [
+      if (authors.isNotEmpty)
+        field(
+          "author",
+          authors.length == 1 ? "Author" : "Authors",
+          authors.join(", "),
+        ),
+      if (entry.version case final version?)
+        field("version", "Version", version),
+      if (entry.tags.isNotEmpty) field("tags", "Tags", entry.tags.join(", ")),
+      if (entry.location case final location?)
+        InfoController(
+          part("source", "Source", hint: UiHint.info),
+          rows: [
+            InfoRow(
+              "Source",
+              subtitle: "${location.repo}/${location.dir}",
+              glyph: SettingGlyph.globe,
+              link: location.page,
+            ),
+          ],
+        ),
     ];
   }
 

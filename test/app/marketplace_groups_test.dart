@@ -31,24 +31,27 @@ MarketplaceEntry remoteEntry(String name, {List<String> tags = const []}) =>
     );
 
 void main() {
-  test("entries under a recorded manifest slug make its collection", () {
+  test("the entries a record lists make its collection", () {
     final (front, collections) = groupIntoCollections(
       [
         localEntry("alpha"),
         remoteEntry("zoo/gcs"),
-        remoteEntry("acme/build"),
+        localEntry("build"),
         remoteEntry("zoo/bigquery"),
-        // A key with no record stays on the front page, as does one with no
-        // slash: a single-entry manifest is not a collection.
-        remoteEntry("loose/one"),
+        // A key no record lists stays on the front page, whatever its shape.
+        remoteEntry("zoo/loose"),
         remoteEntry("solo"),
       ],
       {
-        "zoo": (name: "Google", summary: "Cloud."),
-        "acme": (name: "Acme", summary: ""),
+        "zoo": (
+          name: "Google",
+          summary: "Cloud.",
+          members: ["zoo/bigquery", "zoo/gcs"],
+        ),
+        "acme": (name: "Acme", summary: "", members: ["build"]),
       },
     );
-    expect(front.map((e) => e.slug), ["alpha", "loose/one", "solo"]);
+    expect(front.map((e) => e.slug), ["alpha", "zoo/loose", "solo"]);
     // By name, not slug; members in the order they came in.
     expect(collections.map((c) => c.name), ["Acme", "Google"]);
     expect(collections.last.members.map((e) => e.slug), [
@@ -58,21 +61,46 @@ void main() {
     expect(collections.last.summary, "Cloud.");
   });
 
-  test("a record with no members is no collection", () {
+  test("a record whose members the index lacks is no collection", () {
     final (front, collections) = groupIntoCollections(
       [localEntry("alpha")],
-      {"zoo": (name: "Google", summary: "")},
+      {
+        "zoo": (name: "Google", summary: "", members: ["gone"]),
+      },
     );
     expect(front.length, 1);
     expect(collections, isEmpty);
+  });
+
+  test("a collection is external when every member is", () {
+    final (_, collections) = groupIntoCollections(
+      [remoteEntry("a"), remoteEntry("b"), localEntry("c")],
+      {
+        "far": (name: "Far", summary: "", members: ["a", "b"]),
+        "mixed": (name: "Mixed", summary: "", members: ["b", "c"]),
+      },
+    );
+    expect(collections.map((c) => (c.name, c.external)), [
+      ("Far", true),
+      ("Mixed", false),
+    ]);
+  });
+
+  test("a byline names the first author and how many more", () {
+    MarketplaceEntry by(String author) =>
+        MarketplaceEntry(slug: "x", name: "x", description: "", author: author);
+    expect(by("").byline, isNull);
+    expect(by("Entoli").byline, "by Entoli");
+    expect(by("ana, bo , cy").byline, "by ana and 2 more");
+    expect(by("ana, bo , cy").authors, ["ana", "bo", "cy"]);
   });
 
   test("collections match on name or summary", () {
     final (_, collections) = groupIntoCollections(
       [remoteEntry("g/a"), remoteEntry("m/a")],
       {
-        "g": (name: "Google", summary: "Cloud and BigQuery."),
-        "m": (name: "Microsoft", summary: "Azure."),
+        "g": (name: "Google", summary: "Cloud and BigQuery.", members: ["g/a"]),
+        "m": (name: "Microsoft", summary: "Azure.", members: ["m/a"]),
       },
     );
     expect(collectionsMatching(collections, " GOOG").map((c) => c.name), [
@@ -153,10 +181,11 @@ void main() {
 
   test("tags list every tag once, with its count, alphabetically", () {
     final tags = tagsOf([
-      localEntry("alpha", tags: ["zulu", "beta"]),
-      localEntry("beta", tags: ["zulu"]),
-      remoteEntry("gamma", tags: ["beta"]),
+      localEntry("alpha", tags: ["zulu", "beta", "all"]),
+      localEntry("beta", tags: ["zulu", "all"]),
+      remoteEntry("gamma", tags: ["beta", "all"]),
     ]);
+    // "all" is on every entry, so it narrows nothing and is not offered.
     expect(tags, [("beta", 2), ("zulu", 2)]);
 
     // The sort is by what a tag reads as, not what it holds: ASCII order

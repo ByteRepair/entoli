@@ -18,25 +18,32 @@ class MarketplaceCollection {
   final String summary;
   final List<MarketplaceEntry> members;
 
+  /// Whether every member is another repository's.
+  late final bool external = members.every((member) => member.external);
+
   late final String _lowerName = name.toLowerCase();
   late final String _lowerSummary = summary.toLowerCase();
 }
 
 /// [entries] split into the front page's and the collections'. An entry is a
-/// member of collection `<slug>` when its key is `<slug>/<sub>` and [records]
-/// names `<slug>`; everything else is the front's, in the order it came in.
-/// Collections are alphabetical by name, members in the order they came in,
-/// and one left with no members is dropped.
+/// member of the first record listing its key; everything else is the
+/// front's, in the order it came in. Collections are alphabetical by name,
+/// members in the order they came in, and one left with no members (a key
+/// the index no longer has) is dropped.
 (List<MarketplaceEntry>, List<MarketplaceCollection>) groupIntoCollections(
   List<MarketplaceEntry> entries,
   Map<String, CollectionRecord> records,
 ) {
+  final owner = <String, String>{};
+  for (final MapEntry(key: slug, value: record) in records.entries) {
+    for (final key in record.members) {
+      owner.putIfAbsent(key, () => slug);
+    }
+  }
   final front = <MarketplaceEntry>[];
   final members = <String, List<MarketplaceEntry>>{};
   for (final entry in entries) {
-    final slash = entry.slug.indexOf("/");
-    final slug = slash < 0 ? null : entry.slug.substring(0, slash);
-    if (slug != null && records.containsKey(slug)) {
+    if (owner[entry.slug] case final slug?) {
       (members[slug] ??= []).add(entry);
     } else {
       front.add(entry);
@@ -94,7 +101,8 @@ bool _matches(MarketplaceEntry entry, String needle) =>
     entry.lowerName.contains(needle) || entry.lowerDescription.contains(needle);
 
 /// Every tag [entries] carry, with how many entries carry it — the tag
-/// picker's rows. Alphabetical, lower-case-compared the way the list is.
+/// picker's rows. Alphabetical, lower-case-compared the way the list is. A
+/// tag every entry carries filters nothing, so it is left out.
 List<(String, int)> tagsOf(List<MarketplaceEntry> entries) {
   final counts = <String, int>{};
   for (final entry in entries) {
@@ -104,5 +112,8 @@ List<(String, int)> tagsOf(List<MarketplaceEntry> entries) {
   }
   final tags = counts.keys.toList()
     ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-  return [for (final tag in tags) (tag, counts[tag]!)];
+  return [
+    for (final tag in tags)
+      if (counts[tag]! < entries.length) (tag, counts[tag]!),
+  ];
 }

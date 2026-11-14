@@ -26,8 +26,9 @@ class _CardsPage extends AppPage {
         removable: false,
         describe: (name) => CollectionItem(
           name,
+          byline: "3 skills",
           subtitle: "About $name.",
-          badge: "3 skills",
+          badge: "External",
           glyph: SettingGlyph.folder,
           editable: false,
           tap: "open",
@@ -53,6 +54,7 @@ void main() {
     expect(find.byType(Card), findsNWidgets(2));
     expect(find.text("About Microsoft."), findsOneWidget);
     expect(find.text("3 skills"), findsNWidgets(2));
+    expect(find.widgetWithText(Chip, "External"), findsNWidgets(2));
     await tester.tap(find.text("Microsoft"));
     await settleIo(tester);
     expect(page.tapped, [1]);

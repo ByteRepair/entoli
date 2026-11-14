@@ -282,6 +282,7 @@ class SettingMeterSegmentData {
 class SettingItemData {
   SettingItemData({
     required this.title,
+    this.byline,
     this.subtitle,
     this.error,
     this.icon,
@@ -303,6 +304,9 @@ class SettingItemData {
 
   /// What it has spent, a line each under its words.
   List<SettingMeterData?> meters;
+
+  /// Who made it, or how much it holds, under its title.
+  String? byline;
   String? subtitle;
   String? error;
   SettingIcon? icon;
