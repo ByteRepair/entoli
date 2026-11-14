@@ -14,7 +14,7 @@ import "package:flutter/foundation.dart" show listEquals;
 /// What the process is being held open for, each one a different thing to
 /// stop — and Android insists the one holding the microphone be a service of
 /// a different type from the others that are not.
-enum BackgroundJob { turns, voice, download, prefill, sync }
+enum BackgroundJob { turns, voice, download, prefill, sync, signIn }
 
 /// A download worth telling the user about. Unlike the other two, its wording
 /// cannot live in Kotlin: which model is being fetched is the catalog's.
@@ -115,6 +115,12 @@ abstract interface class BackgroundWork {
   /// none — or when the keep-alive setting is off, which is the same answer:
   /// the hold is the setting's, and reporting through it is how both say stop.
   Future<void> syncing(SyncNotice? notice);
+
+  /// The account a CLI's sign-in is waiting on the user for ("Claude",
+  /// "ChatGPT"), or null when none is. Held because the sign-in page is in
+  /// another app: a process frozen meanwhile leaves the program's
+  /// `localhost` callback unanswered and the page loading forever.
+  Future<void> signingIn(String? plan);
 
   /// The user said stop from outside the app — each notification has a button,
   /// and this says which was pressed. Whoever owns that kind of work stops it,

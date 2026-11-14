@@ -1093,7 +1093,12 @@ class _Info extends ConsumerWidget {
 
   void _open(BuildContext context, WidgetRef ref, InfoRow row) {
     if (row.link case final link?) {
-      ref.read(linkOpenerProvider).open(context, link);
+      final opener = ref.read(linkOpenerProvider);
+      if (row.signIn) {
+        opener.openSignIn(context, link);
+      } else {
+        opener.open(context, link);
+      }
       return;
     }
     if (row.opens case final page?) openTextPage(context, page);

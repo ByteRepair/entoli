@@ -81,6 +81,7 @@ class CliSignInAppPage extends AppPage {
               "Open the Sign-in Page",
               subtitle: "$page",
               link: page,
+              signIn: true,
               glyph: SettingGlyph.globe,
             ),
           ],

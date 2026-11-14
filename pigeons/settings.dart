@@ -388,6 +388,7 @@ class SettingInfoData {
     this.keyShift = false,
     this.keyAlt = false,
     this.link,
+    this.signIn = false,
     this.opens,
   });
 
@@ -401,6 +402,9 @@ class SettingInfoData {
   bool keyAlt;
 
   String? link;
+
+  /// [link] is a CLI's sign-in page, opened where the app stays running.
+  bool signIn;
 
   /// A page of the app's own it opens.
   TextPageData? opens;
