@@ -9,7 +9,6 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/builtin_backend.dart";
-import "package:agent_chat/data/builtin/compact_prompt.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
 import "package:agent_chat/data/builtin/llm/providers/claude_cli.dart";
@@ -2806,11 +2805,18 @@ void main() {
       expect(marker.upToMessageId, "m13");
       final [first, second] = client.sent;
       expect(textOf(first), contains("a" * 100));
-      expect(textOf(first), contains("earlier work"));
+      // The marker's summary once: the conversation's own summary turn
+      // carries it, not the request beside it.
+      expect("earlier work".allMatches(textOf(first)), hasLength(1));
       expect(textOf(first), isNot(contains("b" * 100)));
-      // The second piece opens on a reply, so it is led in, and reads the
-      // first piece's summary as the prior one.
-      expect(second.first.text, CompactPrompt.continued);
+      // The second piece opens with the first piece's summary, worded as the
+      // conversation's own summary turn.
+      expect(second.first.role, LlmRole.user);
+      expect(
+        second.first.text,
+        contains("<summary>\nthe first half\n</summary>"),
+      );
+      expect("the first half".allMatches(textOf(second)), hasLength(1));
       expect(textOf(second), contains("b" * 100));
       expect(textOf(second), contains("keep this"));
       expect(textOf(second), contains("the first half"));

@@ -24,11 +24,12 @@ void main() {
       const LlmMessage(role: LlmRole.tool, toolCallId: "c1", text: "written"),
     ]);
 
-    final piece = pieces.next(2000)!;
+    const lead = LlmMessage(role: LlmRole.user, text: "the summary so far");
+    final piece = pieces.next(2000, lead: lead)!;
 
     expect(pieces.isDone, isTrue);
-    final [lead, call, result] = piece;
-    expect(lead.text, CompactPrompt.continued);
+    final [first, call, result] = piece;
+    expect(first, same(lead));
     expect(result.text, "written");
     final args = jsonDecode(call.toolCalls.single.argumentsJson) as Map;
     expect(args["path"], "lib/big.dart");

@@ -38,6 +38,7 @@ import "../prompts/skill_package.dart";
 import "background_jobs.dart";
 import "builtin_agent.dart";
 import "compact_prompt.dart";
+import "templates.dart" show summarizedTurnText;
 import "memory/instructions.dart";
 import "memory/store.dart";
 import "llm/gated_client.dart";
@@ -1260,7 +1261,11 @@ class BuiltinBackend implements AgentBackend {
     // What does not fit one ask is read in pieces, in order, each folded into
     // the summary so far — so the marker covers everything it names.
     final pieces = SummaryPieces(projected);
-    var summary = verbatimFrom(history, compactions).marker?.summary;
+    // The first piece opens with the marker's summary turn where one
+    // applies, as the projection words it; each later one with the summary
+    // so far, worded the same.
+    String? summary;
+    var folds = verbatimFrom(history, compactions).marker != null;
     for (var part = 1; !pieces.isDone; part++) {
       final room =
           budget -
@@ -1268,10 +1273,15 @@ class BuiltinBackend implements AgentBackend {
             CompactPrompt.build(
               conversation: const [],
               instructions: instructions,
-              priorSummary: summary,
+              folds: folds,
             ),
           );
-      final piece = pieces.next(room);
+      final piece = pieces.next(
+        room,
+        lead: summary == null
+            ? null
+            : LlmMessage(role: LlmRole.user, text: summarizedTurnText(summary)),
+      );
       final which = part == 1 && pieces.isDone ? "" : "Part $part: ";
       if (piece == null) {
         return fail(
@@ -1282,7 +1292,7 @@ class BuiltinBackend implements AgentBackend {
       final cut = CompactPrompt.build(
         conversation: piece,
         instructions: instructions,
-        priorSummary: summary,
+        folds: folds,
       );
       String? folded;
       var failure = "";
@@ -1306,6 +1316,7 @@ class BuiltinBackend implements AgentBackend {
       }
       if (folded == null) return fail("$which$failure");
       summary = folded;
+      folds = true;
     }
     final marker = ConversationCompaction(
       upToMessageId: history.last.id,

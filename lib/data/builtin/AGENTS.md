@@ -1716,15 +1716,17 @@ one to summarize. Null with a `logFailure` line, like every background call.
 the window with room for the summary (the model's window, half). Where the
 messages after the newest marker do not, `SummaryPieces` (in
 `compact_prompt.dart`) cuts them into pieces that do, and each piece is asked
-with the summary so far as `<prior-summary>` — the first piece with the
-marker's own — so the last summary has read every message and the marker
+opening with the summary so far — the first with the marker's own, as
+the projection words it — so the last summary has read every message and the marker
 ends at the newest. A piece is whole steps: a user turn, or one response with
 its tool results, since a call parted from its result is a request a provider
 refuses. A step too big for an ask alone is a piece of its own and keeps
 the start and end of its longest texts (a call's string arguments cut in
 place, their keys kept) with `CompactPrompt.cutNote` where the middle was, so the
-summarizer knows something is missing; a piece that opens on a reply is led
-by `CompactPrompt.continued`, a provider wanting a user turn first. The cost
+summarizer knows something is missing. The summary turn is the one carrier
+of the summary so far — the request's merge rules point at it rather than
+repeat it — and, a user turn, it is also what a piece opening on a reply
+needs first. The cost
 is the size of what is new since the last marker, read once, plus the
 summary so far per piece.
 

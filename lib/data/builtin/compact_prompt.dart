@@ -22,10 +22,11 @@ final _summaryTags = RegExp(r"<summary>\s*([\s\S]*?)\s*</summary>");
 /// were there. The wording is this file's own.
 ///
 /// [instructions] are the user's own focus, from `/compact <instructions>`.
-/// [priorSummary] is the previous marker's summary; where one exists the new
-/// summary merges it rather than standing in for it, so re-compacting never
-/// loses what the last one kept — the conversation is the newer fact and wins
-/// on conflict.
+/// [folds] says the conversation opens with an earlier summary of itself —
+/// the projection's own summary turn, the one carrier of it — which the new
+/// summary merges rather than stands in for, so re-compacting never loses
+/// what the last one kept; the conversation is the newer fact and wins on
+/// conflict.
 class CompactPrompt {
   CompactPrompt._();
 
@@ -36,13 +37,13 @@ class CompactPrompt {
   static List<LlmMessage> build({
     required List<LlmMessage> conversation,
     String? instructions,
-    String? priorSummary,
+    bool folds = false,
   }) => [
     ...conversation,
-    LlmMessage(role: LlmRole.user, text: _request(instructions, priorSummary)),
+    LlmMessage(role: LlmRole.user, text: _request(instructions, folds)),
   ];
 
-  static String _request(String? instructions, String? priorSummary) {
+  static String _request(String? instructions, bool folds) {
     var text =
         """
 You will be handed a conversation and asked for one thing in return: a summary
@@ -75,20 +76,16 @@ Be brief and concrete; a fact beats a paragraph. Do not write about the
 summarizing, the context, or yourself: the summary describes the work, not
 the handover that produced it."""
             .trim();
-    if (priorSummary != null && priorSummary.trim().isNotEmpty) {
-      text +=
-          """
+    if (folds) {
+      text += """
 
-An earlier summary of this same conversation follows. Fold it into yours:
-its goals, standing constraints and decisions stay even where the messages
-above are silent about them, and only finished or superseded material is
-dropped. Where the messages and the older summary disagree, the messages are
-the newer account — keep theirs and let the old claim go. Move finished work
-into the finished half, and bring the goal and the remaining work up to date.
-
-<prior-summary>
-$priorSummary
-</prior-summary>""";
+The conversation above opens with an earlier summary of itself. Fold it into
+yours: its goals, standing constraints and decisions stay even where the
+messages after it are silent about them, and only finished or superseded
+material is dropped. Where the messages and the older summary disagree, the
+messages are the newer account — keep theirs and let the old claim go. Move
+finished work into the finished half, and bring the goal and the remaining
+work up to date.""";
     }
     if (instructions != null && instructions.trim().isNotEmpty) {
       text +=
@@ -96,12 +93,6 @@ $priorSummary
     }
     return text;
   }
-
-  /// Leads a piece that opens mid-turn: a provider wants a user turn first,
-  /// and the model is told where the messages before it went.
-  static const continued =
-      "(The conversation so far is in <prior-summary> in the request at the "
-      "end. It continues from there:)";
 
   /// What stands where the middle of a step was cut, so the two ends are not
   /// read as joined.
@@ -155,8 +146,8 @@ int estimateTokens(List<LlmMessage> messages) {
 }
 
 /// A conversation too big for one ask, read in order a piece at a time: each
-/// piece's summary is the next one's `<prior-summary>`, so every message is
-/// read once and nothing is dropped.
+/// piece's summary opens the next one, so every message is read once and
+/// nothing is dropped.
 ///
 /// A piece is whole steps — a user turn, or one response with its results —
 /// since a call parted from its result is a request a provider refuses. A
@@ -170,15 +161,14 @@ class SummaryPieces {
 
   bool get isDone => _next >= _steps.length;
 
-  /// The next piece, as many steps as fit [room] tokens; a step too big for
-  /// a piece of its own is one, cut. Null where it cannot be cut to fit.
-  List<LlmMessage>? next(int room) {
+  /// The next piece, [lead] first — the summary so far, which is also the
+  /// user turn a piece opening on a reply needs — then as many steps as fit
+  /// [room] tokens; a step too big for a piece of its own is one, cut. Null
+  /// where it cannot be cut to fit.
+  List<LlmMessage>? next(int room, {LlmMessage? lead}) {
     assert(!isDone);
-    final lead = _steps[_next].first.role == LlmRole.user
-        ? const <LlmMessage>[]
-        : const [LlmMessage(role: LlmRole.user, text: CompactPrompt.continued)];
-    final space = room - estimateTokens(lead);
-    final piece = <LlmMessage>[...lead];
+    final piece = [?lead];
+    final space = room - estimateTokens(piece);
     var used = 0;
     while (!isDone) {
       final step = _steps[_next];
