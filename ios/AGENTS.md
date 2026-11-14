@@ -687,9 +687,10 @@ and `-O`, curl's `-fsSL`, `--connect-timeout`, `--retry` and `-o`, one http
 or https URL. Output to stdout, a method, headers, a body or a resumed
 transfer is the guest's tool's. The answers are the tools' own: wget fails
 on an HTTP error, curl only with `-f`, curl's exit codes are curl's, and a
-failed transfer leaves no file. A shim interrupted removes its claim as it
-exits, and the download checks for that each chunk and stops; one killed
-outright leaves the download to finish into a file nobody reads.
+failed transfer, a body shorter than declared among them, leaves no file. A
+shim interrupted removes its claim as it exits, and the download checks for
+that once a second and stops; one killed outright leaves the download to
+finish into a file nobody reads.
 
 **Only a host-backed path can be the host's.** The host can write the
 workspace at `/root` and the data directory at its own path; anything else
@@ -697,15 +698,19 @@ is the fakefs, whose files are SQLite rows the host must not touch. A
 request with a path off those mounts, a form not taken (listing, members
 named, `tar` from stdin or creating), an unzip that would replace a file
 without `-o`, or an archive the host's disk does not have is answered "fall
-back", and the shim runs the guest's own tool. That last is a bind that did
-not land: the bridge cannot bind a workspace that does not exist yet, so
-`/root` stays the fakefs's and what the guest wrote there is not the host's.
-The Byte Repair setup makes its workspace before it runs for that reason,
-since it can run before any chat has. While it runs the screen is kept on
-(`settingUp` on the background channel, `ScreenHold` in the Runner): a
-locked phone suspends the app and the guest's download with it. So does a request nobody takes within four seconds, which is a host
-not listening. The shims are written afresh at each launch, so one a
-command overwrote is back next time.
+back", and the shim runs the guest's own tool. So does a request nobody
+takes within four seconds, which is a host not listening. The shims are
+written afresh at each launch, so one a command overwrote is back next time.
+
+**The mount table is only true where the bind landed**, and the bridge
+cannot bind a workspace that does not exist: `/root` would stay the
+fakefs's, and what the guest wrote there would not be the host's. A
+project's workspace does not exist before its first chat — the Byte Repair
+setup runs before any — so `IshWorker` makes it before every init.
+
+**The screen stays on while a setup runs** (`settingUp` on the background
+channel, `ScreenHold` in the Runner): iOS gives the app no way to run
+locked, and a locked phone suspends the guest's download with it.
 
 ## The native shell
 

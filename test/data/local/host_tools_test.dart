@@ -128,17 +128,34 @@ void main() {
     late List<Uri> asked;
 
     /// The host's tools over [respond], each request recorded in [asked].
-    HostTools over(Future<http.Response> Function(http.Request) respond) {
+    /// The host's tools over [client], or a [MockClient] of [respond], each
+    /// request recorded in [asked].
+    HostTools over(
+      Future<http.Response> Function(http.Request) respond, {
+      http.Client Function()? client,
+    }) {
       asked = [];
       return HostTools(
         tools.dir,
         mounts: () => [(guest: "/root", host: workspace)],
-        client: () => MockClient((request) {
-          asked.add(request.url);
-          return respond(request);
-        }),
+        client:
+            client ??
+            () => MockClient((request) {
+              asked.add(request.url);
+              return respond(request);
+            }),
       );
     }
+
+    /// A 200 whose body is [chunks], declaring [length].
+    http.Client Function() streaming(List<String> chunks, {int? length}) =>
+        () => MockClient.streaming(
+          (_, _) async => http.StreamedResponse(
+            Stream.fromIterable(chunks.map((c) => c.codeUnits)),
+            200,
+            contentLength: length,
+          ),
+        );
 
     const url = "https://example.com/esbmc.zip";
 
@@ -206,15 +223,9 @@ void main() {
     });
 
     test("a download the shim gave up on stops and leaves nothing", () async {
-      final host = HostTools(
-        tools.dir,
-        mounts: () => [(guest: "/root", host: workspace)],
-        client: () => MockClient.streaming(
-          (_, _) async => http.StreamedResponse(
-            Stream.fromIterable(["a".codeUnits, "b".codeUnits]),
-            200,
-          ),
-        ),
+      final host = over(
+        (_) => throw StateError("unused"),
+        client: streaming(["a", "b"]),
       );
 
       final answer = await host.run("wget", "/root", [
@@ -224,6 +235,18 @@ void main() {
       ], abandoned: () => true);
 
       expect(answer!.code, 130);
+      expect(File(p.join(workspace, "a.zip")).existsSync(), isFalse);
+    });
+
+    test("a body shorter than declared is a failure, not a file", () async {
+      final host = over(
+        (_) => throw StateError("unused"),
+        client: streaming(["ab"], length: 4),
+      );
+
+      final answer = await host.run("wget", "/root", ["-O", "a.zip", url]);
+
+      expect(answer!.code, 1);
       expect(File(p.join(workspace, "a.zip")).existsSync(), isFalse);
     });
 

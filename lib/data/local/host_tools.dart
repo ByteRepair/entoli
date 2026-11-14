@@ -129,79 +129,44 @@ class HostTools {
     String cwd,
     List<String> args, {
     bool Function()? abandoned,
-  }) async {
-    final job = switch (tool) {
-      "unzip" => _unzip(cwd, args),
-      "tar" => _tar(cwd, args),
-      "wget" => _wget(cwd, args),
-      "curl" => _curl(cwd, args),
-      _ => null,
-    };
-    return switch (job) {
-      // Inflating is CPU; a download is I/O and stays on this isolate.
-      _Extract() => Isolate.run(job.extract),
-      _Fetch() => job.fetch(_client(), abandoned ?? () => false),
-      null => null,
-    };
-  }
+  }) async => switch (tool) {
+    "unzip" => await _inflate(_unzip(cwd, args)),
+    "tar" => await _inflate(_tar(cwd, args)),
+    // A download is I/O and stays on this isolate.
+    "wget" => await _wget(cwd, args)?.fetch(_client(), abandoned ?? _never),
+    "curl" => await _curl(cwd, args)?.fetch(_client(), abandoned ?? _never),
+    _ => null,
+  };
+
+  static bool _never() => false;
+
+  /// Inflating is CPU, so it gets an isolate of its own.
+  static Future<HostAnswer?> _inflate(_Extract? job) async =>
+      job == null ? null : Isolate.run(job.extract);
 
   /// busybox's `wget [-q] [-T secs] -O file URL`; anything else (stdout, no
   /// `-O`, continuing, headers) is the guest's.
   _Fetch? _wget(String cwd, List<String> args) {
-    var quiet = false;
-    var timeout = const Duration(seconds: 900);
-    String? out;
-    final urls = <String>[];
-    for (var i = 0; i < args.length; i++) {
-      final arg = args[i];
-      if (arg == "--quiet") {
-        quiet = true;
-      } else if (arg.startsWith("--output-document=")) {
-        out = arg.substring("--output-document=".length);
-      } else if (arg.startsWith("--timeout=")) {
-        final secs = int.tryParse(arg.substring("--timeout=".length));
-        if (secs == null) return null;
-        timeout = Duration(seconds: secs);
-      } else if (arg.startsWith("--")) {
-        return null;
-      } else if (arg.startsWith("-") && arg.length > 1) {
-        final flags = arg.substring(1);
-        for (var j = 0; j < flags.length; j++) {
-          switch (flags[j]) {
-            case "q":
-              quiet = true;
-            case "O" || "T":
-              final value = j + 1 < flags.length
-                  ? flags.substring(j + 1)
-                  : (++i < args.length ? args[i] : null);
-              if (value == null) return null;
-              if (flags[j] == "O") {
-                out = value;
-              } else {
-                final secs = int.tryParse(value);
-                if (secs == null) return null;
-                timeout = Duration(seconds: secs);
-              }
-              j = flags.length;
-            default:
-              return null;
-          }
-        }
-      } else {
-        urls.add(arg);
-      }
-    }
-    if (urls.length != 1 || out == null || out == "-") return null;
-    return _fetch(
-      cwd,
-      urls.single,
-      out,
+    final o = _options(
+      args,
+      flags: {"q"},
+      valued: {"O", "T"},
+      long: {"--quiet": "q", "--output-document": "O", "--timeout": "T"},
+    );
+    if (o == null || o.operands.length != 1) return null;
+    final secs = int.tryParse(o.options["T"] ?? "900");
+    final target = _target(cwd, o.operands.single, o.options["O"]);
+    if (secs == null || target == null) return null;
+    return _Fetch(
+      uri: target.uri,
+      dest: target.dest,
+      guestDest: o.options["O"]!,
       curl: false,
-      quiet: quiet,
+      quiet: o.options.containsKey("q"),
       failOnError: true,
       follow: true,
-      connectTimeout: timeout,
-      idleTimeout: timeout,
+      connectTimeout: Duration(seconds: secs),
+      idleTimeout: Duration(seconds: secs),
       retries: 0,
     );
   }
@@ -209,74 +174,35 @@ class HostTools {
   /// curl's `[-fsSL] [--connect-timeout secs] [--retry n] -o file URL`;
   /// anything else (stdout, a method, headers, a body) is the guest's.
   _Fetch? _curl(String cwd, List<String> args) {
-    var fail = false;
-    var silent = false;
-    var showError = false;
-    var follow = false;
-    var connectTimeout = const Duration(seconds: 300);
-    var retries = 0;
-    String? out;
-    final urls = <String>[];
-    for (var i = 0; i < args.length; i++) {
-      final arg = args[i];
-      String? next() => ++i < args.length ? args[i] : null;
-      switch (arg) {
-        case "--fail":
-          fail = true;
-        case "--silent":
-          silent = true;
-        case "--show-error":
-          showError = true;
-        case "--location":
-          follow = true;
-        case "--output":
-          out = next();
-          if (out == null) return null;
-        case "--connect-timeout":
-          final secs = double.tryParse(next() ?? "");
-          if (secs == null) return null;
-          connectTimeout = Duration(milliseconds: (secs * 1000).round());
-        case "--retry":
-          final n = int.tryParse(next() ?? "");
-          if (n == null) return null;
-          retries = n;
-        default:
-          if (arg.startsWith("--")) return null;
-          if (!arg.startsWith("-") || arg.length == 1) {
-            urls.add(arg);
-            continue;
-          }
-          final flags = arg.substring(1);
-          for (var j = 0; j < flags.length; j++) {
-            switch (flags[j]) {
-              case "f":
-                fail = true;
-              case "s":
-                silent = true;
-              case "S":
-                showError = true;
-              case "L":
-                follow = true;
-              case "o":
-                out = j + 1 < flags.length ? flags.substring(j + 1) : next();
-                if (out == null) return null;
-                j = flags.length;
-              default:
-                return null;
-            }
-          }
-      }
-    }
-    if (urls.length != 1 || out == null || out == "-") return null;
-    return _fetch(
-      cwd,
-      urls.single,
-      out,
+    final o = _options(
+      args,
+      flags: {"f", "s", "S", "L"},
+      valued: {"o", "connect-timeout", "retry"},
+      long: {
+        "--fail": "f",
+        "--silent": "s",
+        "--show-error": "S",
+        "--location": "L",
+        "--output": "o",
+        "--connect-timeout": "connect-timeout",
+        "--retry": "retry",
+      },
+    );
+    if (o == null || o.operands.length != 1) return null;
+    final secs = double.tryParse(o.options["connect-timeout"] ?? "300");
+    final retries = int.tryParse(o.options["retry"] ?? "0");
+    final target = _target(cwd, o.operands.single, o.options["o"]);
+    if (secs == null || retries == null || target == null) return null;
+    bool has(String flag) => o.options.containsKey(flag);
+    return _Fetch(
+      uri: target.uri,
+      dest: target.dest,
+      guestDest: o.options["o"]!,
       curl: true,
-      quiet: silent && !showError,
-      failOnError: fail,
-      follow: follow,
-      connectTimeout: connectTimeout,
+      quiet: has("s") && !has("S"),
+      failOnError: has("f"),
+      follow: has("L"),
+      connectTimeout: Duration(milliseconds: (secs * 1000).round()),
       // curl has no idle limit of its own; a stalled transfer is what the
       // command's own timeout ends.
       idleTimeout: const Duration(minutes: 10),
@@ -284,147 +210,119 @@ class HostTools {
     );
   }
 
-  /// Null where [url] is no plain http(s) one or [out] is not where the host
-  /// can write it: off the mounts, or in a directory the host does not have,
-  /// which is a bind that did not land.
-  _Fetch? _fetch(
-    String cwd,
-    String url,
-    String out, {
-    required bool curl,
-    required bool quiet,
-    required bool failOnError,
-    required bool follow,
-    required Duration connectTimeout,
-    required Duration idleTimeout,
-    required int retries,
-  }) {
+  /// [url] and where [out] is on the host, or null where the URL is no plain
+  /// http(s) one, [out] is stdout, or it is not where the host can write it:
+  /// off the mounts, or in a directory the host does not have.
+  ({Uri uri, String dest})? _target(String cwd, String url, String? out) {
+    if (out == null || out == "-") return null;
     final uri = Uri.tryParse(url);
     if (uri == null || !(uri.isScheme("http") || uri.isScheme("https"))) {
       return null;
     }
     final dest = _host(cwd, out);
     if (dest == null || !Directory(p.dirname(dest)).existsSync()) return null;
-    return _Fetch(
-      uri: uri,
-      dest: dest,
-      guestDest: out,
-      curl: curl,
-      quiet: quiet,
-      failOnError: failOnError,
-      follow: follow,
-      connectTimeout: connectTimeout,
-      idleTimeout: idleTimeout,
-      retries: retries,
-    );
+    return (uri: uri, dest: dest);
   }
 
   _Extract? _unzip(String cwd, List<String> args) {
-    var quiet = false;
-    var overwrite = false;
-    String? into;
-    final positional = <String>[];
-    for (var i = 0; i < args.length; i++) {
-      final arg = args[i];
-      if (arg == "-d") {
-        if (++i >= args.length) return null;
-        into = args[i];
-      } else if (arg.startsWith("-d") && arg.length > 2) {
-        into = arg.substring(2);
-      } else if (arg.startsWith("-") && arg.length > 1) {
-        for (final flag in arg.substring(1).split("")) {
-          switch (flag) {
-            case "q":
-              quiet = true;
-            case "o":
-              overwrite = true;
-            default:
-              return null;
-          }
-        }
-      } else {
-        positional.add(arg);
-      }
-    }
+    final o = _options(args, flags: {"q", "o"}, valued: {"d"});
     // Members named, or none at all: the guest's tool.
-    if (positional.length != 1) return null;
-    final archive = _host(cwd, positional.single);
-    final dest = _host(cwd, into ?? ".");
+    if (o == null || o.operands.length != 1) return null;
+    final archive = _host(cwd, o.operands.single);
+    final dest = _host(cwd, o.options["d"] ?? ".");
     if (archive == null || dest == null) return null;
     return _Extract(
       archive: archive,
-      guestArchive: positional.single,
+      guestArchive: o.operands.single,
       dest: dest,
       kind: _ArchiveKind.zip,
-      verbose: !quiet,
-      overwrite: overwrite,
+      verbose: !o.options.containsKey("q"),
+      overwrite: o.options.containsKey("o"),
     );
   }
 
   _Extract? _tar(String cwd, List<String> args) {
-    var extract = false;
-    var verbose = false;
-    _ArchiveKind? kind;
-    String? file;
-    String? into;
-    final rest = [...args];
+    final words = [...args];
     // The first word may be bundled flags with no dash: `tar xzf a.tgz`.
-    if (rest.isNotEmpty && !rest.first.startsWith("-")) {
-      rest[0] = "-${rest.first}";
+    if (words.isNotEmpty && !words.first.startsWith("-")) {
+      words[0] = "-${words.first}";
     }
-    for (var i = 0; i < rest.length; i++) {
-      final arg = rest[i];
-      if (arg.startsWith("--directory=")) {
-        into = arg.substring("--directory=".length);
-      } else if (arg.startsWith("--file=")) {
-        file = arg.substring("--file=".length);
-      } else if (arg.startsWith("--")) {
-        return null;
-      } else if (arg.startsWith("-") && arg.length > 1) {
-        final flags = arg.substring(1);
-        for (var j = 0; j < flags.length; j++) {
-          switch (flags[j]) {
-            case "x":
-              extract = true;
-            case "v":
-              verbose = true;
-            case "o" || "p":
-              break;
-            case "z":
-              kind = _ArchiveKind.tarGz;
-            case "j":
-              kind = _ArchiveKind.tarBz2;
-            case "J":
-              kind = _ArchiveKind.tarXz;
-            case "f" || "C":
-              // Its value is the rest of this word, or the next one.
-              final value = j + 1 < flags.length
-                  ? flags.substring(j + 1)
-                  : (++i < rest.length ? rest[i] : null);
-              if (value == null) return null;
-              flags[j] == "f" ? file = value : into = value;
-              j = flags.length;
-            default:
-              return null;
-          }
-        }
-      } else {
-        // A member named: the guest's tool.
-        return null;
-      }
+    final o = _options(
+      words,
+      flags: {"x", "v", "o", "p", "z", "j", "J"},
+      valued: {"f", "C"},
+      long: {"--directory": "C", "--file": "f"},
+    );
+    // A member named is the guest's tool's.
+    if (o == null || o.operands.isNotEmpty || !o.options.containsKey("x")) {
+      return null;
     }
-    if (!extract || file == null || file == "-") return null;
+    final file = o.options["f"];
+    if (file == null || file == "-") return null;
     final archive = _host(cwd, file);
-    final dest = _host(cwd, into ?? ".");
+    final dest = _host(cwd, o.options["C"] ?? ".");
     if (archive == null || dest == null) return null;
+    final kind = o.options.containsKey("z")
+        ? _ArchiveKind.tarGz
+        : o.options.containsKey("j")
+        ? _ArchiveKind.tarBz2
+        : o.options.containsKey("J")
+        ? _ArchiveKind.tarXz
+        : _sniff(archive);
     return _Extract(
       archive: archive,
       guestArchive: file,
       dest: dest,
-      kind: kind ?? _sniff(archive),
-      verbose: verbose,
+      kind: kind,
+      verbose: o.options.containsKey("v"),
       overwrite: true,
     );
+  }
+
+  /// [args] read getopt's way: short [flags] bundled, a [valued] one taking
+  /// the rest of its word or the next, and [long] options named for the key
+  /// they set, `--name=value` or `--name value`. Each option is its key, `""`
+  /// for a flag; null on anything else, which is the guest's tool's.
+  static ({Map<String, String> options, List<String> operands})? _options(
+    List<String> args, {
+    required Set<String> flags,
+    required Set<String> valued,
+    Map<String, String> long = const {},
+  }) {
+    final options = <String, String>{};
+    final operands = <String>[];
+    for (var i = 0; i < args.length; i++) {
+      final arg = args[i];
+      String? next() => ++i < args.length ? args[i] : null;
+      if (arg.startsWith("--")) {
+        final eq = arg.indexOf("=");
+        final key = long[eq < 0 ? arg : arg.substring(0, eq)];
+        if (key == null) return null;
+        final String? value;
+        if (valued.contains(key)) {
+          value = eq < 0 ? next() : arg.substring(eq + 1);
+        } else {
+          value = eq < 0 ? "" : null;
+        }
+        if (value == null) return null;
+        options[key] = value;
+      } else if (arg.startsWith("-") && arg.length > 1) {
+        for (var j = 1; j < arg.length; j++) {
+          final key = arg[j];
+          if (valued.contains(key)) {
+            final value = j + 1 < arg.length ? arg.substring(j + 1) : next();
+            if (value == null) return null;
+            options[key] = value;
+            break;
+          }
+          if (!flags.contains(key)) return null;
+          options[key] = "";
+        }
+      } else {
+        operands.add(arg);
+      }
+    }
+    return (options: options, operands: operands);
   }
 
   /// [path], as the guest wrote it from [cwd], on the host; null where it
@@ -547,13 +445,8 @@ enum _ArchiveKind {
   final String extension;
 }
 
-/// What a request is, once the host has taken it.
-sealed class _Job {
-  const _Job();
-}
-
 /// One download to a host path, as wget or curl would have made it.
-class _Fetch extends _Job {
+class _Fetch {
   const _Fetch({
     required this.uri,
     required this.dest,
@@ -584,17 +477,13 @@ class _Fetch extends _Job {
     bool Function() abandoned,
   ) async {
     try {
-      for (var attempt = 0; ; attempt++) {
+      // A transfer that failed on the network is retried; an HTTP error or
+      // a finished one is the answer.
+      for (var attempt = 0; attempt <= retries; attempt++) {
         final answer = await _once(client, abandoned);
-        // A transfer that failed on the network is retried; an HTTP error
-        // or a finished one is the answer.
-        if (answer != null || attempt >= retries) {
-          return answer ??
-              _failed(curl ? 7 : 1, "can't connect to remote host");
-        }
+        if (answer != null) return answer;
       }
-    } on _Abandoned {
-      return const HostAnswer(130, "");
+      return _failed(curl ? 7 : 1, "can't connect to remote host");
     } finally {
       client.close();
     }
@@ -611,12 +500,13 @@ class _Fetch extends _Job {
     final http.StreamedResponse response;
     try {
       response = await client.send(request).timeout(connectTimeout);
-    } on TimeoutException {
-      return null;
-    } on SocketException {
-      return null;
-    } on http.ClientException {
-      return null;
+    } catch (e) {
+      if (e is TimeoutException ||
+          e is SocketException ||
+          e is http.ClientException) {
+        return null;
+      }
+      rethrow;
     }
     if (response.statusCode >= 400 && failOnError) {
       await response.stream.drain<void>().catchError((_) {});
@@ -632,28 +522,48 @@ class _Fetch extends _Job {
                   .trimRight(),
             );
     }
-    final sink = File(dest).openWrite();
+    final file = File(dest);
+    final sink = file.openWrite();
+    var received = 0;
+    var stopped = false;
+    // A stat a second rather than a chunk: this is the UI isolate.
+    final sinceCheck = Stopwatch();
     try {
-      await for (final chunk in response.stream.timeout(idleTimeout)) {
-        // One stat a chunk, cheap beside the chunk's own write.
-        if (abandoned()) throw const _Abandoned();
-        sink.add(chunk);
-      }
+      // addStream for its backpressure: a network faster than the flash
+      // would otherwise queue the gap on the heap.
+      await sink.addStream(
+        response.stream.timeout(idleTimeout).takeWhile((chunk) {
+          if (!sinceCheck.isRunning ||
+              sinceCheck.elapsed > const Duration(seconds: 1)) {
+            sinceCheck
+              ..reset()
+              ..start();
+            stopped = abandoned();
+          }
+          received += chunk.length;
+          return !stopped;
+        }),
+      );
       await sink.close();
     } catch (e) {
       await sink.close().catchError((_) {});
-      try {
-        File(dest).deleteSync();
-      } on FileSystemException {
-        // Never made.
-      }
-      if (e is _Abandoned) rethrow;
+      _delete(file);
       if (e is TimeoutException) {
         return _failed(
           curl ? 28 : 1,
           curl ? "Operation timed out" : "download timed out",
         );
       }
+      return null;
+    }
+    if (stopped) {
+      _delete(file);
+      return const HostAnswer(130, "");
+    }
+    // Shorter than declared is a connection dropped, not a finished file.
+    final expected = response.contentLength;
+    if (expected != null && received != expected) {
+      _delete(file);
       return null;
     }
     return HostAnswer(
@@ -665,19 +575,23 @@ class _Fetch extends _Job {
     );
   }
 
+  static void _delete(File file) {
+    try {
+      file.deleteSync();
+    } on FileSystemException {
+      // Never made.
+    }
+  }
+
   HostAnswer _failed(int code, String why) => HostAnswer(
     code,
     quiet ? "" : (curl ? "curl: ($code) $why\n" : "wget: $why\n"),
   );
 }
 
-class _Abandoned implements Exception {
-  const _Abandoned();
-}
-
 /// One extraction, with everything it needs and nothing of the service, so
 /// it runs on its own isolate.
-class _Extract extends _Job {
+class _Extract {
   const _Extract({
     required this.archive,
     required this.guestArchive,
@@ -698,8 +612,7 @@ class _Extract extends _Job {
   Future<HostAnswer?> extract() async {
     final zip = kind == _ArchiveKind.zip;
     final tool = zip ? "unzip" : "tar";
-    // Not on the host's disk is not proof it is missing: a bind that did not
-    // land leaves the guest's path in the fakefs. Its own tool says which.
+    // The guest's tool says what is missing, in its own words.
     if (!File(archive).existsSync()) return null;
     // unzip asks before replacing a file, which is the guest's tool's
     // business: only a zip that replaces nothing, or is told to, is ours.
