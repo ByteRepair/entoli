@@ -314,18 +314,13 @@ struct TurnSurfaceView: View {
       // would widen the card past the screen: the "Always" pair moves up.
       ViewThatFits(in: .horizontal) {
         HStack(spacing: 8) {
-          Spacer(minLength: 0)
           denyButton(approval)
           alwaysButtons(approval)
           allowButton(approval)
         }
         VStack(alignment: .trailing, spacing: 8) {
+          HStack(spacing: 8) { alwaysButtons(approval) }
           HStack(spacing: 8) {
-            Spacer(minLength: 0)
-            alwaysButtons(approval)
-          }
-          HStack(spacing: 8) {
-            Spacer(minLength: 0)
             denyButton(approval)
             allowButton(approval)
           }
@@ -336,6 +331,7 @@ struct TurnSurfaceView: View {
           allowButton(approval)
         }
       }
+      .frame(maxWidth: .infinity, alignment: .trailing)
     }
     .padding(14)
     .glassSurface(RoundedRectangle(cornerRadius: 20, style: .continuous))
