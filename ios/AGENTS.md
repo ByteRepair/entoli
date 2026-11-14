@@ -96,6 +96,13 @@ truth. iSH runs it inside the guest's own `/bin/sh`, which is what makes a `cd`
 or an `export` in one command stick for the next, the same contract the agent
 is told on every other platform.
 
+iSH's `current` is thread-local and the workers call in from whatever Dart
+pool thread they land on, so the bridge does its own guest work (the binds,
+the `cwd` open) as init and hands the thread back to init once a child is
+started: left on the child, `current` names a dead task after that shell
+exits, and the next session's bind faults on its freed `fs`. That was a
+device crash on the second command after Byte Repair's launch checks.
+
 ## Bring-up status
 
 The app launches and runs on an iOS simulator, with the emulator linked: the
