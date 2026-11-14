@@ -2,7 +2,8 @@ name: Release build
 
 # Builds what release.yml attaches: a signed App Bundle, a Linux AppImage, a
 # macOS DMG, an iOS ipa and a Windows MSI. Dispatched by hand, it checks a tag
-# builds without publishing anything. See "Releasing" in AGENTS.md.
+# builds without publishing anything. Each platform's input, on by default,
+# skips its jobs when off. See "Releasing" in AGENTS.md.
 on:
   workflow_call:
     inputs:
@@ -10,6 +11,26 @@ on:
         description: Tag to build, and to check pubspec's version against.
         type: string
         required: true
+      linux:
+        description: Build the Linux AppImage
+        type: boolean
+        default: true
+      ios:
+        description: Build the iOS ipa
+        type: boolean
+        default: true
+      windows:
+        description: Build the Windows MSI
+        type: boolean
+        default: true
+      android:
+        description: Build the Android App Bundle
+        type: boolean
+        default: true
+      macos:
+        description: Build the macOS DMG
+        type: boolean
+        default: true
     # Named rather than inherited, so a caller hands over only these. Apple's
     # are optional: without them the ios and macos jobs fail fast.
     secrets:
@@ -39,7 +60,7 @@ on:
       ipa:
         value: ${{ jobs.version.outputs.ipa }}
       assets:
-        description: Every file to attach, as `{file, artifact}` objects.
+        description: Every file built, to attach, as `{file, artifact}` objects.
         value: ${{ jobs.version.outputs.assets }}
   workflow_dispatch:
     inputs:
@@ -47,6 +68,26 @@ on:
         description: Tag to build, or nothing to build the ref this was run from
         type: string
         required: false
+      linux:
+        description: Build the Linux AppImage
+        type: boolean
+        default: true
+      ios:
+        description: Build the iOS ipa
+        type: boolean
+        default: true
+      windows:
+        description: Build the Windows MSI
+        type: boolean
+        default: true
+      android:
+        description: Build the Android App Bundle
+        type: boolean
+        default: true
+      macos:
+        description: Build the macOS DMG
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -72,6 +113,11 @@ jobs:
       - id: version
         env:
           TAG: ${{ inputs.tag }}
+          ANDROID: ${{ inputs.android }}
+          LINUX: ${{ inputs.linux }}
+          MACOS: ${{ inputs.macos }}
+          WINDOWS: ${{ inputs.windows }}
+          IOS: ${{ inputs.ios }}
         run: |
           set -euo pipefail
           version="$(sed -n 's/^version: *\([^+ ]*\).*/\1/p' pubspec.yaml)"
@@ -100,16 +146,23 @@ jobs:
                    {"file": "entoli-arm64.dmg", "artifact": "dmg"},
                    {"file": "entoli-installer.msi", "artifact": "msi"},
                    {"file": "entoli.ipa", "artifact": "ipa"}]'
+          built="$(jq -n --argjson aab "$ANDROID" --argjson appimage "$LINUX" \
+            --argjson dmg "$MACOS" --argjson msi "$WINDOWS" --argjson ipa "$IOS" '$ARGS.named')"
+          if [ "$(jq '[.[]] | any' <<<"$built")" != true ]; then
+            echo "::error::No platform selected"
+            exit 1
+          fi
           {
             echo "version=$version"
             echo "code=$((10#$major * 10000 + 10#$minor * 100 + 10#$patch))"
             jq -r '.[] | "\(.artifact)=\(.file)"' <<<"$assets"
-            echo "assets=$(jq -c . <<<"$assets")"
+            echo "assets=$(jq -c --argjson built "$built" 'map(select($built[.artifact]))' <<<"$assets")"
           } >> "$GITHUB_OUTPUT"
 
   # Apart from the aab job: the tools' intermediates left one runner no disk.
   android-tools:
     needs: version
+    if: inputs.android
     runs-on: ubuntu-latest
     outputs:
       abis: ${{ steps.tools.outputs.abis }}
@@ -124,6 +177,7 @@ jobs:
 
   aab:
     needs: [version, android-tools]
+    if: inputs.android
     runs-on: ubuntu-latest
     env:
       AAB: ${{ needs.version.outputs.aab }}
@@ -223,6 +277,7 @@ jobs:
 
   llama-linux:
     needs: version
+    if: inputs.linux
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -233,6 +288,7 @@ jobs:
 
   linux:
     needs: [version, llama-linux]
+    if: inputs.linux
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -260,6 +316,7 @@ jobs:
   # SDK to compile. Back to macos-latest once that carries Xcode 27.
   ios:
     needs: version
+    if: inputs.ios
     runs-on: xcode-27
     env:
       IPA: ${{ needs.version.outputs.ipa }}
@@ -379,6 +436,7 @@ jobs:
   # API key, the ticket stapled; see "The DMG" in macos/AGENTS.md.
   macos:
     needs: version
+    if: inputs.macos
     runs-on: xcode-27
     env:
       DMG: ${{ needs.version.outputs.dmg }}
@@ -484,6 +542,7 @@ jobs:
   # Unsigned for now; see windows/AGENTS.md.
   windows:
     needs: version
+    if: inputs.windows
     runs-on: windows-latest
     env:
       MSI: ${{ needs.version.outputs.msi }}
