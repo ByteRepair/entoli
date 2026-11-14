@@ -5,7 +5,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../data/local/byte_repair_store.dart";
 import "../../../domain/builtin_project.dart";
-import "../../../domain/shell.dart";
 import "../../../providers.dart";
 import "../controller.dart";
 import "../spec.dart";
@@ -106,12 +105,9 @@ final byteRepairSettings = [
         setUp: () => runner.run((log) async {
           final background = c.ref.read(backgroundWorkProvider);
           unawaited(background.settingUp(true));
-          final ShellResult result;
-          try {
-            result = await store.install(shell, onOutput: log);
-          } finally {
-            unawaited(background.settingUp(false));
-          }
+          final result = await store
+              .install(shell, onOutput: log)
+              .whenComplete(() => unawaited(background.settingUp(false)));
           // The whole of it: the live view may hold only part.
           if (result.output.isNotEmpty) log(result.output);
           if (result.returnCode != 0) {

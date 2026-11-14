@@ -1,6 +1,7 @@
 import "dart:async";
 import "dart:convert";
 import "dart:ffi";
+import "dart:io" show Directory;
 import "dart:isolate" show Isolate, ReceivePort, SendPort;
 import "dart:typed_data" show Uint8List;
 
@@ -1143,6 +1144,10 @@ class IshWorker implements IshTransport {
     List<String> readOnly = const [],
   }) async {
     if (!ishLinked) return (sessionId: -1, handle: 0);
+    // The bridge binds [home] at /root and cannot bind what is not there: a
+    // project workspace before its first chat. The guest would write /root
+    // into the fakefs, out of the host's sight.
+    if (home.isNotEmpty) Directory(home).createSync(recursive: true);
     await _ensure();
     final token = const Uuid().v4();
     final dispatcher = dispatcherScript(token);
