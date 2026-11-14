@@ -9,6 +9,7 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/builtin_backend.dart";
+import "package:agent_chat/data/builtin/compact_prompt.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
 import "package:agent_chat/data/builtin/llm/providers/claude_cli.dart";
@@ -2766,20 +2767,26 @@ void main() {
       parts: [MessagePart.text(text: text)],
     );
 
-    test("a live tail too big to summarize whole is halved, however much "
-        "the last marker already covers", () async {
-      // The shape a long chat compacted once has: most messages behind the
-      // marker, two too big to read after it, a newest pair that fits. A
-      // window the model's catalog does not know is the settings' guess, so
-      // this one is small enough to make the big pair too big.
+    const settings = TurnSettings(
+      model: "fake-model",
+      provider: "fake",
+      approveMode: ApproveMode.never,
+    );
+    String textOf(List<LlmMessage> ask) => ask.map((m) => m.text).join("\n");
+
+    test("a tail too big for one ask is read in pieces, each folded into "
+        "the next", () async {
+      // A window the model's catalog does not know is the settings' guess,
+      // small enough here that the two big messages cannot share an ask.
       await (AppSettings.load(config)..totalContext = 8192).save(config);
       final backend = backendOver([
-        [saidOnly("<summary>the newer half</summary>")],
+        [saidOnly("<summary>the first half</summary>")],
+        [saidOnly("<summary>all of it</summary>")],
       ]);
       final history = [
         for (var n = 0; n < 10; n++) said(n, "early $n"),
-        said(10, "a" * 20000),
-        said(11, "b" * 20000),
+        said(10, "a" * 10000),
+        said(11, "b" * 10000),
         said(12, "keep this"),
         said(13, "kept"),
       ];
@@ -2790,47 +2797,69 @@ void main() {
         compactions: const [
           ConversationCompaction(upToMessageId: "m9", summary: "earlier work"),
         ],
-        settings: const TurnSettings(
-          model: "fake-model",
-          provider: "fake",
-          approveMode: ApproveMode.never,
-        ),
+        settings: settings,
         instructions: null,
       );
 
       final marker = (outcome as Compacted).marker;
-      expect(marker.summary, "the newer half");
+      expect(marker.summary, "all of it");
       expect(marker.upToMessageId, "m13");
-      // One ask, of the newest half of what followed the marker, with the
-      // marker's summary carried as the prior one.
-      final asked = client.sent.single.map((m) => m.text).join("\n");
-      expect(asked, contains("keep this"));
-      expect(asked, isNot(contains("b" * 100)));
-      expect(asked, contains("earlier work"));
+      final [first, second] = client.sent;
+      expect(textOf(first), contains("a" * 100));
+      expect(textOf(first), contains("earlier work"));
+      expect(textOf(first), isNot(contains("b" * 100)));
+      // The second piece opens on a reply, so it is led in, and reads the
+      // first piece's summary as the prior one.
+      expect(second.first.text, CompactPrompt.continued);
+      expect(textOf(second), contains("b" * 100));
+      expect(textOf(second), contains("keep this"));
+      expect(textOf(second), contains("the first half"));
+      expect(textOf(second), isNot(contains("a" * 100)));
     });
 
-    test("a conversation that never fits says why, without asking", () async {
+    test("a step too big for an ask alone keeps its ends and says what was "
+        "cut", () async {
       await (AppSettings.load(config)..totalContext = 8192).save(config);
-      final backend = backendOver([]);
+      final backend = backendOver([
+        [saidOnly("<summary>done</summary>")],
+      ]);
 
       final outcome = await backend.compact(
         chatId,
-        history: [for (var n = 0; n < 4; n++) said(n, "x" * 40000)],
+        history: [said(0, "hi"), said(1, "start${"x" * 40000}end")],
         compactions: const [],
-        settings: const TurnSettings(
-          model: "fake-model",
-          provider: "fake",
-          approveMode: ApproveMode.never,
-        ),
+        settings: settings,
+        instructions: null,
+      );
+
+      expect((outcome as Compacted).marker.upToMessageId, "m1");
+      final asked = textOf(client.sent.single);
+      expect(asked, contains("startxxx"));
+      expect(asked, contains("xxxend"));
+      expect(asked, contains("characters were cut from the middle here"));
+    });
+
+    test("a piece the summarizer will not answer is asked again, and "
+        "nothing is recorded when it still does not", () async {
+      final backend = backendOver([
+        [saidOnly("")],
+        [saidOnly("")],
+      ]);
+
+      final outcome = await backend.compact(
+        chatId,
+        history: [said(0, "hi"), said(1, "hello")],
+        compactions: const [],
+        settings: settings,
         instructions: null,
       );
 
       expect(
         (outcome as NotCompacted).reason,
-        "What is left to summarize is about 10k tokens, more than the 4k "
-        "the summarizer can read at once.",
+        "The summarizer gave back an empty summary.",
       );
-      expect(client.sent, isEmpty);
+      final [first, second] = client.sent;
+      expect(textOf(second), textOf(first));
     });
   });
 

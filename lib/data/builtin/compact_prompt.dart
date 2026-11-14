@@ -1,3 +1,5 @@
+import "dart:convert";
+
 import "llm/llm_client.dart";
 
 final _summaryTags = RegExp(r"<summary>\s*([\s\S]*?)\s*</summary>");
@@ -94,6 +96,18 @@ $priorSummary
     return text;
   }
 
+  /// Leads a piece that opens mid-turn: a provider wants a user turn first,
+  /// and the model is told where the messages before it went.
+  static const continued =
+      "(The conversation so far is in <prior-summary> in the request at the "
+      "end. It continues from there:)";
+
+  /// What stands where the middle of a step was cut, so the two ends are not
+  /// read as joined.
+  static String cutNote(int chars) =>
+      "[… $chars characters were cut from the middle here, so the summarizer "
+      "could read the rest of the conversation …]";
+
   /// The summary out of the reply: the tags are the reliable half of the
   /// format, so what arrives without them is taken whole — the model was told
   /// to produce nothing else. Null where it said nothing at all.
@@ -137,4 +151,138 @@ int estimateTokens(List<LlmMessage> messages) {
     }
   }
   return chars ~/ charsPerToken;
+}
+
+/// A conversation too big for one ask, read in order a piece at a time: each
+/// piece's summary is the next one's `<prior-summary>`, so every message is
+/// read once and nothing is dropped.
+///
+/// A piece is whole steps — a user turn, or one response with its results —
+/// since a call parted from its result is a request a provider refuses. A
+/// step too big for an ask alone has the middle of its longest texts cut.
+class SummaryPieces {
+  SummaryPieces(List<LlmMessage> conversation)
+    : _steps = _stepsOf(conversation);
+
+  final List<List<LlmMessage>> _steps;
+  var _next = 0;
+
+  bool get isDone => _next >= _steps.length;
+
+  /// The next piece, as many steps as fit [room] tokens. Null where not even
+  /// one step can be cut to fit, which leaves this piece where it was.
+  List<LlmMessage>? next(int room) {
+    final lead =
+        _next < _steps.length && _steps[_next].first.role != LlmRole.user
+        ? const [LlmMessage(role: LlmRole.user, text: CompactPrompt.continued)]
+        : const <LlmMessage>[];
+    final space = room - estimateTokens(lead);
+    final piece = <LlmMessage>[...lead];
+    var used = 0;
+    while (_next < _steps.length) {
+      final step = _steps[_next];
+      final cost = estimateTokens(step);
+      if (used + cost > space) {
+        // A step that fits an ask of its own waits for the next one; one
+        // that must be cut anyway is cut to what this piece has left.
+        if (cost <= space) break;
+        final cut = _cut(step, space - used);
+        if (cut == null) {
+          if (used > 0) break;
+          return null;
+        }
+        piece.addAll(cut);
+        _next++;
+        break;
+      }
+      piece.addAll(step);
+      used += cost;
+      _next++;
+    }
+    return piece;
+  }
+
+  static List<List<LlmMessage>> _stepsOf(List<LlmMessage> conversation) {
+    final steps = <List<LlmMessage>>[];
+    for (final message in conversation) {
+      if (message.role == LlmRole.tool && steps.isNotEmpty) {
+        steps.last.add(message);
+      } else {
+        steps.add([message]);
+      }
+    }
+    return steps;
+  }
+
+  /// [step] with the middle of its longest texts — a message's or a call's
+  /// arguments — cut until it fits [room]. Null where what is left over is
+  /// not text: thinking, whose signature a cut would break, or attachments.
+  static List<LlmMessage>? _cut(List<LlmMessage> step, int room) {
+    if (room <= 0) return null;
+    final cut = [...step];
+    for (var tries = 0; tries < 2 * step.length + 4; tries++) {
+      final over = estimateTokens(cut) - room;
+      if (over <= 0) return cut;
+      // The longest text in the step, as (message, call): call -1 is the
+      // message's own text.
+      var (at, call, length) = (-1, -1, 0);
+      for (final (i, message) in cut.indexed) {
+        if (message.text.length > length) {
+          (at, call, length) = (i, -1, message.text.length);
+        }
+        for (final (j, c) in message.toolCalls.indexed) {
+          if (c.argumentsJson.length > length) {
+            (at, call, length) = (i, j, c.argumentsJson.length);
+          }
+        }
+      }
+      // The note costs room of its own, and a cut that keeps less than a few
+      // lines of each end tells the summarizer nothing.
+      final keep = length - over * charsPerToken - 200;
+      if (at < 0 || keep < 400) return null;
+      final message = cut[at];
+      cut[at] = call < 0
+          ? _with(message, text: _middleCut(message.text, keep))
+          : _with(
+              message,
+              toolCalls: [
+                for (final (j, c) in message.toolCalls.indexed)
+                  j == call
+                      ? LlmToolCall(
+                          id: c.id,
+                          name: c.name,
+                          // Still an object: a provider parses the arguments.
+                          argumentsJson: jsonEncode({
+                            "cut": _middleCut(c.argumentsJson, keep),
+                          }),
+                          signature: c.signature,
+                        )
+                      : c,
+              ],
+            );
+    }
+    return estimateTokens(cut) <= room ? cut : null;
+  }
+
+  static String _middleCut(String text, int keep) {
+    final head = keep ~/ 2;
+    final tail = keep - head;
+    return "${text.substring(0, head)}\n\n"
+        "${CompactPrompt.cutNote(text.length - keep)}\n\n"
+        "${text.substring(text.length - tail)}";
+  }
+
+  static LlmMessage _with(
+    LlmMessage m, {
+    String? text,
+    List<LlmToolCall>? toolCalls,
+  }) => LlmMessage(
+    role: m.role,
+    text: text ?? m.text,
+    toolCalls: toolCalls ?? m.toolCalls,
+    toolCallId: m.toolCallId,
+    reasoning: m.reasoning,
+    reasoningSignature: m.reasoningSignature,
+    attachments: m.attachments,
+  );
 }

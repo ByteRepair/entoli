@@ -471,11 +471,12 @@ summary describes the work rather than the summarizing — and there is no
 `<analysis>` step, the analysis being stripped before anything is stored and
 costing output tokens on the context that is already over budget.
 
-**The retry ladder**, not a failure: a span too big to summarize is halved —
-the part after the last marker, which is what the ask reads — and
-re-asked, three attempts, each attempt's marker covering only what it read.
-`upToMessageId` is the honest boundary of what was actually summarized, which
-is why the field is on the record rather than implied.
+**Too big for one ask is read in pieces**, not dropped: what follows the last
+marker is cut into pieces that fit, each summarized with the summary so far
+as `<prior-summary>`, a step too big alone keeping its ends around a note of
+what was cut. `upToMessageId` is the newest message, every one before it
+having been read; see "Compaction (the `compact` callback)" in
+`lib/data/builtin/AGENTS.md`.
 
 ### Callbacks, and the wired skill
 
