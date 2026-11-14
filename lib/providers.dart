@@ -35,6 +35,7 @@ import "domain/bot_avatar/definition.dart";
 import "domain/bot_avatar/spec.dart";
 import "domain/agent_backend.dart";
 import "domain/app_restart.dart";
+import "domain/sign_in_page.dart";
 import "domain/app_secrets.dart";
 import "domain/app_settings.dart";
 import "domain/confinement.dart";
@@ -419,6 +420,11 @@ final appUpdateHostProvider = Provider<AppUpdateHost>(
 /// The menu bar, where the platform has one. Overridden in `main` beside the
 /// rest of the platform ports.
 final appMenusProvider = Provider<AppMenus>((ref) => const NoAppMenus());
+
+/// Overridden in `main` on the phones, where the page opens inside the app.
+final signInPagesProvider = Provider<SignInPages>(
+  (ref) => const NoSignInPages(),
+);
 
 /// The browser the agent drives, the same instance the backend holds: the
 /// settings page closes it before replacing the embedded one under it.

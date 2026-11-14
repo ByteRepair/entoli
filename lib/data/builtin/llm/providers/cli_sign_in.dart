@@ -20,20 +20,20 @@ class CliSignIn {
       // at its first half.
       _process.errors.listen((chunk) => _scan(_errors.add(chunk))),
     ];
-    exited = _process.exitCode.then((code) {
-      _scan(_errors.rest.trim());
+    final ended = _process.exitCode.then((code) {
+      final said = _errors.rest.trim();
+      _scan(said);
       for (final sub in _subs) {
         unawaited(sub.cancel());
       }
-      return code == 0 && !_cancelled;
+      return (code: code, said: said);
     });
-    result = exited.then((ok) async {
-      final signedIn = ok && await _provider.signedIn();
+    exited = ended.then((e) => e.code == 0 && !_cancelled);
+    result = ended.then((e) async {
+      final signedIn = await exited && await _provider.signedIn();
       if (!signedIn) {
-        final said = _errors.rest.trim();
         _failure =
-            "sign-in exited ${await _process.exitCode}"
-            "${said.isEmpty ? "" : ":\n$said"}";
+            "sign-in exited ${e.code}${e.said.isEmpty ? "" : ":\n${e.said}"}";
         logFailure("cli", _failure!);
       }
       return signedIn;

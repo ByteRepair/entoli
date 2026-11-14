@@ -170,6 +170,7 @@ class CliAccount extends ChangeNotifier {
           .listen((_) => unawaited(cancel()));
       unawaited(
         signIn.exited.then((ok) {
+          unawaited(_container.read(signInPagesProvider).close());
           if (ok) _show(run, const CliFinishing());
         }),
       );

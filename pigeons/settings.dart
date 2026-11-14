@@ -1170,6 +1170,10 @@ abstract class NativeSettings {
   /// The open form's program account as it now stands, while its sign-in
   /// row is shown.
   void cliAccount(CliAccountData account);
+
+  /// Take down a CLI's sign-in page the client opened, its program having
+  /// exited.
+  void closeSignInPage();
 }
 
 /// Where a CLI program's account stands: the core's `CliAccountStage`, name

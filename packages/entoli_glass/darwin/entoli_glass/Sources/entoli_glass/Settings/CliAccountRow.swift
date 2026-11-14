@@ -49,7 +49,7 @@ private struct CliSignInSheet: View {
   @State private var code = ""
   /// The page last opened, so a page named again is opened once.
   @State private var opened: String?
-  @State private var signIn: SignInPage?
+  @State private var signIn: URL?
 
   var body: some View {
     let account = model.cliAccount
@@ -61,7 +61,6 @@ private struct CliSignInSheet: View {
       case .waiting:
         if let page = account?.page.flatMap(URL.init(string:)) {
           waiting(page, plan: account?.plan ?? "")
-            .signInPage($signIn)
         }
       case .finishing:
         busy("Finishing the sign-in…", value: nil)
@@ -86,8 +85,9 @@ private struct CliSignInSheet: View {
     .onChange(of: account?.page, initial: true) { _, page in
       guard let page, page != opened, let url = URL(string: page) else { return }
       opened = page
-      signIn = SignInPage(url: url)
+      signIn = url
     }
+    .signInPage($signIn)
   }
 
   @ViewBuilder private func busy(_ text: String, value: Double?) -> some View {
@@ -105,7 +105,7 @@ private struct CliSignInSheet: View {
           .fixedSize(horizontal: false, vertical: true)
       }
       HStack {
-        Button("Open the Page Again") { signIn = SignInPage(url: page) }
+        Button("Open the Page Again") { signIn = page }
         Button("Copy Link") { copyToPasteboard(page.absoluteString) }
       }
       .buttonStyle(.borderless)

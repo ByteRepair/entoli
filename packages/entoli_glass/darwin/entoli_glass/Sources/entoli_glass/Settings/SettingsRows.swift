@@ -666,7 +666,7 @@ struct NoticeRow: View {
 struct InfoRow: View {
   let model: SettingsModel
   let row: SettingRowData
-  @State private var signIn: SignInPage?
+  @State private var signIn: URL?
 
   var body: some View {
     ForEach(Array(row.info.compactMap { $0 }.enumerated()), id: \.offset) { _, info in
@@ -676,7 +676,7 @@ struct InfoRow: View {
             .font(.body.monospaced()).foregroundStyle(.secondary)
         }
       } else if let link = info.link.flatMap(URL.init(string:)), info.signIn {
-        Button { signIn = SignInPage(url: link) } label: { infoLabel(info) }
+        Button { signIn = link } label: { infoLabel(info) }
           .signInPage($signIn)
       } else if let link = info.link.flatMap(URL.init(string:)) {
         Link(destination: link) { infoLabel(info) }

@@ -9,6 +9,7 @@ import "../core/platform/remote_artifact.dart" show RemoteArtifacts;
 import "../data/sync/sync_hub.dart";
 import "../domain/chat_store.dart";
 import "../domain/link_opener.dart";
+import "../domain/sign_in_page.dart";
 import "widgets/dialogs.dart";
 import "../app/pages/web.dart";
 import "app_pages.dart";
@@ -184,3 +185,17 @@ class PlatformLinkOpener implements LinkOpener {
 /// The plugin's Android default draws the WebView into a texture Flutter
 /// composites, which lags scrolling by a frame and makes flings stutter;
 /// hybrid composition puts the native view on screen to scroll by itself.
+
+/// The page [PlatformLinkOpener.openSignIn] opened inside the app: an
+/// SFSafariViewController closes, and a Custom Tab, which nothing outside
+/// it may close, stays.
+class InAppSignInPages implements SignInPages {
+  const InAppSignInPages();
+
+  @override
+  Future<void> close() async {
+    if (await supportsCloseForLaunchMode(LaunchMode.inAppBrowserView)) {
+      await closeInAppWebView();
+    }
+  }
+}
