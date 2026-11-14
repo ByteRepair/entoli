@@ -215,7 +215,8 @@ struct CardsRow: View {
           card(item).contentShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
-        .disabled(item.tap == nil)
+        // Not disabled: that dims a card that only has nothing to open.
+        .allowsHitTesting(item.tap != nil)
       }
     }
     .padding(.vertical, 4)
