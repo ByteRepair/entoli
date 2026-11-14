@@ -1,6 +1,6 @@
 import "../domain/models.dart";
 import "../domain/permission.dart" show addDirectoryName;
-import "../domain/tool_arg.dart" show stringArg;
+import "../domain/tool_arg.dart" show callDescription;
 import "chat_controller.dart" show TurnDriver;
 
 /// Which answers [approval] is offered beside Deny, which always is: Allow for
@@ -18,10 +18,8 @@ import "chat_controller.dart" show TurnDriver;
 
 /// What the agent says [approval]'s call is for: the `description` it gave
 /// the call, its own claim, shown beside the call rather than in its place.
-String? approvalPurpose(ToolApproval approval) {
-  final text = stringArg(approval.argumentsJson, "description")?.trim();
-  return text == null || text.isEmpty ? null : text;
-}
+String? approvalPurpose(ToolApproval approval) =>
+    callDescription(approval.argumentsJson);
 
 extension AnswerApproval on TurnDriver {
   /// Answer [approval]: a standing rule carries the call it is a rule for,

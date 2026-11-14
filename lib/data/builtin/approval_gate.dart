@@ -168,11 +168,7 @@ class ApprovalGate {
     List<String> dirs = const [],
   }) {
     if (!confines(permissions)) return null;
-    final granted = [
-      workspace,
-      if (projectWorkspace != workspace) projectWorkspace,
-      ...permissions.writableDirs,
-    ];
+    final granted = [workspace, ..._alsoGranted(permissions)];
     bool on(SandboxGrant grant) => permissions.grants.contains(grant);
     return CommandSandbox(
       workspace: workspace,
@@ -188,6 +184,13 @@ class ApprovalGate {
       ],
     );
   }
+
+  /// What [permissions] grant beside the chat's workspace: the project's
+  /// workspace and the writable folders.
+  List<String> _alsoGranted(StandingPermissions permissions) => [
+    if (projectWorkspace != workspace) projectWorkspace,
+    ...permissions.writableDirs,
+  ];
 
   /// The sandbox [analysis]'s command runs under once the rules have their
   /// word on it — none where a no-sandbox rule covers every segment that
@@ -301,7 +304,7 @@ class ApprovalGate {
     // is there to judge it. Without a sandbox the parse has nothing to hold
     // the run to, and the mode decides as for any command.
     if (analysis?.escalationNote case final note?
-        when !unsandboxed && await confinementOf(analysis!) != null) {
+        when !unsandboxed && sandbox != null) {
       switch (callMode) {
         case ApproveMode.never:
           outcome.result = ShellResult.failed(note);
@@ -314,7 +317,7 @@ class ApprovalGate {
             run,
             outcome,
             argumentsText,
-            analysis,
+            analysis!,
             rules,
             sandboxWrites,
           );
@@ -547,12 +550,7 @@ class ApprovalGate {
         toolName,
         call.argumentsJson,
         workspace: workspace,
-        alsoWritable:
-            sandboxWrites ??
-            [
-              if (projectWorkspace != workspace) projectWorkspace,
-              ...policy.writableDirs,
-            ],
+        alsoWritable: sandboxWrites ?? _alsoGranted(policy),
         findings: findings,
         request: asked,
       ),

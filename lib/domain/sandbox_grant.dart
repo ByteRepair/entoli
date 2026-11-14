@@ -9,36 +9,34 @@ import "settings/setting.dart";
 /// "Approvals" in `lib/data/builtin/AGENTS.md`.
 enum SandboxGrant {
   systemTemps(
+    SettingKeys.sandboxTemps,
     "System temp folders",
     "/tmp and your user's temp folder, for tools that ignore TMPDIR.",
   ),
   caches(
+    SettingKeys.sandboxCaches,
     "Package and build caches",
     "~/.cache, ~/.npm, ~/.pub-cache, Cargo, Gradle, Xcode's DerivedData and "
         "the like.",
   ),
   toolchains(
+    SettingKeys.sandboxToolchains,
     "Language toolchains",
     "Where uv keeps the Pythons it downloads and rustup its toolchains. "
         "Nothing on your PATH.",
   ),
   git(
+    SettingKeys.sandboxGit,
     "Git repositories",
     "The .git folder of a repository a command works in, so a commit lands. "
         "Auto mode asks before a command changes its hooks or config.",
   );
 
-  const SandboxGrant(this.title, this.description);
+  const SandboxGrant(this.setting, this.title, this.description);
 
+  final Setting<bool> setting;
   final String title;
   final String description;
-
-  Setting<bool> get setting => switch (this) {
-    systemTemps => SettingKeys.sandboxTemps,
-    caches => SettingKeys.sandboxCaches,
-    toolchains => SettingKeys.sandboxToolchains,
-    git => SettingKeys.sandboxGit,
-  };
 
   /// The settings page's id for this grant's toggle.
   String get settingId => "sandbox.$name";

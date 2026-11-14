@@ -197,17 +197,19 @@ that must never run. A write you are merely unsure about is ask.
     final asked = request == null
         ? ""
         : "${requestBlock(request, budget: budget)}\n\n";
-    final description = toolName == bashToolName
-        ? stringArg(argumentsJson, "description")?.trim()
-        : null;
-    final unsandboxed =
-        toolName == bashToolName && boolArg(argumentsJson, "unsandboxed");
-    return "${asked}Tool: $toolName"
-        "${unsandboxed ? " (unsandboxed: true)" : ""}"
-        "${description == null || description.isEmpty ? "" : "\nDescription (the agent's claim): ${_head(description, _asideCap)}"}"
-        "\nArguments: $args\nWorkspace: $workspace"
-        "${alsoWritable.isEmpty ? "" : "\nAlso writable: ${alsoWritable.join(", ")}"}"
-        "${findings.isEmpty ? "" : "\nParse findings:\n${[for (final f in findings) "- $f"].join("\n")}"}";
+    final bash = toolName == bashToolName;
+    final description = bash ? callDescription(argumentsJson) : null;
+    return [
+      "${asked}Tool: $toolName"
+          "${bash && boolArg(argumentsJson, "unsandboxed") ? " (unsandboxed: true)" : ""}",
+      if (description != null)
+        "Description (the agent's claim): ${_head(description, _asideCap)}",
+      "Arguments: $args",
+      "Workspace: $workspace",
+      if (alsoWritable.isNotEmpty) "Also writable: ${alsoWritable.join(", ")}",
+      if (findings.isNotEmpty)
+        "Parse findings:\n${[for (final f in findings) "- $f"].join("\n")}",
+    ].join("\n");
   }
 
   /// A quarter of the window. Not more for a larger one: every gated call

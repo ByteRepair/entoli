@@ -8,6 +8,7 @@ import "../../../domain/sandbox_grant.dart";
 import "../../../domain/settings/keys.dart";
 import "../../../providers.dart";
 import "../../downloads/rootfs_downloads.dart";
+import "../bind.dart";
 import "../controller.dart";
 import "../forms/permission_rule.dart";
 import "../scope.dart";
@@ -217,14 +218,9 @@ final terminalSettings = [
       description: grant.description,
       hint: UiHint.toggle,
       at: _defaultProject,
-      build: (c) => ToggleController(
-        c.spec,
-        value: c.scope.own(grant.setting),
-        effective: c.scope.resolve(grant.setting) ?? true,
-        onSet: (value) async {
-          await c.scope.write(grant.setting, value);
-          return null;
-        },
+      build: (c) => c.toggle(
+        grant.setting,
+        shown: c.scope.resolve(grant.setting) ?? true,
       ),
     ),
   // One row per distribution, with the single thing that can be done to it

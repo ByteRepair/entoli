@@ -3,7 +3,7 @@ import "dart:io";
 import "package:path/path.dart" as p;
 
 import "../../core/log.dart";
-import "../../domain/shell.dart" show isTildePath, repositoryRootOf;
+import "../../domain/shell.dart" show cdTarget, commandPath, repositoryRootOf;
 import "../../domain/shell_command_analysis.dart" show plainCommand;
 import "local_shell.dart" show LocalShell;
 
@@ -137,23 +137,19 @@ List<String> commandDirs(
   String Function(String path) resolve,
 ) {
   var at = standing;
-  String full(String path) => isTildePath(path)
-      ? resolve(path)
-      : p.normalize(p.isAbsolute(path) ? path : p.join(at, path));
-  final dirs = [standing];
+  final dirs = {standing};
   for (final segment in segments ?? const <String>[]) {
     final words = plainCommand(segment)?.words;
     if (words == null || words.isEmpty) continue;
-    if (words.length == 2 && words[0] == "cd") {
-      at = full(words[1]);
-      dirs.add(at);
+    if (cdTarget(words, at, resolve) case final target?) {
+      dirs.add(at = target);
     } else if (words[0] == "git") {
       for (var i = 1; i < words.length - 1; i++) {
-        if (words[i] == "-C") dirs.add(full(words[i + 1]));
+        if (words[i] == "-C") dirs.add(commandPath(words[i + 1], at, resolve));
       }
     }
   }
-  return dirs;
+  return dirs.toList();
 }
 
 /// Where toolchains keep what they download under the machine user's
@@ -165,12 +161,11 @@ List<String> commandDirs(
 List<String> toolchainHomes({required String? home}) {
   if (home == null) return const [];
   return [
-    for (final dir in const [
-      [".local", "share", "uv"],
-      [".rustup"],
+    for (final dir in [
+      p.join(home, ".local", "share", "uv"),
+      p.join(home, ".rustup"),
     ])
-      if (Directory(p.joinAll([home, ...dir])).existsSync())
-        p.joinAll([home, ...dir]),
+      if (Directory(dir).existsSync()) dir,
   ];
 }
 

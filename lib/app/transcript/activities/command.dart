@@ -37,8 +37,7 @@ final class BashActivity extends ToolActivity {
   /// gave one.
   @override
   String? summary(Run run) {
-    final said = stringArg(run.call?.argumentsJson, "description")?.trim();
-    return said == null || said.isEmpty ? null : said.split("\n").first;
+    return callDescription(run.call?.argumentsJson)?.split("\n").first;
   }
 
   @override
