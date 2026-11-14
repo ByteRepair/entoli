@@ -328,7 +328,9 @@ struct DetailView: View {
         }
       }
     }
-    .frame(minWidth: 560, minHeight: 420)
+    #if os(macOS)
+      .frame(minWidth: 560, minHeight: 420)
+    #endif
   }
 
   @ViewBuilder private func sectionBody(_ section: SectionSnapshot) -> some View {
