@@ -310,27 +310,55 @@ struct TurnSurfaceView: View {
         .fixedSize(horizontal: false, vertical: true)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
       }
-      HStack(spacing: 8) {
-        Spacer(minLength: 0)
-        Button("Deny", role: .destructive) { answer(approval, .deny) }
-          .glassButton()
-        if approval.chat {
-          Button("Always in Chat") { answer(approval, .chat) }.glassButton()
+      // A row of buttons does not shrink, so on a phone the four in one row
+      // would widen the card past the screen: the "Always" pair moves up.
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: 8) {
+          denyButton(approval)
+          alwaysButtons(approval)
+          allowButton(approval)
         }
-        if approval.project {
-          Button("Always in Project") { answer(approval, .project) }.glassButton()
+        VStack(alignment: .trailing, spacing: 8) {
+          HStack(spacing: 8) { alwaysButtons(approval) }
+          HStack(spacing: 8) {
+            denyButton(approval)
+            allowButton(approval)
+          }
         }
-        if approval.allow {
-          // No Return shortcut: the window would take Return for it before
-          // the composer's field heard it.
-          Button("Allow") { answer(approval, .allow) }
-            .glassButton(prominent: true)
+        VStack(alignment: .trailing, spacing: 8) {
+          denyButton(approval)
+          alwaysButtons(approval)
+          allowButton(approval)
         }
       }
+      .frame(maxWidth: .infinity, alignment: .trailing)
     }
     .padding(14)
     .glassSurface(RoundedRectangle(cornerRadius: 20, style: .continuous))
     .transition(.opacity.combined(with: .move(edge: .bottom)))
+  }
+
+  private func denyButton(_ approval: ApprovalSnapshot) -> some View {
+    Button("Deny", role: .destructive) { answer(approval, .deny) }
+      .glassButton()
+  }
+
+  @ViewBuilder private func alwaysButtons(_ approval: ApprovalSnapshot) -> some View {
+    if approval.chat {
+      Button("Always in Chat") { answer(approval, .chat) }.glassButton()
+    }
+    if approval.project {
+      Button("Always in Project") { answer(approval, .project) }.glassButton()
+    }
+  }
+
+  @ViewBuilder private func allowButton(_ approval: ApprovalSnapshot) -> some View {
+    if approval.allow {
+      // No Return shortcut: the window would take Return for it before
+      // the composer's field heard it.
+      Button("Allow") { answer(approval, .allow) }
+        .glassButton(prominent: true)
+    }
   }
 
   private func answer(_ approval: ApprovalSnapshot, _ answer: ApprovalAnswer) {
