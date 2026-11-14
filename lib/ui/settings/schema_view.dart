@@ -152,6 +152,9 @@ class SettingRow extends StatelessWidget {
         UiHint.card => _Card(c),
         _ => _Notice(c),
       },
+      final CollectionController c when c.hint == UiHint.cards => c.typed(
+        <V>(c) => _Cards<V>(c),
+      ),
       final CollectionController c => c.typed(<V>(c) => _Collection<V>(c)),
       final PairingController c => PairingControls(flow: c.flow),
       final SubpageController c => ListTile(
@@ -984,6 +987,24 @@ class _Catalog extends StatelessWidget {
   );
 }
 
+/// An item's byline, alike in rows and cards.
+class _Byline extends StatelessWidget {
+  const _Byline(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      text,
+      style: theme.textTheme.labelMedium?.copyWith(
+        color: theme.colorScheme.primary,
+      ),
+    );
+  }
+}
+
 class _Badge extends StatelessWidget {
   const _Badge({required this.label, required this.tone});
 
@@ -1384,6 +1405,117 @@ class _DragSliderState extends State<_DragSlider> {
   }
 }
 
+/// The items as cards, as many across as the width takes up to three: each
+/// its face, name, words and badge, a tap running the item's [tap].
+class _Cards<T> extends StatelessWidget {
+  const _Cards(this.c);
+
+  final CollectionController<T> c;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final rows = c.rows;
+    return LayoutBuilder(
+      builder: (context, box) {
+        const gap = 12.0;
+        final inner = box.maxWidth - 32;
+        final across = (inner / 280).floor().clamp(1, rows.length.clamp(1, 3));
+        final width = (inner - gap * (across - 1)) / across;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Wrap(
+            spacing: gap,
+            runSpacing: gap,
+            children: [
+              for (final (index, row) in rows.indexed)
+                SizedBox(
+                  width: width,
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: switch (row.tap) {
+                        final tap? => () => _tell(context, c.act(index, tap)),
+                        null => null,
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            switch ((row.face, settingIcon(row.glyph))) {
+                              (AvatarRowFace(:final spec, :final animate), _) =>
+                                BotAvatarView(
+                                  spec: spec,
+                                  size: 48,
+                                  animate: animate,
+                                ),
+                              (_, final icon?) => SizedBox.square(
+                                dimension: 48,
+                                child: Icon(
+                                  icon,
+                                  size: 28,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              _ => const SizedBox.shrink(),
+                            },
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    row.title,
+                                    style: theme.textTheme.titleMedium,
+                                  ),
+                                  if (row.byline case final byline?)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: _Byline(byline),
+                                    ),
+                                  if (row.subtitle case final words?
+                                      when words.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        words,
+                                        maxLines: 3,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            if (row.badge case final badge?)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: _Badge(
+                                  label: badge,
+                                  tone: theme.colorScheme.primary,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// The items as rows, each with what [CollectionItem] says of it: its state
 /// at a glance, its words and what went wrong, the switch that arms it, what
 /// can be done to it, and a tap that edits it through its form; and the
@@ -1422,11 +1554,13 @@ class _Collection<T> extends StatelessWidget {
           if (c.actionsOf(row) case final actions)
             ListTile(
               leading: switch ((row.face, settingIcon(row.glyph))) {
-                (AvatarRowFace(:final spec), _) => BotAvatarView(
-                  spec: spec,
-                  size: 40,
-                  reactToTap: true,
-                ),
+                (AvatarRowFace(:final spec, :final animate), _) =>
+                  BotAvatarView(
+                    spec: spec,
+                    size: 40,
+                    animate: animate,
+                    reactToTap: true,
+                  ),
                 // Live, and happy at a tap: a row scrolled out of view is not
                 // painted, which stops its ticker until it is back.
                 (AgentRowFace(:final project, :final name), _) => AgentPicture(
@@ -1566,17 +1700,26 @@ class _Collection<T> extends StatelessWidget {
 
   Widget? _words(BuildContext context, CollectionItem row) {
     final error = row.error;
-    if (row.subtitle == null && error == null && row.meters.isEmpty) {
+    if (row.byline == null &&
+        row.subtitle == null &&
+        error == null &&
+        row.meters.isEmpty) {
       return null;
     }
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (row.byline case final byline?)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: _Byline(byline),
+          ),
         if (row.subtitle case final subtitle?) Text(subtitle),
         if (error != null)
           SelectableText(
             error,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+            style: TextStyle(color: theme.colorScheme.error),
           ),
         for (final meter in row.meters)
           if (meter.segments.isNotEmpty)

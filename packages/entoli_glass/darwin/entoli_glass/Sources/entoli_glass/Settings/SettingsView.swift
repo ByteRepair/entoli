@@ -285,6 +285,8 @@ struct SettingRowView: View {
     case .collection:
       if row.hint == .triggers {
         TriggersView(model: model, row: row)
+      } else if row.hint == .cards {
+        CardsRow(model: model, row: row)
       } else {
         CollectionRow(model: model, row: row)
       }

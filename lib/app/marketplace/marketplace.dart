@@ -32,9 +32,13 @@ class MarketplaceLocation {
 
   /// One of [files] at the published ref. "HEAD" reads the default branch,
   /// which is also how an unpinned ref is meant to drift.
-  Uri file(String name) => Uri.parse(
-    "https://raw.githubusercontent.com/$repo/${ref ?? "HEAD"}/$dir/$name",
-  );
+  Uri file(String name) =>
+      Uri.parse("https://raw.githubusercontent.com/$repo/$_at/$dir/$name");
+
+  /// The entry's directory on GitHub, for a person to read.
+  Uri get page => Uri.parse("https://github.com/$repo/tree/$_at/$dir");
+
+  String get _at => ref ?? "HEAD";
 
   /// Strict: [fetchMarketplaceEntries] throws on anything it cannot read, so
   /// an ext record missing a piece is an unreachable marketplace rather than
@@ -92,13 +96,23 @@ class MarketplaceEntry {
   final List<String> tags;
   final MarketplaceLocation? location;
 
-  /// The line under the description wherever the entry is drawn — the list's
-  /// row and the preview's header alike read it, so the two cannot drift.
-  String get metaLine => [
-    if (author.isNotEmpty) author,
-    if (version != null) "v$version",
-    ...tags,
-  ].join(" · ");
+  /// Whether its files are another repository's rather than the site's.
+  bool get external => location != null;
+
+  /// Its authors, as the site joins them: a remote entry's are its source's
+  /// contributors, up to ten.
+  late final List<String> authors = [
+    for (final name in author.split(","))
+      if (name.trim() case final name when name.isNotEmpty) name,
+  ];
+
+  /// Who made it, short enough for a row: the first author, and how many
+  /// more.
+  String? get byline => switch (authors) {
+    [] => null,
+    [final one] => "by $one",
+    [final first, ...final rest] => "by $first and ${rest.length} more",
+  };
 
   /// The name an agent installs under: the slug's last segment — an ext key
   /// carries its manifest's name ahead of the entry's own, and the
@@ -126,24 +140,43 @@ class MarketplaceEntry {
   );
 }
 
+/// What `<folder>/collections.json` says of one collection: the name and
+/// summary its members are shown under, and the members by index key.
+typedef CollectionRecord = ({
+  String name,
+  String summary,
+  List<String> members,
+});
+
+/// A section as the site lists it: every entry, and the collection records
+/// that group them (see `groupIntoCollections`).
+class MarketplaceListing {
+  const MarketplaceListing(this.entries, [this.collections = const {}]);
+
+  final List<MarketplaceEntry> entries;
+  final Map<String, CollectionRecord> collections;
+}
+
 /// The marketplace's list for [kind]: the site's section index, joined where
-/// it names one with the ext index's location record. Throws on anything it
-/// cannot read, so the page decides what an unreachable marketplace looks
-/// like. An ext index that is not there (a site published before remote
-/// entries were) leaves every entry local; any other bad answer throws.
-Future<List<MarketplaceEntry>> fetchMarketplaceEntries(
+/// it names one with the ext index's location record, and the collection
+/// records beside them. Throws on anything it cannot read, so the page
+/// decides what an unreachable marketplace looks like. An ext index or a
+/// collections file that is not there (a site published before either) reads
+/// as none; any other bad answer throws.
+Future<MarketplaceListing> fetchMarketplaceEntries(
   http.Client client,
   CompletionKind kind,
 ) async {
   final index = Uri.parse("$marketplaceBaseUrl/${kind.folder}/index.json");
-  final (body, locations) = await (
+  final (body, locations, collections) = await (
     _get(client, index),
     _fetchLocations(client, kind),
+    _fetchCollections(client, kind),
   ).wait;
   // A missing index is a site that cannot be read, not an empty one.
   if (body == null) throw http.ClientException("HTTP 404", index);
   final json = jsonDecode(utf8.decode(body)) as Map<String, Object?>;
-  return [
+  final entries = [
     for (final MapEntry(:key, :value) in json.entries)
       MarketplaceEntry.fromJson(
         key,
@@ -151,7 +184,28 @@ Future<List<MarketplaceEntry>> fetchMarketplaceEntries(
         location: locations[key],
       ),
   ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  return MarketplaceListing(entries, collections);
 }
+
+Future<Map<String, CollectionRecord>> _fetchCollections(
+  http.Client client,
+  CompletionKind kind,
+) async {
+  final uri = Uri.parse("$marketplaceBaseUrl/${kind.folder}/collections.json");
+  final body = await _get(client, uri);
+  if (body == null) return const {};
+  final json = jsonDecode(utf8.decode(body)) as Map<String, Object?>;
+  return {
+    for (final MapEntry(:key, :value) in json.entries)
+      key: _collectionRecord(key, value as Map<String, Object?>),
+  };
+}
+
+CollectionRecord _collectionRecord(String slug, Map<String, Object?> json) => (
+  name: (json["name"] as String?) ?? slug,
+  summary: (json["summary"] as String?) ?? "",
+  members: (json["members"] as List<Object?>?)?.cast<String>() ?? const [],
+);
 
 /// The site's ext index: where each remote entry's files live, keyed as the
 /// section index keys them. The build writes it per entry; a site older than

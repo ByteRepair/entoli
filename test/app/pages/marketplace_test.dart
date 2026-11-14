@@ -5,12 +5,14 @@ import "dart:typed_data";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
+import "package:agent_chat/app/marketplace/groups.dart";
 import "package:agent_chat/app/marketplace/marketplace.dart";
 import "package:agent_chat/app/pages/app_page.dart";
 import "package:agent_chat/app/pages/marketplace.dart";
 import "package:agent_chat/app/settings/controller.dart";
 import "package:agent_chat/data/prompts/skill_import.dart";
 import "package:agent_chat/data/prompts/skill_package.dart";
+import "package:agent_chat/domain/bot_avatar/spec.dart";
 import "package:agent_chat/domain/models.dart";
 
 import "../../data/fake_network.dart";
@@ -51,6 +53,8 @@ const upstreamSkillDir = "skills/red-letter";
 const upstreamAgentDir = "agents/letter-writer";
 
 void main() {
+  // The rows' faces are picked from the presets, an asset read.
+  TestWidgetsFlutterBinding.ensureInitialized();
   late TestApp app;
   late FakeNetwork network;
 
@@ -78,6 +82,11 @@ void main() {
   /// remote entry's source location is recorded.
   String extIndexPath(CompletionKind kind) =>
       Uri.parse("$marketplaceBaseUrl/ext/${kind.folder}/index.json").path;
+
+  /// The skills' collection records, which group the remote skill.
+  final collectionsPath = Uri.parse(
+    "$marketplaceBaseUrl/skills/collections.json",
+  ).path;
 
   /// The path of one raw file of the remote fixtures' source repository, at
   /// the ref their location records name.
@@ -148,6 +157,12 @@ void main() {
   }
 }"""),
     ],
+    collectionsPath: [
+      utf8.encode(
+        '{"upstream": {"name": "Upstream", "summary": "Letters from afar.", '
+        '"members": ["upstream/red-letter"]}}',
+      ),
+    ],
     rawPath(upstreamSkillDir, "README.md"): [
       utf8.encode("# Red letter\n\nFrom upstream.\n"),
     ],
@@ -204,13 +219,21 @@ Frame it, from upstream.
     final page = PageDriver(app, MarketplaceAppPage());
     await page.until(
       () =>
-          page.find<CollectionController<MarketplaceEntry>>("local") != null ||
+          page.find<CollectionController<MarketplaceEntry>>("front") != null ||
           page.find<NoticeController>("failed") != null,
     );
     return page;
   }
 
-  List<String> names(PageDriver<MarketplaceAppPage> page, String part) =>
+  List<String> collectionNames(PageDriver page) =>
+      page
+          .find<CollectionController<MarketplaceCollection>>("collections")
+          ?.items
+          .map((c) => c.name)
+          .toList() ??
+      const [];
+
+  List<String> names(PageDriver page, String part) =>
       page
           .find<CollectionController<MarketplaceEntry>>(part)
           ?.items
@@ -222,7 +245,7 @@ Frame it, from upstream.
     CompletionKind kind,
     String slug,
   ) async {
-    final all = await fetchMarketplaceEntries(network, kind);
+    final all = (await fetchMarketplaceEntries(network, kind)).entries;
     final page = PageDriver(
       app,
       MarketplaceEntryAppPage(
@@ -237,33 +260,121 @@ Frame it, from upstream.
   String skillDir(String name) =>
       p.join(app.config.promptsDir(CompletionKind.skill), name);
 
-  test("the site's own entries first, the remote under External", () async {
+  test("collections first, then every entry in none", () async {
     start();
     final page = await list();
-    expect(names(page, "local"), ["letterbox"]);
-    expect(names(page, "remote"), ["red-letter"]);
+    expect(collectionNames(page), ["Upstream"]);
+    expect(names(page, "front"), ["letterbox"]);
+    // Every member is another repository's, and the card says so.
+    final card = page
+        .at<CollectionController<MarketplaceCollection>>("collections")
+        .rows
+        .single;
+    expect((card.byline, card.badge), ("1 skill", "External"));
+    // No agent collections: every agent is on the front page.
     await page
         .at<ChoiceController<CompletionKind>>("kind")
         .set(CompletionKind.agent);
-    await page.until(() => names(page, "local").contains("diary"));
-    expect(names(page, "remote"), ["letter-writer"]);
+    await page.until(() => names(page, "front").contains("diary"));
+    expect(names(page, "front"), ["diary", "letter-writer"]);
+    expect(collectionNames(page), isEmpty);
   });
 
-  test("the search and the tags narrow the list in its order", () async {
+  test("rows wear a still face of their key once presets load", () async {
+    start();
+    final page = await list();
+    CollectionItem first() =>
+        page.at<CollectionController<MarketplaceEntry>>("front").rows.first;
+    await page.until(() => first().face != null);
+    final face = first().face! as AvatarRowFace;
+    expect(face.animate, isFalse);
+    expect(face.spec.colour, BotPalette.ownColour("letterbox"));
+    expect(first().glyph, isNull);
+  });
+
+  test("a site with no collections lists every entry up front", () async {
+    start(site()..remove(collectionsPath));
+    final page = await list();
+    expect(names(page, "front"), ["letterbox", "red-letter"]);
+    expect(collectionNames(page), isEmpty);
+  });
+
+  test("a search reaches into the collections", () async {
     start();
     final page = await list();
     await page.at<TextController>("search").set("upstream");
-    expect(names(page, "local"), isEmpty);
-    expect(names(page, "remote"), ["red-letter"]);
-    await page.at<TextController>("search").set("");
+    expect(collectionNames(page), ["Upstream"]);
+    expect(names(page, "front"), isEmpty);
+    expect(names(page, "in-upstream"), ["red-letter"]);
+    // A member matching where its collection does not is still found.
+    await page.at<TextController>("search").set("red");
+    expect(collectionNames(page), isEmpty);
+    expect(names(page, "in-upstream"), ["red-letter"]);
+    await page.at<TextController>("search").set("nothing like it");
+    expect(page.find<NoticeController>("nomatch"), isNotNull);
+  });
+
+  test("a row says who made it, and an external one says so", () async {
+    start(site()..remove(collectionsPath));
+    final page = await list();
+    final [local, remote] = page
+        .at<CollectionController<MarketplaceEntry>>("front")
+        .rows;
+    expect((local.byline, local.badge), ("by Entoli Team · v1.0.0", null));
+    expect(remote.byline, "by The Upstream Authors · v2.0.0");
+    expect(remote.badge, "External");
+  });
+
+  test("the tags sit over the front page's entries and filter them", () async {
+    start();
+    // One entry up front: no tag narrows it, so there is no Tags row.
+    expect((await list()).find<ActionController>("tags"), isNull);
+    app.dispose();
+    network.bodies.remove(collectionsPath);
+    app = TestApp.create(marketplaceClient: network);
+    final page = await list();
+    expect(
+      page.sections.firstWhere((s) => s.id == "front").controllers.first,
+      isA<ActionController>(),
+    );
     await page.at<ActionController>("tags").run();
     final tags =
         page.app.container.read(appPagesProvider).last
             as MarketplaceTagsAppPage;
     final tagged = PageDriver(app, tags);
     await tagged.at<ToggleController>("tag-layout").set(true);
-    expect(names(page, "local"), ["letterbox"]);
-    expect(names(page, "remote"), isEmpty);
+    expect(names(page, "front"), ["letterbox"]);
+  });
+
+  test("the tag picker searches the tags", () async {
+    start(site()..remove(collectionsPath));
+    final page = await list();
+    await page.at<ActionController>("tags").run();
+    final tagged = PageDriver(
+      app,
+      page.app.container.read(appPagesProvider).last as MarketplaceTagsAppPage,
+    );
+    await tagged.at<TextController>("search").set(" LAY");
+    expect(tagged.find<ToggleController>("tag-layout"), isNotNull);
+    expect(tagged.find<ToggleController>("tag-external"), isNull);
+    await tagged.at<TextController>("search").set("zzz");
+    expect(tagged.find<NoticeController>("nomatch"), isNotNull);
+  });
+
+  test("a collection opens on its members, searched on their own", () async {
+    start();
+    final page = await list();
+    await page
+        .at<CollectionController<MarketplaceCollection>>("collections")
+        .act(0, "open");
+    final opened = page.app.container.read(appPagesProvider).last;
+    expect(opened.address, "marketplace-collection/skill/upstream");
+    final collection = PageDriver(app, opened as MarketplaceCollectionAppPage);
+    expect(names(collection, "members"), ["red-letter"]);
+    await collection.at<TextController>("search").set("letterbox");
+    expect(names(collection, "members"), isEmpty);
+    // One member: no tag narrows it.
+    expect(collection.find<ActionController>("tags"), isNull);
   });
 
   test(
@@ -274,7 +385,7 @@ Frame it, from upstream.
       expect(page.find<NoticeController>("failed"), isNotNull);
       network.bodies.addAll(site());
       await page.at<ActionController>("retry").run();
-      await page.until(() => names(page, "local").isNotEmpty);
+      await page.until(() => names(page, "front").isNotEmpty);
     },
   );
 
@@ -333,6 +444,38 @@ Frame it, from upstream.
     await (await entry(CompletionKind.agent, "diary")).tool("install").run();
     expect(File(p.join(agents, "diary.md")).existsSync(), isTrue);
     expect(File(p.join(agents, "diary.png")).existsSync(), isFalse);
+  });
+
+  test("an entry's page sets its words apart from who made it", () async {
+    start();
+    final page = await entry(CompletionKind.skill, "upstream/red-letter");
+    String field(String id) => page.at<NoticeController>(id).lines.single.text;
+    expect(
+      field("description"),
+      "Frames the reply from an upstream repository.",
+    );
+    expect(page.at<NoticeController>("author").spec.title, "Author");
+    expect(field("author"), "The Upstream Authors");
+    expect((field("version"), field("tags")), ("2.0.0", "external"));
+    final source = page.at<InfoController>("source").rows.single;
+    expect(source.subtitle, "$upstreamRepo/$upstreamSkillDir");
+    expect(
+      source.link.toString(),
+      "https://github.com/$upstreamRepo/tree/main/$upstreamSkillDir",
+    );
+    final card = page.at<CollectionController<MarketplaceEntry>>("card");
+    expect(card.rows.single.badge, "External");
+    // A site's own entry has no source to point at, and no badge.
+    final local = await entry(CompletionKind.skill, "letterbox");
+    expect(local.find<InfoController>("source"), isNull);
+    expect(
+      local
+          .at<CollectionController<MarketplaceEntry>>("card")
+          .rows
+          .single
+          .badge,
+      isNull,
+    );
   });
 
   test(

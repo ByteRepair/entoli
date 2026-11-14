@@ -872,6 +872,7 @@ class CollectionItem {
     this.title, {
     this.id,
     this.removeLabel,
+    this.byline,
     this.subtitle,
     this.error,
     this.glyph,
@@ -898,6 +899,10 @@ class CollectionItem {
 
   /// What it is known by, where a frontend opens a page of its own for it.
   final String? id;
+
+  /// Who made it, or how much it holds: a short line under its title, set
+  /// apart from [subtitle]'s words.
+  final String? byline;
 
   final String? subtitle;
 
@@ -953,9 +958,12 @@ final class AgentRowFace extends RowFace {
 }
 
 final class AvatarRowFace extends RowFace {
-  const AvatarRowFace(this.spec);
+  const AvatarRowFace(this.spec, {this.animate = true});
 
   final BotAvatarSpec spec;
+
+  /// False draws a still: a long list of live faces is a ticker per row.
+  final bool animate;
 }
 
 /// One thing an item has spent, said; [fraction] of it gone where it is

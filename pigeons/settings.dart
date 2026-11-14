@@ -78,6 +78,7 @@ enum SettingHint {
   skills,
   botAvatars,
   open,
+  cards,
 }
 
 /// What an icon beside a setting stands for: the schema's `SettingGlyph`,
@@ -281,6 +282,7 @@ class SettingMeterSegmentData {
 class SettingItemData {
   SettingItemData({
     required this.title,
+    this.byline,
     this.subtitle,
     this.error,
     this.icon,
@@ -291,6 +293,7 @@ class SettingItemData {
     this.opens,
     this.bot,
     this.botColour,
+    this.botLive = true,
     this.tap,
     this.badge,
     this.editable = true,
@@ -301,6 +304,9 @@ class SettingItemData {
 
   /// What it has spent, a line each under its words.
   List<SettingMeterData?> meters;
+
+  /// Who made it, or how much it holds, under its title.
+  String? byline;
   String? subtitle;
   String? error;
   SettingIcon? icon;
@@ -314,6 +320,9 @@ class SettingItemData {
   /// colour as 0xRRGGBB.
   String? bot;
   int? botColour;
+
+  /// False draws [bot] still.
+  bool botLive;
 
   /// A page of the app's that tells more of it.
   TextPageData? opens;

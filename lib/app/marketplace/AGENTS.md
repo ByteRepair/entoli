@@ -6,10 +6,24 @@ entries, Skills or Agents picked above them. Tapping an entry opens
 `MarketplaceEntryAppPage`, which previews and installs it.
 
 The list is organized, and the organizing is `groups.dart`, pure
-and tested on its own. The site's own entries come first, each half
-alphabetical, and the remote half sits under an "External" heading — drawn
-only where both halves have something, a heading that separates nothing being
-no heading at all. A search row searches — name and description alike, over the entries the fetch already
+and tested on its own. **Collections** come first: `/<folder>/collections.json`
+(`{slug: {name, summary, members}}`, the marketplace build's) names each one
+and its members by index key — an ext manifest's sub-entries, or a group the
+marketplace declares in `collections/<folder>.toml` — and a listed entry is
+that collection's rather than a front-page row. Membership is the list and
+nothing else, so a site from before the file (a 404, read as no records)
+leaves every entry on the front page as it was, and a key the index no
+longer has drops out. A collection row opens `MarketplaceCollectionAppPage`,
+the members already fetched, with a search and tags of its own, its address
+scoped by slug, since `open` raises a page already open at an address. With
+a query the front page also shows the matching collections and, under each
+collection's name, its matching members, so a search finds a skill wherever
+it is filed. **The front page's tags filter its own entries only**, so their
+row heads the entries' section, under the collections rather than over them,
+and stays there while a tick is set even if a search empties it. A tag every
+entry of a list carries narrows nothing and is not offered (`tagsOf`), which
+is what keeps `external` off a collection of remote entries; a list no tag
+narrows has no Tags row. A search row searches — name and description alike, over the entries the fetch already
 holds, nothing re-read off disk; the needle is the sidebar's
 `searchNeedle` (`domain/chat_search.dart`), the one shared rule for what a typed query compares as, and
 the lowercased name and description the match reads are `late final` on the
@@ -22,8 +36,16 @@ already filtered — and passing means carrying **every** tag ticked: the
 intersection, where an empty set filters nothing. Search and tags hold
 together, and a no-match result says "Nothing matches here.", distinct from
 the empty-index line. The picker lists the section's tags with each one's
-entry count, and Clear when anything is ticked; the row that opens it is
-dead while the list has not landed.
+entry count under a search of its own, and Clear when anything is ticked.
+
+**Every row wears a Bot Avatar picked from its key** (`face.dart`): the
+preset at `hashString(key) % presets.length`, coloured `ownColour(key)`, so a
+row looks the same on every device with nothing fetched. It follows the
+bundled presets' order, so reordering them changes every row's face; that is
+accepted. The faces are stills (`AvatarRowFace(animate: false)`, `botLive` on
+the wire): a collection of hundreds of live faces is a ticker per row. Until
+the presets load the rows keep their glyph, and a row with a face has none,
+since the native row draws both.
 
 The list is the site's `index.json` per section
 (`byterepair.github.io/entoli-marketplace`). The URL is
@@ -32,7 +54,9 @@ one. The section path is `CompletionKind.folder`, which is `"skills"` /
 `"agents"`, the site's own directory names: one fact, written once — and
 anchored on the field's doc in `models.dart`, the place an edit would land.
 Fetched beside it is `/ext/<folder>/index.json`, the site's record of where
-every remote entry's files live, joined into the list by key.
+every remote entry's files live, joined into the list by key, and
+`collections.json`, in the same wait, so one provider has one loading and one
+error state.
 
 Entry files fetch as `/{folder}/{slug}/{file}`; the skill package is the one
 exception, fetched as `/{folder}/{slug}.skill` — its own function,
@@ -61,10 +85,16 @@ as no locations, which is every entry local — the old behavior, unbroken.
 `fetchMarketplaceEntries` is the whole read, and it throws on anything it
 cannot do. What is absent in an entry's frontmatter — `version`, `tags` — is
 null or empty here; nothing is invented for it. Entries are sorted by name,
-the way the library below sorts its own. The meta line —
-`author · v<version> · tags`, joined — is a getter on `MarketplaceEntry`,
-read by the list's row and the preview's header alike, so the two renderings
-cannot drift; the test asserts both.
+the way the library below sorts its own. The list's row is for scanning:
+its byline (`CollectionItem.byline`) says who made it and the version, the
+description is cut at a word near 140 characters, and **an entry another
+repository serves is badged External** (`MarketplaceEntry.external`, a
+location record), as is a collection whose every member is. A remote entry's
+author is up to ten contributors, so the byline names the first and counts
+the rest; the preview lists them all. Collections are drawn as cards
+(`UiHint.cards`), their count as the byline, and a collection's page opens on
+its own card; headings say how many sit under them, and a search that finds
+nothing names what was typed.
 
 `marketplaceEntriesProvider` is `autoDispose`, per tab: a reopen re-fetches
 rather than showing what may have changed underneath it. The fetch rides
@@ -89,6 +119,11 @@ is what the real site answers about a file an entry does not carry, and
 rather than as a failure — an agent's `profile.png` is there and then absent.
 
 ## From list to preview
+
+The preview opens on the entry's own card — face, byline, External — and
+keeps what it says apart: the description as a paragraph of its own, then
+Details, a labelled row each for the authors, the version and the tags, and
+for a remote entry its source directory on GitHub as a link.
 
 `EntryPreview` is what the page fetched at open: the README, the parsed
 `.skill` (or the parser's reason it refused one), the agent's prompt and its

@@ -72,6 +72,7 @@ class _IncomingLinksState extends ConsumerState<IncomingLinks> {
         // The provider logs a failed fetch; a missing slug is this one's.
         final entries = await ref
             .read(marketplaceEntriesProvider(kind).future)
+            .then((listing) => listing.entries)
             .catchError((Object _) => const <Never>[]);
         final entry = entries.where((e) => e.slug == slug).firstOrNull;
         if (!mounted) return;

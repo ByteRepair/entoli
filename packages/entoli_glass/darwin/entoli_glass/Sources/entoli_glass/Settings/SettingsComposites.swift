@@ -36,7 +36,7 @@ struct CollectionRow: View {
           if let bot = item.bot {
             BotFaceView(
               model: model, key: bot, colour: Int(item.botColour ?? 0xff6a1a), size: 32,
-              reactToTap: true)
+              live: item.botLive, reactToTap: true)
           } else if let data = item.image?.data, let image = PlatformImage(data: data) {
             Image(platformImage: image).resizable().scaledToFill()
               .frame(width: 32, height: 32).clipShape(Circle())
@@ -49,6 +49,7 @@ struct CollectionRow: View {
           let actions = item.actions.compactMap { $0 }
           let words = VStack(alignment: .leading, spacing: 2) {
             Text(item.title)
+            if let byline = item.byline { BylineText(text: byline) }
             if let subtitle = item.subtitle, !subtitle.isEmpty {
               Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
@@ -188,6 +189,85 @@ struct CollectionRow: View {
       }
     }
     .asking($acting.confirm, $acting.notice) { acting.agreed(model, row.id) }
+  }
+}
+
+/// A collection's items as glass cards in a grid: face, name, words and
+/// badge, a tap running the item's own action.
+struct CardsRow: View {
+  let model: SettingsModel
+  let row: SettingRowData
+  @State private var acting = ItemActing()
+
+  var body: some View {
+    let items = row.items.compactMap { $0 }
+    // A lone card fills the row rather than one column of several.
+    let columns =
+      items.count == 1
+      ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 240), spacing: 12)]
+    LazyVGrid(columns: columns, spacing: 12) {
+      ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+        if let tap = item.tap {
+          Button {
+            acting.run(model, row.id, index, tap)
+          } label: {
+            card(item).contentShape(RoundedRectangle(cornerRadius: 16))
+          }
+          .buttonStyle(.plain)
+        } else {
+          card(item)
+        }
+      }
+    }
+    .padding(.vertical, 4)
+    // Glass of their own: a grouped cell around them is a box in a box.
+    .listRowBackground(Color.clear)
+    .listRowInsets(EdgeInsets())
+    .asking($acting.confirm, $acting.notice) { acting.agreed(model, row.id) }
+  }
+
+  private func card(_ item: SettingItemData) -> some View {
+    HStack(alignment: .top, spacing: 12) {
+      if let bot = item.bot {
+        BotFaceView(
+          model: model, key: bot, colour: Int(item.botColour ?? 0xff6a1a), size: 44,
+          live: item.botLive)
+      } else if let icon = item.icon {
+        Image(systemName: icon.symbol).font(.title2).foregroundStyle(.secondary)
+          .frame(width: 44, height: 44)
+      }
+      VStack(alignment: .leading, spacing: 4) {
+        Text(item.title).font(.headline)
+        if let byline = item.byline { BylineText(text: byline) }
+        if let subtitle = item.subtitle, !subtitle.isEmpty {
+          Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+        }
+      }
+      Spacer(minLength: 0)
+      if let badge = item.badge { BadgeLabel(text: badge) }
+    }
+    .padding(14)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .glassSurface(RoundedRectangle(cornerRadius: 16))
+  }
+}
+
+/// An item's byline, alike in rows and cards.
+struct BylineText: View {
+  let text: String
+
+  var body: some View {
+    Text(text).font(.caption.weight(.medium)).foregroundStyle(.tint)
+  }
+}
+
+/// A word set beside an item, in a pill: a catalog's or a card's badge.
+struct BadgeLabel: View {
+  let text: String
+
+  var body: some View {
+    Text(text).font(.caption2).padding(.horizontal, 6).padding(.vertical, 1)
+      .overlay(Capsule().stroke(Color.accentColor))
   }
 }
 
@@ -630,10 +710,7 @@ struct CatalogRow: View {
         VStack(alignment: .leading, spacing: 3) {
           HStack {
             Text(item.title)
-            if let badge = item.badge {
-              Text(badge).font(.caption2).padding(.horizontal, 6).padding(.vertical, 1)
-                .overlay(Capsule().stroke(Color.accentColor))
-            }
+            if let badge = item.badge { BadgeLabel(text: badge) }
           }
           if let summary = item.summary, !summary.isEmpty {
             Text(summary).font(.caption).foregroundStyle(.secondary)
