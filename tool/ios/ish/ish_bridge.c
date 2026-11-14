@@ -49,6 +49,17 @@
 
 static bool ish_booted = false;
 
+// `current` is per thread, and the Dart workers call in from whatever pool
+// thread they land on. Left on a child the bridge started, it names a dead
+// task once that child exits (fs NULL, then freed), and the next path lookup
+// on that thread faults. The bridge's own guest work runs as init, which
+// never exits.
+static void become_init(void) {
+    lock(&pids_lock);
+    current = pid_get_task(1);
+    unlock(&pids_lock);
+}
+
 // ---- helpers ----
 
 // A host fd as a guest fd on the current task: the same three lines
@@ -264,6 +275,7 @@ static bool guest_prepare(
             return false;
         }
     }
+    become_init();
     if (data_dir[0] != '\0') {
         bind_data_dir(data_dir);
         bind_read_only(read_only, read_only_count);
@@ -406,11 +418,13 @@ ish_session *ish_session_init(
     s->wake_write = wake_pipe[1];
     // task_start sets the task's pthread going; do_execve only dressed it.
     task_start(task);
+    become_init();
 
     *error = NULL;
     return s;
 
 fail:
+    become_init();
     for (int i = 0; i < 2; i++) {
         if (stdin_pipe[i] >= 0) close(stdin_pipe[i]);
         if (stdout_pipe[i] >= 0) close(stdout_pipe[i]);
@@ -793,11 +807,13 @@ ish_pipe_session *ish_pipe_init(
     unlock(&pids_lock);
 
     task_start(task);
+    become_init();
 
     *error = NULL;
     return s;
 
 fail:
+    become_init();
     for (int i = 0; i < 2; i++) {
         if (stdin_pipe[i] >= 0) close(stdin_pipe[i]);
         if (stdout_pipe[i] >= 0) close(stdout_pipe[i]);
