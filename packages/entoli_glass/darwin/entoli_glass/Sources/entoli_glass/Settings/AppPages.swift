@@ -195,7 +195,11 @@ struct AppPageView: View {
               Button(page.guarded ? "Cancel" : "Done", action: leave)
             }
           }
-          ForEach(Array(page.toolbar.compactMap { $0 }.enumerated()), id: \.element.id) {
+          // Keyed on enabled too: iOS keeps a bar item drawn as it first was
+          // while its id stands, so the welcome's Done stayed off once ticked.
+          ForEach(
+            Array(page.toolbar.compactMap { $0 }.enumerated()), id: \.element.barIdentity
+          ) {
             index, row in
             // The page's own: the first, unless it is secondary.
             ToolbarItem(
@@ -240,6 +244,10 @@ private struct ToolbarAction: View {
     .disabled(!row.enabled || row.busy)
     .help(row.detail ?? row.label ?? row.title)
   }
+}
+
+extension SettingRowData {
+  fileprivate var barIdentity: String { "\(id)/\(enabled)" }
 }
 
 extension View {
