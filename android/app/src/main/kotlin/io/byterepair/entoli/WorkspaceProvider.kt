@@ -4,6 +4,7 @@ import android.database.Cursor
 import android.database.MatrixCursor
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
+import android.provider.DocumentsContract
 import android.provider.DocumentsContract.Document
 import android.provider.DocumentsContract.Root
 import android.provider.DocumentsProvider
@@ -11,6 +12,12 @@ import android.webkit.MimeTypeMap
 import org.json.JSONObject
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.IOException
+import java.nio.file.FileVisitResult
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 
 // The workspaces in the Files app and in every picker that asks for a file or a
 // folder. See "The workspaces in the Files app" in AGENTS.md.
@@ -30,7 +37,10 @@ class WorkspaceProvider : DocumentsProvider() {
             add(Root.COLUMN_DOCUMENT_ID, PROJECT)
             add(Root.COLUMN_TITLE, info.loadLabel(app.packageManager).toString())
             add(Root.COLUMN_SUMMARY, "Workspaces")
-            add(Root.COLUMN_FLAGS, Root.FLAG_LOCAL_ONLY or Root.FLAG_SUPPORTS_IS_CHILD)
+            add(
+                Root.COLUMN_FLAGS,
+                Root.FLAG_LOCAL_ONLY or Root.FLAG_SUPPORTS_IS_CHILD or Root.FLAG_SUPPORTS_CREATE,
+            )
             // `<application android:icon>`, so this does not follow the user's
             // icon setting: a root is the app's, like AgentService's.
             add(Root.COLUMN_ICON, info.icon)
@@ -45,7 +55,7 @@ class WorkspaceProvider : DocumentsProvider() {
             return cursor
         }
         val found = locate(documentId)
-        cursor.addFile(documentId, found.file, nameOf(found))
+        cursor.addFile(documentId, found, nameOf(found))
         return cursor
     }
 
@@ -65,7 +75,11 @@ class WorkspaceProvider : DocumentsProvider() {
             // these directories, so a link out of one is something it can have
             // been told to leave behind.
             if (contains(parent.workspace, child.canonicalFile)) {
-                cursor.addFile("$parentDocumentId/${child.name}", child, child.name)
+                cursor.addFile(
+                    "$parentDocumentId/${child.name}",
+                    Found(child, parent.workspace),
+                    child.name,
+                )
             }
         }
         return cursor
@@ -75,14 +89,37 @@ class WorkspaceProvider : DocumentsProvider() {
         documentId: String,
         mode: String,
         signal: CancellationSignal?,
-    ): ParcelFileDescriptor {
-        if (ParcelFileDescriptor.parseMode(mode) != ParcelFileDescriptor.MODE_READ_ONLY) {
-            throw UnsupportedOperationException("Entoli's workspaces are read-only here")
+    ): ParcelFileDescriptor =
+        ParcelFileDescriptor.open(locate(documentId).file, ParcelFileDescriptor.parseMode(mode))
+
+    override fun createDocument(
+        parentDocumentId: String,
+        mimeType: String,
+        displayName: String,
+    ): String {
+        val parent = locate(parentDocumentId)
+        if (!canCreateIn(parent)) throw notFound(parentDocumentId)
+        // One segment: a name is the caller's, and `../x` would land outside.
+        if (displayName.isBlank() || '/' in displayName || displayName == "." || displayName == "..") {
+            throw IllegalArgumentException("Not a file name: $displayName")
         }
-        return ParcelFileDescriptor.open(
-            locate(documentId).file,
-            ParcelFileDescriptor.MODE_READ_ONLY,
-        )
+        val name = uniqueName(parent.file, withExtension(displayName, mimeType))
+        val file = File(parent.file, name)
+        val made = if (mimeType == Document.MIME_TYPE_DIR) file.mkdir() else file.createNewFile()
+        if (!made) throw IOException("Could not create $name")
+        notifyChildren(parentDocumentId)
+        return "$parentDocumentId/$name"
+    }
+
+    override fun deleteDocument(documentId: String) {
+        val found = locate(documentId)
+        if (isFixed(found)) throw UnsupportedOperationException("$documentId cannot be deleted")
+        // The link itself, not what `locate` resolved it to, and links inside a
+        // folder are removed rather than followed: one can point out of the
+        // workspace, or at a sibling the user did not ask to lose.
+        deleteTree(File(dataDir, documentId).toPath())
+        revokeDocumentPermission(documentId)
+        notifyChildren(documentId.substringBeforeLast('/'))
     }
 
     override fun isChildDocument(parentDocumentId: String, documentId: String): Boolean = when {
@@ -93,6 +130,59 @@ class WorkspaceProvider : DocumentsProvider() {
     }
 
     private class Found(val file: File, val workspace: File)
+
+    // The workspace and the chat folders are the app's, like the projects
+    // above them: what they hold is the user's to change, they are not.
+    private fun isFixed(found: Found) =
+        found.file == found.workspace || found.file == chatsOf(found) ||
+            found.file.parentFile == chatsOf(found)
+
+    // `chats/` holds the chats' folders and nothing the user adds, as on iOS.
+    private fun canCreateIn(found: Found) = found.file.isDirectory && found.file != chatsOf(found)
+
+    private fun chatsOf(found: Found) = File(found.workspace, "chats")
+
+    // DocumentsUI's own rule: a name already taken gets " (n)" before its
+    // extension rather than replacing what is there.
+    private fun uniqueName(dir: File, name: String): String {
+        if (!File(dir, name).exists()) return name
+        val base = name.substringBeforeLast('.')
+        val ext = if ('.' in name) "." + name.substringAfterLast('.') else ""
+        return generateSequence(1) { it + 1 }.map { "$base ($it)$ext" }
+            .first { !File(dir, it).exists() }
+    }
+
+    // A picker asks for "notes" as text/plain, and expects notes.txt.
+    private fun withExtension(name: String, mimeType: String): String {
+        if (mimeType == Document.MIME_TYPE_DIR || '.' in name) return name
+        val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
+        return if (ext == null) name else "$name.$ext"
+    }
+
+    private fun deleteTree(root: Path) {
+        Files.walkFileTree(
+            root,
+            object : SimpleFileVisitor<Path>() {
+                override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                    Files.delete(file)
+                    return FileVisitResult.CONTINUE
+                }
+
+                override fun postVisitDirectory(dir: Path, exc: IOException?): FileVisitResult {
+                    if (exc != null) throw exc
+                    Files.delete(dir)
+                    return FileVisitResult.CONTINUE
+                }
+            },
+        )
+    }
+
+    private fun notifyChildren(parentDocumentId: String) {
+        app.contentResolver.notifyChange(
+            DocumentsContract.buildChildDocumentsUri(authority, parentDocumentId),
+            null,
+        )
+    }
 
     /**
      * Only the workspaces are reachable: a document id has to name one before
@@ -148,13 +238,13 @@ class WorkspaceProvider : DocumentsProvider() {
         val workspace = File(dir, "workspace")
         if (!workspace.isDirectory) return
         val id = "projects/$project/workspace"
-        addFile(id, workspace, WORKSPACE)
+        addFile(id, Found(workspace, workspace), WORKSPACE)
         // The chats' own, which are folders in the workspace above them. Named
         // here as well as reachable by opening `chats/`, since a title is what
         // the user picked one by.
         File(workspace, "chats").listFiles()?.sortedWith(BY_NAME)?.forEach { chat ->
             if (chat.isDirectory) {
-                addFile("$id/chats/${chat.name}", chat, chatTitle(dir, chat.name))
+                addFile("$id/chats/${chat.name}", Found(chat, workspace), chatTitle(dir, chat.name))
             }
         }
     }
@@ -185,15 +275,24 @@ class WorkspaceProvider : DocumentsProvider() {
         }
     }
 
-    private fun MatrixCursor.addFile(documentId: String, file: File, name: String) {
+    private fun MatrixCursor.addFile(documentId: String, found: Found, name: String) {
+        val file = found.file
         newRow().apply {
             add(Document.COLUMN_DOCUMENT_ID, documentId)
             add(Document.COLUMN_DISPLAY_NAME, name)
             add(Document.COLUMN_MIME_TYPE, mimeOf(file))
             add(Document.COLUMN_LAST_MODIFIED, file.lastModified())
-            add(Document.COLUMN_FLAGS, 0)
+            add(Document.COLUMN_FLAGS, flagsOf(found))
             if (file.isFile) add(Document.COLUMN_SIZE, file.length())
         }
+    }
+
+    private fun flagsOf(found: Found): Int {
+        var flags = 0
+        if (found.file.isFile) flags = flags or Document.FLAG_SUPPORTS_WRITE
+        if (canCreateIn(found)) flags = flags or Document.FLAG_DIR_SUPPORTS_CREATE
+        if (!isFixed(found)) flags = flags or Document.FLAG_SUPPORTS_DELETE
+        return flags
     }
 
     // A project's workspace by the word the explorer uses, a chat's by the title
@@ -245,6 +344,8 @@ class WorkspaceProvider : DocumentsProvider() {
     private val dataDir by lazy { appDataDir(app) }
 
     private val app get() = context!!
+
+    private val authority get() = "${app.packageName}.workspaces"
 
     private companion object {
         // A document id is either a project — ":" for the root, which is all of

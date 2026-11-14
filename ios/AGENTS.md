@@ -573,7 +573,7 @@ runs from Documents and Files shows nothing until a launch where it lands. Both 
 for the team in the developer portal; the release job ad-hoc signs the
 extension with its own before the export, as it does the app.
 
-**Writable, unlike Android's.** What Files adds, edits or deletes inside a
+**Writable, as Android's is.** What Files adds, edits or deletes inside a
 workspace lands in it: `createItem` writes the file or folder, `modifyItem`
 swaps new contents in, `deleteItem` removes the item. The root has no
 directory to write to, so an item added there stays on the device

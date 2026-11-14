@@ -140,11 +140,15 @@ the URI the user picked through that UI and nothing besides, and
 `FLAG_SUPPORTS_IS_CHILD` is what lets them pick a whole workspace rather than one
 file at a time.
 
-**Read-only**, because this is the route out and the other direction already has
-a better one: a file coming in has to be told which workspace it belongs in, and
-"Sharing to Entoli" above is the page that asks. Writing would be
-`FLAG_SUPPORTS_CREATE` and `createDocument`/`deleteDocument` beside what is there
-rather than a change to any of it.
+**Writable, as iOS's is.** What Files or a picker adds, edits or deletes
+inside a workspace lands in it: `createDocument` makes the file or folder (a
+taken name gets ` (n)`, as DocumentsUI's own providers do), `openDocument`
+opens in whatever mode was asked, and `deleteDocument` removes the item. The
+workspace, its `chats/` and the chats' own folders are the app's and cannot be
+deleted, and `chats/` takes nothing new, since it holds the chats and only
+them. Nothing is renamed or moved: a document id is the item's path. A delete
+removes a link rather than what it points at, and does not follow links inside
+a folder, since one can point out of the workspace.
 
 **The tree is the on-disk layout, not a view of it.** The root is every project,
 which is what `projects/` holds; a project's children are its shared
