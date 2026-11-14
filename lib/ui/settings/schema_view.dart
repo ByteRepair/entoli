@@ -1402,7 +1402,7 @@ class _Cards<T> extends StatelessWidget {
       builder: (context, box) {
         const gap = 12.0;
         final inner = box.maxWidth - 32;
-        final across = (inner / 280).floor().clamp(1, 3);
+        final across = (inner / 280).floor().clamp(1, rows.length.clamp(1, 3));
         final width = (inner - gap * (across - 1)) / across;
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),

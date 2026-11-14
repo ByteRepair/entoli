@@ -203,7 +203,11 @@ struct CardsRow: View {
 
   var body: some View {
     let items = row.items.compactMap { $0 }
-    LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: 12)], spacing: 12) {
+    // A lone card is the page's head, and fills the row.
+    let columns =
+      items.count == 1
+      ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 240), spacing: 12)]
+    LazyVGrid(columns: columns, spacing: 12) {
       ForEach(Array(items.enumerated()), id: \.offset) { index, item in
         Button {
           if let tap = item.tap { acting.run(model, row.id, index, tap) }
