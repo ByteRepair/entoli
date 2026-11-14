@@ -987,6 +987,24 @@ class _Catalog extends StatelessWidget {
   );
 }
 
+/// An item's byline, alike in rows and cards.
+class _Byline extends StatelessWidget {
+  const _Byline(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      text,
+      style: theme.textTheme.labelMedium?.copyWith(
+        color: theme.colorScheme.primary,
+      ),
+    );
+  }
+}
+
 class _Badge extends StatelessWidget {
   const _Badge({required this.label, required this.tone});
 
@@ -1455,13 +1473,7 @@ class _Cards<T> extends StatelessWidget {
                                   if (row.byline case final byline?)
                                     Padding(
                                       padding: const EdgeInsets.only(top: 2),
-                                      child: Text(
-                                        byline,
-                                        style: theme.textTheme.labelMedium
-                                            ?.copyWith(
-                                              color: theme.colorScheme.primary,
-                                            ),
-                                      ),
+                                      child: _Byline(byline),
                                     ),
                                   if (row.subtitle case final words?
                                       when words.isNotEmpty)
@@ -1485,13 +1497,9 @@ class _Cards<T> extends StatelessWidget {
                             if (row.badge case final badge?)
                               Padding(
                                 padding: const EdgeInsets.only(left: 8),
-                                child: Chip(
-                                  label: Text(badge),
-                                  labelStyle: theme.textTheme.labelSmall,
-                                  visualDensity: VisualDensity.compact,
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  padding: EdgeInsets.zero,
+                                child: _Badge(
+                                  label: badge,
+                                  tone: theme.colorScheme.primary,
                                 ),
                               ),
                           ],
@@ -1705,12 +1713,7 @@ class _Collection<T> extends StatelessWidget {
         if (row.byline case final byline?)
           Padding(
             padding: const EdgeInsets.only(bottom: 2),
-            child: Text(
-              byline,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: theme.colorScheme.primary,
-              ),
-            ),
+            child: _Byline(byline),
           ),
         if (row.subtitle case final subtitle?) Text(subtitle),
         if (error != null)

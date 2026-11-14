@@ -110,10 +110,10 @@ List<(String, int)> tagsOf(List<MarketplaceEntry> entries) {
       counts[tag] = (counts[tag] ?? 0) + 1;
     }
   }
-  final tags = counts.keys.toList()
-    ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  final tags = counts.entries.toList()
+    ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
   return [
-    for (final tag in tags)
-      if (counts[tag]! < entries.length) (tag, counts[tag]!),
+    for (final MapEntry(:key, :value) in tags)
+      if (value < entries.length) (key, value),
   ];
 }

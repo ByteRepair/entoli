@@ -54,7 +54,7 @@ void main() {
     expect(find.byType(Card), findsNWidgets(2));
     expect(find.text("About Microsoft."), findsOneWidget);
     expect(find.text("3 skills"), findsNWidgets(2));
-    expect(find.widgetWithText(Chip, "External"), findsNWidgets(2));
+    expect(find.text("External"), findsNWidgets(2));
     await tester.tap(find.text("Microsoft"));
     await settleIo(tester);
     expect(page.tapped, [1]);

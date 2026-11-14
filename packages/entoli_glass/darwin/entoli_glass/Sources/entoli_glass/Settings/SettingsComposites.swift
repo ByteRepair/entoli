@@ -49,9 +49,7 @@ struct CollectionRow: View {
           let actions = item.actions.compactMap { $0 }
           let words = VStack(alignment: .leading, spacing: 2) {
             Text(item.title)
-            if let byline = item.byline {
-              Text(byline).font(.caption.weight(.medium)).foregroundStyle(.tint)
-            }
+            if let byline = item.byline { BylineText(text: byline) }
             if let subtitle = item.subtitle, !subtitle.isEmpty {
               Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
@@ -203,23 +201,28 @@ struct CardsRow: View {
 
   var body: some View {
     let items = row.items.compactMap { $0 }
-    // A lone card is the page's head, and fills the row.
+    // A lone card fills the row rather than one column of several.
     let columns =
       items.count == 1
       ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 240), spacing: 12)]
     LazyVGrid(columns: columns, spacing: 12) {
       ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-        Button {
-          if let tap = item.tap { acting.run(model, row.id, index, tap) }
-        } label: {
-          card(item).contentShape(RoundedRectangle(cornerRadius: 16))
+        if let tap = item.tap {
+          Button {
+            acting.run(model, row.id, index, tap)
+          } label: {
+            card(item).contentShape(RoundedRectangle(cornerRadius: 16))
+          }
+          .buttonStyle(.plain)
+        } else {
+          card(item)
         }
-        .buttonStyle(.plain)
-        // Not disabled: that dims a card that only has nothing to open.
-        .allowsHitTesting(item.tap != nil)
       }
     }
     .padding(.vertical, 4)
+    // Glass of their own: a grouped cell around them is a box in a box.
+    .listRowBackground(Color.clear)
+    .listRowInsets(EdgeInsets())
     .asking($acting.confirm, $acting.notice) { acting.agreed(model, row.id) }
   }
 
@@ -235,23 +238,36 @@ struct CardsRow: View {
       }
       VStack(alignment: .leading, spacing: 4) {
         Text(item.title).font(.headline)
-        if let byline = item.byline {
-          Text(byline).font(.caption.weight(.medium)).foregroundStyle(.tint)
-        }
+        if let byline = item.byline { BylineText(text: byline) }
         if let subtitle = item.subtitle, !subtitle.isEmpty {
           Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(3)
         }
       }
       Spacer(minLength: 0)
-      if let badge = item.badge {
-        Text(badge).font(.caption2.weight(.medium))
-          .padding(.horizontal, 8).padding(.vertical, 3)
-          .background(.tint.opacity(0.15), in: Capsule())
-      }
+      if let badge = item.badge { BadgeLabel(text: badge) }
     }
     .padding(14)
     .frame(maxWidth: .infinity, alignment: .leading)
     .glassSurface(RoundedRectangle(cornerRadius: 16))
+  }
+}
+
+/// An item's byline, alike in rows and cards.
+struct BylineText: View {
+  let text: String
+
+  var body: some View {
+    Text(text).font(.caption.weight(.medium)).foregroundStyle(.tint)
+  }
+}
+
+/// A word set beside an item, in a pill: a catalog's or a card's badge.
+struct BadgeLabel: View {
+  let text: String
+
+  var body: some View {
+    Text(text).font(.caption2).padding(.horizontal, 6).padding(.vertical, 1)
+      .overlay(Capsule().stroke(Color.accentColor))
   }
 }
 
@@ -694,10 +710,7 @@ struct CatalogRow: View {
         VStack(alignment: .leading, spacing: 3) {
           HStack {
             Text(item.title)
-            if let badge = item.badge {
-              Text(badge).font(.caption2).padding(.horizontal, 6).padding(.vertical, 1)
-                .overlay(Capsule().stroke(Color.accentColor))
-            }
+            if let badge = item.badge { BadgeLabel(text: badge) }
           }
           if let summary = item.summary, !summary.isEmpty {
             Text(summary).font(.caption).foregroundStyle(.secondary)

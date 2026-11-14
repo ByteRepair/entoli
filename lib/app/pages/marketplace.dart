@@ -67,22 +67,14 @@ mixin ListsMarketplaceEntries on AppPage {
     // the rest is the preview's.
     describe: (entry) => CollectionItem(
       entry.name,
-      byline: switch ([
+      byline: _joined([
         ?entry.byline,
         if (entry.version case final version?) "v$version",
-      ]) {
-        [] => null,
-        final parts => parts.join(" · "),
-      },
+      ]),
       subtitle: _short(entry.description),
       badge: entry.external ? _external : null,
       face: _face(entry.slug),
-      // Native draws a glyph beside a face, so a face replaces it.
-      glyph: _presets.isNotEmpty
-          ? null
-          : kind == CompletionKind.skill
-          ? SettingGlyph.skill
-          : SettingGlyph.agent,
+      glyph: _glyph(kind),
       editable: false,
       takesImage: false,
       tap: "open",
@@ -127,7 +119,7 @@ mixin ListsMarketplaceEntries on AppPage {
 
   /// One entry as the head of its own page: its face, who made it, and
   /// whether it is another repository's.
-  SettingController entryCard(MarketplaceEntry entry) =>
+  SettingController entryCard(CompletionKind kind, MarketplaceEntry entry) =>
       CollectionController<MarketplaceEntry>(
         part("card", entry.name, hint: UiHint.cards),
         items: [entry],
@@ -137,11 +129,18 @@ mixin ListsMarketplaceEntries on AppPage {
           byline: entry.byline,
           badge: entry.external ? _external : null,
           face: _face(entry.slug),
-          glyph: _presets.isNotEmpty ? null : SettingGlyph.skill,
+          glyph: _glyph(kind),
           editable: false,
           takesImage: false,
         ),
       );
+
+  /// Native draws a glyph beside a face, so a face replaces it.
+  SettingGlyph? _glyph(CompletionKind kind) => _presets.isNotEmpty
+      ? null
+      : kind == CompletionKind.skill
+      ? SettingGlyph.skill
+      : SettingGlyph.agent;
 
   /// The Tags row, opening [kind]'s picker over [tags]; [scope] keeps a
   /// collection's picker apart from the front page's. Null where no tag
@@ -151,38 +150,53 @@ mixin ListsMarketplaceEntries on AppPage {
     Set<String> ticked,
     List<(String, int)> tags, {
     String? scope,
-  }) => tags.isEmpty && ticked.isEmpty
-      ? null
-      : ActionController(
-          part("tags", "Tags", hint: UiHint.open, glyph: SettingGlyph.tune),
-          label: ticked.isEmpty ? "All" : "${ticked.length} ticked",
-          run: () async {
-            pages.open(
-              MarketplaceTagsAppPage(
-                kind: kind,
-                scope: scope,
-                tags: tags,
-                ticked: ticked,
-                onTicked: changed,
-              ),
-            );
-            return null;
-          },
+  }) {
+    if (tags.isEmpty && ticked.isEmpty) return null;
+    return ActionController(
+      part("tags", "Tags", hint: UiHint.open, glyph: SettingGlyph.tune),
+      label: ticked.isEmpty ? "All" : "${ticked.length} ticked",
+      run: () async {
+        pages.open(
+          MarketplaceTagsAppPage(
+            kind: kind,
+            scope: scope,
+            tags: tags,
+            ticked: ticked,
+            onTicked: changed,
+          ),
         );
-
-  TextController searchRow(String query, void Function(String) onQuery) =>
-      TextController(
-        part("search", "Search", hint: UiHint.input),
-        value: query,
-        prompt: "Search",
-        allowBlank: true,
-        onSet: (text) async {
-          onQuery(text);
-          changed();
-          return null;
-        },
-      );
+        return null;
+      },
+    );
+  }
 }
+
+/// The marketplace pages' search field, redrawing its page as it is typed in.
+extension on AppPage {
+  TextController searchRow(
+    String query,
+    void Function(String) onQuery, {
+    String prompt = "Search",
+  }) => TextController(
+    part("search", "Search", hint: UiHint.input),
+    value: query,
+    prompt: prompt,
+    allowBlank: true,
+    onSet: (text) async {
+      onQuery(text);
+      changed();
+      return null;
+    },
+  );
+}
+
+/// [parts] joined as one line, or null where there are none.
+String? _joined(List<String> parts) => parts.isEmpty ? null : parts.join(" · ");
+
+/// A listing's split into front page and collections, made once per fetch
+/// rather than on every keystroke.
+final _grouped =
+    Expando<(List<MarketplaceEntry>, List<MarketplaceCollection>)>();
 
 /// [text] cut at a word to about two lines of a row.
 String _short(String text, [int max = 140]) {
@@ -225,13 +239,6 @@ class MarketplaceAppPage extends AppPage with ListsMarketplaceEntries {
     watchFaces(reader);
     final listed = reader.watch(marketplaceEntriesProvider(_kind));
     final tagged = _tagged[_kind]!;
-    final grouped = switch (listed.value) {
-      final listing? => groupIntoCollections(
-        listing.entries,
-        listing.collections,
-      ),
-      null => null,
-    };
     return [
       PageSection("browse", "", [
         ChoiceController<CompletionKind>(
@@ -250,11 +257,7 @@ class MarketplaceAppPage extends AppPage with ListsMarketplaceEntries {
         searchRow(_query, (text) => _query = text),
       ]),
       ...switch (listed) {
-        AsyncValue(hasValue: true, :final value?) => _lists(
-          value.entries.isEmpty,
-          grouped!,
-          tagged,
-        ),
+        AsyncValue(hasValue: true, :final value?) => _lists(value, tagged),
         AsyncValue(:final error?) => [
           failed(
             "Could not reach the marketplace",
@@ -268,15 +271,14 @@ class MarketplaceAppPage extends AppPage with ListsMarketplaceEntries {
     ];
   }
 
-  List<PageSection> _lists(
-    bool empty,
-    (List<MarketplaceEntry>, List<MarketplaceCollection>) grouped,
-    Set<String> tagged,
-  ) {
-    if (empty) {
+  List<PageSection> _lists(MarketplaceListing listing, Set<String> tagged) {
+    if (listing.entries.isEmpty) {
       return [notice("empty", "The marketplace lists no ${_kind.folder} yet.")];
     }
-    final (front, collections) = grouped;
+    final (front, collections) = _grouped[listing] ??= groupIntoCollections(
+      listing.entries,
+      listing.collections,
+    );
     final shownFront = entriesMatching(front, _query, tagged);
     // The tags filter these entries alone, so they sit over them rather
     // than over the collections.
@@ -418,17 +420,7 @@ class MarketplaceTagsAppPage extends AppPage {
     ];
     return [
       PageSection("search", "", [
-        TextController(
-          part("search", "Search", hint: UiHint.input),
-          value: _query,
-          prompt: "Search tags",
-          allowBlank: true,
-          onSet: (text) async {
-            _query = text;
-            changed();
-            return null;
-          },
-        ),
+        searchRow(_query, (text) => _query = text, prompt: "Search tags"),
       ]),
       PageSection("tags", "", [
         if (tags.isEmpty)
@@ -726,7 +718,7 @@ class MarketplaceEntryAppPage extends AppPage
     final details = _details();
     return [
       PageSection("about", "", [
-        entryCard(entry),
+        entryCard(kind, entry),
         if (preview.packageProblem case final problem?)
           noticeRow("problem", problem, tone: NoticeTone.warning),
         if (kind == CompletionKind.agent &&

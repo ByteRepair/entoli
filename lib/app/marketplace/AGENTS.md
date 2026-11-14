@@ -123,8 +123,7 @@ rather than as a failure — an agent's `profile.png` is there and then absent.
 The preview opens on the entry's own card — face, byline, External — and
 keeps what it says apart: the description as a paragraph of its own, then
 Details, a labelled row each for the authors, the version and the tags, and
-for a remote entry its source directory on GitHub as a link. They were one
-info row's subtitle once, joined by line breaks, which read as one block.
+for a remote entry its source directory on GitHub as a link.
 
 `EntryPreview` is what the page fetched at open: the README, the parsed
 `.skill` (or the parser's reason it refused one), the agent's prompt and its

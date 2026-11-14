@@ -126,16 +126,9 @@ struct SettingsPageView: View {
           Section {
             ForEach(section.rows.compactMap { $0 }.filter { $0.parent == nil }, id: \.id) {
               row in
-              // Cards are glass of their own: in a grouped cell they were a
-              // box in a box, padded twice.
-              let cards = row.kind == .collection && row.hint == .cards
               SettingRowView(model: model, row: row)
                 .id(row.id)
-                .listRowBackground(
-                  lit == row.id
-                    ? Color.accentColor.opacity(0.18) : cards ? Color.clear : nil
-                )
-                .listRowInsets(cards ? EdgeInsets() : nil)
+                .listRowBackground(lit == row.id ? Color.accentColor.opacity(0.18) : nil)
             }
           } header: {
             if !section.title.isEmpty { Text(section.title) }

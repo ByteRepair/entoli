@@ -32,13 +32,13 @@ class MarketplaceLocation {
 
   /// One of [files] at the published ref. "HEAD" reads the default branch,
   /// which is also how an unpinned ref is meant to drift.
-  Uri file(String name) => Uri.parse(
-    "https://raw.githubusercontent.com/$repo/${ref ?? "HEAD"}/$dir/$name",
-  );
+  Uri file(String name) =>
+      Uri.parse("https://raw.githubusercontent.com/$repo/$_at/$dir/$name");
 
   /// The entry's directory on GitHub, for a person to read.
-  Uri get page =>
-      Uri.parse("https://github.com/$repo/tree/${ref ?? "HEAD"}/$dir");
+  Uri get page => Uri.parse("https://github.com/$repo/tree/$_at/$dir");
+
+  String get _at => ref ?? "HEAD";
 
   /// Strict: [fetchMarketplaceEntries] throws on anything it cannot read, so
   /// an ext record missing a piece is an unreachable marketplace rather than
@@ -149,7 +149,7 @@ typedef CollectionRecord = ({
 });
 
 /// A section as the site lists it: every entry, and the collection records
-/// that group the remote ones (see `groupIntoCollections`).
+/// that group them (see `groupIntoCollections`).
 class MarketplaceListing {
   const MarketplaceListing(this.entries, [this.collections = const {}]);
 
