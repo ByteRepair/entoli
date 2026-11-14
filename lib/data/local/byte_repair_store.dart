@@ -104,6 +104,10 @@ class ByteRepairStore {
     final body = await rootBundle.loadString(
       "assets/scripts/byte-repair-setup.sh",
     );
+    // Before any chat has made it, iSH cannot bind a missing workspace at
+    // /root: the 240 MB zip then lands in the emulated fakefs, slowly, where
+    // the host's unzip cannot see it.
+    Directory(workspace).createSync(recursive: true);
     final result = await _run(
       shell,
       body,

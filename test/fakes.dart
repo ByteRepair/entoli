@@ -230,6 +230,7 @@ class FakeBackgroundWork implements BackgroundWork {
   final List<String?> prefills = [];
   final List<SyncNotice?> synced = [];
   final List<String?> signIns = [];
+  final List<bool> setups = [];
   final _stops = StreamController<BackgroundJob>.broadcast();
 
   @override
@@ -250,6 +251,9 @@ class FakeBackgroundWork implements BackgroundWork {
 
   @override
   Future<void> signingIn(String? plan) async => signIns.add(plan);
+
+  @override
+  Future<void> settingUp(bool active) async => setups.add(active);
 
   @override
   Stream<BackgroundJob> get stopRequests => _stops.stream;

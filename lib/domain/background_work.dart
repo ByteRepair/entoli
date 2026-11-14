@@ -122,6 +122,11 @@ abstract interface class BackgroundWork {
   /// `localhost` callback unanswered and the page loading forever.
   Future<void> signingIn(String? plan);
 
+  /// Whether a project's setup is installing its tools. iOS keeps the screen
+  /// on for it: a locked phone suspends the app, and the guest's download
+  /// with it.
+  Future<void> settingUp(bool active);
+
   /// The user said stop from outside the app — each notification has a button,
   /// and this says which was pressed. Whoever owns that kind of work stops it,
   /// which is what then takes the notification away: the button asks, it does

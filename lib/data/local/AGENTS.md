@@ -110,9 +110,10 @@ know is refused before anything runs. Only `apk` and `brew` are ever named;
 the arms for apt-get, dnf, yum and pacman went, being code nothing reached.
 `ENV_SCRATCH_DIR` is where ESBMC's zip is fetched and unpacked, beside the
 install directory unless named, so the last move is a rename. iOS names the
-guest's workspace, `/root`: a host directory, where the guest's `unzip` is
-the host's own (see "Tools the host runs" in `ios/AGENTS.md`), rather than
-six minutes of interpreted inflate that brushed the setup's timeout.
+guest's workspace, `/root`: a host directory, where the guest's `wget` and
+`unzip` are the host's own (see "Tools the host runs" in `ios/AGENTS.md`),
+rather than minutes of interpreted TLS and six of interpreted inflate that
+brushed the setup's timeout.
 
 **Install what is missing, touch nothing else.** A guest gets `apk add
 --no-cache` of exactly the missing packages — no `apk update` (the

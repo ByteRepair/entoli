@@ -597,6 +597,26 @@ exit 0""");
     },
   );
 
+  test("an install makes the workspace before it runs", () async {
+    final workspace = config.projectWorkspaceDir(
+      project: ByteRepairProject().dir,
+    );
+    final s = ByteRepairStore(
+      config: config,
+      project: ByteRepairProject().dir,
+      workspace: workspace,
+      installDir: bin,
+    );
+    bool? existed;
+    final shell = FakeShell((_) {
+      existed ??= Directory(workspace).existsSync();
+      return const ShellResult(returnCode: 0, output: "");
+    });
+    await s.install(shell);
+
+    expect(existed, isTrue);
+  });
+
   test("an install reports its output as it prints", () async {
     final s = ByteRepairStore(
       config: config,
