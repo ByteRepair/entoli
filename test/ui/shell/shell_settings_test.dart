@@ -47,6 +47,9 @@ class _FakeNativeSettings implements TestNativeSettings {
 
   @override
   void cliAccount(CliAccountData account) {}
+
+  @override
+  void closeSignInPage() {}
 }
 
 /// A page with one toggle, which leaving asks about once it is flipped.

@@ -294,6 +294,9 @@ extension SettingsModel {
 
   func cliAccount(account: CliAccountData) throws { cliAccount = account }
 
+  // Pigeon calls in on the platform thread, which is the main one.
+  func closeSignInPage() throws { MainActor.assumeIsolated { closeSignInPages() } }
+
   /// Watches the account of the program form [id]'s sign-in names.
   func openCliAccount(_ id: String, _ index: Int?, _ answers: [String?: String?]) {
     cliAccount = nil

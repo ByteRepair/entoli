@@ -11,7 +11,7 @@ import "core/log.dart";
 import "app/app_menus.dart";
 import "core/platform/app_menus.dart";
 import "core/platform/background_work.dart";
-import "core/platform/form_factor.dart" show isApple;
+import "core/platform/form_factor.dart" show isApple, isPhone;
 import "core/platform/clipboard_files.dart";
 import "core/platform/platform.dart" as platform;
 import "core/platform/system_palette.dart";
@@ -393,7 +393,10 @@ class AppSession {
         appUpdateHostProvider.overrideWithValue(
           platform.createAppUpdateHost(cache),
         ),
-        if (frontend.swiftUI) ...shellOverrides,
+        if (frontend.swiftUI)
+          ...shellOverrides
+        else if (isPhone)
+          signInPagesProvider.overrideWithValue(const InAppSignInPages()),
         appMenusProvider.overrideWithValue(
           glassAvailable ? _menus ??= NativeAppMenus() : const NoAppMenus(),
         ),

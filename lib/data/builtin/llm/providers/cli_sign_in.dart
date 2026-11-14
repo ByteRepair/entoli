@@ -20,15 +20,20 @@ class CliSignIn {
       // at its first half.
       _process.errors.listen((chunk) => _scan(_errors.add(chunk))),
     ];
-    result = _process.exitCode.then((code) async {
+    final ended = _process.exitCode.then((code) {
       final said = _errors.rest.trim();
       _scan(said);
       for (final sub in _subs) {
         unawaited(sub.cancel());
       }
-      final signedIn = code == 0 && !_cancelled && await _provider.signedIn();
+      return (code: code, said: said);
+    });
+    exited = ended.then((e) => e.code == 0 && !_cancelled);
+    result = ended.then((e) async {
+      final signedIn = await exited && await _provider.signedIn();
       if (!signedIn) {
-        _failure = "sign-in exited $code${said.isEmpty ? "" : ":\n$said"}";
+        _failure =
+            "sign-in exited ${e.code}${e.said.isEmpty ? "" : ":\n${e.said}"}";
         logFailure("cli", _failure!);
       }
       return signedIn;
@@ -68,6 +73,11 @@ class CliSignIn {
   /// the first link it prints. Either may come first, so a page it asked to
   /// open replaces a link it printed.
   ValueListenable<Uri?> get page => _page;
+
+  /// Whether the program exited 0 of itself: the page's callback reached
+  /// it and it stored what it was given. Its own status, which [result]
+  /// waits on, is seconds more under an emulator.
+  late final Future<bool> exited;
 
   /// Whether it ended signed in: the program exited 0, and its own status
   /// says so.

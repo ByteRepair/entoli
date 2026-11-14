@@ -64,6 +64,15 @@ final class CliWaiting extends CliAccountStage {
   bool get signingIn => true;
 }
 
+/// The program exited 0, the page done with, and its status is being asked
+/// whether the sign-in took.
+final class CliFinishing extends CliAccountStage {
+  const CliFinishing();
+
+  @override
+  bool get signingIn => true;
+}
+
 final class CliFailed extends CliAccountStage {
   const CliFailed(this.reason);
 
@@ -159,6 +168,12 @@ class CliAccount extends ChangeNotifier {
       final stops = work.stopRequests
           .where((job) => job == BackgroundJob.signIn)
           .listen((_) => unawaited(cancel()));
+      unawaited(
+        signIn.exited.then((ok) {
+          unawaited(_container.read(signInPagesProvider).close());
+          if (ok) _show(run, const CliFinishing());
+        }),
+      );
       final bool done;
       try {
         done = await signIn.result;

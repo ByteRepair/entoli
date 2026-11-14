@@ -75,6 +75,7 @@ class _CliSignInDialogState extends ConsumerState<CliSignInDialog> {
             onCode: () => _account.answer(_code.text),
           ),
           CliStarting() => const _Busy("Starting the sign-in…"),
+          CliFinishing() => const _Busy("Finishing the sign-in…"),
           CliFailed(:final reason) => Text(
             reason,
             style: TextStyle(color: Theme.of(context).colorScheme.error),

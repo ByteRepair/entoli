@@ -1427,8 +1427,18 @@ void main() {
       final (:cli, :login) = signingIn(signedIn: false);
       final signIn = await CliSignIn.start(cli);
       login.exit(0);
+      expect(await signIn.exited, isTrue);
       expect(await signIn.result, isFalse);
       expect(signIn.page.value, isNull);
+    });
+
+    test("a cancelled sign-in has not exited of itself", () async {
+      final (:cli, :login) = signingIn(signedIn: true);
+      final signIn = await CliSignIn.start(cli);
+      unawaited(signIn.cancel());
+      login.exit(0);
+      expect(await signIn.exited, isFalse);
+      expect(await signIn.result, isFalse);
     });
   });
 

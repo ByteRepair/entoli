@@ -65,6 +65,7 @@ class ShellCliAccount {
         CliInstalling() => CliAccountStep.installing,
         CliStarting() => CliAccountStep.starting,
         CliWaiting() => CliAccountStep.waiting,
+        CliFinishing() => CliAccountStep.finishing,
         CliFailed() => CliAccountStep.failed,
       },
       plan: account.plan,
