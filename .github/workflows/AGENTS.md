@@ -261,6 +261,14 @@ whole called workflow, so one failed build job skips the publish matrix,
 store until every build passes. The fix is the failed job's, then *Re-run
 failed jobs*, which rebuilds only those and runs the publishers after.
 
+**A dispatch can leave platforms out.** Both workflows' dispatches take a
+boolean per platform (`linux`, `ios`, `windows`, `android`, `macos`), on by
+default; a release event has no inputs and builds all five. An unticked
+platform's jobs are skipped, the version job drops its file from `assets` so
+the publish matrix attaches only what was built, and `testflight` and `play`
+run only with `ios` and `android`. "Every platform" above means every one
+selected. A run with none selected fails in the version job.
+
 **Every channel also waits on the release being published.** The `gate`
 job runs after the builds and fails unless the tag's release exists and is
 not a draft; the publish matrix, `testflight` and `play` all need it, so an
