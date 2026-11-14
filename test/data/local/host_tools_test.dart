@@ -2,6 +2,8 @@ import "dart:io";
 
 import "package:archive/archive_io.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:http/http.dart" as http;
+import "package:http/testing.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/local/host_tools.dart";
@@ -118,11 +120,135 @@ void main() {
     expect(File(p.join(workspace, "README")).readAsStringSync(), "hello");
   });
 
-  test("a missing archive says so, as unzip would", () async {
-    final answer = await tools.run("unzip", "/root", ["gone.zip"]);
+  test("an archive not on the host's disk is the guest's tool's", () async {
+    expect(await tools.run("unzip", "/root", ["gone.zip"]), isNull);
+  });
 
-    expect(answer!.code, 1);
-    expect(answer.output, contains("gone.zip"));
+  group("downloads", () {
+    late List<Uri> asked;
+
+    /// The host's tools over [respond], each request recorded in [asked].
+    HostTools over(Future<http.Response> Function(http.Request) respond) {
+      asked = [];
+      return HostTools(
+        tools.dir,
+        mounts: () => [(guest: "/root", host: workspace)],
+        client: () => MockClient((request) {
+          asked.add(request.url);
+          return respond(request);
+        }),
+      );
+    }
+
+    const url = "https://example.com/esbmc.zip";
+
+    test("the setup's wget lands in the workspace", () async {
+      final host = over((_) async => http.Response("zip bytes", 200));
+
+      final answer = await host.run("wget", "/root", [
+        "-q",
+        "-T",
+        "30",
+        "-O",
+        "/root/esbmc.zip",
+        url,
+      ]);
+
+      expect(answer!.code, 0);
+      expect(answer.output, isEmpty);
+      expect(asked, [Uri.parse(url)]);
+      expect(
+        File(p.join(workspace, "esbmc.zip")).readAsStringSync(),
+        "zip bytes",
+      );
+    });
+
+    test("an HTTP error fails wget and leaves no file", () async {
+      final host = over((_) async => http.Response("", 404));
+
+      final answer = await host.run("wget", "/root", ["-O", "a.zip", url]);
+
+      expect(answer!.code, 1);
+      expect(answer.output, contains("404"));
+      expect(File(p.join(workspace, "a.zip")).existsSync(), isFalse);
+    });
+
+    test("curl retries a network failure as many times as told", () async {
+      var calls = 0;
+      final host = over((_) async {
+        if (++calls < 3) throw http.ClientException("reset");
+        return http.Response("zip bytes", 200);
+      });
+
+      final answer = await host.run("curl", "/root", [
+        "-fsSL",
+        "--connect-timeout",
+        "30",
+        "--retry",
+        "2",
+        "-o",
+        "a.zip",
+        url,
+      ]);
+
+      expect(answer!.code, 0);
+      expect(calls, 3);
+      expect(File(p.join(workspace, "a.zip")).existsSync(), isTrue);
+    });
+
+    test("curl without --fail keeps the error body, as curl does", () async {
+      final host = over((_) async => http.Response("not here", 404));
+
+      final answer = await host.run("curl", "/root", ["-o", "a.html", url]);
+
+      expect(answer!.code, 0);
+      expect(File(p.join(workspace, "a.html")).readAsStringSync(), "not here");
+    });
+
+    test("a download the shim gave up on stops and leaves nothing", () async {
+      final host = HostTools(
+        tools.dir,
+        mounts: () => [(guest: "/root", host: workspace)],
+        client: () => MockClient.streaming(
+          (_, _) async => http.StreamedResponse(
+            Stream.fromIterable(["a".codeUnits, "b".codeUnits]),
+            200,
+          ),
+        ),
+      );
+
+      final answer = await host.run("wget", "/root", [
+        "-O",
+        "a.zip",
+        url,
+      ], abandoned: () => true);
+
+      expect(answer!.code, 130);
+      expect(File(p.join(workspace, "a.zip")).existsSync(), isFalse);
+    });
+
+    test("forms the host does not take are the guest's", () async {
+      final host = over((_) async => http.Response("", 200));
+      for (final (tool, args) in [
+        ("wget", [url]),
+        ("wget", ["-O", "-", url]),
+        ("wget", ["-c", "-O", "a.zip", url]),
+        ("wget", ["-O", "/opt/a.zip", url]),
+        ("wget", ["-O", "missing/a.zip", url]),
+        ("wget", ["-O", "a.zip", "ftp://example.com/a.zip"]),
+        ("curl", [url]),
+        ("curl", ["-o", "-", url]),
+        ("curl", ["-H", "X: y", "-o", "a.zip", url]),
+        ("curl", ["-d", "x", "-o", "a.zip", url]),
+      ]) {
+        expect(
+          await host.run(tool, "/root", args),
+          isNull,
+          reason: "$tool $args",
+        );
+      }
+      expect(asked, isEmpty);
+    });
   });
 
   group("the shim", () {

@@ -669,22 +669,41 @@ does the unzip, and moved into `/usr/local/bin`.
 
 The emulator interprets every instruction, so a CPU-bound tool is tens of
 times slower in it than on the device: unzipping ESBMC took six minutes in
-the guest. `unzip` and `tar` are therefore the host's where they can be.
+the guest, and a download is TLS decrypted the same way, 240 MB of ESBMC
+sitting on "Downloading" for minutes. `unzip`, `tar`, `wget` and `curl` are
+therefore the host's where they can be, for the setup script and for an
+agent's own commands alike.
 `HostTools` (`lib/data/local/host_tools.dart`) puts a shim for each in a host
 directory the bridge binds writable at `/run/entoli` (`ish_set_host_calls`,
 once, as the guest boots), first on the guest's `PATH`. A shim leaves its
 arguments and working directory in `/run/entoli/calls/` and waits; Dart,
 which looks there only while a guest command runs, renames the request to
-say it has it, extracts with `package:archive` on an isolate, and writes
-back the exit code and what to print.
+say it has it, extracts with `package:archive` on an isolate or downloads
+with the app's own HTTP client, and writes back the exit code and what to
+print.
+
+**A download takes only what a file is fetched with**: wget's `-q`, `-T`
+and `-O`, curl's `-fsSL`, `--connect-timeout`, `--retry` and `-o`, one http
+or https URL. Output to stdout, a method, headers, a body or a resumed
+transfer is the guest's tool's. The answers are the tools' own: wget fails
+on an HTTP error, curl only with `-f`, curl's exit codes are curl's, and a
+failed transfer leaves no file. A shim interrupted removes its claim as it
+exits, and the download checks for that each chunk and stops; one killed
+outright leaves the download to finish into a file nobody reads.
 
 **Only a host-backed path can be the host's.** The host can write the
 workspace at `/root` and the data directory at its own path; anything else
 is the fakefs, whose files are SQLite rows the host must not touch. A
 request with a path off those mounts, a form not taken (listing, members
-named, `tar` from stdin or creating), or an unzip that would replace a file
-without `-o` is answered "fall back", and the shim runs the guest's own
-tool. So does a request nobody takes within four seconds, which is a host
+named, `tar` from stdin or creating), an unzip that would replace a file
+without `-o`, or an archive the host's disk does not have is answered "fall
+back", and the shim runs the guest's own tool. That last is a bind that did
+not land: the bridge cannot bind a workspace that does not exist yet, so
+`/root` stays the fakefs's and what the guest wrote there is not the host's.
+The Byte Repair setup makes its workspace before it runs for that reason,
+since it can run before any chat has. While it runs the screen is kept on
+(`settingUp` on the background channel, `ScreenHold` in the Runner): a
+locked phone suspends the app and the guest's download with it. So does a request nobody takes within four seconds, which is a host
 not listening. The shims are written afresh at each launch, so one a
 command overwrote is back next time.
 

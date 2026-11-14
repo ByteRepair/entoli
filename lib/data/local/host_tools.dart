@@ -4,9 +4,11 @@ import "dart:io";
 import "dart:isolate";
 
 import "package:archive/archive_io.dart";
+import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
 import "../../core/log.dart";
+import "../../core/tls.dart";
 import "../../domain/documents.dart" show writeThroughRename;
 import "file_modes.dart";
 
@@ -14,10 +16,12 @@ import "file_modes.dart";
 /// [host] on the host's disk.
 typedef GuestMount = ({String guest, String host});
 
-/// Runs the guest's `unzip` and `tar` natively, where the emulator would
-/// interpret every instruction; see "Tools the host runs" in ios/AGENTS.md.
+/// Runs the guest's `unzip`, `tar`, `wget` and `curl` natively, where the
+/// emulator would interpret every instruction; see "Tools the host runs" in
+/// ios/AGENTS.md.
 class HostTools {
-  HostTools(this.dir, {required this.mounts});
+  HostTools(this.dir, {required this.mounts, http.Client Function()? client})
+    : _client = client ?? tlsClient;
 
   /// The host side of [guestDir].
   final String dir;
@@ -25,6 +29,8 @@ class HostTools {
   /// The guest's host-backed directories, asked per request: `/root` changes
   /// with the project.
   final List<GuestMount> Function() mounts;
+
+  final http.Client Function() _client;
 
   static const guestDir = "/run/entoli";
   static const guestBin = "$guestDir/bin";
@@ -94,7 +100,12 @@ class HostTools {
       final parts = utf8.decode(File(taken).readAsBytesSync()).split("\x00");
       if (parts.isNotEmpty && parts.last.isEmpty) parts.removeLast();
       if (parts.length >= 2) {
-        answer = await run(parts[0], parts[1], parts.sublist(2));
+        answer = await run(
+          parts[0],
+          parts[1],
+          parts.sublist(2),
+          abandoned: () => !File(taken).existsSync(),
+        );
       }
     } catch (e) {
       logFailure("host-tools", "request $id failed", e);
@@ -111,14 +122,201 @@ class HostTools {
   }
 
   /// [tool] with [args], as the guest ran it from [cwd]; null is the guest's
-  /// own tool to run.
-  Future<HostAnswer?> run(String tool, String cwd, List<String> args) async {
+  /// own tool to run. [abandoned] is the shim having gone, which ends a
+  /// download nobody waits for.
+  Future<HostAnswer?> run(
+    String tool,
+    String cwd,
+    List<String> args, {
+    bool Function()? abandoned,
+  }) async {
     final job = switch (tool) {
       "unzip" => _unzip(cwd, args),
       "tar" => _tar(cwd, args),
+      "wget" => _wget(cwd, args),
+      "curl" => _curl(cwd, args),
       _ => null,
     };
-    return job == null ? null : Isolate.run(job.extract);
+    return switch (job) {
+      // Inflating is CPU; a download is I/O and stays on this isolate.
+      _Extract() => Isolate.run(job.extract),
+      _Fetch() => job.fetch(_client(), abandoned ?? () => false),
+      null => null,
+    };
+  }
+
+  /// busybox's `wget [-q] [-T secs] -O file URL`; anything else (stdout, no
+  /// `-O`, continuing, headers) is the guest's.
+  _Fetch? _wget(String cwd, List<String> args) {
+    var quiet = false;
+    var timeout = const Duration(seconds: 900);
+    String? out;
+    final urls = <String>[];
+    for (var i = 0; i < args.length; i++) {
+      final arg = args[i];
+      if (arg == "--quiet") {
+        quiet = true;
+      } else if (arg.startsWith("--output-document=")) {
+        out = arg.substring("--output-document=".length);
+      } else if (arg.startsWith("--timeout=")) {
+        final secs = int.tryParse(arg.substring("--timeout=".length));
+        if (secs == null) return null;
+        timeout = Duration(seconds: secs);
+      } else if (arg.startsWith("--")) {
+        return null;
+      } else if (arg.startsWith("-") && arg.length > 1) {
+        final flags = arg.substring(1);
+        for (var j = 0; j < flags.length; j++) {
+          switch (flags[j]) {
+            case "q":
+              quiet = true;
+            case "O" || "T":
+              final value = j + 1 < flags.length
+                  ? flags.substring(j + 1)
+                  : (++i < args.length ? args[i] : null);
+              if (value == null) return null;
+              if (flags[j] == "O") {
+                out = value;
+              } else {
+                final secs = int.tryParse(value);
+                if (secs == null) return null;
+                timeout = Duration(seconds: secs);
+              }
+              j = flags.length;
+            default:
+              return null;
+          }
+        }
+      } else {
+        urls.add(arg);
+      }
+    }
+    if (urls.length != 1 || out == null || out == "-") return null;
+    return _fetch(
+      cwd,
+      urls.single,
+      out,
+      curl: false,
+      quiet: quiet,
+      failOnError: true,
+      follow: true,
+      connectTimeout: timeout,
+      idleTimeout: timeout,
+      retries: 0,
+    );
+  }
+
+  /// curl's `[-fsSL] [--connect-timeout secs] [--retry n] -o file URL`;
+  /// anything else (stdout, a method, headers, a body) is the guest's.
+  _Fetch? _curl(String cwd, List<String> args) {
+    var fail = false;
+    var silent = false;
+    var showError = false;
+    var follow = false;
+    var connectTimeout = const Duration(seconds: 300);
+    var retries = 0;
+    String? out;
+    final urls = <String>[];
+    for (var i = 0; i < args.length; i++) {
+      final arg = args[i];
+      String? next() => ++i < args.length ? args[i] : null;
+      switch (arg) {
+        case "--fail":
+          fail = true;
+        case "--silent":
+          silent = true;
+        case "--show-error":
+          showError = true;
+        case "--location":
+          follow = true;
+        case "--output":
+          out = next();
+          if (out == null) return null;
+        case "--connect-timeout":
+          final secs = double.tryParse(next() ?? "");
+          if (secs == null) return null;
+          connectTimeout = Duration(milliseconds: (secs * 1000).round());
+        case "--retry":
+          final n = int.tryParse(next() ?? "");
+          if (n == null) return null;
+          retries = n;
+        default:
+          if (arg.startsWith("--")) return null;
+          if (!arg.startsWith("-") || arg.length == 1) {
+            urls.add(arg);
+            continue;
+          }
+          final flags = arg.substring(1);
+          for (var j = 0; j < flags.length; j++) {
+            switch (flags[j]) {
+              case "f":
+                fail = true;
+              case "s":
+                silent = true;
+              case "S":
+                showError = true;
+              case "L":
+                follow = true;
+              case "o":
+                out = j + 1 < flags.length ? flags.substring(j + 1) : next();
+                if (out == null) return null;
+                j = flags.length;
+              default:
+                return null;
+            }
+          }
+      }
+    }
+    if (urls.length != 1 || out == null || out == "-") return null;
+    return _fetch(
+      cwd,
+      urls.single,
+      out,
+      curl: true,
+      quiet: silent && !showError,
+      failOnError: fail,
+      follow: follow,
+      connectTimeout: connectTimeout,
+      // curl has no idle limit of its own; a stalled transfer is what the
+      // command's own timeout ends.
+      idleTimeout: const Duration(minutes: 10),
+      retries: retries,
+    );
+  }
+
+  /// Null where [url] is no plain http(s) one or [out] is not where the host
+  /// can write it: off the mounts, or in a directory the host does not have,
+  /// which is a bind that did not land.
+  _Fetch? _fetch(
+    String cwd,
+    String url,
+    String out, {
+    required bool curl,
+    required bool quiet,
+    required bool failOnError,
+    required bool follow,
+    required Duration connectTimeout,
+    required Duration idleTimeout,
+    required int retries,
+  }) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !(uri.isScheme("http") || uri.isScheme("https"))) {
+      return null;
+    }
+    final dest = _host(cwd, out);
+    if (dest == null || !Directory(p.dirname(dest)).existsSync()) return null;
+    return _Fetch(
+      uri: uri,
+      dest: dest,
+      guestDest: out,
+      curl: curl,
+      quiet: quiet,
+      failOnError: failOnError,
+      follow: follow,
+      connectTimeout: connectTimeout,
+      idleTimeout: idleTimeout,
+      retries: retries,
+    );
   }
 
   _Extract? _unzip(String cwd, List<String> args) {
@@ -268,7 +466,7 @@ class HostTools {
     }
   }
 
-  static const _tools = ["unzip", "tar"];
+  static const _tools = ["unzip", "tar", "wget", "curl"];
 
   /// Each of [_tools], by its own name: leaves its call in `calls/` and waits,
   /// or runs the guest's copy where the app falls back or never answers.
@@ -292,7 +490,8 @@ fallback() {
 req="$calls/$$.$(date +%s)"
 printf '%s\0' "$tool" "$PWD" "$@" > "$req.tmp" && mv "$req.tmp" "$req.req" ||
   fallback "$@"
-trap 'rm -f "$req.req" "$req.res"; exit 130' INT TERM
+# The claim gone is how the host hears it is waited for no longer.
+trap 'rm -f "$req.req" "$req.taken" "$req.res"; exit 130' INT TERM
 
 # Taken within four seconds, or the app is not listening.
 n=0
@@ -348,9 +547,137 @@ enum _ArchiveKind {
   final String extension;
 }
 
+/// What a request is, once the host has taken it.
+sealed class _Job {
+  const _Job();
+}
+
+/// One download to a host path, as wget or curl would have made it.
+class _Fetch extends _Job {
+  const _Fetch({
+    required this.uri,
+    required this.dest,
+    required this.guestDest,
+    required this.curl,
+    required this.quiet,
+    required this.failOnError,
+    required this.follow,
+    required this.connectTimeout,
+    required this.idleTimeout,
+    required this.retries,
+  });
+
+  final Uri uri;
+  final String dest;
+  final String guestDest;
+  final bool curl;
+  final bool quiet;
+  final bool failOnError;
+  final bool follow;
+  final Duration connectTimeout;
+  final Duration idleTimeout;
+  final int retries;
+
+  /// [client] is this fetch's, closed when it ends.
+  Future<HostAnswer> fetch(
+    http.Client client,
+    bool Function() abandoned,
+  ) async {
+    try {
+      for (var attempt = 0; ; attempt++) {
+        final answer = await _once(client, abandoned);
+        // A transfer that failed on the network is retried; an HTTP error
+        // or a finished one is the answer.
+        if (answer != null || attempt >= retries) {
+          return answer ??
+              _failed(curl ? 7 : 1, "can't connect to remote host");
+        }
+      }
+    } on _Abandoned {
+      return const HostAnswer(130, "");
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Null is a network failure worth retrying.
+  Future<HostAnswer?> _once(
+    http.Client client,
+    bool Function() abandoned,
+  ) async {
+    final request = http.Request("GET", uri)
+      ..followRedirects = follow
+      ..maxRedirects = 20;
+    final http.StreamedResponse response;
+    try {
+      response = await client.send(request).timeout(connectTimeout);
+    } on TimeoutException {
+      return null;
+    } on SocketException {
+      return null;
+    } on http.ClientException {
+      return null;
+    }
+    if (response.statusCode >= 400 && failOnError) {
+      await response.stream.drain<void>().catchError((_) {});
+      return curl
+          ? _failed(
+              22,
+              "The requested URL returned error: ${response.statusCode}",
+            )
+          : _failed(
+              1,
+              "server returned error: HTTP/1.1 ${response.statusCode} "
+                      "${response.reasonPhrase ?? ""}"
+                  .trimRight(),
+            );
+    }
+    final sink = File(dest).openWrite();
+    try {
+      await for (final chunk in response.stream.timeout(idleTimeout)) {
+        // One stat a chunk, cheap beside the chunk's own write.
+        if (abandoned()) throw const _Abandoned();
+        sink.add(chunk);
+      }
+      await sink.close();
+    } catch (e) {
+      await sink.close().catchError((_) {});
+      try {
+        File(dest).deleteSync();
+      } on FileSystemException {
+        // Never made.
+      }
+      if (e is _Abandoned) rethrow;
+      if (e is TimeoutException) {
+        return _failed(
+          curl ? 28 : 1,
+          curl ? "Operation timed out" : "download timed out",
+        );
+      }
+      return null;
+    }
+    return HostAnswer(
+      0,
+      quiet || curl
+          ? ""
+          : "Connecting to ${uri.host}\nsaving to '$guestDest'\n"
+                "'$guestDest' saved\n",
+    );
+  }
+
+  HostAnswer _failed(int code, String why) => HostAnswer(
+    code,
+    quiet ? "" : (curl ? "curl: ($code) $why\n" : "wget: $why\n"),
+  );
+}
+
+class _Abandoned implements Exception {
+  const _Abandoned();
+}
+
 /// One extraction, with everything it needs and nothing of the service, so
 /// it runs on its own isolate.
-class _Extract {
+class _Extract extends _Job {
   const _Extract({
     required this.archive,
     required this.guestArchive,
@@ -371,9 +698,9 @@ class _Extract {
   Future<HostAnswer?> extract() async {
     final zip = kind == _ArchiveKind.zip;
     final tool = zip ? "unzip" : "tar";
-    if (!File(archive).existsSync()) {
-      return HostAnswer(1, "$tool: can't open '$guestArchive'\n");
-    }
+    // Not on the host's disk is not proof it is missing: a bind that did not
+    // land leaves the guest's path in the fakefs. Its own tool says which.
+    if (!File(archive).existsSync()) return null;
     // unzip asks before replacing a file, which is the guest's tool's
     // business: only a zip that replaces nothing, or is told to, is ours.
     if (zip && !overwrite) {

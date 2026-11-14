@@ -51,6 +51,9 @@ class ForegroundService implements BackgroundWork {
   @override
   Future<void> signingIn(String? plan) => _tell("signingIn", plan);
 
+  @override
+  Future<void> settingUp(bool active) => _tell("settingUp", active);
+
   Future<void> _tell(String method, Object? argument) async {
     // Logged rather than raised: a platform that will not hold the process
     // leaves the work where every other platform's already is, and a refusal
