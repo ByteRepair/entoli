@@ -13,8 +13,8 @@ iOS). The layers, each knowing only the one below it:
   `SettingKeys` — the key, a codec, the levels it may be set at, and for the
   app's level a fallback. A value equal to its fallback is not written at the
   app's level, so a file that predates a default gets it; a key this build
-  does not know is kept through a save; a key under an old name is moved
-  under its own as the file loads (`SettingKeys.upgrades`). `AppSettings`,
+  does not know is kept through a save; a key that once had another name was
+  moved by `migrations.dart`, so the reader knows only today's. `AppSettings`,
   `ProjectSettings` and `ChatMeta` are typed views over their documents, a
   getter and a setter a key, so nothing that reads them changed.
 - **Scopes** (`lib/app/settings/scope.dart`). `AppScope`, `ProjectScope` and
@@ -161,8 +161,8 @@ already running keeps what it started with. Settings wins over the process's
 own environment, but a key already exported is found without having to be
 pasted in. A project carries the same list of its own in `project.json`,
 edited from its settings page, and a name set there wins over one set in
-`settings.json`. Old files with the former `opencodeEnv` key still load, and
-rewrite themselves under the new name on the next save.
+`settings.json`. A file with the former `opencodeEnv` key had it moved under
+the new name by 8.4.0's migration.
 
 The settings page is fifteen categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own (see "Narrow, the categories are the

@@ -81,7 +81,7 @@ class ChatMeta {
   set headless(bool? value) => doc.set(SettingKeys.headless, value);
 
   factory ChatMeta.fromJson(Map<String, dynamic> json) =>
-      ChatMeta.of(SettingsDocument(json: json, upgrades: SettingKeys.upgrades));
+      ChatMeta.of(SettingsDocument(json: json));
 
   /// Null is a `meta.json` that was never written, which inherits everything —
   /// and so is one that cannot be parsed.

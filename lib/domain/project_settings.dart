@@ -114,9 +114,7 @@ class ProjectSettings {
   }
 
   factory ProjectSettings.fromJson(Map<String, dynamic> json) =>
-      ProjectSettings.of(
-        SettingsDocument(json: json, upgrades: SettingKeys.upgrades),
-      );
+      ProjectSettings.of(SettingsDocument(json: json));
 
   Future<void> save(AppConfig config, {String? project}) =>
       config.documents.write(

@@ -60,11 +60,7 @@ void main() {
       }
     });
 
-    test("the bool it replaced still loads", () {
-      expect(
-        ProjectSettings.fromJson({"useProjectMemory": true}).memory,
-        Tristate.on,
-      );
+    test("a project that says nothing inherits", () {
       expect(ProjectSettings.fromJson({}).memory, Tristate.inherit);
     });
   });

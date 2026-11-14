@@ -1,5 +1,4 @@
 import "dart:convert";
-import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 
@@ -14,20 +13,19 @@ import "../harness.dart";
 
 void main() {
   group("reading one out of settings", () {
-    test("keeps everything it was written with, and ignores an old key", () {
+    test("keeps everything it was written with", () {
       final provider = LlmProviderConfig.fromJson(const {
         "id": "openrouter",
         "api": "openai",
         "baseUrl": "https://openrouter.ai/api/v1",
-        "label": "OpenRouter",
-        "apiKey": "sk-or-1",
+        "name": "OpenRouter",
+        "catalogId": "openrouter",
         "modelsEndpoint": "https://openrouter.ai/api/v1/models",
       });
 
       expect(provider!.id, "openrouter");
       expect(provider.api, LlmApi.openai);
       expect(provider.displayName, "OpenRouter");
-      // Saved before names and models.dev ids were apart: the id was both.
       expect(provider.catalogId, "openrouter");
       expect(provider.modelsEndpoint, "https://openrouter.ai/api/v1/models");
       // The key is not the config's any more; nothing here carries one.
@@ -166,31 +164,6 @@ void main() {
       // configured amounts to ask.
       expect(loaded.approveMode, ApproveMode.auto);
     });
-
-    test(
-      "an environment under its old name is still found, and is rewritten",
-      () async {
-        final config = tempConfig("agent_chat_providers_env_");
-        await config.documents.write(
-          config.settingsFile,
-          jsonEncode({
-            "opencodeEnv": {"ANTHROPIC_API_KEY": "sk-old"},
-          }),
-        );
-
-        final loaded = AppSettings.load(config);
-        expect(loaded.environment, {"ANTHROPIC_API_KEY": "sk-old"});
-
-        await loaded.save(config);
-        expect(
-          File(config.settingsFile).readAsStringSync(),
-          isNot(contains("opencodeEnv")),
-        );
-        expect(AppSettings.load(config).environment, {
-          "ANTHROPIC_API_KEY": "sk-old",
-        });
-      },
-    );
 
     test(
       "a provider entry that is broken does not take the rest with it",

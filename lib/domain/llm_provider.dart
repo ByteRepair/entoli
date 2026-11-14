@@ -155,8 +155,8 @@ class LlmProviderConfig {
 
   /// Null for anything that does not name an id and, unless it is a CLI, a
   /// base URL: a half-written entry is worse than a missing one, because it
-  /// fails at the first prompt. An API this build does not know is read as
-  /// OpenAI's, as an entry from before the field had more than two values.
+  /// fails at the first prompt. An API this build does not know is a later
+  /// build's, read as OpenAI's.
   static LlmProviderConfig? fromJson(Object? value) {
     if (value is! Map) return null;
     final id = value["id"];
@@ -170,17 +170,12 @@ class LlmProviderConfig {
     }
     final env = value["env"];
     final custom = value["customModels"];
-    // An entry with no name was written by 7.0.0 or older, whose id was its
-    // name and its models.dev id both.
-    final named = value.containsKey("name");
     return LlmProviderConfig(
       id: id,
       api: api,
       baseUrl: baseUrl,
-      name: (named ? value["name"] : value["label"]) as String?,
-      catalogId: named ? value["catalogId"] as String? : id,
-      // An older file's `apiKey` is ignored: the store is where a key lives,
-      // and a key left in the file was stripped by the save that followed it.
+      name: value["name"] as String?,
+      catalogId: value["catalogId"] as String?,
       apiKeyEnv: value["apiKeyEnv"] as String?,
       modelsEndpoint: value["modelsEndpoint"] as String?,
       defaultModelId: value["defaultModelId"] as String?,

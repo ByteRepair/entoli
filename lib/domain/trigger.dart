@@ -383,27 +383,15 @@ class Trigger {
   );
 
   factory Trigger.fromJson(Map<String, dynamic> json) {
-    // The source is a map this build wrote, or the flat `at`/`repeat` keys an
-    // older one left on the trigger itself — the reminder shape. Held as
-    // schedule data rather than migrated: a legacy record is a trigger
-    // because the reader says so, the siblingOf bargain.
-    final raw = json["source"];
-    final source = raw is Map<String, dynamic>
-        ? _sourceFrom(raw)
-        : _legacySourceFrom(json);
     return Trigger(
       id: json["id"] as String,
       name: json["name"] as String? ?? "",
       prompt: json["prompt"] as String? ?? "",
-      source: source,
+      source: _sourceFrom(json["source"]),
       chatId: json["chatId"] as String?,
       member: json["member"] as String?,
       project: json["project"] as String?,
-      tempChatTtl:
-          TempChatTtl.values.asNameMap()[json["tempChatTtl"]] ??
-          // `temporary` is what a build before the TTL field wrote, and false
-          // there meant the one TTL a bool could name.
-          ((json["temporary"] as bool? ?? true) ? null : TempChatTtl.off),
+      tempChatTtl: TempChatTtl.values.asNameMap()[json["tempChatTtl"]],
       byAgent: json["byAgent"] as bool? ?? false,
       enabled: json["enabled"] as bool? ?? true,
       lastFiredAt: _date(json["lastFiredAt"]),
@@ -412,26 +400,22 @@ class Trigger {
     );
   }
 
-  static TriggerSource _legacySourceFrom(Map<String, dynamic> json) =>
-      ScheduleSource(
-        at: _date(json["at"]) ?? DateTime(2026),
-        // An unknown name is a later build's: fall back, not lose the list.
-        repeat:
-            ScheduleRepeat.values.asNameMap()[json["repeat"]] ??
-            ScheduleRepeat.off,
-      );
-
-  static TriggerSource _sourceFrom(Map<String, dynamic> json) {
-    final kind = json["kind"] as String?;
-    return switch (kind) {
+  static TriggerSource _sourceFrom(Object? raw) {
+    final json = raw is Map<String, dynamic> ? raw : const <String, dynamic>{};
+    return switch (json["kind"]) {
       "timer" => TimerSource(
         duration: Duration(seconds: json["seconds"] as int? ?? 0),
         registeredAt: _date(json["registeredAt"]) ?? DateTime(2026),
       ),
       "file" => _fileSourceFrom(json),
-      // An unknown kind is a file written by a later build: schedule is
-      // what a trigger used to be, and a fall back beats a lost list.
-      _ => _legacySourceFrom(json),
+      // A schedule, or a kind a later build wrote: a schedule that falls
+      // back beats a lost list, as does an unknown repeat.
+      _ => ScheduleSource(
+        at: _date(json["at"]) ?? DateTime(2026),
+        repeat:
+            ScheduleRepeat.values.asNameMap()[json["repeat"]] ??
+            ScheduleRepeat.off,
+      ),
     };
   }
 

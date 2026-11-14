@@ -168,25 +168,11 @@ class JsonCodec<T extends Object> extends SettingCodec<T> {
 /// One value a settings document holds: the key it is under, how it is
 /// kept, and the levels it may be set at.
 class Setting<T extends Object> {
-  const Setting(
-    this.key,
-    this.codec, {
-    this.scopes = const {SettingScope.app},
-    this.legacy,
-    this.retired = const [],
-  });
+  const Setting(this.key, this.codec, {this.scopes = const {SettingScope.app}});
 
   final String key;
   final SettingCodec<T> codec;
   final Set<SettingScope> scopes;
-
-  /// What a file from before this key existed says instead, read where the
-  /// key is absent. A document listing this among its upgrades moves it
-  /// under [key] as it loads.
-  final T? Function(Map<String, Object?> json)? legacy;
-
-  /// The keys [legacy] reads, dropped from the file on a write.
-  final List<String> retired;
 
   /// [SettingsDocument.set] with [value] typed by this setting, for a
   /// caller holding values of several types at once.
@@ -205,8 +191,6 @@ class DefaultedSetting<T extends Object> extends Setting<T> {
     super.codec, {
     required this.fallback,
     super.scopes,
-    super.legacy,
-    super.retired,
   });
 
   final T fallback;
@@ -219,23 +203,9 @@ class DefaultedSetting<T extends Object> extends Setting<T> {
 class SettingsDocument {
   /// [root] is the app's level, where nothing above inherits: a value equal
   /// to its setting's fallback is not written there, so a file that predates
-  /// a default says nothing and gets it. Each of [upgrades] that a file holds
-  /// only under its old name is moved under its own, so the next save writes
-  /// the file in today's shape.
-  SettingsDocument({
-    Map<String, Object?>? json,
-    this.root = false,
-    List<Setting> upgrades = const [],
-  }) : _json = {...?json} {
-    for (final setting in upgrades) {
-      _upgrade(setting);
-    }
-  }
-
-  void _upgrade<T extends Object>(Setting<T> setting) {
-    if (!setting.retired.any(_json.containsKey)) return;
-    set(setting, read(setting));
-  }
+  /// a default says nothing and gets it.
+  SettingsDocument({Map<String, Object?>? json, this.root = false})
+    : _json = {...?json};
 
   final bool root;
   final Map<String, Object?> _json;
@@ -244,12 +214,7 @@ class SettingsDocument {
   /// What this level holds for [setting], or null where it holds nothing.
   T? read<T extends Object>(Setting<T> setting) {
     if (_cache.containsKey(setting)) return _cache[setting] as T?;
-    final raw = _json[setting.key];
-    final value = raw == null
-        ? setting.legacy?.call(_json)
-        : setting.codec.decode(raw);
-    _cache[setting] = value;
-    return value;
+    return _cache[setting] = setting.codec.decode(_json[setting.key]);
   }
 
   /// What this level holds for [setting], or its fallback.
@@ -259,9 +224,6 @@ class SettingsDocument {
   /// Sets [setting] to [value], or clears it where [value] is null, empty, or
   /// the fallback at the [root].
   void set<T extends Object>(Setting<T> setting, T? value) {
-    for (final key in setting.retired) {
-      _json.remove(key);
-    }
     final unset =
         value == null ||
         setting.codec.isEmpty(value) ||
