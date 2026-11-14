@@ -316,5 +316,55 @@ void main() {
 
       expect(result.stdout, "guest unzip -l a.zip\n");
     });
+
+    group("grep", () {
+      setUp(() {
+        // busybox's grep, as Alpine links it.
+        final busybox = File(p.join(stubs, "busybox"))
+          ..writeAsStringSync('#!/bin/sh\necho "guest \${0##*/} \$*"\n');
+        Process.runSync("chmod", ["+x", busybox.path]);
+        Link(p.join(stubs, "grep")).createSync("busybox");
+        File(p.join(workspace, "a.txt")).writeAsStringSync("x\n");
+        tools = HostTools(
+          tools.dir,
+          mounts: () => [(guest: workspace, host: workspace)],
+        )..start();
+      });
+
+      Future<ProcessResult> grep(List<String> args) => Process.run(
+        p.join(tools.binDir, "grep"),
+        args,
+        workingDirectory: workspace,
+        environment: {"PATH": "${tools.binDir}:$stubs:/usr/bin:/bin"},
+      );
+
+      test("a recursive search of a directory is the host's", () async {
+        final result = await grep(["-rn", "x", "."]);
+
+        expect(result.stdout, "./a.txt:1:x\n");
+        expect(result.exitCode, 0);
+      });
+
+      test("any other grep is the guest's, never asked of the host", () async {
+        // The host would have answered either, and differently.
+        expect(
+          (await grep(["-n", "x", "a.txt"])).stdout,
+          "guest grep -n x a.txt\n",
+        );
+        expect(
+          (await grep(["-r", "x", "a.txt"])).stdout,
+          "guest grep -r x a.txt\n",
+        );
+      });
+
+      test("a grep that is not busybox's is left alone", () async {
+        Link(p.join(stubs, "grep")).deleteSync();
+        final gnu = File(p.join(stubs, "grep"))
+          ..writeAsStringSync('#!/bin/sh\necho "gnu grep \$*"\n');
+        Process.runSync("chmod", ["+x", gnu.path]);
+
+        expect((await grep(["-rn", "x", "."])).stdout, "gnu grep -rn x .\n");
+      });
+    });
   });
 }

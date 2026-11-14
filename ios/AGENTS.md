@@ -670,17 +670,17 @@ does the unzip, and moved into `/usr/local/bin`.
 The emulator interprets every instruction, so a CPU-bound tool is tens of
 times slower in it than on the device: unzipping ESBMC took six minutes in
 the guest, and a download is TLS decrypted the same way, 240 MB of ESBMC
-sitting on "Downloading" for minutes. `unzip`, `tar`, `wget` and `curl` are
-therefore the host's where they can be, for the setup script and for an
-agent's own commands alike.
+sitting on "Downloading" for minutes. `unzip`, `tar`, `wget`, `curl` and a
+recursive `grep` are therefore the host's where they can be, for the setup
+script and for an agent's own commands alike.
 `HostTools` (`lib/data/local/host_tools.dart`) puts a shim for each in a host
 directory the bridge binds writable at `/run/entoli` (`ish_set_host_calls`,
 once, as the guest boots), first on the guest's `PATH`. A shim leaves its
 arguments and working directory in `/run/entoli/calls/` and waits; Dart,
 which looks there only while a guest command runs, renames the request to
-say it has it, extracts with `package:archive` on an isolate or downloads
-with the app's own HTTP client, and writes back the exit code and what to
-print.
+say it has it, extracts with `package:archive` or searches on an isolate,
+or downloads with the app's own HTTP client, and writes back the exit code
+and what to print.
 
 **A download takes only what a file is fetched with**: wget's `-q`, `-T`
 and `-O`, curl's `-fsSL`, `--connect-timeout`, `--retry` and `-o`, one http
@@ -691,6 +691,46 @@ failed transfer, a body shorter than declared among them, leaves no file. A
 shim interrupted removes its claim as it exits, and the download checks for
 that once a second and stops; one killed outright leaves the download to
 finish into a file nobody reads.
+
+**A recursive grep is the host's too, and nothing else an agent runs is.**
+Timed on a release build of the blinkish harness over this repository (1,216
+files, `lib/` 6 MB), before the host took it: busybox's `grep -rn` was 19 s
+over `lib/` and 71 s over the whole tree, about 0.3 MB/s, since every line is
+a musl `regexec` interpreted an instruction at a time. Everything else a
+coding agent reaches for was already cheap: `ls`, `cat`, `head`, `wc` and a
+one-file grep 15 to 200 ms, `find` 0.1 to 0.2 s, and git from `apk` 0.05 s
+for `log` and `diff`, 0.5 s for `status`; `rg`, which Alpine does not ship,
+0.9 s once installed. A request round trip is 0.1 to 0.15 s, the 100 ms poll
+and the shim's sleeps, so for those the host would cost more than it saves,
+and git's and rg's semantics are far too wide to mimic for under a second.
+Through the host the two searches take 0.38 s and 0.59 s, byte for byte the
+same output.
+
+`host_grep.dart` is a port of busybox 1.37's `grep_file` and
+`recursive_action`: readdir's order (the guest's realfs reads the same
+directory), a NUL ending a line as a newline does, `-A`/`-B`/`-C` with its
+separator, `-c`/`-l`/`-L`/`-q`/`-m`/`-h`/`-H`, `-F` as strstr on the bytes.
+A pattern is translated from POSIX BRE or ERE into a Dart regex only where
+musl's TRE is certain to mean the same, and a line only answered where it is
+certain to match the same: a translation refuses back references, `-o`,
+`-f`, an anchor or a quantifier where TRE reads it as a literal, and `-w`
+over anything but a literal (TRE's match is leftmost-longest); a line with
+non-ASCII characters is refused for a class or `\w` unless each of them is
+in a range musl surely leaves out (dashes, arrows, emoji); a line with an
+invalid UTF-8 sequence, where regexec gives up at the first one it reads,
+one character past the earliest match end, is answered only for a pattern
+that looks at nothing past a match. A refusal anywhere in the walk, an error
+grep would print, a symlink out of the mounts or a special file makes the
+whole request fall back. 87 cases run against the guest's own grep, covering
+all of these, gave the same bytes and exit code wherever the host answered.
+
+The shim decides most of this before asking: only a grep with an `-r` or
+`-R` and a directory among its arguments makes a request, since a request
+costs a piped or one-file grep more than its search, and only where the
+guest's grep is busybox's link — `apk add grep` is GNU's, whose output
+differs. The system prompt says the rest (`IshShell.platformDescription`):
+commands are emulated, so read files with the read tool, which never enters
+the guest, and search with `grep -r`.
 
 **Only a host-backed path can be the host's.** The host can write the
 workspace at `/root` and the data directory at its own path; anything else
