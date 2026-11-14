@@ -464,6 +464,7 @@ class ApprovalSnapshot {
     required this.glyph,
     required this.tool,
     this.detail,
+    this.purpose,
     this.allow = true,
     this.chat = false,
     this.project = false,
@@ -473,6 +474,9 @@ class ApprovalSnapshot {
   String title;
   Glyph glyph;
   String tool;
+
+  /// What the agent says the call is for, its own words beside the call.
+  String? purpose;
 
   /// The call as the agent worded it, verbatim.
   String? detail;

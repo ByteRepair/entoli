@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 
 import "../../../domain/models.dart";
 import "../../fonts.dart";
+import "../../../app/approvals.dart" show approvalPurpose;
 import "../../../app/transcript/activities/catalog.dart" show toolActivityFor;
 import "../../../app/transcript/activity.dart" show TranscriptGlyph;
 import "../activity/glyphs.dart";
@@ -66,6 +67,7 @@ class ApprovalBanner extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final detail = approval.argumentsText ?? approval.argumentsJson;
+    final purpose = approvalPurpose(approval);
     final (icon, title) = headingOf(approval);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -106,6 +108,15 @@ class ApprovalBanner extends StatelessWidget {
               ),
             ],
           ),
+          if (purpose != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              purpose,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
           if (detail != null) ...[
             const SizedBox(height: 10),
             Container(

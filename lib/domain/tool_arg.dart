@@ -37,3 +37,10 @@ int? intArg(String? json, String key) {
 /// Whether a boolean argument is set to true; anything else, missing or not
 /// a boolean, is false.
 bool boolArg(String? json, String key) => decodeArgs(json)?[key] == true;
+
+/// A call's `description`, the model's own words for what it does, where it
+/// gave one.
+String? callDescription(String? json) {
+  final said = stringArg(json, "description")?.trim();
+  return said == null || said.isEmpty ? null : said;
+}

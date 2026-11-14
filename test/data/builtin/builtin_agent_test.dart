@@ -2453,7 +2453,7 @@ void main() {
           client,
           sandboxHelper: _StubSandboxHelper(),
           approveMode: ApproveMode.auto,
-          classifier: FakeClassifier(decision: PermissionDecision.ask),
+          classifier: FakeClassifier(decision: ClassifierVerdict.ask),
           approvals: [ApprovalResponse.allow, ApprovalResponse.allow],
         ).run(userMessage("go")).toList();
 

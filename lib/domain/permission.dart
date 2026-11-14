@@ -52,7 +52,7 @@ const approveModeLabels = {
 /// [request] is what the user asked the turn for, so a call is judged
 /// against the work it serves; null where the turn has nothing to say.
 abstract class PermissionClassifier {
-  Future<PermissionDecision> classify(
+  Future<ClassifierVerdict> classify(
     String toolName,
     String argumentsJson, {
     required String workspace,
@@ -123,8 +123,9 @@ class Asked {
 
 /// What the classifier reads beside a call: what was [asked], the chat's
 /// active goal, the plan's task under way, and the calls the agent made
-/// before this one, their arguments alone. Tool results are left out, as
-/// Claude Code's classifier leaves them, being where injected text arrives.
+/// before this one, their arguments and what the sandbox refused them. Tool
+/// output is left out, as Claude Code's classifier leaves it, being where
+/// injected text arrives.
 /// Data the classifier weighs, never instructions it takes — see the rubric
 /// in `LlmClassifier`. Message content, so it is never put in a log line.
 class ClassifierRequest {
@@ -166,8 +167,35 @@ class ClassifierRequest {
   final List<ClassifierCall> calls;
 }
 
-/// One call the agent made, as the classifier reads it: never its result.
-typedef ClassifierCall = ({String tool, String argumentsJson});
+/// One call the agent made, as the classifier reads it: never its output.
+/// [refused] is what the sandbox refused it, the result's `violations` —
+/// paths the sandbox reported, not text the command printed — so the
+/// classifier tells a command that hit the sandbox's wall from one that
+/// never tried it.
+typedef ClassifierCall = ({
+  String tool,
+  String argumentsJson,
+  List<String> refused,
+});
+
+/// What the classifier answers about a call. [sandbox] is for a call asking
+/// to leave the sandbox that the sandbox can run: refused, with the agent
+/// told to run it sandboxed. Only the classifier says so; a [deny] of such a
+/// call is a deny.
+enum ClassifierVerdict {
+  allow,
+  ask,
+  deny,
+  sandbox;
+
+  /// What the outcome records: staying in the sandbox is a refusal of the
+  /// call as asked.
+  PermissionDecision get decision => switch (this) {
+    allow => PermissionDecision.allow,
+    ask => PermissionDecision.ask,
+    deny || sandbox => PermissionDecision.deny,
+  };
+}
 
 /// Always asks. What auto mode falls back to when no classifier model is
 /// configured: every command escalates to the banner, which is the same as
@@ -176,14 +204,14 @@ class NoClassifier implements PermissionClassifier {
   const NoClassifier();
 
   @override
-  Future<PermissionDecision> classify(
+  Future<ClassifierVerdict> classify(
     String toolName,
     String argumentsJson, {
     required String workspace,
     List<String> alsoWritable = const [],
     List<String> findings = const [],
     ClassifierRequest? request,
-  }) async => PermissionDecision.ask;
+  }) async => ClassifierVerdict.ask;
 }
 
 /// One permission rule, written at the app, project or chat tier: for [tool]

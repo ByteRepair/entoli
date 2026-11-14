@@ -764,6 +764,29 @@ abstract final class SettingKeys {
     scopes: {SettingScope.project, SettingScope.chat},
   );
 
+  /// Whether each `SandboxGrant` is granted. Unset inherits, and the
+  /// default project's unset is on.
+  static const sandboxTemps = Setting<bool>(
+    "sandboxTemps",
+    BoolCodec(),
+    scopes: {SettingScope.project},
+  );
+  static const sandboxCaches = Setting<bool>(
+    "sandboxCaches",
+    BoolCodec(),
+    scopes: {SettingScope.project},
+  );
+  static const sandboxToolchains = Setting<bool>(
+    "sandboxToolchains",
+    BoolCodec(),
+    scopes: {SettingScope.project},
+  );
+  static const sandboxGit = Setting<bool>(
+    "sandboxGit",
+    BoolCodec(),
+    scopes: {SettingScope.project},
+  );
+
   /// The chat's own model and the provider it is reached through: both or
   /// neither, unset following the project's and the app's default.
   static const model = Setting<String>(

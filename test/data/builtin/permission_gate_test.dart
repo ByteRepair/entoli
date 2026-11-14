@@ -12,6 +12,7 @@ import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
+import "package:agent_chat/domain/sandbox_grant.dart";
 import "package:agent_chat/domain/shell.dart";
 
 import "../../fakes.dart";
@@ -61,6 +62,7 @@ void main() {
     ApproveMode? approveMode = ApproveMode.never,
     SandboxHelper? sandboxHelper,
     bool sandboxed = true,
+    Set<SandboxGrant> grants = const {...SandboxGrant.values},
     ShellResult Function(String)? respond,
     PermissionClassifier? classifier,
     FakeWebSearch? webSearch,
@@ -106,6 +108,7 @@ void main() {
         permissions: liveRules,
         writableDirs: writableDirs,
         sandboxed: sandboxed,
+        grants: grants,
         approveMode: liveMode,
       ),
       classifier: classifier,
@@ -456,7 +459,7 @@ void main() {
       final events = await agentOver(
         client,
         approveMode: ApproveMode.auto,
-        classifier: _StubClassifier(PermissionDecision.allow),
+        classifier: _StubClassifier(ClassifierVerdict.allow),
       ).run(userMessage("go")).toList();
       final result = results(events);
       expect(result.decidedBy, PermissionSource.classifier);
@@ -474,7 +477,7 @@ void main() {
         [finish],
       ]);
       final classifier = FakeClassifier()
-        ..decide = (_, _) => PermissionDecision.allow;
+        ..decide = (_, _) => ClassifierVerdict.allow;
       final events = await agentOver(
         client,
         approveMode: ApproveMode.auto,
@@ -505,10 +508,12 @@ void main() {
           writableDirs: [repo],
         ).run(userMessage("go")).toList();
 
-        expect(classifier.alsoWritable.single, [
-          p.dirname(p.dirname(workspaceDir)),
-          repo,
-        ]);
+        // The sandbox's whole write set beside the workspace: its tmp, the
+        // project's workspace and the grants, then the defaults.
+        expect(
+          classifier.alsoWritable.single,
+          containsAllInOrder([p.dirname(p.dirname(workspaceDir)), repo]),
+        );
       },
     );
 
@@ -520,8 +525,7 @@ void main() {
       final events = await agentOver(
         client,
         approveMode: ApproveMode.auto,
-        classifier: FakeClassifier()
-          ..decide = (_, _) => PermissionDecision.deny,
+        classifier: FakeClassifier()..decide = (_, _) => ClassifierVerdict.deny,
       ).run(userMessage("clean")).toList();
 
       expect(shell.ran, isNot(contains("rm -rf /")));
@@ -538,7 +542,7 @@ void main() {
         client,
         approveMode: ApproveMode.auto,
         approvals: [ApprovalResponse.deny],
-        classifier: _StubClassifier(PermissionDecision.ask),
+        classifier: _StubClassifier(ClassifierVerdict.ask),
       ).run(userMessage("go")).toList();
       // The classifier's ask reached the banner; the test denied it there.
       expect(shell.ran, isEmpty);
@@ -552,7 +556,7 @@ void main() {
         allowedClient,
         approveMode: ApproveMode.auto,
         approvals: [ApprovalResponse.allow],
-        classifier: _StubClassifier(PermissionDecision.ask),
+        classifier: _StubClassifier(ClassifierVerdict.ask),
       ).run(userMessage("go")).toList();
       expect(allowedEvents.whereType<ApprovalRequestEvent>().length, 1);
       expect(shell.ran.last, contains("cp notes.txt"));
@@ -583,7 +587,7 @@ void main() {
           client,
           approveMode: ApproveMode.auto,
           approvals: List.filled(4, ApprovalResponse.allow),
-          classifier: _StubClassifier(PermissionDecision.ask),
+          classifier: _StubClassifier(ClassifierVerdict.ask),
         ).run(userMessage("test")).toList();
 
         expect(
@@ -616,7 +620,7 @@ void main() {
         final allowedEvents = await agentOver(
           allowedClient,
           approveMode: ApproveMode.auto,
-          classifier: _StubClassifier(PermissionDecision.allow),
+          classifier: _StubClassifier(ClassifierVerdict.allow),
         ).run(userMessage("test")).toList();
 
         expect(allowedEvents.whereType<InfoEvent>(), isEmpty);
@@ -652,7 +656,7 @@ void main() {
       final events = await agentOver(
         client,
         approveMode: ApproveMode.auto,
-        classifier: _StubClassifier(PermissionDecision.deny),
+        classifier: _StubClassifier(ClassifierVerdict.deny),
         webSearch: web,
       ).run(userMessage("fetch")).toList();
 
@@ -669,7 +673,7 @@ void main() {
       await agentOver(
         client,
         approveMode: ApproveMode.auto,
-        classifier: _StubClassifier(PermissionDecision.allow),
+        classifier: _StubClassifier(ClassifierVerdict.allow),
         permissions: [
           const PermissionRule(
             tool: "bash",
@@ -987,6 +991,76 @@ void main() {
       expect(shell.sandboxes, [isNull]);
     });
 
+    String resultOf(List<AgentEvent> events) {
+      final result = events.whereType<ToolResultEvent>().single.result;
+      return result.exceptionInfo ?? result.output;
+    }
+
+    test("the classifier's sandbox verdict tells the agent to run it "
+        "sandboxed", () async {
+      final client = FakeLlmClient([
+        [unsandboxed("uv run pytest")],
+        [finish],
+      ]);
+      final events = await agentOver(
+        client,
+        approveMode: ApproveMode.auto,
+        classifier: FakeClassifier(decision: ClassifierVerdict.sandbox),
+      ).run(userMessage("go")).toList();
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+      expect(shell.ran, isEmpty);
+      expect(resultOf(events), contains("without `unsandboxed`"));
+    });
+
+    test(
+      "the classifier's deny of it is a deny, not a sandbox rerun",
+      () async {
+        final client = FakeLlmClient([
+          [unsandboxed("rm -rf /")],
+          [finish],
+        ]);
+        final events = await agentOver(
+          client,
+          approveMode: ApproveMode.auto,
+          classifier: FakeClassifier(decision: ClassifierVerdict.deny),
+        ).run(userMessage("go")).toList();
+        expect(shell.ran, isEmpty);
+        expect(resultOf(events), contains("dangerous"));
+        expect(resultOf(events), isNot(contains("without `unsandboxed`")));
+      },
+    );
+
+    test(
+      "what the sandbox refused an earlier call reaches the classifier",
+      () async {
+        final classifier = FakeClassifier();
+        final client = FakeLlmClient([
+          [bashCall("make install", id: "call-1")],
+          [
+            bashCall(
+              "make install",
+              id: "call-2",
+              extra: {"unsandboxed": true},
+            ),
+          ],
+          [finish],
+        ]);
+        await agentOver(
+          client,
+          approveMode: ApproveMode.auto,
+          classifier: classifier,
+          respond: (_) => const ShellResult(
+            returnCode: 2,
+            output: "Operation not permitted",
+            violations: ["/usr/local/bin/tool"],
+          ),
+        ).run(userMessage("go")).toList();
+        expect(classifier.requests.last!.calls.single.refused, [
+          "/usr/local/bin/tool",
+        ]);
+      },
+    );
+
     test("an allow rule does not cover it; a no-sandbox rule does", () async {
       const allowPodman = PermissionRule(
         tool: "bash",
@@ -1241,6 +1315,40 @@ void main() {
       );
     });
 
+    test("a grant switched off is not in the sandbox", () async {
+      final client = FakeLlmClient([
+        [bashCall("python3 build.py")],
+        [finish],
+      ]);
+      await agentOver(
+        client,
+        approveMode: ApproveMode.never,
+        grants: {},
+      ).run(userMessage("go")).toList();
+      expect(
+        shell.sandboxes.single!.extraWrites,
+        isNot(containsAll(await systemTemps())),
+      );
+    }, skip: Platform.isWindows ? "no temp folders are granted there" : null);
+
+    test("a repository a command works in has its .git granted", () async {
+      final repo = folder("repo");
+      Directory(p.join(repo, ".git")).createSync();
+      final client = FakeLlmClient([
+        [bashCall("git -C $repo commit -m wip")],
+        [finish],
+      ]);
+      await agentOver(
+        client,
+        approveMode: ApproveMode.never,
+      ).run(userMessage("go")).toList();
+      expect(
+        shell.sandboxes.single!.extraWrites,
+        contains(p.join(repo, ".git")),
+      );
+      expect(shell.sandboxes.single!.extraWrites, isNot(contains(repo)));
+    });
+
     test("the turn's writableDirs reach the sandbox while they are folders "
         "on disk", () async {
       final repo = folder("repo");
@@ -1276,7 +1384,7 @@ void main() {
 
     test("is judged whole by the classifier, and runs on its allow", () async {
       final command = r"cat notes.txt > $B/out.txt";
-      final classifier = FakeClassifier(decision: PermissionDecision.allow);
+      final classifier = FakeClassifier(decision: ClassifierVerdict.allow);
       final client = FakeLlmClient([
         [bashCall(command)],
         [finish],
@@ -1312,7 +1420,7 @@ void main() {
       final events = await agentOver(
         client,
         approveMode: ApproveMode.auto,
-        classifier: FakeClassifier(decision: PermissionDecision.deny),
+        classifier: FakeClassifier(decision: ClassifierVerdict.deny),
       ).run(userMessage("go")).toList();
       final text = resultText(events);
       expect(shell.ran, isEmpty);
@@ -1323,7 +1431,7 @@ void main() {
 
     test("a deny rule the parse hides the command from keeps it refused, "
         "unasked", () async {
-      final classifier = FakeClassifier(decision: PermissionDecision.allow);
+      final classifier = FakeClassifier(decision: ClassifierVerdict.allow);
       for (final command in [
         // The words are plain, the redirect is not: the rule matches them.
         r"rm -rf build > $B/log",
@@ -1353,7 +1461,7 @@ void main() {
     });
 
     test("an ask rule the parse hides the command from still asks", () async {
-      final classifier = FakeClassifier(decision: PermissionDecision.allow);
+      final classifier = FakeClassifier(decision: ClassifierVerdict.allow);
       final client = FakeLlmClient([
         [bashCall(r"git commit -m wip > $B/log")],
         [finish],
@@ -1453,10 +1561,10 @@ class _StubHelper implements SandboxHelper {
 class _StubClassifier implements PermissionClassifier {
   const _StubClassifier(this.decision);
 
-  final PermissionDecision decision;
+  final ClassifierVerdict decision;
 
   @override
-  Future<PermissionDecision> classify(
+  Future<ClassifierVerdict> classify(
     String toolName,
     String argumentsJson, {
     required String workspace,
@@ -1473,7 +1581,7 @@ class _SpyClassifier implements PermissionClassifier {
   final void Function() ask;
 
   @override
-  Future<PermissionDecision> classify(
+  Future<ClassifierVerdict> classify(
     String toolName,
     String argumentsJson, {
     required String workspace,
@@ -1482,6 +1590,6 @@ class _SpyClassifier implements PermissionClassifier {
     ClassifierRequest? request,
   }) async {
     ask();
-    return PermissionDecision.allow;
+    return ClassifierVerdict.allow;
   }
 }

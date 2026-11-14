@@ -440,6 +440,12 @@ it grants nothing and a command cannot recreate it under the grant. Rows are
 the shared `EditableRow`, with no tap, since a folder is only added and
 removed.
 
+The folders the sandbox grants by default — the temp folders, the caches, the
+toolchains' stores, a repository's `.git` — are not rows here. They are the
+app's, not the user's additions, so each is a toggle beside the Sandbox
+switch (a `SandboxGrant`; see "Approvals" in `lib/data/builtin/AGENTS.md`),
+on unless turned off.
+
 It is drawn only where the paths are this device's and the sandbox is what
 they open. It is not drawn for a paired device's project, whose folders a
 picker here cannot name. Nor is it drawn where the picked

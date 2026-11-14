@@ -19,15 +19,16 @@ void main() {
 
     test("the first word is the answer, anything else is ask", () async {
       const cases = {
-        "allow": PermissionDecision.allow,
-        "deny": PermissionDecision.deny,
-        "ask": PermissionDecision.ask,
-        "allow this command": PermissionDecision.allow,
-        "Allow.": PermissionDecision.allow,
-        "**Deny**": PermissionDecision.deny,
-        "disallow": PermissionDecision.ask,
-        "maybe": PermissionDecision.ask,
-        "": PermissionDecision.ask,
+        "allow": ClassifierVerdict.allow,
+        "deny": ClassifierVerdict.deny,
+        "ask": ClassifierVerdict.ask,
+        "sandbox": ClassifierVerdict.sandbox,
+        "allow this command": ClassifierVerdict.allow,
+        "Allow.": ClassifierVerdict.allow,
+        "**Deny**": ClassifierVerdict.deny,
+        "disallow": ClassifierVerdict.ask,
+        "maybe": ClassifierVerdict.ask,
+        "": ClassifierVerdict.ask,
       };
       for (final MapEntry(key: reply, value: decision) in cases.entries) {
         final c = classifierOver([saidOnly(reply)]);
@@ -48,7 +49,7 @@ void main() {
         '{"command": "ls"}',
         workspace: "/tmp",
       );
-      expect(decision, PermissionDecision.ask);
+      expect(decision, ClassifierVerdict.ask);
     });
 
     test("bash shows the command and webfetch the URL, not the JSON", () async {
@@ -133,6 +134,7 @@ void main() {
             (
               tool: "bash",
               argumentsJson: jsonEncode({"command": "step $i ${"y" * 400}"}),
+              refused: const <String>[],
             ),
         ],
       );
@@ -186,6 +188,7 @@ void main() {
             (
               tool: "bash",
               argumentsJson: jsonEncode({"command": "step $i ${"y" * 300}"}),
+              refused: const <String>[],
             ),
         ],
       );
@@ -212,8 +215,13 @@ void main() {
                 "path": "build.py",
                 "content": "import os\n${"z" * 5000}",
               }),
+              refused: const <String>[],
             ),
-            (tool: "bash", argumentsJson: jsonEncode({"command": "echo hi"})),
+            (
+              tool: "bash",
+              argumentsJson: jsonEncode({"command": "echo hi"}),
+              refused: const <String>[],
+            ),
           ],
         ),
         budget: LlmClassifier.maxBudget,
@@ -222,6 +230,45 @@ void main() {
       expect(block, contains("import os"));
       expect(block, isNot(contains("z" * 1000)));
       expect(block, contains("- bash: echo hi"));
+    });
+
+    test("an earlier call shows the paths the sandbox refused it", () {
+      final block = LlmClassifier.requestBlock(
+        ClassifierRequest(
+          calls: [
+            (
+              tool: "bash",
+              argumentsJson: jsonEncode({"command": "make install"}),
+              refused: const ["/usr/local/bin/tool"],
+            ),
+          ],
+        ),
+        budget: LlmClassifier.maxBudget,
+      );
+      expect(
+        block,
+        contains(
+          "- bash: make install\n  the sandbox refused: "
+          "/usr/local/bin/tool",
+        ),
+      );
+    });
+
+    test("an unsandboxed call says so, with the agent's description", () async {
+      final c = classifierOver([saidOnly("deny")]);
+      await c.classify(
+        "bash",
+        jsonEncode({
+          "command": "uv run pytest",
+          "description": "Run the tests",
+          "unsandboxed": true,
+        }),
+        workspace: "/ws",
+      );
+      final sent = client.sent.single.last.text;
+      expect(sent, contains("Tool: bash (unsandboxed: true)"));
+      expect(sent, contains("Description (the agent's claim): Run the tests"));
+      expect(sent, contains("Arguments: uv run pytest"));
     });
 
     test("granted directories reach the prompt as writable", () async {

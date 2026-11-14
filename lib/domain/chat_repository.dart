@@ -18,6 +18,7 @@ import "permission.dart";
 import "project.dart";
 import "wired_skill.dart";
 import "project_settings.dart";
+import "sandbox_grant.dart";
 import "prompt_library.dart";
 import "shell.dart";
 import "shell_job.dart" show ChatShellJobs;
@@ -579,6 +580,13 @@ class ChatRepository {
           projectSettings.sandbox ??
           defaultProjectSettings.sandbox ??
           true,
+      grants: {
+        for (final grant in SandboxGrant.values)
+          if (projectSettings.doc.read(grant.setting) ??
+              defaultProjectSettings.doc.read(grant.setting) ??
+              true)
+            grant,
+      },
       approveMode: meta.approveMode ?? _settings().approveMode,
     );
   }

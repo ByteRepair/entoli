@@ -1,5 +1,3 @@
-import "package:path/path.dart" as p;
-
 import "../../../domain/agent_backend.dart";
 import "../../../domain/models.dart" show ToolResult;
 import "../../../domain/permission.dart"
@@ -298,12 +296,7 @@ class BashTool extends AgentTool {
   ) {
     final first = analysis.modelableSegments?.firstOrNull;
     final words = first == null ? null : plainCommand(first)?.words;
-    if (words == null || words.length != 2 || words[0] != "cd") return null;
-    final target = words[1];
-    if (target == "~" || target.startsWith("~/")) {
-      return turn.resolvePath(target);
-    }
-    return p.isAbsolute(target) ? target : p.join(standing, target);
+    return words == null ? null : cdTarget(words, standing, turn.resolvePath);
   }
 
   Future<ShellResult> _execute(

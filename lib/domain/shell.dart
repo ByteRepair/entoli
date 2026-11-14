@@ -172,6 +172,23 @@ class CommandSandbox {
 /// resolves in its own terms — a guest's home or the machine's.
 bool isTildePath(String path) => path == "~" || path.startsWith("~/");
 
+/// [path] as a command standing in [at] means it: `~` read by [tilde],
+/// a relative path joined to [at].
+String commandPath(String path, String at, String Function(String) tilde) =>
+    isTildePath(path)
+    ? tilde(path)
+    : p.normalize(p.isAbsolute(path) ? path : p.join(at, path));
+
+/// Where a plain `cd` with [words] goes from [at], or null where the words
+/// are anything else.
+String? cdTarget(
+  List<String> words,
+  String at,
+  String Function(String) tilde,
+) => words.length == 2 && words[0] == "cd"
+    ? commandPath(words[1], at, tilde)
+    : null;
+
 /// Whether [path] is [root] or under it, compared by components so `/w/x`
 /// does not match `/wextra`.
 bool pathInside(String path, String root) {

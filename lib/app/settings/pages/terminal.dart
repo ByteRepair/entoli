@@ -4,9 +4,11 @@ import "../../../core/formatting.dart" show formatSize;
 import "../../../domain/confinement.dart";
 import "../../../domain/permission.dart";
 import "../../../domain/rootfs.dart";
+import "../../../domain/sandbox_grant.dart";
 import "../../../domain/settings/keys.dart";
 import "../../../providers.dart";
 import "../../downloads/rootfs_downloads.dart";
+import "../bind.dart";
 import "../controller.dart";
 import "../forms/permission_rule.dart";
 import "../scope.dart";
@@ -204,6 +206,23 @@ final terminalSettings = [
       },
     ),
   ),
+  // The folders granted beside the workspaces that nobody named: a toggle
+  // each, not a work folder, since they are the app's defaults rather than
+  // the user's additions.
+  for (final (i, grant) in SandboxGrant.values.indexed)
+    SettingSpec(
+      id: grant.settingId,
+      path: (page: _page, section: "permissions"),
+      weight: 11 + i,
+      title: grant.title,
+      description: grant.description,
+      hint: UiHint.toggle,
+      at: _defaultProject,
+      build: (c) => c.toggle(
+        grant.setting,
+        shown: c.scope.resolve(grant.setting) ?? true,
+      ),
+    ),
   // One row per distribution, with the single thing that can be done to it
   // now. An architecture with no image is a row drawn dead.
   SettingSpec(
