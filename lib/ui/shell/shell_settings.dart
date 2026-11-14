@@ -403,6 +403,7 @@ class _Encoder {
                 keyShift: info.keys?.shift ?? false,
                 keyAlt: info.keys?.alt ?? false,
                 link: info.link?.toString(),
+                signIn: info.signIn,
                 opens: _textPage(info.opens),
               ),
           ];

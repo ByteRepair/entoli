@@ -1538,6 +1538,7 @@ class InfoRow {
     this.glyph,
     this.keys,
     this.link,
+    this.signIn = false,
     this.opens,
   });
 
@@ -1550,6 +1551,10 @@ class InfoRow {
 
   /// A page out of the app it opens.
   final Uri? link;
+
+  /// [link] is a CLI's sign-in page, whose callback reaches a program this
+  /// app runs: opened the way `LinkOpener.openSignIn` does.
+  final bool signIn;
 
   /// A page of the app's own it opens.
   final TextPage? opens;

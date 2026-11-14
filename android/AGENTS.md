@@ -41,6 +41,12 @@ Kotlin, the names ride in from Dart the way a download's label does, and the
 action says Disconnect rather than Stop — what it ends is connections, not
 work mid-flight.
 
+`SignInService` holds a CLI's sign-in while its page is open in a Custom
+Tab: Android freezes a backgrounded process within seconds, and a frozen
+proot leaves the program's `localhost` callback unanswered, the page
+loading forever. `CliAccount` holds it from the program's start to its
+exit, and its Stop cancels the sign-in.
+
 **A swiped notification is put back.** Since Android 14 the user can dismiss
 any foreground-service notification, and the service keeps running when it
 goes — a swiped sync hold would look exactly like the failure it exists to

@@ -138,6 +138,10 @@
             android:exported="false"
             android:foregroundServiceType="dataSync"/>
         <service
+            android:name=".SignInService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"/>
+        <service
             android:name=".VoiceService"
             android:exported="false"
             android:foregroundServiceType="microphone"/>

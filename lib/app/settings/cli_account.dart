@@ -6,6 +6,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../core/log.dart";
 import "../../data/builtin/llm/providers/cli_sign_in.dart";
 import "../../data/builtin/llm/providers/presets.dart" show CliProvider;
+import "../../domain/background_work.dart";
 import "../../domain/download.dart";
 import "../downloads/downloads.dart" show DownloadState;
 import "../../domain/llm_provider.dart";
@@ -153,11 +154,18 @@ class CliAccount extends ChangeNotifier {
 
       named();
       signIn.page.addListener(named);
+      final work = _container.read(backgroundWorkProvider);
+      unawaited(work.signingIn(plan));
+      final stops = work.stopRequests
+          .where((job) => job == BackgroundJob.signIn)
+          .listen((_) => unawaited(cancel()));
       final bool done;
       try {
         done = await signIn.result;
       } finally {
         signIn.page.removeListener(named);
+        unawaited(stops.cancel());
+        unawaited(work.signingIn(null));
         if (_signIn == signIn) _signIn = null;
       }
       _show(

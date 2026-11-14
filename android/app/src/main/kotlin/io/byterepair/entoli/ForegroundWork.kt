@@ -225,6 +225,7 @@ abstract class ForegroundWork : Service() {
         private var downloading = false
         private var prefilling = false
         private var syncing = false
+        private var signingIn = false
 
         // A hold the alarm receiver took before Dart was listening. It starts
         // AgentService itself, inside the one window a backgrounded app may —
@@ -243,7 +244,7 @@ abstract class ForegroundWork : Service() {
         // mode counts, since the session it holds is in that isolate too.
         val busy: Boolean
             get() = turns > 0 || listening || downloading || prefilling ||
-                syncing || alarmHold
+                syncing || signingIn || alarmHold
 
         fun holdForAlarm() {
             alarmHold = true
@@ -299,6 +300,13 @@ abstract class ForegroundWork : Service() {
                                 @Suppress("UNCHECKED_CAST")
                                 val names = notice?.get("names") as? List<String>
                                 it.putStringArrayListExtra(SyncService.EXTRA_NAMES, ArrayList(names ?: emptyList()))
+                            }
+                        }
+                        "signingIn" -> {
+                            val plan = call.arguments as? String
+                            signingIn = plan != null
+                            hold(appContext, SignInService::class.java, signingIn) {
+                                it.putExtra(SignInService.EXTRA_PLAN, plan)
                             }
                         }
                         else -> return@setMethodCallHandler result.notImplemented()
