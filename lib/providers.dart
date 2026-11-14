@@ -257,10 +257,10 @@ final byteRepairToolVersionsProvider = FutureProvider<Map<String, String?>>((
   // Asked again when another Linux is picked, which is where they would be.
   ref.watch(appSettingsProvider.select((s) => s.rootfsId));
   final store = ref.watch(byteRepairStoreProvider);
-  if (store.capabilityBanner != null) {
+  final shell = ref.watch(shellProvider);
+  if (store.capabilityBanner != null || !shell.canRunCommands) {
     return {for (final tool in ByteRepairStore.tools.keys) tool: null};
   }
-  final shell = ref.watch(shellProvider);
   return store.runToolVersions(shell);
 });
 

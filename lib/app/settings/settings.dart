@@ -35,18 +35,19 @@ bool holdsPage(Iterable<SectionView> sections) =>
     sections.any((s) => s.settings.any((c) => c.holdsPage));
 
 /// Whether [page] may not be left now, as one value: a frontend watching it
-/// rebuilds when that flips, not with every change on the page.
-final settingsPageHeldProvider = Provider.autoDispose
-    .family<bool, SettingsPageId>(
-      (ref, page) => holdsPage(
-        buildPage(
-          RefReader(ref),
-          ref.watch(settingsSchemaProvider),
-          page,
-          const AppAddress(),
-        ),
-      ),
-    );
+/// rebuilds when that flips, not with every change on the page. Kept, not
+/// auto-disposed: one bool per page, where a disposal would be a timer left
+/// pending when the page goes.
+final settingsPageHeldProvider = Provider.family<bool, SettingsPageId>(
+  (ref, page) => holdsPage(
+    buildPage(
+      RefReader(ref),
+      ref.watch(settingsSchemaProvider),
+      page,
+      const AppAddress(),
+    ),
+  ),
+);
 
 /// [page]'s [section] alone, where it has something in it: [only] keeps to
 /// those settings where it names any.
