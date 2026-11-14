@@ -506,6 +506,7 @@ class SettingRowData {
     this.prerequisiteCommand,
     this.tools,
     this.running = false,
+    this.setupLog,
     this.deleteConfirm,
     this.setUpLabel,
     this.importLabel,
@@ -620,6 +621,9 @@ class SettingRowData {
   String? prerequisiteCommand;
   List<SettingToolData?>? tools;
   bool running;
+
+  /// What the running or last setup printed.
+  String? setupLog;
   SettingConfirmData? deleteConfirm;
 
   /// A setup row's three buttons.

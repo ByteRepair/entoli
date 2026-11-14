@@ -127,6 +127,9 @@ import SwiftUI
   /// The pages offered among the others, rather than opened from a row.
   var listed: [SettingsPageData] { pages.filter { $0.openedFrom == nil } }
 
+  /// Whether a page on screen may not be left now: every way back is shut.
+  var held: Bool { drawn.contains { page($0)?.held == true } }
+
   func page(_ key: SettingsPageKey) -> SettingsPageData? {
     pages.first { $0.key == key }
   }

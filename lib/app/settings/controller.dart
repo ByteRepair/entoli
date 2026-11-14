@@ -228,6 +228,10 @@ sealed class SettingController {
 
   /// Something done beside it, drawn at its end: hearing the voice picked.
   final ActionController? accessory;
+
+  /// Whether its page may not be left now, by any back: a run is under way
+  /// that leaving would hide.
+  bool get holdsPage => false;
 }
 
 /// On or off, or unset where [unsettable].
@@ -1626,6 +1630,7 @@ final class SetupController extends SettingController {
     this.notice,
     this.prerequisite,
     this.error,
+    this.log,
     super.title,
     super.description,
     super.footnote,
@@ -1654,6 +1659,9 @@ final class SetupController extends SettingController {
   /// What went wrong with the last run.
   final String? error;
 
+  /// What the running or last setup printed, null before one has.
+  final String? log;
+
   final SettingConfirm deleteConfirm;
 
   /// What its three buttons are called: "Run Setup", "Import ESBMC", "Delete
@@ -1665,6 +1673,9 @@ final class SetupController extends SettingController {
   final Future<void> Function() _onSetUp;
   final Future<void> Function() _onImport;
   final Future<void> Function() _onDelete;
+
+  @override
+  bool get holdsPage => running;
 
   Future<void> setUp() => _onSetUp();
 

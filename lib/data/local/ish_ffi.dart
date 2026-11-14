@@ -48,6 +48,9 @@ typedef IshInitDart =
       Pointer<Pointer<Utf8>> error,
     );
 
+typedef IshSetHostCallsC = Void Function(Pointer<Utf8> hostDir);
+typedef IshSetHostCallsDart = void Function(Pointer<Utf8> hostDir);
+
 typedef IshDrainWakeC = Void Function(IshSessionPtr session);
 typedef IshDrainWakeDart = void Function(IshSessionPtr session);
 
@@ -249,6 +252,9 @@ class IshBridge {
       ),
       pipeExitCode = lib.lookupFunction<IshPipeExitCodeC, IshPipeExitCodeDart>(
         "${prefix}_pipe_exit_code",
+      ),
+      setHostCalls = lib.lookupFunction<IshSetHostCallsC, IshSetHostCallsDart>(
+        "${prefix}_set_host_calls",
       );
 
   final IshInitDart init;
@@ -269,6 +275,10 @@ class IshBridge {
   final IshPipeHangupDart pipeHangup;
   final IshPipeDestroyDart pipeDestroy;
   final IshPipeExitCodeDart pipeExitCode;
+
+  /// Names the host directory the guest binds at /run/entoli; see
+  /// [HostTools].
+  final IshSetHostCallsDart setHostCalls;
 }
 
 /// [strings] as a C array of C strings, both allocated in [arena], which

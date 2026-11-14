@@ -327,7 +327,7 @@ carries the same copy button; the setup cannot run that installer itself,
 which wants sudo. Both are the store's (`setupNotice`, `prerequisite`), so the
 page names no platform. A delete takes the links and leaves what Homebrew
 installed, and its confirm says that.
-See "Byte Repair's environment, in four variables" in `lib/data/local/AGENTS.md`.
+See "Byte Repair's environment, in five variables" in `lib/data/local/AGENTS.md`.
 The
 banner asks the same env question everywhere, the store naming the platform's
 own answer: a phone with no Linux has no shell at all — so both hide the

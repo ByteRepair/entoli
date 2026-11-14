@@ -9,8 +9,9 @@ import "../spec.dart";
 
 const _page = SettingsPageId.byteRepair;
 
-/// Whether setup or an import is running, and what went wrong with the last.
-typedef SetupRun = ({bool running, String? error});
+/// Whether setup or an import is running, what went wrong with the last, and
+/// what the last setup printed.
+typedef SetupRun = ({bool running, String? error, String? log});
 
 final byteRepairRunProvider = NotifierProvider<ByteRepairRun, SetupRun>(
   ByteRepairRun.new,
@@ -18,22 +19,30 @@ final byteRepairRunProvider = NotifierProvider<ByteRepairRun, SetupRun>(
 
 class ByteRepairRun extends Notifier<SetupRun> {
   @override
-  SetupRun build() => (running: false, error: null);
+  SetupRun build() => (running: false, error: null, log: null);
 
   /// Runs [work] with the buttons dead; what it returns is the error to show.
-  Future<void> run(Future<String?> Function() work) async {
+  /// [work] reports the output so far through the callback it is handed.
+  Future<void> run(
+    Future<String?> Function(void Function(String log) log) work,
+  ) async {
     if (state.running) return;
-    state = (running: true, error: null);
+    state = (running: true, error: null, log: null);
+    void log(String text) {
+      if (ref.mounted) state = (running: true, error: null, log: text);
+    }
+
     String? error;
     try {
-      error = await work();
+      error = await work(log);
     } catch (e) {
       error = "$e";
     }
-    if (ref.mounted) state = (running: false, error: error);
+    if (ref.mounted) state = (running: false, error: error, log: state.log);
   }
 
-  void fail(String error) => state = (running: false, error: error);
+  void fail(String error) =>
+      state = (running: false, error: error, log: state.log);
 }
 
 const byteRepairSections = [
@@ -81,6 +90,7 @@ final byteRepairSettings = [
                   {for (final tool in ByteRepairStore.tools.keys) tool: null},
         running: run.running,
         error: run.error,
+        log: run.log,
         setUpLabel: "Run Setup",
         importLabel: "Import ESBMC",
         deleteLabel: "Delete Byte Repair Data",
@@ -90,15 +100,17 @@ final byteRepairSettings = [
           confirmLabel: "Delete",
           destructive: true,
         ),
-        setUp: () => runner.run(() async {
-          final result = await store.install(shell);
+        setUp: () => runner.run((log) async {
+          final result = await store.install(shell, onOutput: log);
+          // The whole of it: the live view may hold only part.
+          if (result.output.isNotEmpty) log(result.output);
           if (result.returnCode != 0) {
             return result.exceptionInfo ?? result.output.trim();
           }
           refresh();
           return null;
         }),
-        import: () => runner.run(() async {
+        import: () => runner.run((_) async {
           const type = XTypeGroup(label: "ESBMC binary");
           final file = await openFile(acceptedTypeGroups: const [type]);
           if (file == null) return null;

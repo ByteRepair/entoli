@@ -16,6 +16,9 @@ import "package:agent_chat/ui/chat/widgets/code_block.dart" show CodeBlock;
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
+import "package:agent_chat/domain/shell.dart" show ShellResult;
+
+import "../data/builtin/builtin_fakes.dart" show FakeShell;
 import "../fakes.dart";
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
@@ -848,6 +851,42 @@ void main() {
 
         expect(find.textContaining("Run Setup uses Homebrew"), findsOneWidget);
         expect(find.byType(CodeBlock), findsNothing);
+      },
+    );
+
+    // The rows ask the machine, whatever the marker says: a setup is what
+    // writes the marker, so a machine that already has the tools shows them
+    // before any setup ran.
+    targetTest(
+      "the rows show what is installed with no setup marker",
+      TargetPlatform.linux,
+      (tester) async {
+        app.dispose();
+        final bin = p.join(app.config.dataDir, "byte-repair", "bin");
+        app = TestApp.create(
+          byteRepairInstallDir: bin,
+          shell: FakeShell(
+            (command) => switch (command) {
+              "esbmc --version" => const ShellResult(
+                returnCode: 0,
+                output: "ESBMC version 8.6.0 64-bit x86_64 linux\n",
+              ),
+              "make --version" => const ShellResult(
+                returnCode: 0,
+                output: "GNU Make 4.4.1\nmore\n",
+              ),
+              _ => const ShellResult(returnCode: 127, output: ""),
+            },
+          ),
+        );
+        await pumpSettings(tester, app, SettingsCategory.byteRepair);
+
+        expect(
+          find.text("ESBMC version 8.6.0 64-bit x86_64 linux"),
+          findsOneWidget,
+        );
+        expect(find.text("GNU Make 4.4.1"), findsOneWidget);
+        expect(find.text("Not installed"), findsOneWidget);
       },
     );
 

@@ -1,7 +1,9 @@
+import "dart:async";
 import "dart:io";
 
 import "package:flutter/foundation.dart"
     show TargetPlatform, debugDefaultTargetPlatformOverride;
+import "package:flutter/services.dart" show rootBundle;
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
@@ -594,6 +596,38 @@ exit 0""");
       expect(shell.environments.last, isNull);
     },
   );
+
+  test("an install reports its output as it prints", () async {
+    final s = ByteRepairStore(
+      config: config,
+      project: ByteRepairProject().dir,
+      workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
+      installDir: bin,
+    );
+    // Held by what install reads: the bundle's copy, not the file on disk.
+    final shell = FakeShell((_) => const ShellResult(returnCode: 0, output: ""))
+      ..hang.add(
+        await rootBundle.loadString("assets/scripts/byte-repair-setup.sh"),
+      );
+    final reported = StreamController<String>();
+    final seen = StreamIterator(reported.stream);
+    final install = s.install(shell, onOutput: reported.add);
+    // Started once the script is read from the bundle.
+    while (shell.ran.isEmpty) {
+      await pumpEventQueue();
+    }
+
+    shell.printed.value = "fetch\n";
+    expect(await seen.moveNext(), isTrue);
+    expect(seen.current, "fetch\n");
+    shell.printed.value = "fetch\nOK\n";
+    expect(await seen.moveNext(), isTrue);
+    expect(seen.current, "fetch\nOK\n");
+
+    shell.finishHung(const ShellResult(returnCode: 0, output: "fetch\nOK\n"));
+    await install;
+    await seen.cancel();
+  });
 
   /// The env gate asked per platform, the way the store answers it for the
   /// settings page: the target overridden for the one test — a test body is

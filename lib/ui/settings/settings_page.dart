@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../app/settings/settings.dart";
 import "../widgets/side_panel_frame.dart";
 import "settings_category.dart";
 import "schema_view.dart";
@@ -39,38 +40,52 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   /// Back from a category to the list, by the bar's button or the back key.
   void _showList() => setState(() => _categoryShown = false);
 
+  bool _holds(SettingsCategory category) =>
+      ref.watch(settingsPageHeldProvider(category.page));
+
   @override
   Widget build(BuildContext context) {
     // A category this platform does not offer is not opened, whoever names it.
     if (widget.initialCategory case final initial?
         when widget.focus && initial.offered(ref)) {
-      return Scaffold(
-        appBar: PageBar(title: initial.label),
-        body: _categoryBody(initial),
+      return PopScope(
+        canPop: !_holds(initial),
+        child: Scaffold(
+          appBar: PageBar(title: initial.label),
+          body: _categoryBody(initial),
+        ),
       );
     }
     final category = _category.offered(ref)
         ? _category
         : SettingsCategory.general;
-    return SidePanelFrame(
-      narrow: SidePanelNarrow.page,
-      contentShown: _categoryShown,
-      onHideContent: _showList,
-      // The list is settings' own structure, so it is never hidden: nothing
-      // takes the bar's leading slot from its back button. In front of the
-      // list the button is drawn whatever is under the route, since it goes
-      // back to the list rather than out of settings.
-      bar: (mode) => mode == SidePanelMode.contentPage
-          ? PageBar(title: category.label, onBack: _showList)
-          : PageBar(title: "Settings"),
-      panel: _Categories(
-        selected: category,
-        onSelect: (picked) => setState(() {
-          _category = picked;
-          _categoryShown = true;
-        }),
+    // Held, every way out is shut: back, the bar's button and another pick.
+    final held = _holds(category);
+    return PopScope(
+      canPop: !held,
+      child: SidePanelFrame(
+        narrow: SidePanelNarrow.page,
+        contentShown: _categoryShown,
+        onHideContent: held ? null : _showList,
+        // The list is settings' own structure, so it is never hidden: nothing
+        // takes the bar's leading slot from its back button. In front of the
+        // list the button is drawn whatever is under the route, since it goes
+        // back to the list rather than out of settings.
+        bar: (mode) => mode == SidePanelMode.contentPage
+            ? PageBar(title: category.label, onBack: held ? null : _showList)
+            : PageBar(title: "Settings"),
+        panel: _Categories(
+          selected: category,
+          onSelect: (picked) {
+            if (held) return;
+            setState(() {
+              _category = picked;
+              _categoryShown = true;
+            });
+          },
+        ),
+        child: _categoryBody(category, key: ValueKey(category)),
       ),
-      child: _categoryBody(category, key: ValueKey(category)),
     );
   }
 }

@@ -11,7 +11,7 @@ import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/web_search.dart";
-import "package:flutter/foundation.dart" show ValueListenable;
+import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
 import "package:http/http.dart" as http;
 
 /// A provider whose client is whatever the test builds.
@@ -193,6 +193,18 @@ class FakeShell extends Shell {
   /// What a hung command had printed by the time it was killed.
   String killedOutput = "";
 
+  /// Every run's live output, set by a test as a command would print.
+  final printed = ValueNotifier<String?>(null);
+
+  final List<_FakeRun> _hung = [];
+
+  /// Ends every hung command with [result].
+  void finishHung(ShellResult result) {
+    for (final run in _hung) {
+      if (!run._done.isCompleted) run._done.complete(result);
+    }
+  }
+
   @override
   void closeSession(String cwd) => closedSessions.add(cwd);
 
@@ -236,7 +248,11 @@ class FakeShell extends Shell {
 
 class _FakeRun implements ShellRun {
   _FakeRun(this.shell, this.command, this._pid) {
-    if (!shell.hang.contains(command)) _done.complete(shell.respond(command));
+    if (shell.hang.contains(command)) {
+      shell._hung.add(this);
+    } else {
+      _done.complete(shell.respond(command));
+    }
   }
 
   final FakeShell shell;
@@ -248,7 +264,7 @@ class _FakeRun implements ShellRun {
   Future<ShellResult> get result => _done.future;
 
   @override
-  ValueListenable<String?>? get output => null;
+  ValueListenable<String?>? get output => shell.printed;
 
   @override
   Future<int?> get pid async => _pid;

@@ -61,7 +61,7 @@ into the app: Homebrew's `esbmc` formula, and make and gh where missing,
 linked into `<cacheDir>/byte-repair/bin`. ESBMC's own mac release links
 Homebrew's libraries by absolute path and ships none of them, so nothing else
 starts here. Homebrew itself is the user's to install, its installer wanting
-sudo; see "Byte Repair's environment, in four variables" in
+sudo; see "Byte Repair's environment, in five variables" in
 `lib/data/local/AGENTS.md`.
 
 ## The menu bar

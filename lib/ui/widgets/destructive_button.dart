@@ -14,6 +14,7 @@ class DestructiveButton extends StatelessWidget {
     required this.confirmMessage,
     this.confirmLabel = "Delete",
     required this.onConfirmed,
+    this.enabled = true,
   });
 
   final IconData icon;
@@ -22,6 +23,7 @@ class DestructiveButton extends StatelessWidget {
   final String confirmMessage;
   final String confirmLabel;
   final Future<void> Function() onConfirmed;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -34,17 +36,19 @@ class DestructiveButton extends StatelessWidget {
           backgroundColor: Theme.of(context).colorScheme.errorContainer,
           foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
         ),
-        onPressed: () async {
-          final confirmed = await confirm(
-            context,
-            title: confirmTitle,
-            message: confirmMessage,
-            confirmLabel: confirmLabel,
-            destructive: true,
-          );
-          if (!confirmed) return;
-          await onConfirmed();
-        },
+        onPressed: !enabled
+            ? null
+            : () async {
+                final confirmed = await confirm(
+                  context,
+                  title: confirmTitle,
+                  message: confirmMessage,
+                  confirmLabel: confirmLabel,
+                  destructive: true,
+                );
+                if (!confirmed) return;
+                await onConfirmed();
+              },
       ),
     );
   }

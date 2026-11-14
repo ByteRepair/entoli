@@ -6,16 +6,24 @@
 #   ESBMC is fetched from its release).
 # - ENV_BREW: the brew executable, with ENV_PACKAGE_MANAGER=brew.
 # - ENV_ESBMC_BINARY: the binary's file name, esbmc.exe on Windows. Default esbmc.
-# See "Byte Repair's environment, in four variables" in lib/data/local/AGENTS.md.
+# - ENV_SCRATCH_DIR: where ESBMC is downloaded and unpacked. Default beside
+#   ENV_INSTALL_DIR, so the last move is a rename.
+# See "Byte Repair's environment, in five variables" in lib/data/local/AGENTS.md.
 set -eu
 
 BIN="${ENV_INSTALL_DIR:-}"
 PM="${ENV_PACKAGE_MANAGER:-}"
 BINARY="${ENV_ESBMC_BINARY:-esbmc}"
+SCRATCH="${ENV_SCRATCH_DIR:-$BIN}"
 
 fail() {
   echo "$*" >&2
   exit 1
+}
+
+# Each step said as it starts, so a run that stops shows where.
+step() {
+  echo "==> $*"
 }
 
 have() {
@@ -64,7 +72,9 @@ link_tool() {
 
 # --- make and github-cli ------------------------------------------------------
 missing=""
+step "Checking for make"
 works make || missing="make"
+step "Checking for gh"
 works gh || missing="${missing:+$missing }gh"
 if [ -n "$missing" ]; then
   case "$PM" in
@@ -81,9 +91,11 @@ if [ -n "$missing" ]; then
           *)  pkgs="$pkgs $tool" ;;
         esac
       done
+      step "Installing with apk:$pkgs"
       apk add --no-cache $pkgs || fail "apk could not install:$pkgs"
       ;;
     brew)
+      step "Installing with Homebrew: $missing"
       "$BREW" install $missing || fail "brew could not install: $missing"
       for tool in $missing; do
         case "$tool" in
@@ -101,6 +113,7 @@ fi
 # binary found elsewhere on PATH is linked or copied in, not left where it is.
 
 install_esbmc_brew() {
+  step "Checking for ESBMC"
   works "$BIN/$BINARY" && return 0
   # A link to a removed keg, or the unstartable zip binary an older setup
   # left: gone first, so the PATH probe below cannot find it.
@@ -158,6 +171,7 @@ extract() {
 }
 
 install_esbmc_release() {
+  step "Checking for ESBMC"
   if works "$BINARY"; then
     # The re-run that would copy $BIN's own binary onto itself is the -f's.
     if [ ! -f "$BIN/$BINARY" ]; then
@@ -168,15 +182,17 @@ install_esbmc_release() {
   fi
 
   asset=$(esbmc_asset)
-  # Scratch beside $BIN rather than in a shared /tmp: a fresh name, no other
-  # user's files, the final mv a rename, and gone however the run ends. A
-  # run killed outright leaves its scratch to the next one to sweep.
-  rm -rf "$BIN"/.esbmc-download.*
-  scratch=$(mktemp -d "$BIN/.esbmc-download.XXXXXX")
+  # Scratch in $SCRATCH (beside $BIN unless told) rather than a shared /tmp:
+  # a fresh name, no other user's files, and gone however the run ends. A run
+  # killed outright leaves its scratch to the next one to sweep.
+  rm -rf "$SCRATCH"/.esbmc-download.*
+  scratch=$(mktemp -d "$SCRATCH/.esbmc-download.XXXXXX")
   trap 'rm -rf "$scratch"' EXIT
   trap 'exit 1' HUP INT TERM
 
+  step "Downloading $asset"
   download "https://github.com/esbmc/esbmc/releases/latest/download/$asset" "$scratch/esbmc.zip"
+  step "Extracting $asset"
   extract "$scratch/esbmc.zip" "$scratch/x"
 
   # Under a bin/ wherever the release puts it (v8.4: bin/, v8.5: release/bin/).
@@ -196,5 +212,6 @@ fi
 
 # $BIN's binary itself, not whatever PATH answers: it is what the gate and
 # the turns will run.
+step "Checking the installed ESBMC"
 "$BIN/$BINARY" --version 2>&1 ||
   fail "the esbmc at $BIN/$BINARY cannot be run (see the error above); setup did not succeed"

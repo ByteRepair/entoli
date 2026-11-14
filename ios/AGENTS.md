@@ -661,11 +661,32 @@ base Alpine the shell already runs: IshShell builds no per-project rootfs
 copy, so `apk`'s installs land in what every chat on the device shares, and
 the environment delete takes the workspace and marker but no host tree for
 the tools. Import is the one that has no answer at all: the guest's
-filesystem is the fakefs, which no host path reaches. ESBMC is the remaining
-gap on this platform: the releases publish no i386 asset, so the script
-picks the x86_64 zip for an i686 guest and the tail's verification refuses
-what lands — a setup still reports it did not succeed even after make and
-github-cli installed.
+filesystem is the fakefs, which no host path reaches. The x86-64 guest runs
+ESBMC's own Linux release; it is unpacked in the workspace, where the host
+does the unzip, and moved into `/usr/local/bin`.
+
+## Tools the host runs
+
+The emulator interprets every instruction, so a CPU-bound tool is tens of
+times slower in it than on the device: unzipping ESBMC took six minutes in
+the guest. `unzip` and `tar` are therefore the host's where they can be.
+`HostTools` (`lib/data/local/host_tools.dart`) puts a shim for each in a host
+directory the bridge binds writable at `/run/entoli` (`ish_set_host_calls`,
+once, as the guest boots), first on the guest's `PATH`. A shim leaves its
+arguments and working directory in `/run/entoli/calls/` and waits; Dart,
+which looks there only while a guest command runs, renames the request to
+say it has it, extracts with `package:archive` on an isolate, and writes
+back the exit code and what to print.
+
+**Only a host-backed path can be the host's.** The host can write the
+workspace at `/root` and the data directory at its own path; anything else
+is the fakefs, whose files are SQLite rows the host must not touch. A
+request with a path off those mounts, a form not taken (listing, members
+named, `tar` from stdin or creating), or an unzip that would replace a file
+without `-o` is answered "fall back", and the shim runs the guest's own
+tool. So does a request nobody takes within four seconds, which is a host
+not listening. The shims are written afresh at each launch, so one a
+command overwrote is back next time.
 
 ## The native shell
 

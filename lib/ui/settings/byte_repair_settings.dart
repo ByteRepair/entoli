@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 
 import "../../app/settings/controller.dart";
 import "../chat/widgets/code_block.dart";
+import "../chat/widgets/shell_run.dart" show LiveShellOutput;
 import "../widgets/destructive_button.dart";
 import "../widgets/settings_warning_banner.dart";
 
@@ -85,6 +86,7 @@ class SetupView extends StatelessWidget {
           ],
           const SizedBox(height: 16),
           _ToolStatusList(c.tools),
+          if (c.log case final log? when log.isNotEmpty) _SetupLog(log),
         ],
         if (error != null) ...[
           const SizedBox(height: 8),
@@ -105,10 +107,32 @@ class SetupView extends StatelessWidget {
           confirmTitle: c.deleteConfirm.title,
           confirmMessage: c.deleteConfirm.message,
           onConfirmed: c.delete,
+          enabled: !c.running,
         ),
       ],
     );
   }
+}
+
+/// What the setup printed, folded away until asked for.
+class _SetupLog extends StatelessWidget {
+  const _SetupLog(this.log);
+
+  final String log;
+
+  @override
+  Widget build(BuildContext context) => ExpansionTile(
+    title: Text("Log", style: Theme.of(context).textTheme.bodyMedium),
+    tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+    childrenPadding: const EdgeInsets.symmetric(horizontal: 16),
+    shape: const Border(),
+    children: [
+      ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 240),
+        child: SelectionArea(child: LiveShellOutput(code: log)),
+      ),
+    ],
+  );
 }
 
 class _ToolStatusList extends StatelessWidget {

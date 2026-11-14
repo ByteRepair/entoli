@@ -132,7 +132,7 @@ blink_cflags=(
 # both made from this one list. fakefsify is not among them: the rootfs unpack
 # is guest-independent (one fakefs format), so only the i386 core has it.
 bridge_entry_points=(
-  boot
+  boot set_host_calls
   session_init session_drain_wake session_write_stdin session_poll
   session_read session_interrupt session_hangup session_destroy
   pipe_init pipe_write pipe_close_input pipe_poll pipe_read pipe_terminate

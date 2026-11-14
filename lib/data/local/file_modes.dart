@@ -57,6 +57,13 @@ void makeExecutable(String path) {
   _chmodTo(path, FileStat.statSync(path).mode & 0x1ff | 0x49); // a+x
 }
 
+/// Sets [path]'s permission bits to [mode], as libc's `chmod` does. Nothing
+/// on Windows.
+void setMode(String path, int mode) {
+  if (Platform.isWindows) return;
+  _chmodTo(path, mode & 0x1ff);
+}
+
 typedef _ChmodC = Int32 Function(Pointer<Utf8>, Uint32);
 typedef _ChmodDart = int Function(Pointer<Utf8>, int);
 

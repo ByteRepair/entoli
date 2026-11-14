@@ -256,6 +256,19 @@ static void bind_workspace(const char *workspace) {
     }
 }
 
+// See ish_set_host_calls in ish_bridge.h.
+static char host_calls_dir[PATH_MAX];
+
+void ish_set_host_calls(const char *host_dir) {
+    snprintf(host_calls_dir, sizeof(host_calls_dir), "%s", host_dir);
+}
+
+static void bind_host_calls(void) {
+    static bool bound = false;
+    if (bound || host_calls_dir[0] == '\0') return;
+    if (bind_host_dir(host_calls_dir, "/run/entoli", 0) == 0) bound = true;
+}
+
 // Boot the guest from [rootfs_dir] where it has not been, then bind what a
 // session needs: [data_dir] at its host path with [read_only] beside it, and
 // [home] at /root. An empty string is a bind not wanted. False, with *error
@@ -276,6 +289,7 @@ static bool guest_prepare(
         }
     }
     become_init();
+    bind_host_calls();
     if (data_dir[0] != '\0') {
         bind_data_dir(data_dir);
         bind_read_only(read_only, read_only_count);
