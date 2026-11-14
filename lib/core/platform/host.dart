@@ -609,7 +609,17 @@ Future<String> cacheDir() async {
         p.join(_home, "AppData", "Local");
     return p.join(local, _dirLeaf, "Cache");
   }
-  return p.join((await getApplicationSupportDirectory()).path, "entoli");
+  final dir = p.join((await getApplicationSupportDirectory()).path, "entoli");
+  // iOS backs up Application Support, and Caches is purged under storage
+  // pressure, which a downloaded model must survive. Apple's answer for data
+  // that is refetchable yet kept is this, with the backup flag set.
+  if (Platform.isIOS) {
+    Directory(dir).createSync(recursive: true);
+    if (!excludeFromBackup(dir)) {
+      logFailure("files", "could not exclude the cache from backup");
+    }
+  }
+  return dir;
 }
 
 /// Silero's detector ships inside the app, so its licence does too.
