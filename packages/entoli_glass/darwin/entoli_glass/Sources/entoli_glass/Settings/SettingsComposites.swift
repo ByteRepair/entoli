@@ -191,6 +191,57 @@ struct CollectionRow: View {
   }
 }
 
+/// A collection's items as glass cards in a grid: face, name, words and
+/// badge, a tap running the item's own action.
+struct CardsRow: View {
+  let model: SettingsModel
+  let row: SettingRowData
+  @State private var acting = ItemActing()
+
+  var body: some View {
+    let items = row.items.compactMap { $0 }
+    LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: 12)], spacing: 12) {
+      ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+        Button {
+          if let tap = item.tap { acting.run(model, row.id, index, tap) }
+        } label: {
+          card(item).contentShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .disabled(item.tap == nil)
+      }
+    }
+    .padding(.vertical, 4)
+    .asking($acting.confirm, $acting.notice) { acting.agreed(model, row.id) }
+  }
+
+  private func card(_ item: SettingItemData) -> some View {
+    HStack(alignment: .top, spacing: 12) {
+      if let bot = item.bot {
+        BotFaceView(
+          model: model, key: bot, colour: Int(item.botColour ?? 0xff6a1a), size: 44,
+          live: item.botLive)
+      } else if let icon = item.icon {
+        Image(systemName: icon.symbol).font(.title2).foregroundStyle(.secondary)
+          .frame(width: 44, height: 44)
+      }
+      VStack(alignment: .leading, spacing: 4) {
+        Text(item.title).font(.headline)
+        if let subtitle = item.subtitle, !subtitle.isEmpty {
+          Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+        }
+        if let badge = item.badge {
+          Text(badge).font(.caption.weight(.medium)).foregroundStyle(.tint)
+        }
+      }
+      Spacer(minLength: 0)
+    }
+    .padding(14)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .glassSurface(RoundedRectangle(cornerRadius: 16))
+  }
+}
+
 /// What running an item's action holds: the confirm it waits on, the item
 /// and action that confirm is for, and what the action said.
 @MainActor @Observable final class ItemActing {

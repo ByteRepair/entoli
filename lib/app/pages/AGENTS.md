@@ -25,7 +25,12 @@ under the page's id, so its rules and its words are said once; and
 agents. Two kinds were added for these pages: `DocumentController`, a
 file's text as the whole of a page, edited in place with each edit said back,
 and `WebController`, a web page. A `CollectionItem`'s `RowFace` says who
-leads its row: an agent in their face, or a Bot Avatar of its own.
+leads its row: an agent in their face, or a Bot Avatar of its own, live or
+still (`animate`, `botLive` on the wire). A collection with `UiHint.cards` is
+drawn as a grid of cards instead of rows, each its face, title, subtitle (three
+lines at most) and badge, a tap running the item's `tap`: Flutter's `_Cards`
+in `schema_view.dart`, up to three across, and native's `CardsRow`, an adaptive
+`LazyVGrid` of glass surfaces. The marketplace's collections are the first.
 
 A few pieces keep the look the pages had before they were data.
 `PromptController` is prose the model reads — the profile's instructions —

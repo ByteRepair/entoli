@@ -84,8 +84,12 @@ cannot do. What is absent in an entry's frontmatter — `version`, `tags` — is
 null or empty here; nothing is invented for it. Entries are sorted by name,
 the way the library below sorts its own. The meta line —
 `author · v<version> · tags`, joined — is a getter on `MarketplaceEntry`,
-read by the list's row and the preview's header alike, so the two renderings
-cannot drift; the test asserts both.
+read by the preview's header. The list's row is for scanning and carries
+less: the description cut at a word near 140 characters, the version as its
+badge. A remote entry's author is up to ten contributors, which on a row is
+noise. Collections are drawn as cards (`UiHint.cards`), their count as the
+badge, and a collection's page opens on its own card; headings say how many
+sit under them, and a search that finds nothing names what was typed.
 
 `marketplaceEntriesProvider` is `autoDispose`, per tab: a reopen re-fetches
 rather than showing what may have changed underneath it. The fetch rides

@@ -78,6 +78,7 @@ enum SettingHint {
   skills,
   botAvatars,
   open,
+  cards,
 }
 
 /// What an icon beside a setting stands for: the schema's `SettingGlyph`,

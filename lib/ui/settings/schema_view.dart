@@ -152,6 +152,9 @@ class SettingRow extends StatelessWidget {
         UiHint.card => _Card(c),
         _ => _Notice(c),
       },
+      final CollectionController c when c.hint == UiHint.cards => c.typed(
+        <V>(c) => _Cards<V>(c),
+      ),
       final CollectionController c => c.typed(<V>(c) => _Collection<V>(c)),
       final PairingController c => PairingControls(flow: c.flow),
       final SubpageController c => ListTile(
@@ -1380,6 +1383,115 @@ class _DragSliderState extends State<_DragSlider> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The items as cards, as many across as the width takes up to three: each
+/// its face, name, words and badge, a tap running the item's [tap].
+class _Cards<T> extends StatelessWidget {
+  const _Cards(this.c);
+
+  final CollectionController<T> c;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final rows = c.rows;
+    return LayoutBuilder(
+      builder: (context, box) {
+        const gap = 12.0;
+        final inner = box.maxWidth - 32;
+        final across = (inner / 280).floor().clamp(1, 3);
+        final width = (inner - gap * (across - 1)) / across;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Wrap(
+            spacing: gap,
+            runSpacing: gap,
+            children: [
+              for (final (index, row) in rows.indexed)
+                SizedBox(
+                  width: width,
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: switch (row.tap) {
+                        final tap? => () => _tell(context, c.act(index, tap)),
+                        null => null,
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            switch ((row.face, settingIcon(row.glyph))) {
+                              (AvatarRowFace(:final spec, :final animate), _) =>
+                                BotAvatarView(
+                                  spec: spec,
+                                  size: 48,
+                                  animate: animate,
+                                ),
+                              (_, final icon?) => SizedBox.square(
+                                dimension: 48,
+                                child: Icon(
+                                  icon,
+                                  size: 28,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              _ => const SizedBox.shrink(),
+                            },
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    row.title,
+                                    style: theme.textTheme.titleMedium,
+                                  ),
+                                  if (row.subtitle case final words?
+                                      when words.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        words,
+                                        maxLines: 3,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                      ),
+                                    ),
+                                  if (row.badge case final badge?)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Text(
+                                        badge,
+                                        style: theme.textTheme.labelMedium
+                                            ?.copyWith(
+                                              color: theme.colorScheme.primary,
+                                            ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

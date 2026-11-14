@@ -63,12 +63,15 @@ mixin ListsMarketplaceEntries on AppPage {
     items: entries,
     removable: false,
     emptyLabel: "Nothing matches here.",
+    // The row is for scanning: the description cut short, the version
+    // beside it; the whole meta line is the preview's.
     describe: (entry) => CollectionItem(
       entry.name,
-      subtitle: [
-        if (entry.description.isNotEmpty) entry.description,
-        if (entry.metaLine.isNotEmpty) entry.metaLine,
-      ].join("\n"),
+      subtitle: _short(entry.description),
+      badge: switch (entry.version) {
+        final version? => "v$version",
+        null => null,
+      },
       face: _face(entry.slug),
       // Native draws a glyph beside a face, so a face replaces it.
       glyph: _presets.isNotEmpty
@@ -86,24 +89,25 @@ mixin ListsMarketplaceEntries on AppPage {
     },
   );
 
-  SettingController collectionList(
+  /// Collections as cards; [opens] false is a collection page's own header.
+  SettingController collectionCards(
     CompletionKind kind,
-    List<MarketplaceCollection> collections,
-  ) => CollectionController<MarketplaceCollection>(
-    part("collections", "Collections", hint: UiHint.info),
+    List<MarketplaceCollection> collections, {
+    String id = "collections",
+    bool opens = true,
+  }) => CollectionController<MarketplaceCollection>(
+    part(id, "Collections", hint: UiHint.cards),
     items: collections,
     removable: false,
     describe: (collection) => CollectionItem(
       collection.name,
-      subtitle: [
-        if (collection.summary.isNotEmpty) collection.summary,
-        _count(kind, collection.members.length),
-      ].join("\n"),
+      subtitle: collection.summary,
+      badge: _count(kind, collection.members.length),
       face: _face(collection.slug),
       glyph: _presets.isNotEmpty ? null : SettingGlyph.folder,
       editable: false,
       takesImage: false,
-      tap: "open",
+      tap: opens ? "open" : null,
     ),
     act: (index, _) async {
       pages.open(
@@ -154,6 +158,16 @@ mixin ListsMarketplaceEntries on AppPage {
         },
       );
 }
+
+/// [text] cut at a word to about two lines of a row.
+String _short(String text, [int max = 140]) {
+  if (text.length <= max) return text;
+  final cut = text.lastIndexOf(" ", max);
+  return "${text.substring(0, cut > max ~/ 2 ? cut : max).trimRight()}…";
+}
+
+/// A heading with how many sit under it.
+String _counted(String heading, int n) => "$heading · $n";
 
 String _count(CompletionKind kind, int n) => switch (kind) {
   CompletionKind.skill => n == 1 ? "1 skill" : "$n skills",
@@ -240,13 +254,17 @@ class MarketplaceAppPage extends AppPage with ListsMarketplaceEntries {
     if (searchNeedle(_query).isEmpty) {
       return [
         if (collections.isNotEmpty)
-          PageSection("collections", "Collections", [
-            collectionList(_kind, collections),
-          ]),
+          PageSection(
+            "collections",
+            _counted("Collections", collections.length),
+            [collectionCards(_kind, collections)],
+          ),
         // A heading that separates nothing is no heading at all.
-        PageSection("front", collections.isEmpty ? "" : _kind.label, [
-          entryList(_kind, "front", shownFront),
-        ]),
+        PageSection(
+          "front",
+          collections.isEmpty ? "" : _counted(_kind.label, shownFront.length),
+          [entryList(_kind, "front", shownFront)],
+        ),
       ];
     }
     // A search reaches into the collections: a matching collection, and
@@ -259,21 +277,23 @@ class MarketplaceAppPage extends AppPage with ListsMarketplaceEntries {
           (collection, hits),
     ];
     if (shownFront.isEmpty && matched.isEmpty && members.isEmpty) {
-      return [notice("nomatch", "Nothing matches here.")];
+      return [notice("nomatch", "Nothing matches \"${_query.trim()}\".")];
     }
     return [
       if (matched.isNotEmpty)
-        PageSection("collections", "Collections", [
-          collectionList(_kind, matched),
+        PageSection("collections", _counted("Collections", matched.length), [
+          collectionCards(_kind, matched),
         ]),
       if (shownFront.isNotEmpty)
-        PageSection("front", _kind.label, [
+        PageSection("front", _counted(_kind.label, shownFront.length), [
           entryList(_kind, "front", shownFront),
         ]),
       for (final (collection, hits) in members)
-        PageSection("in-${collection.slug}", collection.name, [
-          entryList(_kind, "in-${collection.slug}", hits),
-        ]),
+        PageSection(
+          "in-${collection.slug}",
+          _counted(collection.name, hits.length),
+          [entryList(_kind, "in-${collection.slug}", hits)],
+        ),
     ];
   }
 }
@@ -303,7 +323,9 @@ class MarketplaceCollectionAppPage extends AppPage
   List<PageSection> sections(SettingReader reader) {
     watchFaces(reader);
     return [
-      if (collection.summary.isNotEmpty) notice("about", collection.summary),
+      PageSection("about", "", [
+        collectionCards(kind, [collection], id: "about", opens: false),
+      ]),
       PageSection("browse", "", [
         searchRow(_query, (text) => _query = text),
         tagsRow(

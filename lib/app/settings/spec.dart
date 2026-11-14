@@ -97,6 +97,9 @@ enum UiHint {
 
   /// A row that opens another page: an action whose run opens an `AppPage`.
   open,
+
+  /// A collection's items as cards in a grid, each its face, name and words.
+  cards,
 }
 
 /// The pages settings is filed under, in the order they are offered. A
