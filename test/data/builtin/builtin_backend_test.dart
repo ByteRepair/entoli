@@ -2821,6 +2821,7 @@ void main() {
         "cut", () async {
       await (AppSettings.load(config)..totalContext = 8192).save(config);
       final backend = backendOver([
+        [saidOnly("<summary>greeted</summary>")],
         [saidOnly("<summary>done</summary>")],
       ]);
 
@@ -2833,7 +2834,9 @@ void main() {
       );
 
       expect((outcome as Compacted).marker.upToMessageId, "m1");
-      final asked = textOf(client.sent.single);
+      // A piece of its own, the step before it already asked.
+      final [_, last] = client.sent;
+      final asked = textOf(last);
       expect(asked, contains("startxxx"));
       expect(asked, contains("xxxend"));
       expect(asked, contains("characters were cut from the middle here"));

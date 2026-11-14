@@ -83,8 +83,7 @@ LlmMessage _named(
   final why = pdfs
       ? "the conversation's PDFs are over the size a request can carry"
       : "this model cannot read PDFs here";
-  return LlmMessage(
-    role: m.role,
+  return m.copyWith(
     text: [
       m.text,
       if (hiddenImages.isNotEmpty)
@@ -92,10 +91,6 @@ LlmMessage _named(
       if (hiddenPdfs.isNotEmpty)
         "(Not sent, as $why: ${names(hiddenPdfs)}. Read it with a command instead.)",
     ].join("\n\n"),
-    toolCalls: m.toolCalls,
-    toolCallId: m.toolCallId,
-    reasoning: m.reasoning,
-    reasoningSignature: m.reasoningSignature,
     attachments: [
       for (final a in m.attachments)
         if (!unread.any((u) => identical(u, a))) a,

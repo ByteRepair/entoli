@@ -1720,8 +1720,9 @@ with the summary so far as `<prior-summary>` — the first piece with the
 marker's own — so the last summary has read every message and the marker
 ends at the newest. A piece is whole steps: a user turn, or one response with
 its tool results, since a call parted from its result is a request a provider
-refuses. A step too big for an ask alone keeps the start and end of its
-longest texts with `CompactPrompt.cutNote` where the middle was, so the
+refuses. A step too big for an ask alone is a piece of its own and keeps
+the start and end of its longest texts (a call's string arguments cut in
+place, their keys kept) with `CompactPrompt.cutNote` where the middle was, so the
 summarizer knows something is missing; a piece that opens on a reply is led
 by `CompactPrompt.continued`, a provider wanting a user turn first. The cost
 is the size of what is new since the last marker, read once, plus the

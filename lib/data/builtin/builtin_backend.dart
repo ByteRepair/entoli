@@ -1095,7 +1095,6 @@ class BuiltinBackend implements AgentBackend {
     bool first = true,
     required String viewer,
     List<ConversationCompaction> compactions = const [],
-    ResourceLoader? load,
   }) async {
     final project = await store.projectOf(chatId);
     return projectionOf(
@@ -1103,7 +1102,7 @@ class BuiltinBackend implements AgentBackend {
       first: first,
       viewer: viewer,
       compactions: compactions,
-      load: load ?? _resourcesOf(chatId),
+      load: _resourcesOf(chatId),
       resourcesDir: config.resourcesDir(chatId, project: project),
       library: libraryFor(project),
     );
@@ -1242,7 +1241,6 @@ class BuiltinBackend implements AgentBackend {
     if (target == null) {
       return fail("No model is set up to summarize this chat with.");
     }
-    if (history.isEmpty) return fail("There is nothing to summarize yet.");
     // Each ask has to fit the window with room for the summary it produces;
     // a budget that would fill the whole window is how the last attempt got
     // here in the first place. The window is the model's own where the
@@ -1262,7 +1260,7 @@ class BuiltinBackend implements AgentBackend {
     // What does not fit one ask is read in pieces, in order, each folded into
     // the summary so far — so the marker covers everything it names.
     final pieces = SummaryPieces(projected);
-    var summary = compactions.lastOrNull?.summary;
+    var summary = verbatimFrom(history, compactions).marker?.summary;
     for (var part = 1; !pieces.isDone; part++) {
       final room =
           budget -
@@ -1286,19 +1284,19 @@ class BuiltinBackend implements AgentBackend {
         instructions: instructions,
         priorSummary: summary,
       );
-      String? next;
+      String? folded;
       var failure = "";
       // One retry of the same piece: an error or an empty reply is the
       // summarizer's, not the piece's.
-      for (var attempt = 0; attempt < 2 && next == null; attempt++) {
+      for (var attempt = 0; attempt < 2 && folded == null; attempt++) {
         try {
           final reply = await _oneCompletion(
             target,
             cut,
             timeout: const Duration(minutes: 3),
           );
-          next = reply == null ? null : CompactPrompt.summaryFrom(reply);
-          if (next == null) {
+          folded = reply == null ? null : CompactPrompt.summaryFrom(reply);
+          if (folded == null) {
             failure = "The summarizer gave back an empty summary.";
           }
         } catch (e) {
@@ -1306,8 +1304,8 @@ class BuiltinBackend implements AgentBackend {
           failure = "The summarizer failed: ${"$e".split("\n").first}";
         }
       }
-      if (next == null) return fail("$which$failure");
-      summary = next;
+      if (folded == null) return fail("$which$failure");
+      summary = folded;
     }
     final marker = ConversationCompaction(
       upToMessageId: history.last.id,

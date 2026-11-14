@@ -157,6 +157,20 @@ class LlmMessage {
   final String? reasoningSignature;
 
   final List<LlmAttachment> attachments;
+
+  LlmMessage copyWith({
+    String? text,
+    List<LlmToolCall>? toolCalls,
+    List<LlmAttachment>? attachments,
+  }) => LlmMessage(
+    role: role,
+    text: text ?? this.text,
+    toolCalls: toolCalls ?? this.toolCalls,
+    toolCallId: toolCallId,
+    reasoning: reasoning,
+    reasoningSignature: reasoningSignature,
+    attachments: attachments ?? this.attachments,
+  );
 }
 
 /// The system messages as one standing prompt, the join Anthropic's `system`
