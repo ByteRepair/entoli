@@ -38,6 +38,7 @@ import "../prompts/skill_package.dart";
 import "background_jobs.dart";
 import "builtin_agent.dart";
 import "compact_prompt.dart";
+import "templates.dart" show summarizedTurnText;
 import "memory/instructions.dart";
 import "memory/store.dart";
 import "llm/gated_client.dart";
@@ -1095,7 +1096,6 @@ class BuiltinBackend implements AgentBackend {
     bool first = true,
     required String viewer,
     List<ConversationCompaction> compactions = const [],
-    ResourceLoader? load,
   }) async {
     final project = await store.projectOf(chatId);
     return projectionOf(
@@ -1103,7 +1103,7 @@ class BuiltinBackend implements AgentBackend {
       first: first,
       viewer: viewer,
       compactions: compactions,
-      load: load ?? _resourcesOf(chatId),
+      load: _resourcesOf(chatId),
       resourcesDir: config.resourcesDir(chatId, project: project),
       library: libraryFor(project),
     );
@@ -1242,107 +1242,93 @@ class BuiltinBackend implements AgentBackend {
     if (target == null) {
       return fail("No model is set up to summarize this chat with.");
     }
-    if (history.isEmpty) return fail("There is nothing to summarize yet.");
-    // The ask has to fit the window with room for the summary it produces; a
-    // budget that would fill the whole window is how the last attempt got
+    // Each ask has to fit the window with room for the summary it produces;
+    // a budget that would fill the whole window is how the last attempt got
     // here in the first place. The window is the model's own where the
-    // registry knows it, the settings' global guess where it does not — and
-    // where the model still refuses a span, the ladder below is the answer.
+    // registry knows it, the settings' global guess where it does not.
     final window =
         target.info?.context ?? AppSettings.load(config).totalContext;
     final budget = window ~/ 2;
-    // The retry ladder: a span too big to summarize is not a failure to give
-    // up on but a span to summarize less of. Each attempt drops the oldest
-    // half of what it was asked to read, so a conversation that will not fit
-    // whole still leaves a summary of its newest half — and a marker that
-    // covers only what was read.
-    //
-    // The loader is memoised across the attempts, which is the point of the
-    // ladder: the surviving half's attachments were just read, and a span
-    // that will not fit is the expected case for the chats this runs on —
-    // one read per resource, not one per attempt.
-    final read = <String, Future<Uint8List?>>{};
-    Future<Uint8List?> loader(String resource) =>
-        read.putIfAbsent(resource, () => _resourcesOf(chatId)(resource));
-    List<Message> span = history;
-    // The oldest half of what the ask reads — the span after the newest
-    // marker it holds — not of the span whole: everything up to that marker's
-    // boundary costs one summary however much of it there is, so dropping it
-    // leaves the ask the size it was. Once the boundary is gone the marker no
-    // longer applies, and [priorSummary] is what carries it.
-    List<Message> halve() {
-      final verbatim = span.sublist(verbatimFrom(span, compactions).from);
-      return verbatim.sublist((verbatim.length / 2).ceil());
-    }
-
-    // Loop-invariant: the markers do not change across the ladder.
-    final priorSummary = compactions.lastOrNull?.summary;
-    // Why the last attempt did not land, which is what the user is told
-    // where the ladder runs out.
-    var failure = "";
-    for (var attempt = 0; attempt < 3; attempt++) {
-      // Summarized as Athena reads the room: the default route's view, in
-      // which the room's says to nobody else are her own.
-      final projected = await _projected(
-        chatId,
-        span,
-        viewer: athena,
-        load: loader,
-        compactions: compactions,
+    // Summarized as Athena reads the room: the default route's view, in
+    // which the room's says to nobody else are her own.
+    final projected = await _projected(
+      chatId,
+      history,
+      viewer: athena,
+      compactions: compactions,
+    );
+    if (projected.isEmpty) return fail("There is nothing to summarize yet.");
+    // What does not fit one ask is read in pieces, in order, each folded into
+    // the summary so far — so the marker covers everything it names.
+    final pieces = SummaryPieces(projected);
+    // The first piece opens with the marker's summary turn where one
+    // applies, as the projection words it; each later one with the summary
+    // so far, worded the same.
+    String? summary;
+    var folds = verbatimFrom(history, compactions).marker != null;
+    for (var part = 1; !pieces.isDone; part++) {
+      final room =
+          budget -
+          estimateTokens(
+            CompactPrompt.build(
+              conversation: const [],
+              instructions: instructions,
+              folds: folds,
+            ),
+          );
+      final piece = pieces.next(
+        room,
+        lead: summary == null
+            ? null
+            : LlmMessage(role: LlmRole.user, text: summarizedTurnText(summary)),
       );
-      if (projected.isEmpty) {
+      final which = part == 1 && pieces.isDone ? "" : "Part $part: ";
+      if (piece == null) {
         return fail(
-          failure.isEmpty
-              ? "There is nothing to summarize yet."
-              : "$failure Nothing was left to summarize after halving.",
+          "${which}a step of this conversation could not be cut to fit the "
+          "${_tokens(budget)} tokens the summarizer can read at once.",
         );
       }
       final cut = CompactPrompt.build(
-        conversation: projected,
+        conversation: piece,
         instructions: instructions,
-        priorSummary: priorSummary,
+        folds: folds,
       );
-      // Where the ask itself would not fit, dropping the oldest half is the
-      // only answer; where it would, the span stands.
-      final asked = estimateTokens(cut);
-      if (asked > budget) {
-        failure =
-            "What is left to summarize is about ${_tokens(asked)} tokens, "
-            "more than the ${_tokens(budget)} the summarizer can read at once.";
-        span = halve();
-        continue;
-      }
-      try {
-        final reply = await _oneCompletion(
-          target,
-          cut,
-          timeout: const Duration(minutes: 3),
-        );
-        final summary = reply == null ? null : CompactPrompt.summaryFrom(reply);
-        if (summary != null) {
-          final marker = ConversationCompaction(
-            upToMessageId: span.last.id,
-            summary: summary,
+      String? folded;
+      var failure = "";
+      // One retry of the same piece: an error or an empty reply is the
+      // summarizer's, not the piece's.
+      for (var attempt = 0; attempt < 2 && folded == null; attempt++) {
+        try {
+          final reply = await _oneCompletion(
+            target,
+            cut,
+            timeout: const Duration(minutes: 3),
           );
-          final after = await _projected(
-            chatId,
-            history,
-            viewer: athena,
-            load: loader,
-            compactions: [...compactions, marker],
-          );
-          return Compacted(marker.copyWith(chatTokens: estimateTokens(after)));
+          folded = reply == null ? null : CompactPrompt.summaryFrom(reply);
+          if (folded == null) {
+            failure = "The summarizer gave back an empty summary.";
+          }
+        } catch (e) {
+          logFailure("compact", "summarizer failed for $chatId", e);
+          failure = "The summarizer failed: ${"$e".split("\n").first}";
         }
-        failure = "The summarizer gave back an empty summary.";
-      } catch (e) {
-        logFailure("compact", "summarizer failed for $chatId", e);
-        failure = "The summarizer failed: ${"$e".split("\n").first}";
       }
-      // A reply that said nothing, or an error: halve and try once more, the
-      // same ladder the too-big ask takes.
-      span = halve();
+      if (folded == null) return fail("$which$failure");
+      summary = folded;
+      folds = true;
     }
-    return fail(failure);
+    final marker = ConversationCompaction(
+      upToMessageId: history.last.id,
+      summary: summary!,
+    );
+    final after = await _projected(
+      chatId,
+      history,
+      viewer: athena,
+      compactions: [...compactions, marker],
+    );
+    return Compacted(marker.copyWith(chatTokens: estimateTokens(after)));
   }
 
   /// A token count as the failure says it: "750k", not "749148".

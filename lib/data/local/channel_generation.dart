@@ -180,8 +180,8 @@ Map<String, Object?> channelTool(LlmTool tool) => {
 /// The framework's failures, in the words the agent's retry machinery acts
 /// on. `context` is deliberately not retryable: the same oversized request
 /// re-sent is the same refusal, and the turn's honest answer is the wording
-/// — the compaction ladder, which bounds its own asks and halves on any
-/// error, is what recovers the session.
+/// — compaction, which bounds its own asks and reads in pieces what does
+/// not fit one, is what recovers the session.
 LlmException _errorOf(
   String label,
   String code,

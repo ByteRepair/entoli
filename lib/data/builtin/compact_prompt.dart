@@ -1,3 +1,6 @@
+import "dart:convert";
+
+import "../../core/formatting.dart" show safeCut, safeTail;
 import "llm/llm_client.dart";
 
 final _summaryTags = RegExp(r"<summary>\s*([\s\S]*?)\s*</summary>");
@@ -19,10 +22,11 @@ final _summaryTags = RegExp(r"<summary>\s*([\s\S]*?)\s*</summary>");
 /// were there. The wording is this file's own.
 ///
 /// [instructions] are the user's own focus, from `/compact <instructions>`.
-/// [priorSummary] is the previous marker's summary; where one exists the new
-/// summary merges it rather than standing in for it, so re-compacting never
-/// loses what the last one kept — the conversation is the newer fact and wins
-/// on conflict.
+/// [folds] says the conversation opens with an earlier summary of itself —
+/// the projection's own summary turn, the one carrier of it — which the new
+/// summary merges rather than stands in for, so re-compacting never loses
+/// what the last one kept; the conversation is the newer fact and wins on
+/// conflict.
 class CompactPrompt {
   CompactPrompt._();
 
@@ -33,13 +37,13 @@ class CompactPrompt {
   static List<LlmMessage> build({
     required List<LlmMessage> conversation,
     String? instructions,
-    String? priorSummary,
+    bool folds = false,
   }) => [
     ...conversation,
-    LlmMessage(role: LlmRole.user, text: _request(instructions, priorSummary)),
+    LlmMessage(role: LlmRole.user, text: _request(instructions, folds)),
   ];
 
-  static String _request(String? instructions, String? priorSummary) {
+  static String _request(String? instructions, bool folds) {
     var text =
         """
 You will be handed a conversation and asked for one thing in return: a summary
@@ -72,20 +76,16 @@ Be brief and concrete; a fact beats a paragraph. Do not write about the
 summarizing, the context, or yourself: the summary describes the work, not
 the handover that produced it."""
             .trim();
-    if (priorSummary != null && priorSummary.trim().isNotEmpty) {
-      text +=
-          """
+    if (folds) {
+      text += """
 
-An earlier summary of this same conversation follows. Fold it into yours:
-its goals, standing constraints and decisions stay even where the messages
-above are silent about them, and only finished or superseded material is
-dropped. Where the messages and the older summary disagree, the messages are
-the newer account — keep theirs and let the old claim go. Move finished work
-into the finished half, and bring the goal and the remaining work up to date.
-
-<prior-summary>
-$priorSummary
-</prior-summary>""";
+The conversation above opens with an earlier summary of itself. Fold it into
+yours: its goals, standing constraints and decisions stay even where the
+messages after it are silent about them, and only finished or superseded
+material is dropped. Where the messages and the older summary disagree, the
+messages are the newer account — keep theirs and let the old claim go. Move
+finished work into the finished half, and bring the goal and the remaining
+work up to date.""";
     }
     if (instructions != null && instructions.trim().isNotEmpty) {
       text +=
@@ -93,6 +93,12 @@ $priorSummary
     }
     return text;
   }
+
+  /// What stands where the middle of a step was cut, so the two ends are not
+  /// read as joined.
+  static String cutNote(int chars) =>
+      "[… $chars characters were cut from the middle here, so the summarizer "
+      "could read the rest of the conversation …]";
 
   /// The summary out of the reply: the tags are the reliable half of the
   /// format, so what arrives without them is taken whole — the model was told
@@ -137,4 +143,133 @@ int estimateTokens(List<LlmMessage> messages) {
     }
   }
   return chars ~/ charsPerToken;
+}
+
+/// A conversation too big for one ask, read in order a piece at a time: each
+/// piece's summary opens the next one, so every message is read once and
+/// nothing is dropped.
+///
+/// A piece is whole steps — a user turn, or one response with its results —
+/// since a call parted from its result is a request a provider refuses. A
+/// step too big for an ask alone has the middle of its longest texts cut.
+class SummaryPieces {
+  SummaryPieces(List<LlmMessage> conversation)
+    : _steps = _stepsOf(conversation);
+
+  final List<List<LlmMessage>> _steps;
+  var _next = 0;
+
+  bool get isDone => _next >= _steps.length;
+
+  /// The next piece, [lead] first — the summary so far, which is also the
+  /// user turn a piece opening on a reply needs — then as many steps as fit
+  /// [room] tokens; a step too big for a piece of its own is one, cut. Null
+  /// where it cannot be cut to fit.
+  List<LlmMessage>? next(int room, {LlmMessage? lead}) {
+    assert(!isDone);
+    final piece = [?lead];
+    final space = room - estimateTokens(piece);
+    var used = 0;
+    while (!isDone) {
+      final step = _steps[_next];
+      final cost = estimateTokens(step);
+      if (used + cost > space) {
+        if (used > 0) break;
+        final cut = _cut(step, space);
+        if (cut == null) return null;
+        piece.addAll(cut);
+        _next++;
+        break;
+      }
+      piece.addAll(step);
+      used += cost;
+      _next++;
+    }
+    return piece;
+  }
+
+  static List<List<LlmMessage>> _stepsOf(List<LlmMessage> conversation) {
+    final steps = <List<LlmMessage>>[];
+    for (final message in conversation) {
+      if (message.role == LlmRole.tool && steps.isNotEmpty) {
+        steps.last.add(message);
+      } else {
+        steps.add([message]);
+      }
+    }
+    return steps;
+  }
+
+  /// [step] with the middle of its longest texts cut until it fits [room]: a
+  /// message's own, or a string argument of a call, its keys kept so a path
+  /// beside it survives. Null where what is over is not text — thinking,
+  /// whose signature a cut would break, or attachments.
+  static List<LlmMessage>? _cut(List<LlmMessage> step, int room) {
+    final cut = [...step];
+    // Re-encoding escapes, so a cut argument can come out longer than kept.
+    for (var tries = 0; estimateTokens(cut) > room; tries++) {
+      final over = estimateTokens(cut) - room;
+      // The longest text in the step: the message at [at], its own text
+      // where [call] is null, else that call's argument [key].
+      var (at, call, key, length) = (0, null as int?, null as String?, 0);
+      for (final (i, message) in cut.indexed) {
+        if (message.text.length > length) {
+          (at, call, key, length) = (i, null, null, message.text.length);
+        }
+        for (final (j, c) in message.toolCalls.indexed) {
+          for (final MapEntry(key: k, value: v) in _argsOf(c).entries) {
+            if (v is String && v.length > length) {
+              (at, call, key, length) = (i, j, k, v.length);
+            }
+          }
+        }
+      }
+      // The note costs room of its own, and a cut that keeps less than a few
+      // lines of each end tells the summarizer nothing.
+      final keep = length - over * charsPerToken - 200;
+      if (keep < 400 || tries > 2 * step.length) return null;
+      final message = cut[at];
+      if (call == null) {
+        cut[at] = message.copyWith(text: _middleCut(message.text, keep));
+        continue;
+      }
+      final c = message.toolCalls[call];
+      final args = _argsOf(c);
+      args[key!] = _middleCut(args[key] as String, keep);
+      cut[at] = message.copyWith(
+        toolCalls: [
+          for (final (j, other) in message.toolCalls.indexed)
+            j == call
+                ? LlmToolCall(
+                    id: c.id,
+                    name: c.name,
+                    argumentsJson: jsonEncode(args),
+                    signature: c.signature,
+                  )
+                : other,
+        ],
+      );
+    }
+    return cut;
+  }
+
+  /// A call's arguments as the object a provider parses them into; anything
+  /// else has no strings to cut.
+  static Map<String, Object?> _argsOf(LlmToolCall call) {
+    try {
+      final decoded = jsonDecode(call.argumentsJson);
+      if (decoded is Map<String, Object?>) return decoded;
+    } on FormatException {
+      // Not JSON: nothing to cut.
+    }
+    return {};
+  }
+
+  static String _middleCut(String text, int keep) {
+    final head = safeCut(text, keep ~/ 2);
+    final tail = safeTail(text, keep - keep ~/ 2);
+    return "$head\n\n"
+        "${CompactPrompt.cutNote(text.length - head.length - tail.length)}\n\n"
+        "$tail";
+  }
 }

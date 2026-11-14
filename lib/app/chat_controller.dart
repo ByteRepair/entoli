@@ -242,7 +242,7 @@ class ChatController extends Notifier<ChatViewState>
   /// Skipped where nothing has reported a usage: a provider that says
   /// nothing and a chat with no turn yet are both "unknown", and compacting
   /// on a guess is not this feature's business — the estimate lives in the
-  /// summarizer's own budget, where a too-big ask is halved, not here.
+  /// summarizer's own budget, where a too-big ask is read in pieces, not here.
   Future<void> _maybeAutoCompact() async {
     if (!ref.mounted) return;
     final settings = ref.read(appSettingsProvider);

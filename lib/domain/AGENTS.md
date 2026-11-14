@@ -460,8 +460,9 @@ attachments included — so an image below the boundary is still an image.
 Earlier markers are shadows: each summarizes everything still live before it,
 and the newest is the one the model reads.
 
-**Re-compaction merges, anchored.** The summarizer is given the previous
-marker's summary as `<prior-summary>` with merge rules — carry forward
+**Re-compaction merges, anchored.** The summarizer reads the previous
+marker's summary as the summary turn the conversation opens with, and the
+ask carries merge rules for it — carry forward
 objectives and constraints, conversation wins conflicts, Active moves to
 Completed — so compacting again never loses what the last one kept. The prompt
 is `lib/data/builtin/compact_prompt.dart`, the one file that words it: two
@@ -471,11 +472,12 @@ summary describes the work rather than the summarizing — and there is no
 `<analysis>` step, the analysis being stripped before anything is stored and
 costing output tokens on the context that is already over budget.
 
-**The retry ladder**, not a failure: a span too big to summarize is halved —
-the part after the last marker, which is what the ask reads — and
-re-asked, three attempts, each attempt's marker covering only what it read.
-`upToMessageId` is the honest boundary of what was actually summarized, which
-is why the field is on the record rather than implied.
+**Too big for one ask is read in pieces**, not dropped: what follows the last
+marker is cut into pieces that fit, each summarized with the summary so far
+as the turn it opens with, a step too big alone keeping its ends around a note of
+what was cut. `upToMessageId` is the newest message, every one before it
+having been read; see "Compaction (the `compact` callback)" in
+`lib/data/builtin/AGENTS.md`.
 
 ### Callbacks, and the wired skill
 

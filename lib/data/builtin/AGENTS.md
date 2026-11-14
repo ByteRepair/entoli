@@ -1712,27 +1712,35 @@ than the light default — the summary is only as good as the context it had —
 and guards on `_running.any`: a session being rewritten underneath it is not
 one to summarize. Null with a `logFailure` line, like every background call.
 
-**The retry ladder is the whole of the failure story.** The ask has to fit the
-window with room for the summary (the provider's `contextWindow`, half), and
-where it does not — or where the summarizer said nothing, or errored — the
-oldest half of the span is dropped and the ask is made again, three attempts.
-The boundary handed back covers only what was read, so a conversation too big
-for its own summarizer still gets a marker for its newest half.
+**Too big for one ask is read in pieces, in order.** Each ask has to fit
+the window with room for the summary (the model's window, half). Where the
+messages after the newest marker do not, `SummaryPieces` (in
+`compact_prompt.dart`) cuts them into pieces that do, and each piece is asked
+opening with the summary so far — the first with the marker's own, as
+the projection words it — so the last summary has read every message and the marker
+ends at the newest. A piece is whole steps: a user turn, or one response with
+its tool results, since a call parted from its result is a request a provider
+refuses. A step too big for an ask alone is a piece of its own and keeps
+the start and end of its longest texts (a call's string arguments cut in
+place, their keys kept) with `CompactPrompt.cutNote` where the middle was, so the
+summarizer knows something is missing. The summary turn is the one carrier
+of the summary so far — the request's merge rules point at it rather than
+repeat it — and, a user turn, it is also what a piece opening on a reply
+needs first. The cost
+is the size of what is new since the last marker, read once, plus the
+summary so far per piece.
 
-**The half dropped is of what the ask reads**, the messages after the newest
-marker the span holds (`verbatimFrom`, the projection's own rule), not of the
-span whole. Everything behind that marker costs one summary however many
-messages it is, so halving them leaves the ask the size it was: a chat
-compacted once and grown past half its window again made three asks of the
-same size and gave up without calling the model. Once the old boundary is
-dropped the marker no longer applies, and the prior summary rides the prompt
-as `<prior-summary>` instead.
+This replaced a ladder that dropped the oldest half and asked again: it never
+split a message, so one agent turn over budget failed however often it
+halved, and a ladder that landed kept a marker at the newest message over a
+half nothing had read. A piece the summarizer errors on or answers empty is
+asked once more as the same piece; a second failure records nothing.
 
 **A compaction that lands nothing says why, on screen and in the log.**
 `compact` answers a `CompactOutcome`: `Compacted` with the marker, or
 `NotCompacted` with a sentence for the user — a turn running, no model,
-nothing to read, a ladder still over budget after its last halving (with the
-numbers), a summarizer that said nothing or failed. The manual turn ends as
+nothing to read, a step that could not be cut to fit (with the budget), a
+summarizer that said nothing or failed, prefixed with the part where it did. The manual turn ends as
 `error` with "The conversation could not be compacted." and the reason on its
 reply, the red an error part is drawn in, since a `done` with nothing after
 it is the compact that seemed never to run. An automatic one has no turn, so
@@ -1762,7 +1770,7 @@ share of a million-token window is a context no model reads well — 80% of
 1M is 838k, and a chat that long has gone wrong well before. The context page draws the same capped
 window, so its 80% mark is where compaction fires. The summarizer is not
 held to it: its budget is half the model's real window where that is known,
-since reading more in one ask is what the ladder wants.
+since a bigger ask is fewer pieces.
 
 The marker lands through `ChatRepository.appendCompaction` —
 `_rethread` with a `CompactionRecord`, the same append/reload/rebuild walk a
