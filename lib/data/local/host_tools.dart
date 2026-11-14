@@ -9,16 +9,15 @@ import "package:path/path.dart" as p;
 
 import "../../core/log.dart";
 import "../../core/tls.dart";
-import "../../domain/documents.dart" show writeThroughRename;
+import "../../domain/documents.dart" show writingSuffix;
 import "file_modes.dart";
+import "host_grep.dart";
 
-/// A guest directory that is a host one: what the guest calls [guest] is
-/// [host] on the host's disk.
-typedef GuestMount = ({String guest, String host});
+export "host_grep.dart" show GuestMount;
 
-/// Runs the guest's `unzip`, `tar`, `wget` and `curl` natively, where the
-/// emulator would interpret every instruction; see "Tools the host runs" in
-/// ios/AGENTS.md.
+/// Runs the guest's `unzip`, `tar`, `wget`, `curl` and recursive `grep`
+/// natively, where the emulator would interpret every instruction; see
+/// "Tools the host runs" in ios/AGENTS.md.
 class HostTools {
   HostTools(this.dir, {required this.mounts, http.Client Function()? client})
     : _client = client ?? tlsClient;
@@ -110,10 +109,10 @@ class HostTools {
     } catch (e) {
       logFailure("host-tools", "request $id failed", e);
     }
-    await writeThroughRename(
-      p.join(callsDir, "$id.res"),
-      answer?.encode() ?? "fallback\n",
-    );
+    final response = p.join(callsDir, "$id.res");
+    final temp = File("$response$writingSuffix");
+    await temp.writeAsBytes(answer?.encode() ?? utf8.encode("fallback\n"));
+    await temp.rename(response);
     try {
       File(taken).deleteSync();
     } on FileSystemException {
@@ -135,6 +134,7 @@ class HostTools {
     // A download is I/O and stays on this isolate.
     "wget" => await _wget(cwd, args)?.fetch(_client(), abandoned ?? _never),
     "curl" => await _curl(cwd, args)?.fetch(_client(), abandoned ?? _never),
+    "grep" => await _grep(cwd, args),
     _ => null,
   };
 
@@ -143,6 +143,14 @@ class HostTools {
   /// Inflating is CPU, so it gets an isolate of its own.
   static Future<HostAnswer?> _inflate(_Extract? job) async =>
       job == null ? null : Isolate.run(job.extract);
+
+  /// A search is CPU too; its mounts go with it, since they change with the
+  /// project.
+  Future<HostAnswer?> _grep(String cwd, List<String> args) async {
+    final mounts = this.mounts();
+    final result = await Isolate.run(() => GrepJob.search(cwd, args, mounts));
+    return result == null ? null : HostAnswer.bytes(result.code, result.output);
+  }
 
   /// busybox's `wget [-q] [-T secs] -O file URL`; anything else (stdout, no
   /// `-O`, continuing, headers) is the guest's.
@@ -328,20 +336,8 @@ class HostTools {
   /// [path], as the guest wrote it from [cwd], on the host; null where it
   /// is not under a [GuestMount], the longest mount winning as the guest's
   /// lookup does.
-  String? _host(String cwd, String path) {
-    final guest = p.posix.normalize(p.posix.join(cwd, path));
-    GuestMount? best;
-    for (final mount in mounts()) {
-      if (guest == mount.guest || p.posix.isWithin(mount.guest, guest)) {
-        if (best == null || mount.guest.length > best.guest.length) {
-          best = mount;
-        }
-      }
-    }
-    if (best == null) return null;
-    final relative = p.posix.relative(guest, from: best.guest);
-    return relative == "." ? best.host : p.join(best.host, relative);
-  }
+  String? _host(String cwd, String path) =>
+      hostPathOf(mounts(), p.posix.normalize(p.posix.join(cwd, path)));
 
   /// A tar given no compression flag is what its first bytes say, as
   /// busybox's tar decides.
@@ -364,7 +360,7 @@ class HostTools {
     }
   }
 
-  static const _tools = ["unzip", "tar", "wget", "curl"];
+  static const _tools = ["unzip", "tar", "wget", "curl", "grep"];
 
   /// Each of [_tools], by its own name: leaves its call in `calls/` and waits,
   /// or runs the guest's copy where the app falls back or never answers.
@@ -373,18 +369,36 @@ tool=${0##*/}
 here=${0%/*}
 calls=${here%/*}/calls
 
+# The guest's own tool: the first on PATH that is not this directory.
+own=
+IFS=:
+for d in $PATH; do
+  [ "$d" = "$here" ] && continue
+  [ -x "$d/$tool" ] && { own=$d/$tool; break; }
+done
+unset IFS
 fallback() {
-  # The guest's own tool: the first on PATH that is not this directory.
-  IFS=:
-  for d in $PATH; do
-    [ "$d" = "$here" ] && continue
-    [ -x "$d/$tool" ] && { unset IFS; exec "$d/$tool" "$@"; }
-  done
-  unset IFS
+  [ -n "$own" ] && exec "$own" "$@"
   exec busybox "$tool" "$@"
 }
 
 [ -d "$calls" ] || fallback "$@"
+if [ "$tool" = grep ]; then
+  # Only a recursive search of a directory, decided here: a request costs
+  # more than a grep of a pipe or a file. And only busybox's, the grep the
+  # host mimics.
+  rec= dir= opts=1
+  for a; do
+    [ "$a" = -- ] && opts=
+    case $opts$a in 1--*) ;; 1-*[rR]*) rec=1 ;; esac
+    [ -d "$a" ] && dir=1
+  done
+  [ -n "$rec" ] && [ -n "$dir" ] || fallback "$@"
+  case $own in
+    '') ;;
+    *) case $(readlink "$own") in */busybox | busybox) ;; *) fallback "$@" ;; esac ;;
+  esac
+fi
 req="$calls/$$.$(date +%s)"
 printf '%s\0' "$tool" "$PWD" "$@" > "$req.tmp" && mv "$req.tmp" "$req.req" ||
   fallback "$@"
@@ -423,13 +437,18 @@ fallback "$@"
 
 /// How a tool the host ran ended, and what it printed.
 class HostAnswer {
-  const HostAnswer(this.code, this.output);
+  HostAnswer(this.code, String output) : bytes = utf8.encode(output);
+
+  /// Output that is the files' own bytes, which need not be UTF-8.
+  HostAnswer.bytes(this.code, this.bytes);
 
   final int code;
-  final String output;
+  final List<int> bytes;
+
+  String get output => utf8.decode(bytes, allowMalformed: true);
 
   /// As the shim reads it: the first line, then the output.
-  String encode() => "exit $code\n$output";
+  List<int> encode() => [...utf8.encode("exit $code\n"), ...bytes];
 }
 
 enum _ArchiveKind {
@@ -558,7 +577,7 @@ class _Fetch {
     }
     if (stopped) {
       _delete(file);
-      return const HostAnswer(130, "");
+      return HostAnswer(130, "");
     }
     // Shorter than declared is a connection dropped, not a finished file.
     final expected = response.contentLength;

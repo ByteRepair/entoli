@@ -111,8 +111,20 @@ class IshShell extends Shell {
   /// offering the tool a device cannot answer.
   bool get rootfsInstalled => rootfsDir().isNotEmpty;
 
+  /// The guest, and what the emulator costs: the file tools and a recursive
+  /// grep skip it. See "Tools the host runs" in ios/AGENTS.md.
   @override
-  String get platformDescription => _describe();
+  String get platformDescription {
+    if (!rootfsInstalled) return _describe();
+    final grep = hostToolsDir == null
+        ? ""
+        : ". grep -r runs natively, so search with it rather than rg or a "
+              "find piped to grep";
+    return "${_describe()}. Every command runs in an x86 emulator, tens of "
+        "times slower than the device and heavy on its battery, so read "
+        "files with the read tool rather than cat, head or sed, and keep to "
+        "commands that need a shell$grep";
+  }
 
   /// The seam under [start]: one worker per session and one per one-shot run,
   /// or a test's fake for every owner. The suite runs where `ishLinked` is
