@@ -91,7 +91,7 @@ us, so a CVE in a bundled tool is a version bump in `versions.sh` and a release
 every user has to install. That is the cost that took git out of this list, and
 it is worth weighing before anything is added back to it.
 
-## Byte Repair's environment, in four variables
+## Byte Repair's environment, in five variables
 
 `byte-repair-setup.sh` answers to what it is told and probes nothing. Where to
 install is the store's `ENV_INSTALL_DIR` — `/usr/local/bin` inside a guest
@@ -108,6 +108,11 @@ honest "Not installed" row. A named manager that fails is a failure, so a guest
 install that did not happen never reads as done, and one the script does not
 know is refused before anything runs. Only `apk` and `brew` are ever named;
 the arms for apt-get, dnf, yum and pacman went, being code nothing reached.
+`ENV_SCRATCH_DIR` is where ESBMC's zip is fetched and unpacked, beside the
+install directory unless named, so the last move is a rename. iOS names the
+guest's workspace, `/root`: a host directory, where the guest's `unzip` is
+the host's own (see "Tools the host runs" in `ios/AGENTS.md`), rather than
+six minutes of interpreted inflate that brushed the setup's timeout.
 
 **Install what is missing, touch nothing else.** A guest gets `apk add
 --no-cache` of exactly the missing packages — no `apk update` (the

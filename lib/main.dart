@@ -271,6 +271,7 @@ class AppSession {
       rootfs: rootfs,
       abi: await abi,
       byteRepairBinDir: byteRepairBin,
+      hostToolsDir: platform.hostToolsDirIn(cache),
       secrets: secrets,
       loginPath: await loginPath,
       triggerRegistry: (chatId, project) => triggerRegistry(chatId, project),

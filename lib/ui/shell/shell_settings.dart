@@ -14,6 +14,7 @@ import "../../app/settings/forms/model.dart";
 import "../../app/settings/hand_off.dart";
 import "../../app/settings/scope.dart";
 import "../../app/settings/settings.dart";
+import "../../app/settings/schema.dart" show SectionView;
 import "../../app/settings/spec.dart";
 import "../../core/formatting.dart";
 import "../../core/log.dart";
@@ -60,35 +61,37 @@ final nativeSettingsProvider = Provider.autoDispose<NativeSettingsPages>((ref) {
   final schema = ref.watch(settingsSchemaProvider);
   final controllers = <String, SettingController>{};
   final encode = _Encoder(ref, controllers);
+  SettingsPageData data(SettingsPageId page) {
+    final sections = shown.contains(page)
+        ? buildPage(reader, schema, page, const AppAddress())
+        : const <SectionView>[];
+    return SettingsPageData(
+      key: SettingsPageKey.values.byName(page.name),
+      title: page.title,
+      groupStart: page.groupStart,
+      openedFrom: switch (page.openedFrom) {
+        final from? => SettingsPageKey.values.byName(from.name),
+        null => null,
+      },
+      held: holdsPage(sections),
+      sections: [
+        for (final section in sections)
+          encode.section(
+            PageSection(
+              section.spec.id,
+              section.spec.title,
+              section.settings,
+              detail: section.description,
+            ),
+          ),
+      ],
+    );
+  }
+
   final pages = [
     for (final page in SettingsPageId.values)
       if (page.settings && (!page.listed || pageOffered(reader, page)))
-        SettingsPageData(
-          key: SettingsPageKey.values.byName(page.name),
-          title: page.title,
-          groupStart: page.groupStart,
-          openedFrom: switch (page.openedFrom) {
-            final from? => SettingsPageKey.values.byName(from.name),
-            null => null,
-          },
-          sections: [
-            if (shown.contains(page))
-              for (final section in buildPage(
-                reader,
-                schema,
-                page,
-                const AppAddress(),
-              ))
-                encode.section(
-                  PageSection(
-                    section.spec.id,
-                    section.spec.title,
-                    section.settings,
-                    detail: section.description,
-                  ),
-                ),
-          ],
-        ),
+        data(page),
   ];
   return (snapshot: SettingsSnapshot(pages: pages), controllers: controllers);
 });
@@ -434,6 +437,7 @@ class _Encoder {
                     SettingToolData(name: name, version: version),
                 ]
           ..running = c.running
+          ..setupLog = c.log
           ..error = c.error
           ..deleteConfirm = _confirm(c.deleteConfirm)
           ..setUpLabel = c.setUpLabel

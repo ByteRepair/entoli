@@ -4,6 +4,7 @@
 /// of the model is here too, since it is the same shell it reaches.
 library;
 
+import "dart:async";
 import "dart:io";
 
 import "package:flutter/foundation.dart" show ValueListenable;
@@ -623,3 +624,37 @@ done
 /// from the same token [dispatcherScript] uses, so what scans the output is
 /// what wrote it.
 String dispatcherMarker(String token) => "@@E$token rc=";
+
+/// Reports [run]'s output as it prints, each change no more than
+/// [shellWatchInterval] apart. The watch holds the latest value rather than
+/// queueing reports behind a timer — what is shown is the tail as it is now,
+/// not what it was — and the timer is cancelled with the result, so a command
+/// that finished inside an interval is not followed by a report of what it
+/// printed on the way out. Unsubscribed on the result, so the watch spans the
+/// whole run whatever awaits it.
+///
+/// The one shape of it: the agent's commands, the user's `!` command and a
+/// setup's log all report through it. Reading [ShellRun.output] is what tells
+/// the shell the run is watched; before that it pays nothing per chunk.
+void watchShellOutput(ShellRun run, void Function(String text) report) {
+  final output = run.output;
+  if (output == null) return;
+  Timer? timer;
+  void listener() {
+    timer ??= Timer(shellWatchInterval, () {
+      timer = null;
+      final text = output.value;
+      if (text != null && text.trim().isNotEmpty) report(text);
+    });
+  }
+
+  output.addListener(listener);
+  unawaited(
+    run.result.whenComplete(() {
+      timer?.cancel();
+      output.removeListener(listener);
+    }),
+  );
+}
+
+const shellWatchInterval = Duration(milliseconds: 100);

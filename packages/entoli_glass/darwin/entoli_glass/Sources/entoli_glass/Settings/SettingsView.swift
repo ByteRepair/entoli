@@ -66,6 +66,7 @@ public struct SettingsRoot: View {
           SearchResults(model: model)
         }
       }
+      .disabled(model.held)
       .searchable(text: $model.query, placement: .sidebar, prompt: "Search settings")
       .overlay {
         if !model.query.isEmpty && model.found.isEmpty {
@@ -78,7 +79,9 @@ public struct SettingsRoot: View {
         // On the list rather than the split view, whose own toolbar a
         // phone's collapsed one does not show.
         .toolbar {
-          ToolbarItem(placement: .topBarTrailing) { DoneButton { model.presented = false } }
+          ToolbarItem(placement: .topBarTrailing) {
+            DoneButton { model.presented = false }.disabled(model.held)
+          }
         }
       #endif
       #if os(macOS)
@@ -143,6 +146,8 @@ struct SettingsPageView: View {
       .task(id: model.arriving) { await arrive() }
     }
     .navigationTitle(page.title)
+    // Hiding it takes the edge swipe back with it.
+    .navigationBarBackButtonHidden(page.held)
   }
 
   /// The sub-page a search opened, pushed over this page once it is up.
@@ -533,7 +538,7 @@ extension View {
       } label: {
         Label("Back", systemImage: "chevron.left")
       }
-      .disabled(model.path.isEmpty)
+      .disabled(model.path.isEmpty || model.held)
       .keyboardShortcut("[", modifiers: .command)
       .help("Back")
       Button {
@@ -541,7 +546,7 @@ extension View {
       } label: {
         Label("Forward", systemImage: "chevron.right")
       }
-      .disabled(model.ahead.isEmpty)
+      .disabled(model.ahead.isEmpty || model.held)
       .keyboardShortcut("]", modifiers: .command)
       .help("Forward")
     }

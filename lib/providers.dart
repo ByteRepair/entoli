@@ -247,18 +247,19 @@ final byteRepairStoreProvider = Provider<ByteRepairStore>(
 /// The version of each tool the setup installs (ESBMC, make, gh), or null
 /// where one is not installed. Refreshed by the settings page after a setup run.
 ///
-/// Gated on setup being complete: before it there is no environment to probe
-/// — the poll would run inside the shared base rootfs, the wrong instance for
-/// a project that isolates its own, and write proot's stubs into it where the
-/// next setup's copy died on them. "Not installed" with no shell run is the
-/// honest row.
+/// What is on the machine, asked of it whatever the setup marker says: the
+/// marker unlocks the project's chats, and follows from a setup, not the
+/// other way round. Only where there is nothing to ask — no Linux on a phone,
+/// nowhere to install on the host — is every row "Not installed" unasked.
 final byteRepairToolVersionsProvider = FutureProvider<Map<String, String?>>((
   ref,
 ) async {
-  if (!ref.watch(setupCompleteProvider(ByteRepairProject().dir))) {
+  // Asked again when another Linux is picked, which is where they would be.
+  ref.watch(appSettingsProvider.select((s) => s.rootfsId));
+  final store = ref.watch(byteRepairStoreProvider);
+  if (store.capabilityBanner != null) {
     return {for (final tool in ByteRepairStore.tools.keys) tool: null};
   }
-  final store = ref.watch(byteRepairStoreProvider);
   final shell = ref.watch(shellProvider);
   return store.runToolVersions(shell);
 });

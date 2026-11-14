@@ -1,3 +1,6 @@
+import "dart:async";
+
+import "package:agent_chat/app/settings/pages/byte_repair.dart";
 import "package:agent_chat/app/pages/app_page.dart";
 import "package:agent_chat/app/settings/controller.dart";
 import "package:agent_chat/app/settings/hand_off.dart";
@@ -135,6 +138,37 @@ void main() {
     expect(keys, contains(SettingsPageKey.general));
     expect(keys, contains(SettingsPageKey.syncRelay));
     expect(keys, isNot(contains(SettingsPageKey.welcome)));
+  });
+
+  testWidgets("a setup running holds its page and sends what it printed", (
+    tester,
+  ) async {
+    SettingsPageData byteRepair() => pages
+        .read()
+        .snapshot
+        .pages
+        .nonNulls
+        .firstWhere((p) => p.key == SettingsPageKey.byteRepair);
+    final done = Completer<String?>();
+    final run = app.container.read(byteRepairRunProvider.notifier).run((log) {
+      log("==> Checking for make\n");
+      return done.future;
+    });
+
+    expect(byteRepair().held, isTrue);
+    expect(
+      rowsOf(SettingsPageKey.byteRepair).single.setupLog,
+      "==> Checking for make\n",
+    );
+
+    done.complete(null);
+    await run;
+    expect(byteRepair().held, isFalse);
+    // Kept once it ends, so a failure can be read after.
+    expect(
+      rowsOf(SettingsPageKey.byteRepair).single.setupLog,
+      "==> Checking for make\n",
+    );
   });
 
   testWidgets("a page not drawn is sent with no rows", (tester) async {

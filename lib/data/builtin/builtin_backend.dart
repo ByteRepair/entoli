@@ -1059,7 +1059,7 @@ class BuiltinBackend implements AgentBackend {
   /// The user's own `!` command, watched through the agent's one watch shape —
   /// no call id, there being nothing called a tool.
   void _reportOutput(StreamController<AgentEvent> controller, ShellRun run) =>
-      BuiltinAgent.watchShellOutput(run, (text) {
+      watchShellOutput(run, (text) {
         if (!controller.isClosed) {
           controller.add(ShellOutputEvent(callId: null, text: text));
         }

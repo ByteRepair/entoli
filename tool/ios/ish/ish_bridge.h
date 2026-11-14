@@ -70,6 +70,12 @@ typedef struct {
 // A failed mount leaves the kernel unbooted, so the next init retries it.
 void ish_boot(const char *rootfs_dir);
 
+// Name the host directory the next session binds writable at /run/entoli,
+// once for the process: where the guest's shims for the tools the host runs
+// natively live, and where they leave their requests. Call before the first
+// session; the bridge copies the path.
+void ish_set_host_calls(const char *host_dir);
+
 // Make a session: fork a child of the kernel's init task, wire its stdio to
 // two host pipes the bridge reads and writes, start a persistent /bin/sh
 // under the dispatcher. [home] is the host project workspace, bound into the

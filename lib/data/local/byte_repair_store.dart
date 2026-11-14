@@ -18,7 +18,7 @@ import "tree_ops.dart";
 /// through the configured terminal env with [project]: a guest's rootfs on
 /// Android and iOS, the host shell with an injected bin directory on the
 /// desktops. The script is told its environment and probes nothing — see
-/// "Byte Repair's environment, in four variables" in the directory's
+/// "Byte Repair's environment, in five variables" in the directory's
 /// AGENTS.md.
 ///
 /// "Run Setup" installs into the selected shared guest environment (or the
@@ -34,6 +34,7 @@ class ByteRepairStore {
     this.installTimeout = guestInstallTimeout,
     this.rootfsStore,
     this.brewPaths = homebrewPaths,
+    this.scratchDir,
   });
 
   final AppConfig config;
@@ -54,6 +55,10 @@ class ByteRepairStore {
   /// [homebrewPaths], or a test's own.
   final List<String> brewPaths;
 
+  /// Where ESBMC is fetched and unpacked (`ENV_SCRATCH_DIR`); null is beside
+  /// [installDir]. See "Tools the host runs" in ios/AGENTS.md.
+  final String? scratchDir;
+
   static const tools = {"ESBMC": "esbmc", "make": "make", "gh": "gh"};
 
   Future<ShellResult> _run(
@@ -61,6 +66,7 @@ class ByteRepairStore {
     String script,
     Duration timeout, {
     Map<String, String>? environment,
+    void Function(String output)? onOutput,
   }) async {
     try {
       final run = shell.start(
@@ -72,6 +78,7 @@ class ByteRepairStore {
         project: project,
         environment: environment,
       );
+      if (onOutput != null) watchShellOutput(run, onOutput);
       return await run.result;
     } catch (e) {
       logFailure("byte-repair", "shell run failed", e);
@@ -89,7 +96,11 @@ class ByteRepairStore {
   }
 
   /// The bundled install script through [shell], then the marker on success.
-  Future<ShellResult> install(Shell shell) async {
+  /// [onOutput] hears what it has printed so far, each time that grows.
+  Future<ShellResult> install(
+    Shell shell, {
+    void Function(String output)? onOutput,
+  }) async {
     final body = await rootBundle.loadString(
       "assets/scripts/byte-repair-setup.sh",
     );
@@ -98,6 +109,7 @@ class ByteRepairStore {
       body,
       installTimeout,
       environment: installEnvironment(),
+      onOutput: onOutput,
     );
     if (result.returnCode == 0) await markSetupComplete();
     return result;
@@ -113,6 +125,7 @@ class ByteRepairStore {
       if (installDir == guestEsbmcInstallDir && rootfs != null)
         packageManagerEnvVar: rootfs.packageManager,
       "ENV_ESBMC_BINARY": esbmcFileName,
+      "ENV_SCRATCH_DIR": ?scratchDir,
       if (_usesHomebrew) packageManagerEnvVar: "brew",
       if (_usesHomebrew && _brew != null) "ENV_BREW": _brew!,
     };
