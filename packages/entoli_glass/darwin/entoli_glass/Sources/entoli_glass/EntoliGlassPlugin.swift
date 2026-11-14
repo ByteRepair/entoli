@@ -74,6 +74,8 @@ public struct FrontendView: View {
       content.sheet(isPresented: $settings.presented) {
         // A page's room on an iPad, the whole screen on a phone.
         SettingsRoot(model: settings).presentationSizing(.page)
+          // Swipe and Escape alike: a held page is left by nothing.
+          .interactiveDismissDisabled(settings.held)
           // A page opened from a setting comes up over the settings.
           .modifier(AppPagesPresenter(inSettings: true))
       }

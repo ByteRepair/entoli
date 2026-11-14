@@ -11,6 +11,8 @@ import "package:uuid/uuid.dart";
 
 import "../../domain/file_tools.dart";
 import "../../domain/shell.dart";
+import "../../core/log.dart";
+import "host_tools.dart";
 import "ish_ffi.dart";
 
 /// The iOS shell. iOS denies an app a child process, so the host shell every
@@ -44,8 +46,39 @@ class IshShell extends Shell {
     required this.environment,
     required String Function() platformDescription,
     required IshTransport Function() transport,
+    this.hostToolsDir,
   }) : _describe = platformDescription,
        _transportFor = transport;
+
+  /// Where the tools the host runs for the guest live on the host, bound at
+  /// [HostTools.guestDir]; null runs every tool in the guest.
+  final String? hostToolsDir;
+
+  HostTools? _hostTools;
+
+  /// The guest's host-backed directories, for [HostTools] to map paths by.
+  List<GuestMount> _mounts() => [
+    if (_boundHome case final home?) (guest: guestHome, host: home),
+    if (dataDir.isNotEmpty) (guest: dataDir, host: dataDir),
+    if (hostToolsDir case final dir?) (guest: HostTools.guestDir, host: dir),
+  ];
+
+  /// Started with the first command, before the guest boots: the bridge binds
+  /// the directory as it boots, once.
+  void _startHostTools() {
+    final dir = hostToolsDir;
+    if (dir == null || _hostTools != null) return;
+    try {
+      _hostTools = HostTools(dir, mounts: _mounts)..install();
+      using((arena) {
+        for (final core in IshCore.values) {
+          core.bridge?.setHostCalls(dir.toNativeUtf8(allocator: arena));
+        }
+      });
+    } catch (e) {
+      logFailure("host-tools", "could not start", e);
+    }
+  }
 
   /// Where the guest's rootfs is mounted from, asked per command: a Linux
   /// installed where none was reaches the next command, and one deleted stops
@@ -156,6 +189,7 @@ class IshShell extends Shell {
         "run commands in the new one.",
       );
     }
+    _startHostTools();
     final busy = _claimHome(home);
     if (busy != null) return _IshUnavailableRun(busy);
     // The guest's view of the chat workspace: the project workspace is bound
@@ -179,17 +213,25 @@ class IshShell extends Shell {
         (_) => _liveOneShots--,
         onError: (Object _) => _liveOneShots--,
       );
-      return run;
+      return _heldBy(run);
     }
-    return _sessions
-        .putIfAbsent(cwd, () => _IshSession(this, cwd, guestCwd, home))
-        .start(
-          command,
-          timeout,
-          environment: environment,
-          restart: restart,
-          readOnly: readOnly,
-        );
+    return _heldBy(
+      _sessions
+          .putIfAbsent(cwd, () => _IshSession(this, cwd, guestCwd, home))
+          .start(
+            command,
+            timeout,
+            environment: environment,
+            restart: restart,
+            readOnly: readOnly,
+          ),
+    );
+  }
+
+  /// [run], with the host answering its tool calls until it ends.
+  ShellRun _heldBy(ShellRun run) {
+    _hostTools?.hold(run.result);
+    return run;
   }
 
   /// Point the guest's [guestHome] at [home]'s project, or say why not yet.
@@ -239,7 +281,7 @@ class IshShell extends Shell {
   }
 
   Map<String, String> _compose({Map<String, String>? extra}) => {
-    "PATH": guestPath,
+    "PATH": _hostTools != null ? "${HostTools.guestBin}:$guestPath" : guestPath,
     ...defaultShellEnvironment,
     "HOME": guestRoot ?? "/",
     ...environment(),

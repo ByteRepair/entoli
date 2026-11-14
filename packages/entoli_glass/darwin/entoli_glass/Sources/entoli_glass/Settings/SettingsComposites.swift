@@ -878,9 +878,19 @@ struct SetupRow: View {
         } else {
           ProgressView().controlSize(.small)
         }
+        if let log = row.setupLog, !log.isEmpty {
+          DisclosureGroup("Log") {
+            ScrollView {
+              OutputBox { Text(log).textSelection(.enabled) }
+            }
+            .defaultScrollAnchor(.bottom)
+            .frame(maxHeight: 240)
+          }
+        }
       }
       if let error = row.error { Text(error).font(.caption).foregroundStyle(.red) }
       Button(row.deleteLabel ?? "", role: .destructive) { confirm = row.deleteConfirm }
+        .disabled(row.running)
     }
     .asking($confirm, $notice) { op(.delete) }
   }

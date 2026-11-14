@@ -95,6 +95,9 @@ Shell platformShell({
   /// Asked per command: which Linux the settings page has picked. Null where
   /// the platform has no picker at all.
   String? Function()? rootfsId,
+
+  /// Where the guest's natively run tools live on iOS; see `HostTools`.
+  String? hostToolsDir,
 }) {
   if (Platform.isIOS) {
     // No host shell and no proot: IshShell drives the emulator through FFI,
@@ -109,6 +112,7 @@ Shell platformShell({
       rootfsDir: () => rootfsDir() ?? "",
       dataDir: dataDir ?? "",
       environment: environment,
+      hostToolsDir: hostToolsDir,
       // Asked per session, since the setting is picked after startup.
       transport: () => IshWorker(core: ishCoreOf(rootfsById(rootfsId?.call()))),
       platformDescription: () => rootfsDir() != null
@@ -322,8 +326,12 @@ ByteRepairStore createByteRepairStore(
     installDir: guest ? guestEsbmcInstallDir : byteRepairBinDir(cacheDir),
     installTimeout: guest ? guestInstallTimeout : hostInstallTimeout,
     rootfsStore: rootfs,
+    scratchDir: Platform.isIOS ? guestHome : null,
   );
 }
+
+/// Where the tools an emulated guest hands the host live: `HostTools`.
+String hostToolsDirIn(String cacheDir) => p.join(cacheDir, "host-tools");
 
 /// The host bin directory a rootfs-isolated project's tools land in, or null
 /// on the phones, whose setup installs inside the guest. The store's
