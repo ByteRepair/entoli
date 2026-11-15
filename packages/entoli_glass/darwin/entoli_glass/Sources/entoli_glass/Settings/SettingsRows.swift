@@ -629,7 +629,9 @@ struct TextEditSheet: View {
         }
       }
     }
-    .frame(minWidth: 380, minHeight: lines > 1 ? 260 : 140)
+    #if os(macOS)
+      .frame(minWidth: 380, minHeight: lines > 1 ? 260 : 140)
+    #endif
   }
 }
 

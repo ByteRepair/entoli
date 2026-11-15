@@ -393,7 +393,9 @@ struct FormSheet: View {
         }
       }
     }
-    .frame(minWidth: 460, minHeight: 420)
+    #if os(macOS)
+      .frame(minWidth: 460, minHeight: 420)
+    #endif
     .task {
       form = await load(nil)
       answers = form?.answers ?? [:]
@@ -844,7 +846,9 @@ struct PairingRow: View {
           }
         }
       }
-      .frame(minWidth: 420, minHeight: 320)
+      #if os(macOS)
+        .frame(minWidth: 420, minHeight: 320)
+      #endif
     }
   }
 
@@ -897,7 +901,9 @@ struct PairingSheet: View {
       }
     }
     .padding(32)
-    .frame(minWidth: 360, minHeight: 360)
+    #if os(macOS)
+      .frame(minWidth: 360, minHeight: 360)
+    #endif
   }
 }
 
