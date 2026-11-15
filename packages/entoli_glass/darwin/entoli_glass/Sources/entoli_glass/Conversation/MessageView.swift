@@ -364,7 +364,9 @@ private struct EditSheet: View {
           }
         }
     }
-    .frame(minWidth: 480, minHeight: 320)
+    #if os(macOS)
+      .frame(minWidth: 480, minHeight: 320)
+    #endif
   }
 }
 
