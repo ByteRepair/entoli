@@ -15,9 +15,7 @@ selected ring),
 `AttachmentStrip`, `Nothing`,
 `CompletionField`, `PromptField` (below), `DiscardGuard`, `SearchField`,
 `ListHeading`, `PageBar` and its `PageAction`s — every pushed page's bar,
-said as data and drawn as an `AppBar` or under Liquid Glass as the window's
-title bar (see "Liquid Glass" in `lib/ui/AGENTS.md`), so a page's bar is a
-`PageBar` and never an `AppBar` —
+said as data and drawn as an `AppBar` —
 `text_input.dart` — the sections below — and `catalog.dart`.
 
 `PromptField` is prose the model reads — a trigger's prompt, an agent's system
@@ -153,19 +151,6 @@ to agree on that, and a code block's bar now uses the same button. Its null
 list. `copyToClipboard` is the other half of the same pairing: copying looks
 identical afterwards whatever did it, so what was taken is said in a snack bar
 from one place rather than each caller's own.
-
-`settings_card.dart` is the settings row that is a card: icon and title at the
-top, the subtitle under, the right-angle arrow at the top right where a tap
-does something. What the tap does stays the caller's — the `.copy` constructor
-is the whole-card-is-the-button form (the copy icon rides in the arrow's slot
-and the tap itself copies, through the same `copyToClipboard`), a navigation
-card takes an `onTap` that pushes, and null `trailing`/`onTap` is a card that
-only states a fact — the Chats card. `SettingsCardRow` is the Wrap that holds
-a screen's worth of them at one fixed width — the only place a row card's
-width is decided, every child boxed with it, so callers place children bare;
-two per phone line and capped where the window is wide. A card placed alone
-keeps its `ListTile` width by growing to its parent instead, which is what
-`WorkspaceTile` does where the chat settings page uses it.
 
 `floating_position.dart` and `chip_row.dart` are the empty-chat screen's two
 animation mechanisms, and anything else that wants the same motion reaches for
@@ -367,7 +352,7 @@ is simply not listed; the pair stays until it is unstarred, should the provider
 come back.
 
 A model the catalog does not list is added through `ModelForm`, the core's
-form both frontends draw, onto the provider it is reached through (`LlmProviderConfig.customModels`, in the same
+form, onto the provider it is reached through (`LlmProviderConfig.customModels`, in the same
 shape), where it comes before the catalog's own entry of the same id.
 
 A provider's own list is asked only where the user names one: the dialog's

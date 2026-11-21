@@ -114,11 +114,8 @@ pixels rather than stroked per slice, since a slice's projection is a
 squash that would stretch a stroke with it.
 
 The `@` menu leads each agent's row with its face, a still (`AgentPicture`
-in `CompletionField`). The native shell's menu is SwiftUI, so Flutter draws
-those stills to PNG (`agentFacePng`, a photo circled, a Bot Avatar by
-`botAvatarPng`) and they ride on `ComposerMenuItem.picture`, drawn while the
-composer is up so a menu has them as it opens. A paired device's agents are
-its own, with no face here, so neither menu draws one for them.
+in `CompletionField`). A paired device's agents are its own, with no face
+here, so the menu draws none for them.
 
 A live avatar follows the pointer: one global pointer route
 (`_PointerWatch`), held while any avatar follows, keeps where the mouse is
@@ -126,17 +123,11 @@ anywhere in the window — until it leaves it — and counts touches, each of
 which an avatar glances at for 2.5 s on its own clock. A thinking avatar
 does not follow; its look is its own.
 
-**The animation is the core's, the drawing each frontend's.** `BotActor`
+**The animation is the core's, the drawing the UI's.** `BotActor`
 (`lib/app/bot_avatar/actor.dart`) is one avatar on screen — its mood eased
 from the last, a tap's reaction, the frame for a moment on its own clock —
 and `BotAvatarView` runs one, keeping only the ticker, the pointer and the
-drag. The native settings draw with SwiftUI's Canvas (`BotFace.swift`) from
-the same engine: `BotStage` (`lib/app/bot_avatar/stage.dart`) hands out a
-definition by key, sends its slices once, and keeps an actor per live
-avatar, whose frames — each shape's kind, its slice by place or its eye,
-and its matrix — the client asks for each display frame and paints. A
-client poses nothing itself, so the two never drift apart. The Bot Avatars
-page under Settings > Agents is that client's own page, the editor's, with
+drag. The Bot Avatars page under Settings > Agents is the editor's, with
 what it offers (`botAvatarEntries`) and what an import makes of its text
 the core's.
 

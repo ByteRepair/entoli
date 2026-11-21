@@ -25,7 +25,7 @@ import "../first_run.dart";
 
 /// Opens what a first launch shows before the app: the device's setup
 /// where a step of it is not done, then the welcome tour, until the tour is
-/// finished. Both frontends ask it as they start.
+/// finished. Asked as the app starts.
 void openFirstRun(SettingReader app) {
   if (app.read(appSettingsProvider).licenceAccepted) return;
   final pages = app.read(appPagesProvider.notifier);

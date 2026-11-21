@@ -19,8 +19,7 @@ List<ChatState> chatsByRecency(
 bool isUserProject(String? project) =>
     project != null && isProjectName(project);
 
-/// What the palette lists, apart from how it is drawn — the Flutter palette
-/// and the native shell's draw the same. With nothing typed ([searching]
+/// What the palette lists, apart from how it is drawn. With nothing typed ([searching]
 /// false), [projects] is the default project and the built-ins, [mine] the
 /// user's own below a rule, and [devices] every paired device's; with
 /// something typed, [projects] and [devices] are those whose names match and

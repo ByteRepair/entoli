@@ -2,10 +2,9 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "spec.dart" show SettingsPageId;
 
-/// What a frontend draws with its own page rather than as a setting: a
-/// paired device's page, every Bot Avatar. The frontend
-/// at the window's root binds them; unbound, a setting that needs one does
-/// not offer it.
+/// What the UI opens as a page of its own rather than as a setting: a
+/// paired device's page, every Bot Avatar. The UI at the window's root
+/// binds them; unbound, a setting that needs one does not offer it.
 class SettingsHandOff {
   /// The page that adds an on-device model by its link.
   Future<void> Function()? addModelByLink;
@@ -13,10 +12,6 @@ class SettingsHandOff {
   /// A paired device's own page: its name to change, and the fingerprints a
   /// pair exists to compare.
   Future<void> Function(String deviceId)? pairedDevice;
-
-  /// Whether [pairedDevice] opens over the settings, where a frontend has
-  /// a page of its own for it, rather than over the conversation.
-  bool pairedDeviceInSettings = false;
 
   /// The camera, pointed at a pairing code another screen shows, answering
   /// the code read.
@@ -29,11 +24,10 @@ class SettingsHandOff {
   /// sends the user to.
   Future<void> Function(SettingsPageId? page)? openSettings;
 
-  /// Unbinds every hook, for a frontend going away.
+  /// Unbinds every hook, for the UI going away.
   void clear() {
     addModelByLink = null;
     pairedDevice = null;
-    pairedDeviceInSettings = false;
     scanCode = null;
     browseBotAvatars = null;
     openSettings = null;

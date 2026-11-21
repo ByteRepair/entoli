@@ -1,6 +1,5 @@
 import "package:agent_chat/app/pages/app_page.dart";
 import "package:agent_chat/ui/app_pages.dart";
-import "package:agent_chat/ui/shell/shell_overrides.dart";
 import "package:agent_chat/app/app_menus.dart";
 import "dart:async";
 import "dart:io";
@@ -49,7 +48,6 @@ import "package:agent_chat/core/transcript_bindings.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart" show LabelledField;
 import "package:agent_chat/ui/app_routes.dart";
 import "package:agent_chat/ui/routes.dart";
-import "package:agent_chat/app/frontend.dart";
 import "package:agent_chat/ui/widgets/model_picker.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/trigger.dart";
@@ -205,7 +203,6 @@ class TestApp {
     http.Client? marketplaceClient,
     Future<bool> Function(String apiKey)? acceptsKey,
     AgentBrowser Function(AppConfig config)? browser,
-    FrontendChoice frontend = const FrontendChoice(),
     List<CliProvider>? clis,
     AppleFm? appleFm,
   }) {
@@ -289,8 +286,6 @@ class TestApp {
             (project) =>
                 PromptLibraryNotifier(project, library ?? testLibrary()),
           ),
-          frontendProvider.overrideWithValue(frontend),
-          if (frontend.swiftUI) ...shellOverrides,
           appUpdateHostProvider.overrideWithValue(updateHost),
           appMenusProvider.overrideWithValue(menus),
           systemAccentProvider.overrideWithValue(systemAccent),

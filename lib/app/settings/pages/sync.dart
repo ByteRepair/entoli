@@ -170,11 +170,7 @@ final syncSettings = [
           },
           actions: [
             if (handOff.pairedDevice != null)
-              ItemAction(
-                "open",
-                "Details…",
-                handsOff: !handOff.pairedDeviceInSettings,
-              ),
+              const ItemAction("open", "Details…"),
             if (peer.status == PeerStatus.online)
               const ItemAction("disconnect", "Disconnect")
             else

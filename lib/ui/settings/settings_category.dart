@@ -5,7 +5,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/settings/settings.dart" show pageOffered;
 import "../../app/settings/spec.dart";
-import "../widgets/native_surfaces.dart";
 
 /// The page's categories, in the order they are offered and the groups they
 /// are offered in. General, Providers, On-device, LLMs and Image Generation
@@ -65,9 +64,8 @@ const settingsRoute = "/settings";
 /// setup row or a bar points at one thing to set.
 typedef SettingsArgs = ({SettingsCategory? category, bool focus});
 
-/// Open Settings, at [category] where there is one: the native settings
-/// where the frontend has its own, Flutter's page otherwise. The welcome tour
-/// is not settings, and is Flutter's on every frontend.
+/// Open Settings, at [category] where there is one. The welcome tour is not
+/// settings, and opens as an app page.
 Future<void> openSettings(
   BuildContext context, {
   SettingsCategory? category,
@@ -77,9 +75,6 @@ Future<void> openSettings(
   if (category == SettingsCategory.welcome) {
     openAppPage(context, WelcomeAppPage(replay: true));
     return Future.value();
-  }
-  if (nativeSurfacesOf(context) case final native?) {
-    return native.openSettings(category?.page);
   }
   return Navigator.of(
     context,

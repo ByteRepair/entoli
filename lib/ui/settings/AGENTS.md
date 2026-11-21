@@ -2,10 +2,8 @@
 
 ## Settings as data
 
-Every settings page is built from data, and each frontend builds its own from
-the same data: Flutter's settings page, and on iOS and macOS under Liquid
-Glass the platform's own settings (a Settings window on a Mac, a sheet on
-iOS). The layers, each knowing only the one below it:
+Every settings page is built from data. The layers, each knowing only the
+one below it:
 
 - **The store** (`lib/domain/settings/`). `settings.json`, `project.json` and
   a chat's `meta.json` are each a `SettingsDocument`: the JSON as the source
@@ -29,28 +27,27 @@ iOS). The layers, each knowing only the one below it:
   behaviour rather than a setting** — a toggle, a choice, a range, a typed
   number, text, a model pick, a group, an action, a collection edited
   through a form, a download catalog, pairing, tooling setup, notices and
-  read-only rows. A one-off quirk is a parameter of a kind, so a frontend's
-  switch over the kinds stays short and a new kind is a compile error in
-  every frontend until it draws it. What a change sets off — a restart to
+  read-only rows. A one-off quirk is a parameter of a kind, so the UI's
+  switch over the kinds stays short and a new kind is a compile error until
+  it is drawn. What a change sets off — a restart to
   say, a re-anchor of every chat's TTL — is the controller's,
   through the notifier setter that does it.
 - **The schema** (`pages/`, `catalog.dart`). A `SettingSpec` per setting: an
   id, its path (page and section), its weight there, title and description,
-  the UI it would like (`UiHint`, a hint and not a kind: a frontend that has
-  no such widget draws the kind its own way), and how its controller is
+  the UI it would like (`UiHint`, a hint and not a kind), and how its controller is
   built at a level. `SectionSpec`s say a section's words and whether it
   shows. Composite settings declare the methods their state is changed
   through — a catalog's download, cancel and delete; a collection's form,
-  submit and item actions; pairing's window, invite and codes — and every
-  frontend calls those, so the logic is the core's. **A form is said once,
+  submit and item actions; pairing's window, invite and codes — and the UI
+  calls those, so the logic is the core's. **A form is said once,
   in the core**: its fields as data (`FormFieldSpec` — text, a prompt,
   choices as menus, segments or cards, links, a fold, a consent, a program's
   sign-in, entries), what stops it saving, the item it makes, and a
-  `FormRefusal` a submit throws to be said on a field with Save anyway. What a
-  frontend opens of its own for one — a program's sign-in, the avatar editor,
-  a device's page — is a `SettingsHandOff`, which the frontend at the root
-  binds (`SettingsHandOffs`), so every frontend offers the same actions. The file work behind the
-  Agents and Skills pages is `lib/app/prompts/`, which both frontends call.
+  `FormRefusal` a submit throws to be said on a field with Save anyway. What the
+  UI opens as a page of its own for one — a program's sign-in, the avatar
+  editor, a device's page — is a `SettingsHandOff`, which the window's root
+  binds (`SettingsHandOffs`). The file work behind the Agents and Skills
+  pages is `lib/app/prompts/`.
 - **Builders.** `schema_view.dart` is Flutter's: `SchemaSections` draws a
   page, `SettingRow` a controller, each hint with its Flutter widget. It
   builds the controllers in place through the widget's ref (`buildPage` over
@@ -59,74 +56,15 @@ iOS). The layers, each knowing only the one below it:
   back. Every form is `form_dialog.dart`'s, a dialog or, where the form
   says it is long, a page under a discard guard; a collection draws every
   item the way its `CollectionItem` says and saves through the controller's
-  `submit`, so a hint changes only how a list is laid out. The native
-  settings are
-  `lib/ui/shell/shell_settings.dart`: every page sent as rows over
-  `pigeons/settings.dart`, a row's id naming its controller in what the
-  client says back; and the SwiftUI under `packages/entoli_glass/.../Settings/`.
-  The pages are sent only while the client says they are on screen
-  (`shown`), and only the ones it draws with their rows — the page picked
-  and those pushed over it, the rest as titles: a page reads what only it
-  shows, each provider's usage among it, which a page nobody is looking at
-  should not pay for, nor resend on every download tick.
+  `submit`, so a hint changes only how a list is laid out.
 
-While the SwiftUI frontend is up, `openSettings` opens the native settings
-rather than the Flutter page — its bridge binds the container's `NativeSurfaces` — and
-the Flutter settings page is not shown over the native UI. The welcome tour
-is not settings: it is an `AppPage` (see `lib/app/pages/AGENTS.md`), drawn
-by whichever frontend is up, and Settings' Welcome opens it. On a Mac the
-window is the Settings scene's: AppKit's `showSettingsWindow:` opens nothing
-from macOS 14, so a page Dart asks for — About from the menu with the window
-closed — goes through SwiftUI's `openSettings`, which `SettingsWindowOpener`
-in the main window hands the model. The menu's Settings item is Dart's on
-both frontends, wearing the scene's gear; the scene's own is removed
-(`commandsRemoved`), since under the Flutter frontend it opened that window
-empty.
-
-The native settings look like the platform's own Settings: each page leads
-with a white symbol on a tile of its colour (`PageIcon`, the colours by kin
-— the model pages purples, sync and the network blues, the app's own grey),
-and the list is searchable. A search finds pages by title and rows by title
-or description on every page, sub-pages included: while a query stands the
-client says every page is shown, so Dart builds the rows of pages nobody has
-opened, and goes back to the drawn ones when it clears. A result is a
-selection of the list rather than a button, since a phone's collapsed split
-view goes to the detail only for one; it opens its page — a sub-page pushed
-over the page that opens it, which every page says (`openedFrom`, declared
-on `SettingsPageId` beside its title, a page with none being one the list
-offers), and once that page is up, since a phone's collapsed split view
-resets the detail's stack as it goes to it and drops a path set alongside —
-then scrolls to the row and lights it.
-
-A Mac's settings draw their own page stack (`PageStack`) rather than a
-`NavigationStack`: in a split view's detail column a Mac's stack shows a
-pushed page with no animation (macOS 27, a plain `NavigationLink` too),
-though a pop animates. Every page of the stack is drawn, each opaque over the
-one beneath, so a push slides the new page in from the trailing edge over
-the one shown, which stays put, and Back slides it out the same way — a Mac
-app's pages, not a carousel; with Back and Forward the model's own. iOS
-keeps its `NavigationStack`.
-
-A paired device's page is the native settings' own (`DevicePage.swift`):
-the shell binds `SettingsHandOff.pairedDevice` to `openDevice`, which asks
-for the device's record and pushes the page over the Sync page once it is
-there — pushed at once, it slid in as a spinner and filled after it had
-stopped — and says so with `pairedDeviceInSettings`, which
-keeps the row's Details from stepping the settings aside. While the page is
-up the client says `deviceShown`, and Dart sends the record whenever the
-device's peer state moves — a rename, a connection, a revoke from the other
-end — and runs connect, disconnect, rename and revoke for it
-(`ShellDevicePage`). It is the Flutter `PairedDevicePage` drawn the Apple way.
-
-A model picker is the catalog page in both: the native one is sent the
-quick picks and every model's card whole (`ModelPickerData`), and adding or
-editing a model is the core's `ModelForm`, asked as any form is.
+The welcome tour is not settings: it is an `AppPage` (see
+`lib/app/pages/AGENTS.md`), and Settings' Welcome opens it.
 
 The chat and project settings pages are `AppPage`s (see
 `lib/app/pages/AGENTS.md`): sections of these same controllers over a
 `ChatScope` or a `ProjectScope`, a setting's own spec built at that level
-where the page shows one (`AppPage.shared`), so both frontends draw them and
-neither holds a copy. Every row of a level that inherits carries its reset,
+where the page shows one (`AppPage.shared`), so no page holds a copy. Every row of a level that inherits carries its reset,
 dimmed while nothing of the level's is set, and a choice shows where it
 stands unset (`ChoiceController.inherited`) — the thinking slider at the
 level above's answer.
@@ -178,7 +116,7 @@ once); and **Welcome, About** (the app rather than anything it does), last.
 **Welcome** is the
 tour rather than a list of sections: an `AppPage`, `WelcomeAppPage`
 (`lib/app/pages/welcome.dart`), which the category opens. It is the first-run
-screen too: `openFirstRun`, which both frontends ask as they start, opens it
+screen too: `openFirstRun`, asked as the app starts, opens it
 over the app while `licenceAccepted` in `settings.json` is still false, and
 on a first launch it cannot be left but by its Done, which writes the flag.
 Ahead of it, `SetupAppPage` runs over the device's `SetupPlan`
@@ -220,11 +158,8 @@ The provider form is the way to sign in outside the tour: a CLI's entry asks
 Sign in where it is not, and Sign in again where it is, which signs the
 program out first so the sign-in is a new one, perhaps another account. The
 steps are `CliAccount` (`app/settings/cli_account.dart`), which every place
-that signs a program in draws: Flutter's form as `CliAccountSection`, the
-native form as `CliAccountRow` and a sheet over the form, through
-`ShellCliAccount`, and the tour's connect as `CliSignInAppPage`. The native
-sheet opens the page in the browser as soon as the program names it, since
-that is where the user has to go next.
+that signs a program in draws: the form as `CliAccountSection`, and the
+tour's connect as `CliSignInAppPage`.
 The default and title model pickers are drawn only where models are
 reachable and nothing answers new chats — a setup from before this — which is the one case Next
 would otherwise wait on with nothing to press. The extras page is optional throughout: a row into each extra, a row
@@ -252,10 +187,7 @@ skill's greeting as a finished assistant turn under it. **General** is the app i
 round a corner is, and the switch that puts the new-chat screen's
 command chips on it, which are what the app looks like; where
 the system has a palette of its own a Material 3 Expressive switch takes the
-place of the colours, on iOS and macOS a Liquid Glass switch in the same
-place says whether Apple's own controls draw the app's chrome from the next
-launch and, while it is on, takes the colours' and the corners' place too (see
-"Liquid Glass" in `lib/ui/AGENTS.md`), and what any of it reaches is "What the settings page can
+place of the colours, and what any of it reaches is "What the settings page can
 change about it" — the environment, and deleting every chat. **Update** is the app keeping itself current: one
 switch, shown exactly where the platform half exists — Linux, Windows, macOS —
 and absent everywhere else without a word, since a phone reaches its newest
@@ -359,7 +291,7 @@ and the row says "Connected" rather than showing any of it — "Needs a key"
 where neither a stored key nor its named variable is there, "On this computer"
 for a local server, and an endpoint typed in by hand carries its address in
 front. Adding one is `ProviderForm` (`lib/app/settings/forms/provider.dart`),
-which every frontend draws: it opens on the presets alone, grouped as paid,
+which opens on the presets alone, grouped as paid,
 free at a cost to privacy and on this machine, each with what it does with
 the prompts, and a free tier is agreed to (`FormConsent`) before anything
 else is asked. A preset's form is written for someone who has never seen a
@@ -456,7 +388,7 @@ so" in `windows/AGENTS.md`); phones; and a Linux guest.
 ## The trigger editor
 
 `TriggerForm` (`lib/app/settings/forms/trigger.dart`), a form long enough to
-be a page where a frontend has pages: the name, the prompt, and one row of
+be a page: the name, the prompt, and one row of
 "When" — a segmented choice over the three sources, each kind bringing its
 own fields under it: a schedule its date and time and repeat, a timer its
 countdown minutes, a file watch its paths and its kinds of change. Beside

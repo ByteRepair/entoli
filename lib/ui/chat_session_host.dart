@@ -8,9 +8,9 @@ import "chat/widgets/composer_controller.dart";
 import "voice/voice_page.dart" as voice;
 import "widgets/dialogs.dart" show notify;
 
-/// The chat sessions' host for either frontend: the Flutter field's text,
-/// and what is said or opened, over the context of the window's root page —
-/// `AppShell`, or the native shell's bridge — which attaches as it mounts.
+/// The chat sessions' host: the Flutter field's text, and what is said or
+/// opened, over the context of the window's root page, `AppShell`, which
+/// attaches as it mounts.
 class RootChatSessionHost implements ChatSessionHost {
   ({BuildContext context, WidgetRef ref})? _root;
 

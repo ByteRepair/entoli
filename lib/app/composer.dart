@@ -42,11 +42,7 @@ enum ComposerAction {
   newGoal,
 }
 
-/// The field's text and selection, in UTF-16 code units.
-typedef TextValue = ({String text, int start, int end});
-
-/// What the composer needs of the field that holds its text, whichever
-/// frontend draws it. [message] is what is sent, [text] what the field holds:
+/// What the composer needs of the field that holds its text. [message] is what is sent, [text] what the field holds:
 /// the two differ by the embeds, each one character of [text].
 abstract interface class ComposerText implements Listenable {
   String get text;
@@ -56,19 +52,6 @@ abstract interface class ComposerText implements Listenable {
   /// The caret, or null where the field has none.
   int? get caret;
 
-  /// The text and selection now.
-  TextValue get textValue;
-
-  /// Bumped whenever the text is set other than by [edited]: a completion
-  /// taken, a message restored, the field cleared on send. A frontend whose
-  /// field is not this one applies a value only when this moved, so it never
-  /// echoes back what was typed — which mid-composition would undo an input
-  /// method's marked text.
-  int get revision;
-
-  /// What the user typed in a frontend's own field, which bumps nothing.
-  void edited(TextValue value);
-
   /// Replace the whole text and put the caret at [caret].
   void edit(String text, int caret);
 
@@ -77,8 +60,8 @@ abstract interface class ComposerText implements Listenable {
   void clear();
 }
 
-/// What stands where a chat's composer goes, decided once for every
-/// frontend: the composer itself, or what is drawn in its place.
+/// What stands where a chat's composer goes: the composer itself, or what
+/// is drawn in its place.
 sealed class ComposerSlot {
   const ComposerSlot();
 }
@@ -112,7 +95,7 @@ final class ComposerStarting extends ComposerSlot {
 }
 
 /// What a page binds its composer to: the turn it sends into and where it
-/// is. One per page, which every frontend's composer is given.
+/// is. One per page.
 class ComposerBinding {
   const ComposerBinding({
     required this.agentSpeaking,
@@ -153,43 +136,10 @@ class ComposerBinding {
   final String? workspaceHome;
 }
 
-/// The composer as a frontend draws it: the business state, and nothing of
-/// how it looks.
-class ComposerState {
-  const ComposerState({
-    required this.value,
-    required this.revision,
-    required this.mode,
-    required this.callback,
-    required this.speaking,
-    required this.voice,
-    required this.attachments,
-    required this.embeds,
-  });
-
-  /// What the field holds, and [revision] counting the times the core set it.
-  final TextValue value;
-  final int revision;
-  final ComposerMode mode;
-
-  /// Which callback is typed, not what to call it.
-  final WiredCall? callback;
-
-  /// A turn is running: an empty field's button is Stop.
-  final bool speaking;
-
-  /// Voice mode can be opened from here.
-  final bool voice;
-  final List<Attachment> attachments;
-
-  /// How many embeds the field holds.
-  final int embeds;
-}
-
 /// The composer's business, apart from how it is drawn: what is attached,
 /// which [ComposerMode] the text puts it in, whether Send would do anything,
-/// whether Queue is on offer, and every [ComposerAction]. The Flutter
-/// frontend's `Composer` and the native shell's both run on it.
+/// whether Queue is on offer, and every [ComposerAction]. The `Composer`
+/// widget runs on it.
 ///
 /// It notifies when the mode, the callback, the embeds or the attachments
 /// change. [canSend] and [queues] are notifiers of their own, since they flip
@@ -199,26 +149,6 @@ class ComposerModel extends ChangeNotifier {
     field.addListener(_sync);
     _sync();
   }
-
-  /// Everything a frontend draws, as one value: changes on every keystroke.
-  ValueListenable<ComposerState> get state => _state;
-  late final ValueNotifier<ComposerState> _state = ValueNotifier(_snapshot());
-
-  ComposerState _snapshot() => ComposerState(
-    value: _field.textValue,
-    revision: _field.revision,
-    mode: _mode,
-    callback: _callback,
-    speaking: _turn.agentSpeaking,
-    voice: _turn.onVoice != null,
-    attachments: attachments,
-    embeds: _embeds,
-  );
-
-  void _publish() => _state.value = _snapshot();
-
-  /// What the user typed in a frontend's own field.
-  void edited(TextValue value) => _field.edited(value);
 
   /// Runs the frontend's picker: the files the user chose.
   final Future<List<Attachment>> Function(AttachmentKind kind) pick;
@@ -280,40 +210,6 @@ class ComposerModel extends ChangeNotifier {
     onVoice: binding.onVoice,
   );
 
-  /// The completion menu's token, where the caret is in one and the menu was
-  /// not closed on it: the `/` or `@` word being typed.
-  CompletionToken? get completion {
-    final token = completionTokenIn(_field.text, _field.caret);
-    return token == _dismissed ? null : token;
-  }
-
-  /// The token the menu was closed on; it stays closed until the caret is in
-  /// another.
-  CompletionToken? _dismissed;
-
-  /// Close the menu on the token the caret is in.
-  void dismissCompletion() {
-    _dismissed = completionTokenIn(_field.text, _field.caret);
-    _publish();
-    notifyListeners();
-  }
-
-  /// Take [name] for the open token: the token, up to the caret, becomes the
-  /// whole name, and the trailing space makes what follows arguments rather
-  /// than more name.
-  void acceptCompletion(String name) {
-    final token = completion;
-    final caret = _field.caret;
-    if (token == null || caret == null) return;
-    final (:text, caret: at) = completionAccepted(
-      _field.text,
-      token,
-      caret,
-      name,
-    );
-    _field.edit(text, at);
-  }
-
   /// A participant is speaking: an empty field's button is Stop.
   bool get speaking => _turn.agentSpeaking;
 
@@ -343,7 +239,6 @@ class ComposerModel extends ChangeNotifier {
   @override
   void dispose() {
     _field.removeListener(_sync);
-    _state.dispose();
     canSend.dispose();
     queues.dispose();
     super.dispose();
@@ -366,13 +261,10 @@ class ComposerModel extends ChangeNotifier {
       case ComposerAction.attachFile:
         attach(await pick(AttachmentKind.file));
       case ComposerAction.insertSkill:
-        _dismissed = null;
         _openTrigger(CompletionKind.skill);
       case ComposerAction.insertAgent:
-        _dismissed = null;
         _openTrigger(CompletionKind.agent);
       case ComposerAction.newGoal:
-        _dismissed = null;
         final goal = goalStarted(_field.text);
         _field.edit(goal, goal.length);
     }
@@ -396,16 +288,10 @@ class ComposerModel extends ChangeNotifier {
         ? ComposerMode.callback
         : ComposerMode.message;
     final embeds = _field.embedCount;
-    // A menu closed on one token opens again on the next.
-    if (_dismissed != null &&
-        completionTokenIn(text, _field.caret) != _dismissed) {
-      _dismissed = null;
-    }
     final reshaped = mode != _mode || embeds != _embeds || wired != _callback;
     _mode = mode;
     _callback = wired;
     _embeds = embeds;
-    _publish();
     if (reshaped) notifyListeners();
   }
 
@@ -462,7 +348,6 @@ class ComposerModel extends ChangeNotifier {
 
   void _changed() {
     _refresh();
-    _publish();
     notifyListeners();
   }
 }

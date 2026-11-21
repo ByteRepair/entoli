@@ -22,7 +22,6 @@ import "../widgets/chip_row.dart";
 import "../widgets/completion_field.dart";
 import "../widgets/side_panel_frame.dart";
 import "../widgets/scrolling.dart";
-import "chat_chrome.dart";
 import "chat_settings_page.dart";
 import "../../app/chat_controller.dart";
 import "../../app/chat_session.dart";
@@ -202,8 +201,6 @@ class _NewChatState extends ConsumerState<_NewChat> {
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(newChatSessionProvider);
-    // The frontend draws this screen itself.
-    if (ref.watch(drawsOpenChatProvider)) return const SizedBox.expand();
     return ListenableBuilder(
       listenable: session.starting,
       builder: (context, _) => _screen(context),
@@ -641,9 +638,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// keeps the view pinned, outside it the jump button appears.
   static const _slack = 200.0;
 
-  /// Inside the native shell: settled at launch, so read once.
-  late final bool _drawsOpenChat = ref.read(drawsOpenChatProvider);
-
   /// The chat's session: its composer, and how a message is sent. Watched in
   /// the build, which keeps it while the page is up.
   ChatSession get _session => ref.read(chatSessionProvider(widget.chatId));
@@ -978,8 +972,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       (_, _) => _follow.jumpIfFollowing(),
     );
     final chat = view.chat;
-    // The frontend draws this chat itself, and asks about its expiry.
-    if (_drawsOpenChat) return const SizedBox.expand();
     if (chat == null) return _waiting();
     _opening(chat);
     // Check expiry once per open: a temporary chat whose window has passed is
@@ -1020,7 +1012,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     final (:online, name: deviceName, :deviceId) =
         ref.watch(mirrorHomeProvider(widget.chatId)) ?? unknownMirrorHome;
     final chat = view.chat;
-    if (_drawsOpenChat) return const SizedBox.expand();
     if (chat == null) return _waiting();
     _opening(chat);
 

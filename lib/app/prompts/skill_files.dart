@@ -5,7 +5,6 @@ import "dart:typed_data";
 import "package:path/path.dart" as p;
 
 import "../../core/config.dart";
-import "../../core/formatting.dart" show formatSize;
 import "../../core/platform/platform.dart" as platform;
 import "../../data/prompts/prompt_export.dart" show skillSourceEntries;
 import "../../data/prompts/skill_import.dart";
@@ -78,23 +77,6 @@ class SkillFiles {
 /// What a skill's page says where its files could not be read.
 const skillUnreadable =
     "The skill's files could not be read. It may have been removed.";
-
-/// [detail] of [name] as one page of Markdown, where a frontend shows it as
-/// text: what it is for, what its folder is wrong about, its instructions,
-/// and its other files.
-String skillMarkdown(String name, SkillDetail? detail) {
-  if (detail == null) return skillUnreadable;
-  final md = detail.skillMd;
-  return [
-    "# $name",
-    ?md?.description,
-    if (detail.problems.isNotEmpty)
-      "**Not loaded:** ${detail.problems.join("; ")}",
-    ?md?.body,
-    if (detail.files.isNotEmpty)
-      "**Files**\n\n${[for (final (path, bytes) in detail.files) "- $path (${formatSize(bytes.length)})"].join("\n")}",
-  ].join("\n\n");
-}
 
 /// A skill as its view page shows it: its SKILL.md read, what its
 /// frontmatter is wrong about, and its other files.

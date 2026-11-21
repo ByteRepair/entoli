@@ -227,8 +227,8 @@ class DeleteQuestion {
 
 /// What can be done to one message, and doing it: the threads written where
 /// it is and the steps between them, delete, edit, regenerate, react. Every
-/// rule of when each is on offer is here, so the frontends' action rows are
-/// a drawing of this.
+/// rule of when each is on offer is here, so the action row is a drawing of
+/// this.
 class MessageActions {
   MessageActions({
     required this.message,
@@ -276,9 +276,6 @@ class MessageActions {
   Future<void> step(int step) async {
     if (canStep(step)) await driver!.stepThread(message.id, step);
   }
-
-  /// Copy is offered only where something was said.
-  bool get canCopy => message.hasText;
 
   String get markdown => message.plainText;
 

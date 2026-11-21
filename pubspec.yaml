@@ -14,8 +14,6 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.9
-  entoli_glass:
-    path: packages/entoli_glass
   entoli_menu:
     path: packages/entoli_menu
 

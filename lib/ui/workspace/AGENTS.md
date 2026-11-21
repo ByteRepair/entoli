@@ -2,8 +2,7 @@
 
 A workspace is where the agent's work lands, and until now the only way to see
 it was to leave the app. A row on the chat and project settings pages opens
-`WorkspaceAppPage` (`lib/app/pages/workspace.dart`, an `AppPage` both
-frontends draw) over one folder — the chat's own `workspace/` or the
+`WorkspaceAppPage` (`lib/app/pages/workspace.dart`, an `AppPage`) over one folder — the chat's own `workspace/` or the
 project's shared one, resolved by the page that knows which it is. A folder
 inside opens as a page of its own over it, so back climbs the way the taps
 went down, and its bar says where it sits under the root.

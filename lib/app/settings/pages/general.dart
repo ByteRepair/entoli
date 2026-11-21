@@ -6,7 +6,6 @@ import "../../../domain/settings/keys.dart";
 import "../../../domain/temp_chat_ttl.dart";
 import "../../../domain/theme_colour.dart";
 import "../../../providers.dart";
-import "../../frontend.dart";
 import "../../selection.dart";
 import "../bind.dart";
 import "../controller.dart";
@@ -68,11 +67,6 @@ final generalSections = [
   ),
 ];
 
-/// Apple's look, whose colours and corners are not the app's to pick.
-bool _appleLook(SettingContext c) =>
-    c.ref.watch(frontendProvider).native &&
-    (c.scope.resolve(SettingKeys.liquidGlass) ?? true);
-
 SwatchLook _swatch(ThemeColour a, [ThemeColour? b]) =>
     SwatchLook(a.argb, b == null || b == a ? null : b.argb);
 
@@ -103,34 +97,6 @@ final generalSettings = [
     ),
   ),
   SettingSpec(
-    id: "liquidGlass",
-    path: (page: _page, section: "appearance"),
-    weight: 20,
-    title: "Liquid Glass",
-    description:
-        "Uses native system UI for drawing some parts of the app. "
-        "Changing this requires an app restart.",
-    hint: UiHint.toggle,
-    build: (c) {
-      final launched = c.ref.watch(frontendProvider);
-      return c.toggle(
-        SettingKeys.liquidGlass,
-        visible: launched.native,
-        // What this launch draws is settled at launch, so a switch that no
-        // longer matches it says so rather than appearing to do nothing.
-        // Switched back to what it started with, there is nothing to
-        // restart for.
-        after: (on) => (on ?? true) == launched.swiftUI
-            ? null
-            : SettingNotice(
-                "Quit and reopen Entoli for Liquid Glass to turn "
-                "${(on ?? true) ? "on" : "off"}.",
-                title: "Restart Entoli",
-              ),
-      );
-    },
-  ),
-  SettingSpec(
     id: "colourTheme",
     path: (page: _page, section: "appearance"),
     weight: 30,
@@ -155,7 +121,7 @@ final generalSettings = [
             .firstOrNull,
         // One accent is the seed of the whole palette, secondary included,
         // so while the system is picking there is nothing here to pick.
-        visible: c.ref.watch(paletteAccentProvider) == null && !_appleLook(c),
+        visible: c.ref.watch(paletteAccentProvider) == null,
         onSet: (theme) async {
           if (theme != null) await notifier.setColourTheme(theme);
           return null;
@@ -193,7 +159,7 @@ final generalSettings = [
               option(colour),
           ]),
         ],
-        visible: c.ref.watch(paletteAccentProvider) == null && !_appleLook(c),
+        visible: c.ref.watch(paletteAccentProvider) == null,
         onSet: (slot, colour) => c.scope.write(keys[slot], colour),
       );
     },
@@ -211,7 +177,7 @@ final generalSettings = [
           "${corner.radius.round()}",
           look: CornerLook(corner.radius),
         ),
-    ], visible: !_appleLook(c)),
+    ]),
   ),
   SettingSpec(
     id: "showCommandChips",

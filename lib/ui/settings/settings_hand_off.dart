@@ -9,10 +9,8 @@ import "settings_category.dart";
 import "paired_device_page.dart";
 import "sync_pairing.dart" show ScanQrPage;
 
-/// Binds the settings' hand-offs to the Flutter app's own pages, pushed on
-/// [context]'s navigator: what either frontend opens for a setting that is
-/// more than a setting. The frontend at the window's root binds them, so
-/// both draw the same actions, and clears them when it goes.
+/// Binds the settings' hand-offs to the app's pages, pushed on [context]'s
+/// navigator: what opens for a setting that is more than a setting.
 void bindSettingsHandOff(
   SettingsHandOff handOff,
   BuildContext context,
@@ -35,14 +33,10 @@ void bindSettingsHandOff(
     ));
 }
 
-/// [child], with the settings' hand-offs bound to this frontend's pages for
-/// as long as it is up: what the frontend at the window's root wraps itself
-/// in.
+/// [child], with the settings' hand-offs bound for as long as it is up:
+/// what the window's root wraps itself in.
 class SettingsHandOffs extends ConsumerStatefulWidget {
-  const SettingsHandOffs({super.key, this.own, required this.child});
-
-  /// The hand-offs a frontend draws itself, bound over the Flutter pages.
-  final void Function(SettingsHandOff)? own;
+  const SettingsHandOffs({super.key, required this.child});
 
   final Widget child;
 
@@ -57,7 +51,6 @@ class _SettingsHandOffsState extends ConsumerState<SettingsHandOffs> {
   void initState() {
     super.initState();
     bindSettingsHandOff(_handOff, context, ref);
-    widget.own?.call(_handOff);
   }
 
   @override

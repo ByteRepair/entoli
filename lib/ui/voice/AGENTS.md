@@ -42,7 +42,7 @@ semantics label, so what a reader hears is what is on screen.
 
 **What a voice state looks like is said once**, not by each widget: `hushed`
 sits on `VoiceViewState` in the core (`lib/app/voice_controller.dart`), and
-the Flutter frontend's `word` and `voiceColour` in `voice_look.dart` beside
+the UI's `word` and `voiceColour` in `voice_look.dart` beside
 it, because the orb, the dot beside the word and the Stop
 button all have to agree, and the first version had the orb owning the four-arm
 colour switch while the button re-derived one arm of it.

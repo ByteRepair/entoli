@@ -670,18 +670,6 @@ abstract final class SettingKeys {
     fallback: true,
   );
 
-  /// Whether iOS and macOS draw the app's chrome — the sidebar, a chat's bar
-  /// and composer, the new-chat and voice pages — in Apple's own controls and
-  /// glass, a SwiftUI shell around the Flutter that draws the conversation.
-  /// Read once at launch, since the shell owns the window before any page is
-  /// built: a change waits for a restart. Default on and written only when
-  /// off, as [autoUpdate] is.
-  static const liquidGlass = DefaultedSetting<bool>(
-    "liquidGlass",
-    BoolCodec(),
-    fallback: true,
-  );
-
   /// The browser the agent drives: null off, `embedded` for the downloaded
   /// Helium, or a Chromium-family executable's path. On the phones the
   /// WebView is on by default: null and `webview` are on, `off` is off. See

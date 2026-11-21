@@ -55,7 +55,7 @@ final class TodoActivity extends ToolActivity {
   }
 }
 
-/// How the frontends word a task list.
+/// How a task list is worded.
 extension TodoWords on TodoList {
   /// A `todo` call's label: the task it moved to.
   String get label => switch (current) {

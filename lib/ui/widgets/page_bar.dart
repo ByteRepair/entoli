@@ -1,25 +1,13 @@
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "discard_guard.dart";
 
-/// How a frontend draws a page's bar where it is not the [AppBar]: the
-/// native shell's window title bar. Null, the Flutter frontend's, is the
-/// [AppBar]. A seam rather than a branch here, so this file knows nothing of
-/// the shell.
-typedef PageBarDraw = Widget Function(BuildContext context, PageBar bar);
-
-/// Overridden in `main` by the frontend whose bars are not Flutter's.
-final pageBarDrawProvider = Provider<PageBarDraw?>((ref) => null);
-
 /// A pushed page's bar, said as what it holds rather than drawn: a [title],
 /// the line under it, how the page is left, and its [actions]. It is an
-/// [AppBar] unless the frontend draws bars its own way ([pageBarDrawProvider]);
-/// a page knows nothing of which.
+/// [AppBar].
 ///
-/// [bottom] — a page's tabs, a search under its bar — is Flutter's either
-/// way, drawn beneath whichever bar is above it.
-class PageBar extends ConsumerWidget implements PreferredSizeWidget {
+/// [bottom] is a page's tabs, or a search under its bar.
+class PageBar extends StatelessWidget implements PreferredSizeWidget {
   const PageBar({
     super.key,
     required this.title,
@@ -39,22 +27,13 @@ class PageBar extends ConsumerWidget implements PreferredSizeWidget {
   final List<PageAction> actions;
   final PreferredSizeWidget? bottom;
 
-  /// The [AppBar]'s: a [Scaffold] gives the bar up to this much and takes
-  /// what it draws, which under the shell is no more than [bottom].
+  /// The [AppBar]'s.
   @override
   Size get preferredSize =>
       Size.fromHeight(kToolbarHeight + (bottom?.preferredSize.height ?? 0));
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // A page, not a dialog's: a dialog's bar is always its own.
-    final draw = ref.watch(pageBarDrawProvider);
-    return draw != null && ModalRoute.of(context) is PageRoute
-        ? draw(context, this)
-        : _flutter(context);
-  }
-
-  Widget _flutter(BuildContext context) => AppBar(
+  Widget build(BuildContext context) => AppBar(
     automaticallyImplyLeading: leading != PageLeading.none,
     leading: switch (leading) {
       PageLeading.close => const DiscardButton(),

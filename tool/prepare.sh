@@ -11,13 +11,8 @@ flutter pub get ${CI:+--enforce-lockfile}
 # reaches models.dart through skill_validate), whose freezed and json parts do
 # not exist until this has run — a cold checkout cannot compile them first.
 dart run build_runner build
-# The native shell's protocol, both ends: the Dart in packages/entoli_glass and
-# the Swift its plugin compiles. See "Liquid Glass" in lib/ui/AGENTS.md.
-dart run pigeon --input pigeons/shell.dart
-# The menu bar's, which both frontends use: packages/entoli_menu.
+# The menu bar's protocol, both ends: packages/entoli_menu.
 dart run pigeon --input pigeons/menu.dart
-dart run pigeon --input pigeons/settings.dart
-dart run pigeon --input pigeons/transcript.dart
 dart run tool/gen_bundled_skills.dart
 dart run tool/gen_prompts.dart
 dart run tool/gen_privacy_policy.dart

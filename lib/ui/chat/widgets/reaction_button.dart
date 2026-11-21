@@ -1,15 +1,13 @@
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/reaction.dart";
-import "../../app_chrome.dart";
 import "../../widgets/action_icon.dart";
 import "../../widgets/anchored_menu.dart";
 
 /// The smiley under a message, and the strip of reactions it opens just above
 /// itself, centred on it. What the message already has is shown chosen, and
-/// picking it again takes it back. A frontend may draw the strip itself.
-class ReactionButton extends ConsumerWidget {
+/// picking it again takes it back.
+class ReactionButton extends StatelessWidget {
   const ReactionButton({
     super.key,
     required this.onReact,
@@ -22,25 +20,20 @@ class ReactionButton extends ConsumerWidget {
   /// The emoji already reacted with.
   final List<String> chosen;
 
-  Future<void> _pick(BuildContext context, AppChrome chrome) async {
-    final picked =
-        await (chrome.pickReaction(context, chosen) ??
-            showAnchoredPopup<Reaction>(
-              context,
-              (_) => _Strip(chosen: chosen),
-            ));
+  Future<void> _pick(BuildContext context) async {
+    final picked = await showAnchoredPopup<Reaction>(
+      context,
+      (_) => _Strip(chosen: chosen),
+    );
     if (picked != null && context.mounted) onReact(picked);
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final chrome = ref.watch(appChromeProvider);
-    return ActionIcon(
-      icon: Icons.add_reaction_outlined,
-      tooltip: "React",
-      onPressed: () => _pick(context, chrome),
-    );
-  }
+  Widget build(BuildContext context) => ActionIcon(
+    icon: Icons.add_reaction_outlined,
+    tooltip: "React",
+    onPressed: () => _pick(context),
+  );
 }
 
 /// The six reactions on a pill that hugs them, the chosen ones filled.

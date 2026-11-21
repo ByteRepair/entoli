@@ -40,9 +40,8 @@ behind an Xcode configuration of its own, not as a fork of this one. That
 build re-enters the Powerbox territory deliberately, since a MAS archive
 cannot ship without it.
 
-The deployment target is 15.0, iOS 18's year, so the native UI is written
-for one generation of SwiftUI on both (see "Liquid Glass" in
-`lib/ui/AGENTS.md`); it is above mlx-swift-lm's floor of 14. FoundationModels
+The deployment target is 15.0, iOS 18's year; it is above mlx-swift-lm's
+floor of 14. FoundationModels
 is weak-linked in the Debug and Release xcconfigs, since 15 does not carry
 it.
 
@@ -86,11 +85,11 @@ fills a menu when it is opened, while a shortcut finds only what is filled,
 so a key-down monitor fills them all before every ⌘ chord; without it no
 shortcut fires until its menu has been opened once.
 
-## The native shell
+## The SwiftUI host
 
 **The Runner is a SwiftUI app.** `Launch` (`AppDelegate.swift`) is `@main`
 so the model host can fork before anything of AppKit loads; everything else
-is `EntoliApp`, one `Window` showing `FrontendView` from `entoli_glass`, a
+is `EntoliApp`, one `Window` showing the Flutter view (`FlutterPane`), a
 unified toolbar and the menu bar as `.commands`. The delegate, through
 `@NSApplicationDelegateAdaptor`, is still a `FlutterAppDelegate` and owns the
 one `FlutterEngine`, set up the first time anything asks for its view — the
@@ -98,19 +97,8 @@ window's content or `applicationWillFinishLaunching`, whichever comes first,
 so `app_links` has its URL handler in place — with the plugins and the
 channels in `Channels.swift`. The wake and quit rules stay the delegate's:
 a wake launch hides the app once launched, an activation unhides it, and
-SwiftUI reopens the window from the Dock. There is no `MainMenu.xib`.
-
-The window shows the launch colour until Dart says which frontend the core
-picked, then Flutter's view alone or the shell, whose toolbar and sidebar
-wait for the app proper to be up (see "The native shell" in
-`ios/AGENTS.md`).
-
-The sidebar is a `NavigationSplitView` column, which on 26 floats over the
-detail: the Flutter view runs under the toolbar and the composer and never
-under it. The window's appearance is `NSApp.appearance`, not the window's,
-since a popover, a menu and a sheet are windows of their own. The menu bar
-stays Flutter's, and the native composer takes its own editing keys — see
-"Where the platforms differ" under "Liquid Glass" in `lib/ui/AGENTS.md`.
+SwiftUI reopens the window from the Dock. There is no `MainMenu.xib`, and no
+Settings scene: the menu's Settings item is Dart's, opening the Flutter page.
 
 ## Shortcuts
 
@@ -210,8 +198,8 @@ one runs (`BackgroundWork.running`, which `TurnHold` in
 the app stays, and the Dock says it is running in the background. Clicking
 the icon (`applicationShouldHandleReopen`) or any activation brings the
 window back. The decision is the delegate's rather than the window's close
-because the native shell's close button closes the window without
-`performClose`, which an override there never saw. Cmd-H is an ordinary
+because SwiftUI's close button closes the window without `performClose`,
+which an override there never saw. Cmd-H is an ordinary
 hide, and Cmd-Q quits at once, turn or no turn.
 
 **One rule ends a session nobody is watching**, `AppDelegate.quitIfUnwatched`:

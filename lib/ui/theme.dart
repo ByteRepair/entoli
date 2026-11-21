@@ -33,16 +33,10 @@ Color spokenColour(Brightness brightness) => brightness == Brightness.dark
     ? const Color(0xFF2DD4BF)
     : const Color(0xFF0E9384);
 
-/// The look a frontend wears whatever the settings pick: the native shell's
-/// Apple look. Null is the settings'. Overridden in `main`.
-final appLookOverrideProvider = Provider<AppLook?>((ref) => null);
-
 /// What the app is drawn with: the settings resolved against the system's own
 /// palette, so `main` watches one thing and the rule that an accent replaces
 /// both colours is written once.
 final appLookProvider = Provider<AppLook>((ref) {
-  // A frontend with a look of its own wears it whatever was picked.
-  if (ref.watch(appLookOverrideProvider) case final look?) return look;
   final accent = ref.watch(paletteAccentProvider);
   final settings = ref.watch(
     appSettingsProvider.select(

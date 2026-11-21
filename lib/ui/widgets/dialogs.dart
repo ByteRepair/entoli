@@ -4,7 +4,6 @@ import "package:flutter/material.dart";
 
 import "../../core/platform/rich_clipboard.dart";
 import "../../domain/project.dart";
-import "native_surfaces.dart";
 import "text_input.dart";
 
 /// Put [text] on the clipboard and say so. Copying is silent otherwise — the
@@ -21,11 +20,8 @@ Future<void> copyToClipboard(
   notify(context, said);
 }
 
-/// Says [message] in passing: a snack bar, or the native shell's notice.
+/// Says [message] in passing, in a snack bar.
 void notify(BuildContext context, String message) {
-  if (nativeSurfacesOf(context) case final native?) {
-    return native.notice(message);
-  }
   ScaffoldMessenger.maybeOf(
     context,
   )?.showSnackBar(SnackBar(content: Text(message)));
@@ -35,9 +31,6 @@ void notify(BuildContext context, String message) {
 /// for a caught failure, hoisted so they stop duplicating it. Selectable, so
 /// it can be copied into an issue.
 void say(BuildContext context, Object error) {
-  if (nativeSurfacesOf(context) case final native?) {
-    return native.notice("$error");
-  }
   ScaffoldMessenger.of(
     context,
   ).showSnackBar(SnackBar(content: SelectableText("$error")));
@@ -62,16 +55,6 @@ Future<({String? project})?> pickProject(
   required List<String?> projects,
   String? current,
 }) async {
-  if (nativeSurfacesOf(context)?.dialogs case final native?) {
-    final at = await native.choose(
-      "Move to project",
-      [for (final p in projects) projectLabel(p)],
-      picked: current == null && !projects.contains(null)
-          ? null
-          : projects.indexOf(current),
-    );
-    return at == null ? null : (project: projects[at]);
-  }
   return showDialog<({String? project})>(
     context: context,
     builder: (context) => SimpleDialog(
@@ -119,17 +102,6 @@ Future<String?> promptForText(
   int maxLines = 1,
   bool allowBlank = false,
 }) {
-  if (nativeSurfacesOf(context)?.dialogs case final native?) {
-    return native.text(
-      title: title,
-      initial: initial,
-      confirmLabel: confirmLabel,
-      hint: hint,
-      helper: helper,
-      lines: maxLines,
-      allowBlank: allowBlank,
-    );
-  }
   final controller = TextEditingController(text: initial);
   String? submit() {
     final text = controller.text.trim();
@@ -178,15 +150,6 @@ Future<({String name, String value})?> promptForPair(
   String name = "",
   String value = "",
 }) {
-  if (nativeSurfacesOf(context)?.dialogs case final native?) {
-    return native.pair(
-      title: title,
-      nameLabel: nameLabel,
-      valueLabel: valueLabel,
-      name: name,
-      value: value,
-    );
-  }
   final nameField = TextEditingController(text: name);
   final valueField = TextEditingController(text: value);
   ({String name, String value})? submit() {
@@ -235,21 +198,19 @@ Future<void> tell(
   BuildContext context, {
   required String title,
   required String message,
-}) =>
-    nativeSurfacesOf(context)?.dialogs.tell(title: title, message: message) ??
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("OK"),
-          ),
-        ],
+}) => showDialog<void>(
+  context: context,
+  builder: (context) => AlertDialog(
+    title: Text(title),
+    content: Text(message),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text("OK"),
       ),
-    );
+    ],
+  ),
+);
 
 /// Ask before doing something irreversible. A null [confirmLabel] leaves only
 /// a way out, for when there is nothing to confirm.
@@ -262,15 +223,6 @@ Future<bool> confirm(
   bool destructive = false,
   bool dismissible = true,
 }) async {
-  if (nativeSurfacesOf(context)?.dialogs case final native?) {
-    return native.confirm(
-      title: title,
-      message: message,
-      confirmLabel: confirmLabel,
-      cancelLabel: cancelLabel,
-      destructive: destructive,
-    );
-  }
   final answer = await showDialog<bool>(
     context: context,
     barrierDismissible: dismissible,

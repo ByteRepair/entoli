@@ -1,7 +1,6 @@
 # The marketplace page
 
-`MarketplaceAppPage` (`lib/app/pages/marketplace.dart`, an `AppPage` both
-frontends draw) is what the sidebar's Marketplace tile opens: the site's
+`MarketplaceAppPage` (`lib/app/pages/marketplace.dart`, an `AppPage`) is what the sidebar's Marketplace tile opens: the site's
 entries, Skills or Agents picked above them. Tapping an entry opens
 `MarketplaceEntryAppPage`, which previews and installs it.
 

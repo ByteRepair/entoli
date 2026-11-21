@@ -450,23 +450,6 @@ final busyChatsProvider = Provider<ValueListenable<Set<String>>>((ref) {
   return busy;
 });
 
-/// [busyChatsProvider]'s set as a value, for what watches it rather than
-/// listening: the native shell's publishers, whose build is what they send.
-final busyChatIdsProvider = NotifierProvider<BusyChatIds, Set<String>>(
-  BusyChatIds.new,
-);
-
-class BusyChatIds extends Notifier<Set<String>> {
-  @override
-  Set<String> build() {
-    final busy = ref.watch(busyChatsProvider);
-    void changed() => state = busy.value;
-    busy.addListener(changed);
-    ref.onDispose(() => busy.removeListener(changed));
-    return busy.value;
-  }
-}
-
 /// What voice mode listens and speaks with, as the catalog page offers it:
 /// an on-device model under [localProviderId], a provider's under its id.
 ModelChoice voiceRecognitionChoice(AppSettings s) => (
@@ -916,11 +899,6 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setAutoUpdate(bool value) =>
       _update((s) => s.autoUpdate = value);
 
-  /// Whether the next launch draws in the system's glass; this one keeps
-  /// what it started with.
-  Future<void> setLiquidGlass(bool value) =>
-      _update((s) => s.liquidGlass = value);
-
   /// Which browser the agent drives; null turns its tools off.
   Future<void> setAgentBrowser(String? value) =>
       _update((s) => s.agentBrowser = value);
@@ -1249,9 +1227,8 @@ final paletteAccentProvider = Provider<int?>(
 );
 
 /// Whether the start page names the library's commands and agents as chips.
-/// One provider because both copies of the screen ask — the Flutter one and
-/// the native shell's — and a `select` on the field rather than the settings
-/// object, so an unrelated write does not rebuild either: `AppSettings` has no
+/// A `select` on the field rather than the settings object, so an unrelated
+/// write does not rebuild the screen: `AppSettings` has no
 /// equality, so its notifier publishes a new instance for every save.
 final showCommandChipsProvider = Provider<bool>(
   (ref) => ref.watch(appSettingsProvider.select((s) => s.showCommandChips)),
