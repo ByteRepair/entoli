@@ -8,8 +8,8 @@ the `Default`-plus-reset pairing,
 `LabelledField` (a field under its caption) and
 `InheritableDropdown` over both (whose first entry stores null and names what
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
-`pickProject` dialogs and `copyToClipboard` beside them, `notify` and `say` over
-`showNotice` (below), `showAnchoredMenu`
+`pickProject` dialogs and `copyToClipboard` beside them, `notify` and `say`
+(notices, below), `showAnchoredMenu`
 and `showMenuAt`, `Choice` (a swatch, corner or icon to pick, with the one
 selected ring),
 `NavDrawer` and `navBreakpoint`, `SidePanelFrame` (below), `ActionIcon`, `AttachmentChip` /
@@ -150,7 +150,7 @@ row keeps whether or not anything is in it — the row and the buttons in it hav
 to agree on that, and a code block's bar now uses the same button. Its null
 `onPressed` is the dead form, which is a thread arrow at either end of the
 list. `copyToClipboard` is the other half of the same pairing: copying looks
-identical afterwards whatever did it, so what was taken is said in a snack bar
+identical afterwards whatever did it, so what was taken is said in a notice
 from one place rather than each caller's own.
 
 `floating_position.dart` and `chip_row.dart` are the empty-chat screen's two

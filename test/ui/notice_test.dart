@@ -29,7 +29,7 @@ void main() {
 
   testWidgets("the page under a notice still takes taps", (tester) async {
     await pumpPage(tester);
-    showNotice(page, "Copied");
+    notify(page, "Copied");
     await tester.pumpAndSettle();
     expect(find.text("Copied"), findsOneWidget);
 
@@ -40,7 +40,7 @@ void main() {
 
   testWidgets("a tap on the notice dismisses it", (tester) async {
     await pumpPage(tester);
-    showNotice(page, "Copied");
+    notify(page, "Copied");
     await tester.pumpAndSettle();
 
     await tester.tap(find.text("Copied"));
@@ -51,7 +51,7 @@ void main() {
 
   testWidgets("it leaves on its own", (tester) async {
     await pumpPage(tester);
-    showNotice(page, "Copied");
+    notify(page, "Copied");
     await tester.pumpAndSettle();
 
     await tester.pump(const Duration(seconds: 4));
@@ -61,9 +61,9 @@ void main() {
 
   testWidgets("a newer notice replaces the last", (tester) async {
     await pumpPage(tester);
-    showNotice(page, "First");
+    notify(page, "First");
     await tester.pumpAndSettle();
-    showNotice(page, "Second", error: true);
+    say(page, "Second");
     await tester.pumpAndSettle();
 
     expect(find.text("First"), findsNothing);

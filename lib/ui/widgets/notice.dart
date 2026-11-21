@@ -1,17 +1,22 @@
 import "dart:async";
 
 import "package:flutter/material.dart";
-import "package:flutter/services.dart";
 
-/// Show [message] as a notice at the top of the screen, over whatever is
-/// there. Not a snack bar: one sits on the bottom edge, where it covers the
-/// composer and where swiping it away starts the system's home and reach
-/// gestures. This one takes no taps but its own, goes on a tap or an upward
-/// swipe, and stays while a pointer is over it. A newer notice replaces it.
-///
-/// An [error] is drawn in the error colours, waits longer, and carries a
-/// copy button, the text being what goes into an issue.
-void showNotice(BuildContext context, String message, {bool error = false}) {
+import "../../core/platform/rich_clipboard.dart";
+
+// Why a notice rather than a snack bar, and how it behaves, is "Notices" in
+// this directory's AGENTS.md.
+
+/// Says [message] in passing, in a notice.
+void notify(BuildContext context, String message) => _show(context, message);
+
+/// Report [error] in a notice. The one-line form several pages spell out
+/// for a caught failure, hoisted so they stop duplicating it. The notice
+/// can copy it, for an issue.
+void say(BuildContext context, Object error) =>
+    _show(context, "$error", error: true);
+
+void _show(BuildContext context, String message, {bool error = false}) {
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
   _shown[overlay]?.remove();
@@ -21,7 +26,6 @@ void showNotice(BuildContext context, String message, {bool error = false}) {
       message: message,
       error: error,
       onGone: () {
-        if (_shown[overlay] != entry) return;
         _shown[overlay] = null;
         entry.remove();
       },
@@ -31,6 +35,8 @@ void showNotice(BuildContext context, String message, {bool error = false}) {
   overlay.insert(entry);
 }
 
+// Per overlay rather than one global: each `MaterialApp` the app builds has
+// its own, and removing an entry from a disposed one asserts.
 final _shown = Expando<OverlayEntry>("notice");
 
 class _Notice extends StatefulWidget {
@@ -53,10 +59,19 @@ class _NoticeState extends State<_Notice> with SingleTickerProviderStateMixin {
     vsync: this,
     duration: const Duration(milliseconds: 200),
   )..forward();
+  late final _curve = CurvedAnimation(
+    parent: _motion,
+    curve: Curves.easeOutCubic,
+  );
+  late final _slide = Tween(
+    begin: const Offset(0, -0.5),
+    end: Offset.zero,
+  ).animate(_curve);
   // Cancelled in dispose, which a test's teardown reaches: a timer left
   // pending fails the test that showed the notice.
   Timer? _timer;
-  bool _leaving = false;
+
+  bool get _leaving => !_motion.isForwardOrCompleted;
 
   Duration get _stay => widget.error
       ? const Duration(seconds: 8)
@@ -76,7 +91,6 @@ class _NoticeState extends State<_Notice> with SingleTickerProviderStateMixin {
 
   Future<void> _leave() async {
     if (_leaving) return;
-    _leaving = true;
     _timer?.cancel();
     await _motion.reverse();
     if (mounted) widget.onGone();
@@ -85,6 +99,7 @@ class _NoticeState extends State<_Notice> with SingleTickerProviderStateMixin {
   @override
   void dispose() {
     _timer?.cancel();
+    _curve.dispose();
     _motion.dispose();
     super.dispose();
   }
@@ -95,19 +110,15 @@ class _NoticeState extends State<_Notice> with SingleTickerProviderStateMixin {
     final (fill, ink) = widget.error
         ? (scheme.errorContainer, scheme.onErrorContainer)
         : (scheme.inverseSurface, scheme.onInverseSurface);
-    final curve = CurvedAnimation(parent: _motion, curve: Curves.easeOutCubic);
     return SafeArea(
       child: Align(
         alignment: Alignment.topCenter,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: FadeTransition(
-            opacity: curve,
+            opacity: _curve,
             child: SlideTransition(
-              position: Tween(
-                begin: const Offset(0, -0.5),
-                end: Offset.zero,
-              ).animate(curve),
+              position: _slide,
               child: Dismissible(
                 key: const ValueKey("notice"),
                 direction: DismissDirection.up,
@@ -122,39 +133,20 @@ class _NoticeState extends State<_Notice> with SingleTickerProviderStateMixin {
                       child: Material(
                         color: fill,
                         elevation: 6,
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: const BorderRadius.all(
+                          Radius.circular(16),
+                        ),
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
                           onTap: _leave,
                           child: Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              16,
-                              10,
-                              widget.error ? 4 : 16,
-                              10,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    widget.message,
-                                    maxLines: 6,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(color: ink),
+                            padding: widget.error
+                                ? const EdgeInsets.fromLTRB(16, 10, 4, 10)
+                                : const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 10,
                                   ),
-                                ),
-                                if (widget.error)
-                                  IconButton(
-                                    tooltip: "Copy",
-                                    color: ink,
-                                    icon: const Icon(Icons.copy, size: 18),
-                                    onPressed: () => Clipboard.setData(
-                                      ClipboardData(text: widget.message),
-                                    ),
-                                  ),
-                              ],
-                            ),
+                            child: _body(ink),
                           ),
                         ),
                       ),
@@ -168,4 +160,26 @@ class _NoticeState extends State<_Notice> with SingleTickerProviderStateMixin {
       ),
     );
   }
+
+  Widget _body(Color ink) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Flexible(
+        child: Text(
+          widget.message,
+          maxLines: 6,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: ink),
+        ),
+      ),
+      if (widget.error)
+        IconButton(
+          tooltip: "Copy",
+          color: ink,
+          icon: const Icon(Icons.copy, size: 18),
+          onPressed: () =>
+              writeClipboard(ClipboardContent(plain: widget.message)),
+        ),
+    ],
+  );
 }

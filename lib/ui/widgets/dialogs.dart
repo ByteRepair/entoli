@@ -7,6 +7,8 @@ import "../../domain/project.dart";
 import "notice.dart";
 import "text_input.dart";
 
+export "notice.dart" show notify, say;
+
 /// Put [text] on the clipboard and say so. Copying is silent otherwise — the
 /// button that did it looks the same afterwards — so what was copied is
 /// [said] in a notice. With [html], the same entry carries it formatted.
@@ -20,16 +22,6 @@ Future<void> copyToClipboard(
   if (!context.mounted) return;
   notify(context, said);
 }
-
-/// Says [message] in passing, in a notice.
-void notify(BuildContext context, String message) =>
-    showNotice(context, message);
-
-/// Report [error] in a notice. The one-line form several pages spell out
-/// for a caught failure, hoisted so they stop duplicating it. The notice
-/// can copy it, for an issue.
-void say(BuildContext context, Object error) =>
-    showNotice(context, "$error", error: true);
 
 /// Run a [work] whose future nobody would await — a sync verb handed to an
 /// `onPressed` — and catch its failure with [say], where dropping it left a
