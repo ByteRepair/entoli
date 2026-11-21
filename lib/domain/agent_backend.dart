@@ -586,6 +586,11 @@ abstract class AgentBackend {
   /// same way: `TurnKeepAlive` aborts, `interruptLiveTurns` interrupts.
   ValueListenable<Set<String>> get runningTurns;
 
+  /// How many steps the running turns have taken since the backend began: a
+  /// reply started or a tool answered. iOS reports it as the progress of the
+  /// task keeping the app alive, which the system expires when it stalls.
+  ValueListenable<int> get turnSteps;
+
   /// What the background memory writes land as: a note per chat, after the
   /// turn that earned it. A backend with no memory writes simply never adds
   /// one, and a page that is not interested never listens.

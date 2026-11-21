@@ -1,8 +1,9 @@
 /// Asks the platform not to kill the app while there is work it must not lose.
-/// Android's foreground services; on macOS, a running turn keeps closing the
-/// window from quitting the app (see "Closing the window during a turn" in
-/// macos/AGENTS.md); a no-op everywhere else, where a process nobody is
-/// looking at is left alone.
+/// Android's foreground services; on iOS, a continued-processing task and a
+/// Live Activity (see "Running off screen" in ios/AGENTS.md); on macOS, a
+/// running turn keeps closing the window from quitting the app (see "Closing
+/// the window during a turn" in macos/AGENTS.md); a no-op everywhere else,
+/// where a process nobody is looking at is left alone.
 ///
 /// Nothing about the work moves. It runs in the isolate it always ran in; this
 /// only buys that isolate the right to keep running off screen, and offers the
@@ -98,6 +99,10 @@ abstract interface class BackgroundWork {
   /// How many turns are running. Zero releases whatever was held.
   Future<void> running(int turns);
 
+  /// The backend's step count, as it moves: the progress iOS reports for the
+  /// task that holds it. Nothing elsewhere.
+  Future<void> stepped(int steps);
+
   /// Whether voice mode has the microphone open.
   Future<void> listening(bool active);
 
@@ -122,9 +127,8 @@ abstract interface class BackgroundWork {
   /// `localhost` callback unanswered and the page loading forever.
   Future<void> signingIn(String? plan);
 
-  /// Whether a project's setup is installing its tools. iOS keeps the screen
-  /// on for it: a locked phone suspends the app, and the guest's download
-  /// with it.
+  /// Whether a project's setup is installing its tools. iOS holds the app
+  /// for it as for a turn: off screen it would suspend the guest's download.
   Future<void> settingUp(bool active);
 
   /// The user said stop from outside the app — each notification has a button,

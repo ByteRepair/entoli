@@ -48,7 +48,7 @@ final class AppDelegate: FlutterAppDelegate {
     IntentBridge.shared.register(with: messenger)
     BrowserChannel.register(with: messenger)
     FilesChannel.register(with: messenger)
-    ScreenHold.register(with: messenger)
+    WorkHold.register(with: messenger)
     return FlutterViewController(engine: engine, nibName: nil, bundle: nil)
   }()
 
@@ -121,21 +121,6 @@ final class FlutterContainer: UIViewController {
       flutter.beginAppearanceTransition(true, animated: false)
       flutter.endAppearanceTransition()
     }
-  }
-}
-
-/// Answers `settingUp` on `agent_chat/background`, the channel Android's
-/// foreground services answer: iOS gives the app no way to run with the
-/// screen locked, so a setup keeps it on. In this file rather than its own so
-/// the Xcode project needs no new entry.
-enum ScreenHold {
-  static func register(with messenger: FlutterBinaryMessenger) {
-    FlutterMethodChannel(name: "agent_chat/background", binaryMessenger: messenger)
-      .setMethodCallHandler { call, result in
-        guard call.method == "settingUp" else { return result(FlutterMethodNotImplemented) }
-        UIApplication.shared.isIdleTimerDisabled = (call.arguments as? Bool) ?? false
-        result(nil)
-      }
   }
 }
 

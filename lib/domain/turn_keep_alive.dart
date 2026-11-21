@@ -9,6 +9,7 @@ import "background_work.dart";
 class TurnKeepAlive {
   TurnKeepAlive(this._backend, this._work) {
     _backend.runningTurns.addListener(_changed);
+    _backend.turnSteps.addListener(_stepped);
     // Its own kind only: voice mode and a download have Stop buttons of their
     // own, and killing every turn because a download was cancelled is not what
     // the user pressed.
@@ -24,11 +25,14 @@ class TurnKeepAlive {
   void _changed() =>
       unawaited(_work.running(_backend.runningTurns.value.length));
 
+  void _stepped() => unawaited(_work.stepped(_backend.turnSteps.value));
+
   Future<void> _stopAll() =>
       Future.wait(_backend.runningTurns.value.map(_backend.abort));
 
   void dispose() {
     _backend.runningTurns.removeListener(_changed);
+    _backend.turnSteps.removeListener(_stepped);
     unawaited(_stops.cancel());
   }
 }

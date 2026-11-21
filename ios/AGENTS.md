@@ -462,7 +462,7 @@ to), and needs Xcode 27 with the Metal Toolchain component
 adapter compiles out, so `EntoliMLX` is an `#error` there rather than an
 empty framework that silently hides the MLX section — and both release jobs
 run on the `xcode-27` image. The deployment targets are
-the app's, iOS 18 and macOS 15, above the package's own floor of 17 and 14. The simulator is built arm64 alone (`ios/Flutter/Mlx.xcconfig`):
+the app's, iOS 26 and macOS 15, above the package's own floor of 17 and 14. The simulator is built arm64 alone (`ios/Flutter/Mlx.xcconfig`):
 Flutter's simulator build adds x86_64, where the import has no module, and
 Xcode 27 runs on no Intel Mac to want one. The macOS Runner compiles `AppleFmChannel.swift`, `MlxChannel.swift` and
 `GenerationChannel.swift` by reference, the
@@ -748,9 +748,46 @@ fakefs's, and what the guest wrote there would not be the host's. A
 project's workspace does not exist before its first chat — the Byte Repair
 setup runs before any — so `IshWorker` makes it before every init.
 
-**The screen stays on while a setup runs** (`settingUp` on the background
-channel, `ScreenHold` in the Runner): iOS gives the app no way to run
-locked, and a locked phone suspends the guest's download with it.
+A setup is held off screen as a turn is (see "Running off screen").
+
+## Running off screen
+
+iOS suspends an app seconds after it leaves the screen, and a turn is
+minutes. `WorkHold` (`Runner/WorkHold.swift`) answers `agent_chat/background`
+as Android's foreground services do: while a turn runs (`running`) or a setup
+installs (`settingUp`), it holds a `BGContinuedProcessingTask`, the one thing
+iOS lets user-started work keep running on, and shows a Live Activity. Nothing
+about the work moves; the hold only buys the isolate the time.
+
+**The task is submitted from the foreground or not at all.** A turn starts
+from a tap, so that is free; a trigger's or a sync peer's turn that starts in
+the background is refused and left as it was before, and so is a task the
+system expired. Both are held again when the app next becomes active. It is
+`.fail`, not queued: a queued task would say the work waits while it runs.
+
+**The task must report progress or it is expired as stalled**, and no turn
+knows its length. The backend counts steps (`AgentBackend.turnSteps`: a reply
+begun, a tool answered) and `TurnKeepAlive` sends them (`stepped`); the task
+reads them as done against one still to come per turn. A setup reports none.
+An expiry is the system's, so it drops the hold and leaves the turn running,
+killable again, as Android's `onTimeout` does; the user's stop is the
+activity's.
+
+**The Live Activity is the WorkActivity extension** (`ios/WorkActivity/`),
+a widget extension drawing `WorkAttributes`: what is running, the time since
+the hold began, and Stop while a turn runs. `WorkAttributes.swift` is
+compiled into both targets, as `WorkspaceTree.swift` is. Stop is a
+`LiveActivityIntent`, which iOS performs in the app's process: it posts a
+notification `WorkHold` forwards as `stopRequested("turns")`, the path
+Android's Stop takes. The system draws the continued task's own progress too,
+so a running turn shows twice; the activity is the one with Stop. The wording
+is Swift's, the port carrying a count, as Android's is Kotlin's.
+
+The task asks for no GPU: background GPU wants the
+`continued-processing.gpu` entitlement, so an MLX turn still stops off
+screen. A remote provider's turn is network and CPU, which the default
+covers. None of this answers on the simulator as it does on a device; the
+recipe is a device: start a turn, lock the phone, and watch it finish.
 
 ## The SwiftUI host
 
@@ -767,10 +804,11 @@ launch finishes. Scene URLs come to SwiftUI, so `.onOpenURL` and
 no storyboard and no scene delegate. The launch screen and the view's
 background are `systemBackground`, so a dark device never flashes white.
 
-The app is iOS 18 and macOS 15, the plugins' packages and the Runners'
-targets alike. The Runner's targets say 18.0 outright rather than "the
+The app is iOS 26 and macOS 15, the plugins' packages and the Runners'
+targets alike — 26 for the continued-processing task (see "Running off
+screen"). The Runner's targets say 26.0 outright rather than "the
 recommended version": Flutter writes its generated plugin package's platform
-from the targets', and the recommended one resolved to 15, which an iOS 18
+from the targets', and the recommended one resolved to 15, which an iOS 26
 package refuses.
 
 ## The menu bar

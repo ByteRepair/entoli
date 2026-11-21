@@ -231,10 +231,14 @@ class FakeBackgroundWork implements BackgroundWork {
   final List<SyncNotice?> synced = [];
   final List<String?> signIns = [];
   final List<bool> setups = [];
+  final List<int> steps = [];
   final _stops = StreamController<BackgroundJob>.broadcast();
 
   @override
   Future<void> running(int turns) async => told.add(turns);
+
+  @override
+  Future<void> stepped(int steps) async => this.steps.add(steps);
 
   @override
   Future<void> listening(bool active) async => listened.add(active);
@@ -677,6 +681,9 @@ class FakeBackend implements AgentBackend {
   /// sets it and watches what follows.
   @override
   final ValueNotifier<Set<String>> runningTurns = ValueNotifier(const {});
+
+  @override
+  final ValueNotifier<int> turnSteps = ValueNotifier(0);
 
   /// The memory notes a test wants the page to see: a real holder, so a test
   /// adds one the way the backend would.

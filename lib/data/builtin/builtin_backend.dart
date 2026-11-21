@@ -143,6 +143,10 @@ class BuiltinBackend implements AgentBackend {
   @override
   ValueListenable<Set<String>> get runningTurns => _running;
 
+  @override
+  ValueListenable<int> get turnSteps => _steps;
+  final _steps = ValueNotifier(0);
+
   /// Each chat's sessions, one per participant who has spoken there.
   final Map<String, Map<String, BuiltinSession>> _sessions = {};
 
@@ -261,7 +265,10 @@ class BuiltinBackend implements AgentBackend {
         steers: steers,
       ),
     );
-    return controller.stream;
+    return controller.stream.map((event) {
+      if (event is ResponseStart || event is ToolResultEvent) _steps.value++;
+      return event;
+    });
   }
 
   /// [prompt] is the message the user sent, or null to carry on the turn
