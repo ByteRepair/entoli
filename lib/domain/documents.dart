@@ -1,3 +1,4 @@
+import "dart:convert";
 import "dart:io";
 
 /// What a document being written through a rename is called until the rename.
@@ -9,9 +10,13 @@ const writingSuffix = ".writing";
 /// sibling, then a rename. The caller that owns the parent directory creates
 /// it. The temp name is fixed, which is safe only because a path has one
 /// writer — [RenameWriter] is that writer.
-Future<void> writeThroughRename(String path, String text) async {
+Future<void> writeThroughRename(String path, String text) =>
+    writeBytesThroughRename(path, utf8.encode(text));
+
+/// [writeThroughRename] of bytes that need not be text.
+Future<void> writeBytesThroughRename(String path, List<int> bytes) async {
   final temp = File("$path$writingSuffix");
-  await temp.writeAsString(text);
+  await temp.writeAsBytes(bytes);
   await temp.rename(path);
 }
 

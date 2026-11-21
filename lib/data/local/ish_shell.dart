@@ -13,6 +13,7 @@ import "package:uuid/uuid.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/shell.dart";
 import "../../core/log.dart";
+import "guest_mounts.dart";
 import "host_tools.dart";
 import "ish_ffi.dart";
 
@@ -116,10 +117,7 @@ class IshShell extends Shell {
   @override
   String get platformDescription {
     if (!rootfsInstalled) return _describe();
-    final grep = hostToolsDir == null
-        ? ""
-        : ". grep -r runs natively, so search with it rather than rg or a "
-              "find piped to grep";
+    final grep = hostToolsDir == null ? "" : ". ${HostTools.promptNote}";
     return "${_describe()}. Every command runs in an x86 emulator, tens of "
         "times slower than the device and heavy on its battery, so read "
         "files with the read tool rather than cat, head or sed, and keep to "

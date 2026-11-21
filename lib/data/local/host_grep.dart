@@ -4,23 +4,7 @@ import "dart:typed_data";
 
 import "package:path/path.dart" as p;
 
-/// A guest directory that is a host one: what the guest calls [guest] is
-/// [host] on the host's disk.
-typedef GuestMount = ({String guest, String host});
-
-/// [guest], a normalized absolute guest path, on the host; null where it is
-/// not under one of [mounts], the longest winning as the guest's lookup does.
-String? hostPathOf(List<GuestMount> mounts, String guest) {
-  GuestMount? best;
-  for (final mount in mounts) {
-    if (guest == mount.guest || p.posix.isWithin(mount.guest, guest)) {
-      if (best == null || mount.guest.length > best.guest.length) best = mount;
-    }
-  }
-  if (best == null) return null;
-  final relative = p.posix.relative(guest, from: best.guest);
-  return relative == "." ? best.host : p.join(best.host, relative);
-}
+import "guest_mounts.dart";
 
 /// The guest's busybox `grep -r`, run on the host's files; see "Tools the
 /// host runs" in ios/AGENTS.md. A port of busybox 1.37's `grep_file` and
@@ -29,24 +13,42 @@ String? hostPathOf(List<GuestMount> mounts, String guest) {
 /// null or [GrepJob.run] answering null, and the guest's grep runs instead.
 class GrepJob {
   GrepJob._(
-    this._patterns, {
+    this._patterns,
+    Set<String> opts, {
     required this.cwd,
     required this.mounts,
     required this.operands,
-    required this.opts,
     required this.maxMatches,
     required this.linesBefore,
     required this.linesAfter,
-  });
+  }) : _invert = opts.contains("v"),
+       _quiet = opts.contains("q"),
+       _listMatching = opts.contains("l"),
+       _listMissing = opts.contains("L"),
+       _count = opts.contains("c"),
+       _lineNumbers = opts.contains("n"),
+       _followAll = opts.contains("R"),
+       _maxed = opts.contains("m"),
+       _noFilenames = opts.contains("h"),
+       _filenames = opts.contains("H");
 
   final String cwd;
   final List<GuestMount> mounts;
   final List<String> operands;
   final List<_Matcher> _patterns;
-  final Set<String> opts;
   final int maxMatches;
   final int linesBefore;
   final int linesAfter;
+  final bool _invert;
+  final bool _quiet;
+  final bool _listMatching;
+  final bool _listMissing;
+  final bool _count;
+  final bool _lineNumbers;
+  final bool _followAll;
+  final bool _maxed;
+  final bool _noFilenames;
+  final bool _filenames;
 
   /// Past this much output the guest's grep prints it instead: the answer is
   /// held whole in memory and in the response file.
@@ -65,8 +67,7 @@ class GrepJob {
     final operands = <String>[];
     int? max, after, before, context;
     var endOfOptions = false;
-    int? number(String? v) =>
-        v != null && RegExp(r"^[0-9]{1,9}$").hasMatch(v) ? int.parse(v) : null;
+    int? number(String v) => _number.hasMatch(v) ? int.parse(v) : null;
     for (var i = 0; i < args.length; i++) {
       final arg = args[i];
       if (endOfOptions || arg == "-" || !arg.startsWith("-")) {
@@ -89,30 +90,25 @@ class GrepJob {
               ? arg.substring(j + 1)
               : (++i < args.length ? args[i] : null);
           if (value == null) return null;
+          opts.add(c);
           if (c == "e") {
             patternArgs.add(value);
-            opts.add("e");
-          } else {
-            final n = number(value);
-            if (n == null) return null;
-            switch (c) {
-              case "m":
-                max = n;
-                opts.add("m");
-              case "A":
-                after = n;
-                opts.add("A");
-              case "B":
-                before = n;
-                opts.add("B");
-              case "C":
-                // -C unsets an -A or -B before it; one after it overrides.
-                context = n;
-                opts
-                  ..add("C")
-                  ..remove("A")
-                  ..remove("B");
-            }
+            break;
+          }
+          final n = number(value);
+          if (n == null) return null;
+          switch (c) {
+            case "m":
+              max = n;
+            case "A":
+              after = n;
+            case "B":
+              before = n;
+            case "C":
+              // -C unsets an -A or -B before it; one after it overrides.
+              context = n;
+              after = null;
+              before = null;
           }
           break;
         }
@@ -129,35 +125,29 @@ class GrepJob {
     }
     // No operand is stdin, which is not the host's.
     if (operands.isEmpty || operands.contains("-")) return null;
-    var linesAfter = after ?? 0;
-    var linesBefore = before ?? 0;
-    if (context != null) {
-      if (!opts.contains("A")) linesAfter = context;
-      if (!opts.contains("B")) linesBefore = context;
-    }
+    var linesAfter = after ?? context ?? 0;
+    var linesBefore = before ?? context ?? 0;
     if (opts.intersection({"c", "q", "l", "L"}).isNotEmpty) {
       opts.remove("n");
       linesBefore = 0;
       linesAfter = 0;
     }
-    final fixed = opts.contains("F");
-    final icase = opts.contains("i");
     final patterns = <_Matcher>[];
     for (final arg in patternArgs) {
       for (final pattern in arg.split("\n")) {
-        final matcher = fixed
+        final matcher = opts.contains("F")
             ? _FixedMatcher.of(pattern, opts)
-            : _RegexMatcher.of(pattern, opts, icase: icase);
+            : _RegexMatcher.of(pattern, opts);
         if (matcher == null) return null;
         patterns.add(matcher);
       }
     }
     return GrepJob._(
       patterns,
+      opts,
       cwd: cwd,
       mounts: mounts,
       operands: operands,
-      opts: opts,
       maxMatches: max ?? 0,
       linesBefore: linesBefore,
       linesAfter: linesAfter,
@@ -172,7 +162,7 @@ class GrepJob {
     List<GuestMount> mounts,
   ) => parse(cwd, args, mounts)?.run();
 
-  bool has(String opt) => opts.contains(opt);
+  static final _number = RegExp(r"^[0-9]{1,9}$");
 
   final _out = BytesBuilder(copy: false);
   var _printFilename = false;
@@ -194,35 +184,32 @@ class GrepJob {
   }
 
   ({int code, Uint8List output}) _run() {
-    for (final operand in operands) {
-      final guest = p.posix.normalize(p.posix.join(cwd, operand));
+    final guests = [for (final o in operands) guestPathOf(cwd, o)];
+    for (final guest in guests) {
       // A mount inside the tree that is not where the host's tree has it
       // would be walked past.
+      final host = hostPathOf(mounts, guest);
       for (final mount in mounts) {
         if (!p.posix.isWithin(guest, mount.guest)) continue;
-        final host = hostPathOf(mounts, guest);
         final natural = host == null
             ? null
             : p.join(host, p.posix.relative(mount.guest, from: guest));
         if (natural != mount.host) throw const _Fallback();
       }
     }
-    _printFilename = operands.length > 1;
-    if (has("H")) _printFilename = true;
-    if (has("h")) _printFilename = false;
+    _printFilename = !_noFilenames && (_filenames || operands.length > 1);
     var matched = false;
     try {
-      for (final operand in operands) {
-        final guest = p.posix.normalize(p.posix.join(cwd, operand));
-        final resolved = _resolve(guest);
+      for (var i = 0; i < operands.length; i++) {
+        final resolved = _resolve(guests[i]);
         final type = FileSystemEntity.typeSync(resolved.host);
         if (type == FileSystemEntityType.directory) {
-          if (!has("h")) _printFilename = true;
-          matched |= _walk(guest, operand, 0);
+          if (!_noFilenames) _printFilename = true;
+          matched |= _walk(guests[i], operands[i], 0);
           continue;
         }
         if (type != FileSystemEntityType.file) throw const _Fallback();
-        matched |= _grepFile(resolved.host, operand);
+        matched |= _grepFile(resolved.host, operands[i]);
       }
     } on _Quit {
       return (code: 0, output: _out.takeBytes());
@@ -233,19 +220,14 @@ class GrepJob {
   /// `recursive_action1`: [guest] is the entry, [display] the path grep
   /// prints for it. Symlinks are followed at the top and, with `-R`,
   /// everywhere.
-  bool _walk(String guest, String display, int depth) {
+  bool _walk(String guest, String display, int depth, {String? host}) {
     if (depth > 64) throw const _Fallback();
-    final follow = depth == 0 || has("R");
-    final ({String guest, String host}) at;
-    if (follow) {
-      at = _resolve(guest);
-    } else {
-      // The parent is resolved already, so the entry is where the host has
-      // it.
-      final host = hostPathOf(mounts, guest);
-      if (host == null) throw const _Fallback();
-      at = (guest: guest, host: host);
-    }
+    // The parent is resolved already, and `_run` saw no mount inside the
+    // tree off its natural place, so an entry not followed is where its
+    // parent's listing has it.
+    final at = depth == 0 || _followAll
+        ? _resolve(guest)
+        : (guest: guest, host: host!);
     final type = FileSystemEntity.typeSync(at.host, followLinks: false);
     if (type == FileSystemEntityType.link) {
       // Only an entry not followed: `file_action_grep` skips one to a
@@ -261,12 +243,15 @@ class GrepJob {
     var matched = false;
     // listSync is readdir's order, which is the guest's: its realfs reads
     // the same directory.
+    final slash = display.endsWith("/") ? "" : "/";
     for (final entry in Directory(at.host).listSync(followLinks: false)) {
       final name = p.basename(entry.path);
-      final childDisplay = display.endsWith("/")
-          ? "$display$name"
-          : "$display/$name";
-      matched |= _walk(p.posix.join(at.guest, name), childDisplay, depth + 1);
+      matched |= _walk(
+        "${at.guest}/$name",
+        "$display$slash$name",
+        depth + 1,
+        host: entry.path,
+      );
     }
     return matched;
   }
@@ -322,14 +307,14 @@ class GrepJob {
     var nmatches = 0;
     var printAfter = 0;
     var curpos = 0;
-    final invert = has("v");
+    final name = utf8.encode(curFile);
     var start = 0;
     while (start < data.length) {
       var end = start;
       while (end < data.length && data[end] != 0x0a && data[end] != 0) {
         end++;
       }
-      final line = Uint8List.sublistView(data, start, end);
+      final line = _Line(Uint8List.sublistView(data, start, end));
       start = end + 1;
       linenum++;
       var found = false;
@@ -341,18 +326,18 @@ class GrepJob {
           break;
         }
       }
-      if (found != invert) {
+      if (found != _invert) {
         nmatches++;
-        if (has("q") || has("l") || has("L")) {
-          if (has("q")) throw const _Quit();
-          if (has("l")) {
+        if (_quiet || _listMatching || _listMissing) {
+          if (_quiet) throw const _Quit();
+          if (_listMatching) {
             _puts(curFile);
             return true;
           }
           return false;
         }
-        if (has("m") && nmatches > maxMatches) break;
-        if (!has("c")) {
+        if (_maxed && nmatches > maxMatches) break;
+        if (!_count) {
           final prevpos = curpos == 0 ? linesBefore - 1 : curpos - 1;
           if (linesBefore > 0 && _beforeBuf[prevpos] != null) {
             var first = linenum - linesBefore;
@@ -362,36 +347,37 @@ class GrepJob {
               first++;
             }
             while (_beforeBuf[idx] != null) {
-              _printLine(_beforeBuf[idx]!, first, curFile, "-");
+              _printLine(_beforeBuf[idx]!, first, name, _dash);
               _beforeBuf[idx] = null;
               idx = (idx + 1) % linesBefore;
               first++;
             }
           }
           printAfter = linesAfter;
-          _printLine(line, linenum, curFile, ":");
+          _printLine(line.bytes, linenum, name, _colon);
         }
       } else if (printAfter > 0) {
-        _printLine(line, linenum, curFile, "-");
+        _printLine(line.bytes, linenum, name, _dash);
         printAfter--;
       } else if (linesBefore > 0) {
-        _beforeBuf[curpos] = line;
+        _beforeBuf[curpos] = line.bytes;
         curpos = (curpos + 1) % linesBefore;
       }
-      if (has("m") && printAfter == 0 && nmatches == maxMatches) break;
+      if (_maxed && printAfter == 0 && nmatches == maxMatches) break;
     }
-    if (has("c")) {
+    if (_count) {
       if (_printFilename) _write("$curFile:");
       _write("$nmatches\n");
     }
-    if (has("L")) {
+    if (_listMissing) {
       _puts(curFile);
       return true;
     }
     return nmatches != 0;
   }
 
-  void _printLine(Uint8List line, int linenum, String curFile, String deco) {
+  /// [deco] is `:` or `-`, after [name] and the line number.
+  void _printLine(Uint8List line, int linenum, List<int> name, int deco) {
     if (linenum < 1) return;
     if ((linesBefore > 0 || linesAfter > 0) &&
         _didPrintLine &&
@@ -400,8 +386,15 @@ class GrepJob {
     }
     _didPrintLine = true;
     _lastLinePrinted = linenum;
-    if (_printFilename) _write("$curFile$deco");
-    if (has("n")) _write("$linenum$deco");
+    if (_printFilename) {
+      _out
+        ..add(name)
+        ..addByte(deco);
+    }
+    if (_lineNumbers) {
+      _write("$linenum");
+      _out.addByte(deco);
+    }
     _out
       ..add(line)
       ..addByte(0x0a);
@@ -411,6 +404,26 @@ class GrepJob {
   void _puts(String text) => _write("$text\n");
 
   void _write(String text) => _out.add(utf8.encode(text));
+
+  static const _colon = 0x3a;
+  static const _dash = 0x2d;
+}
+
+/// One line, with what every pattern asks of it worked out once.
+class _Line {
+  _Line(this.bytes);
+
+  final Uint8List bytes;
+
+  late final bool ascii = !bytes.any((b) => b >= 0x80);
+
+  /// Where musl's decoding of it stops, or -1.
+  late final int invalid = ascii ? -1 : _firstInvalid(bytes);
+
+  /// Valid lines only.
+  late final String text = ascii
+      ? String.fromCharCodes(bytes)
+      : utf8.decode(bytes);
 }
 
 class _Fallback implements Exception {
@@ -425,15 +438,23 @@ class _Quit implements Exception {
 sealed class _Matcher {
   /// Whether [line] holds this pattern; null where the guest might answer
   /// otherwise.
-  bool? matches(Uint8List line);
+  bool? matches(_Line line);
 }
 
 /// `-F`: strstr, or musl's ASCII-only strcasestr, on the bytes.
 class _FixedMatcher extends _Matcher {
-  _FixedMatcher(this.needle, this.opts);
+  _FixedMatcher(List<int> needle, Set<String> opts)
+    : _icase = opts.contains("i"),
+      _exact = opts.contains("x"),
+      _word = opts.contains("w"),
+      _needle = opts.contains("i")
+          ? Uint8List.fromList([for (final b in needle) _lower(b)])
+          : Uint8List.fromList(needle);
 
-  final Uint8List needle;
-  final Set<String> opts;
+  final Uint8List _needle;
+  final bool _icase;
+  final bool _exact;
+  final bool _word;
 
   static _FixedMatcher? of(String pattern, Set<String> opts) {
     // An empty word reads past the line in busybox.
@@ -442,79 +463,73 @@ class _FixedMatcher extends _Matcher {
   }
 
   @override
-  bool matches(Uint8List line) {
-    final icase = opts.contains("i");
+  bool matches(_Line line) {
+    final h = line.bytes;
     var str = 0;
     while (true) {
-      final match = icase ? _strcasestr(line, str) : _strstr(line, str);
+      final match = _find(h, str);
       if (match < 0) return false;
-      if (opts.contains("x")) {
-        return match == str && match + needle.length == line.length;
-      }
-      if (!opts.contains("w")) return true;
-      var c = match != 0 ? line[match - 1] : 0x20;
+      if (_exact) return match == str && match + _needle.length == h.length;
+      if (!_word) return true;
+      var c = match != 0 ? h[match - 1] : 0x20;
       if (!_isWord(c)) {
-        final after = match + needle.length;
-        c = after < line.length ? line[after] : 0;
+        final after = match + _needle.length;
+        c = after < h.length ? h[after] : 0;
         if (c == 0 || !_isWord(c)) return true;
       }
       str = match + 1;
     }
   }
 
-  int _strstr(Uint8List h, int from) {
-    for (var i = from; i + needle.length <= h.length; i++) {
-      if (_at(h, i, (a, b) => a == b)) return i;
-    }
-    return -1;
-  }
-
-  /// musl's: no match in an empty haystack, even of an empty needle.
-  int _strcasestr(Uint8List h, int from) {
-    for (var i = from; i < h.length; i++) {
-      if (i + needle.length <= h.length &&
-          _at(h, i, (a, b) => _lower(a) == _lower(b))) {
-        return i;
+  /// strstr from [from], or strcasestr, which in musl finds nothing in an
+  /// empty haystack, even an empty needle.
+  int _find(Uint8List h, int from) {
+    if (_icase && from >= h.length) return -1;
+    outer:
+    for (var i = from; i + _needle.length <= h.length; i++) {
+      for (var j = 0; j < _needle.length; j++) {
+        final b = _icase ? _lower(h[i + j]) : h[i + j];
+        if (b != _needle[j]) continue outer;
       }
+      return i;
     }
     return -1;
-  }
-
-  bool _at(Uint8List h, int i, bool Function(int, int) same) {
-    for (var j = 0; j < needle.length; j++) {
-      if (!same(h[i + j], needle[j])) return false;
-    }
-    return true;
   }
 }
 
-int _lower(int c) => c >= 0x41 && c <= 0x5a ? c + 32 : c;
+bool _isDigit(int c) => c >= 0x30 && c <= 0x39;
+bool _isUpper(int c) => c >= 0x41 && c <= 0x5a;
+bool _isLower(int c) => c >= 0x61 && c <= 0x7a;
+bool _isAlpha(int c) => _isUpper(c) || _isLower(c);
+int _lower(int c) => _isUpper(c) ? c + 32 : c;
+int _upper(int c) => _isLower(c) ? c - 32 : c;
 
 /// musl's isalnum or `_`, which is ASCII alone.
-bool _isWord(int c) =>
-    (c >= 0x30 && c <= 0x39) ||
-    (c >= 0x41 && c <= 0x5a) ||
-    (c >= 0x61 && c <= 0x7a) ||
-    c == 0x5f;
+bool _isWord(int c) => _isAlpha(c) || _isDigit(c) || c == 0x5f;
+
+/// A code point as a Dart `unicode` regex escape.
+String _u(int c) => "\\u{${c.toRadixString(16)}}";
 
 /// A POSIX pattern, translated into a Dart one that matches the same lines
 /// as musl's regexec in its UTF-8 locale.
 class _RegexMatcher extends _Matcher {
-  _RegexMatcher(this.regex, this.shape, this.opts);
+  _RegexMatcher(
+    this.regex,
+    this.shape, {
+    required this.word,
+    required this.exact,
+  });
 
   final RegExp regex;
   final _Shape shape;
-  final Set<String> opts;
+  final bool word;
+  final bool exact;
 
-  static _RegexMatcher? of(
-    String pattern,
-    Set<String> opts, {
-    required bool icase,
-  }) {
+  static _RegexMatcher? of(String pattern, Set<String> opts) {
     final shape = _Translator(
       pattern,
       extended: opts.contains("E"),
-      icase: icase,
+      icase: opts.contains("i"),
     ).translate();
     if (shape == null) return null;
     // -w takes the match regexec answers, leftmost-longest, which is only
@@ -524,44 +539,42 @@ class _RegexMatcher extends _Matcher {
     return _RegexMatcher(
       RegExp(source, unicode: true, dotAll: true),
       shape,
-      opts,
+      word: opts.contains("w"),
+      exact: opts.contains("x"),
     );
   }
 
   @override
-  bool? matches(Uint8List line) {
-    final invalid = _firstInvalid(line);
+  bool? matches(_Line line) {
     // Classes and case are musl's tables past ASCII: a line is ours only
     // where each of its other characters is surely outside them.
-    if (shape.tables.isNotEmpty && line.any((b) => b >= 0x80)) {
-      for (final c in utf8.decode(line, allowMalformed: true).runes) {
+    if (shape.tables.isNotEmpty && !line.ascii) {
+      for (final c in utf8.decode(line.bytes, allowMalformed: true).runes) {
         if (c >= 0x80 && !shape.tables.every((t) => t.surelyOutside(c))) {
           return null;
         }
       }
     }
-    if (invalid < 0) {
-      final text = utf8.decode(line);
-      if (opts.contains("w")) return _word(text);
-      return regex.hasMatch(text);
+    if (line.invalid < 0) {
+      return word ? _wordMatch(line.text) : regex.hasMatch(line.text);
     }
     // regexec gives up at the first invalid sequence it reads, and reads one
     // character past the earliest end of a match; that is only this simple
     // where nothing looks past a match and none is empty.
-    if (opts.contains("w") ||
-        opts.contains("x") ||
-        shape.lookahead ||
-        shape.nullable) {
-      return null;
-    }
-    final chars = utf8.decode(Uint8List.sublistView(line, 0, invalid)).runes;
-    if (chars.isEmpty) return false;
-    return regex.hasMatch(String.fromCharCodes(chars.take(chars.length - 1)));
+    if (word || exact || shape.lookahead || shape.nullable) return null;
+    final valid = utf8.decode(
+      Uint8List.sublistView(line.bytes, 0, line.invalid),
+    );
+    if (valid.isEmpty) return false;
+    // Less its last character, which may be two UTF-16 units.
+    final last = valid.codeUnitAt(valid.length - 1);
+    final cut = last >= 0xdc00 && last <= 0xdfff ? 2 : 1;
+    return regex.hasMatch(valid.substring(0, valid.length - cut));
   }
 
   /// busybox's -w: a match with a word character beside it is retried past
   /// its end.
-  bool _word(String text) {
+  bool _wordMatch(String text) {
     var from = 0;
     while (from <= text.length) {
       final next = regex.allMatches(text, from).iterator;
@@ -671,22 +684,32 @@ class _Translator {
 
   bool get _end => _i >= _p.length;
   int get _c => _p[_i];
-  bool _at(String s) {
-    final r = s.runes.toList();
-    if (_i + r.length > _p.length) return false;
-    for (var j = 0; j < r.length; j++) {
-      if (_p[_i + j] != r[j]) return false;
+
+  /// Whether the pattern holds the ASCII [s] at [pos], here by default.
+  bool _at(String s, [int? pos]) {
+    final at = pos ?? _i;
+    if (at + s.length > _p.length) return false;
+    for (var j = 0; j < s.length; j++) {
+      if (_p[at + j] != s.codeUnitAt(j)) return false;
     }
     return true;
   }
 
-  bool get _atBar => extended ? _at("|") : _at(r"\|");
-  bool get _atClose => extended ? _at(")") : _at(r"\)");
+  /// [op] as this syntax spells it: bare in ERE, after a backslash in BRE.
+  bool _atOp(String op) => _at(extended ? op : "\\$op");
+
+  bool _eatOp(String op) {
+    if (!_atOp(op)) return false;
+    _i += extended ? 1 : 2;
+    return true;
+  }
+
+  bool get _atBar => _atOp("|");
+  bool get _atClose => _atOp(")");
 
   ({String source, bool nullable}) _alternation(int depth) {
     final branches = <({String source, bool nullable})>[_branch(depth)];
-    while (!_end && _atBar) {
-      _i += extended ? 1 : 2;
+    while (!_end && _eatOp("|")) {
       _literal = false;
       branches.add(_branch(depth));
     }
@@ -730,10 +753,7 @@ class _Translator {
 
   bool get _quantifierAhead {
     if (_end) return false;
-    if (_at("*")) return true;
-    return extended
-        ? _at("+") || _at("?") || _at("{")
-        : _at(r"\+") || _at(r"\?") || _at(r"\{");
+    return _at("*") || _atOp("+") || _atOp("?") || _atOp("{");
   }
 
   ({String source, int min})? _quantifier() {
@@ -742,16 +762,9 @@ class _Translator {
       _i++;
       return (source: "*", min: 0);
     }
-    if (extended ? _at("+") : _at(r"\+")) {
-      _i += extended ? 1 : 2;
-      return (source: "+", min: 1);
-    }
-    if (extended ? _at("?") : _at(r"\?")) {
-      _i += extended ? 1 : 2;
-      return (source: "?", min: 0);
-    }
-    if (extended ? _at("{") : _at(r"\{")) {
-      _i += extended ? 1 : 2;
+    if (_eatOp("+")) return (source: "+", min: 1);
+    if (_eatOp("?")) return (source: "?", min: 0);
+    if (_eatOp("{")) {
       final m = _digits();
       int? n = m;
       var open = false;
@@ -760,8 +773,7 @@ class _Translator {
         open = true;
         n = _end || !_isDigit(_c) ? null : _digits();
       }
-      if (!(extended ? _at("}") : _at(r"\}"))) throw const _Refused();
-      _i += extended ? 1 : 2;
+      if (!_eatOp("}")) throw const _Refused();
       if (m > 255 || (n != null && (n > 255 || n < m))) {
         throw const _Refused();
       }
@@ -782,19 +794,15 @@ class _Translator {
     return n;
   }
 
-  static bool _isDigit(int c) => c >= 0x30 && c <= 0x39;
-
   ({String source, bool nullable, bool anchor}) _atom(
     int depth, {
     required bool first,
   }) {
     final c = _c;
-    if (extended ? c == 0x28 : _at(r"\(")) {
-      _i += extended ? 1 : 2;
+    if (_eatOp("(")) {
       _literal = false;
       final inner = _alternation(depth + 1);
-      if (!_atClose) throw const _Refused();
-      _i += extended ? 1 : 2;
+      if (!_eatOp(")")) throw const _Refused();
       return (
         source: "(?:${inner.source})",
         nullable: inner.nullable,
@@ -878,16 +886,12 @@ class _Translator {
     return (source: _char(e), nullable: false, anchor: false);
   }
 
-  static bool _isAlpha(int c) =>
-      (c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a);
-
   /// A literal character, both cases of it under -i: TRE's REG_ICASE
   /// matches a letter's toupper and tolower and nothing else.
   String _char(int c) {
     if (icase && c >= 0x80) throw const _Refused();
     if (icase && _isAlpha(c)) {
-      final lower = c | 0x20;
-      return "[${String.fromCharCode(lower - 32)}${String.fromCharCode(lower)}]";
+      return "[${String.fromCharCode(_upper(c))}${String.fromCharCode(_lower(c))}]";
     }
     return _escaped(c);
   }
@@ -899,9 +903,7 @@ class _Translator {
     if (icase) _tables.add(_Table.caseMap);
   }
 
-  static String _escaped(int c) => _isAlpha(c) || _isDigit(c) || c == 0x5f
-      ? String.fromCharCode(c)
-      : "\\u{${c.toRadixString(16)}}";
+  static String _escaped(int c) => _isWord(c) ? String.fromCharCode(c) : _u(c);
 
   /// After the `[`, through the `]`: the set's ASCII members worked out
   /// here, so the Dart class is plain ranges whatever POSIX said.
@@ -955,19 +957,13 @@ class _Translator {
     // A negated set under -i may be matched through the input's case, which
     // past ASCII is musl's tables.
     if (icase && negate) _tables.add(_Table.caseMap);
-    final included = <int>[
+    final xs = [
       for (var x = 1; x < 128; x++)
-        if (members[x] != negate) x,
+        if (members[x]) x,
     ];
-    if (included.isEmpty && !negate) throw const _Refused();
-    if (negate) {
-      final excluded = <int>[
-        for (var x = 1; x < 128; x++)
-          if (members[x]) x,
-      ];
-      return excluded.isEmpty ? r"[^\u{0}]" : "[^${_ranges(excluded)}]";
-    }
-    return "[${_ranges(included)}]";
+    if (negate) return xs.isEmpty ? r"[^\u{0}]" : "[^${_ranges(xs)}]";
+    if (xs.isEmpty) throw const _Refused();
+    return "[${_ranges(xs)}]";
   }
 
   static String _ranges(List<int> xs) {
@@ -978,26 +974,19 @@ class _Translator {
       while (j + 1 < xs.length && xs[j + 1] == xs[j] + 1) {
         j++;
       }
-      out.write("\\u{${xs[i].toRadixString(16)}}");
-      if (j > i) out.write("-\\u{${xs[j].toRadixString(16)}}");
+      out.write(_u(xs[i]));
+      if (j > i) out.write("-${_u(xs[j])}");
       i = j + 1;
     }
     return out.toString();
   }
 
   int _indexOf(String s, int from) {
-    final r = s.runes.toList();
-    for (var i = from; i + r.length <= _p.length; i++) {
-      var ok = true;
-      for (var j = 0; j < r.length; j++) {
-        if (_p[i + j] != r[j]) ok = false;
-      }
-      if (ok) return i;
+    for (var i = from; i + s.length <= _p.length; i++) {
+      if (_at(s, i)) return i;
     }
     return -1;
   }
-
-  static int _upper(int c) => c >= 0x61 && c <= 0x7a ? c - 32 : c;
 
   /// musl's ctype over ASCII, and the table it reads past it; digits are
   /// ASCII's alone.
@@ -1006,8 +995,8 @@ class _Translator {
         "alpha" => (_isAlpha, _Table.word),
         "digit" => (_isDigit, null),
         "alnum" => ((c) => _isAlpha(c) || _isDigit(c), _Table.word),
-        "upper" => ((c) => c >= 0x41 && c <= 0x5a, _Table.word),
-        "lower" => ((c) => c >= 0x61 && c <= 0x7a, _Table.word),
+        "upper" => (_isUpper, _Table.word),
+        "lower" => (_isLower, _Table.word),
         "space" => ((c) => c == 0x20 || (c >= 0x09 && c <= 0x0d), _Table.space),
         "blank" => ((c) => c == 0x20 || c == 0x09, _Table.space),
         "punct" => (

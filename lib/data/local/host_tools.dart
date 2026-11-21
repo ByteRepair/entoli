@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:convert";
 import "dart:io";
 import "dart:isolate";
+import "dart:typed_data";
 
 import "package:archive/archive_io.dart";
 import "package:http/http.dart" as http;
@@ -9,11 +10,10 @@ import "package:path/path.dart" as p;
 
 import "../../core/log.dart";
 import "../../core/tls.dart";
-import "../../domain/documents.dart" show writingSuffix;
+import "../../domain/documents.dart" show writeBytesThroughRename;
 import "file_modes.dart";
+import "guest_mounts.dart";
 import "host_grep.dart";
-
-export "host_grep.dart" show GuestMount;
 
 /// Runs the guest's `unzip`, `tar`, `wget`, `curl` and recursive `grep`
 /// natively, where the emulator would interpret every instruction; see
@@ -109,10 +109,10 @@ class HostTools {
     } catch (e) {
       logFailure("host-tools", "request $id failed", e);
     }
-    final response = p.join(callsDir, "$id.res");
-    final temp = File("$response$writingSuffix");
-    await temp.writeAsBytes(answer?.encode() ?? utf8.encode("fallback\n"));
-    await temp.rename(response);
+    await writeBytesThroughRename(
+      p.join(callsDir, "$id.res"),
+      answer?.encode() ?? utf8.encode("fallback\n"),
+    );
     try {
       File(taken).deleteSync();
     } on FileSystemException {
@@ -337,7 +337,7 @@ class HostTools {
   /// is not under a [GuestMount], the longest mount winning as the guest's
   /// lookup does.
   String? _host(String cwd, String path) =>
-      hostPathOf(mounts(), p.posix.normalize(p.posix.join(cwd, path)));
+      hostPathOf(mounts(), guestPathOf(cwd, path));
 
   /// A tar given no compression flag is what its first bytes say, as
   /// busybox's tar decides.
@@ -361,6 +361,12 @@ class HostTools {
   }
 
   static const _tools = ["unzip", "tar", "wget", "curl", "grep"];
+
+  /// What the system prompt says of [_tools]: grep is the one an agent
+  /// would otherwise reach past.
+  static const promptNote =
+      "grep -r runs natively, so search with it rather than rg or a find "
+      "piped to grep";
 
   /// Each of [_tools], by its own name: leaves its call in `calls/` and waits,
   /// or runs the guest's copy where the app falls back or never answers.
@@ -440,7 +446,7 @@ class HostAnswer {
   HostAnswer(this.code, String output) : bytes = utf8.encode(output);
 
   /// Output that is the files' own bytes, which need not be UTF-8.
-  HostAnswer.bytes(this.code, this.bytes);
+  const HostAnswer.bytes(this.code, this.bytes);
 
   final int code;
   final List<int> bytes;
@@ -448,7 +454,12 @@ class HostAnswer {
   String get output => utf8.decode(bytes, allowMalformed: true);
 
   /// As the shim reads it: the first line, then the output.
-  List<int> encode() => [...utf8.encode("exit $code\n"), ...bytes];
+  Uint8List encode() {
+    final head = utf8.encode("exit $code\n");
+    return Uint8List(head.length + bytes.length)
+      ..setAll(0, head)
+      ..setAll(head.length, bytes);
+  }
 }
 
 enum _ArchiveKind {
@@ -577,7 +588,7 @@ class _Fetch {
     }
     if (stopped) {
       _delete(file);
-      return HostAnswer(130, "");
+      return const HostAnswer.bytes(130, []);
     }
     // Shorter than declared is a connection dropped, not a finished file.
     final expected = response.contentLength;
