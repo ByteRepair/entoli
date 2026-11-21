@@ -8,7 +8,8 @@ the `Default`-plus-reset pairing,
 `LabelledField` (a field under its caption) and
 `InheritableDropdown` over both (whose first entry stores null and names what
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
-`pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`
+`pickProject` dialogs and `copyToClipboard` beside them, `notify` and `say`
+(notices, below), `showAnchoredMenu`
 and `showMenuAt`, `Choice` (a swatch, corner or icon to pick, with the one
 selected ring),
 `NavDrawer` and `navBreakpoint`, `SidePanelFrame` (below), `ActionIcon`, `AttachmentChip` /
@@ -149,7 +150,7 @@ row keeps whether or not anything is in it — the row and the buttons in it hav
 to agree on that, and a code block's bar now uses the same button. Its null
 `onPressed` is the dead form, which is a thread arrow at either end of the
 list. `copyToClipboard` is the other half of the same pairing: copying looks
-identical afterwards whatever did it, so what was taken is said in a snack bar
+identical afterwards whatever did it, so what was taken is said in a notice
 from one place rather than each caller's own.
 
 `floating_position.dart` and `chip_row.dart` are the empty-chat screen's two
@@ -366,3 +367,14 @@ server asks its own `/models` unless another is named, and the on-device
 providers list what is installed. What such a list has and the catalog does not know is
 offered as a chat model with nothing known of it; one the catalog does know is
 offered by what the catalog says.
+
+## Notices
+
+`notify` and `say` show a notice, not a snack bar: a pill at the top of the
+root overlay, under the status bar. A snack bar sits on the bottom edge, over
+the composer, and swiping it away on a phone starts the system's home and
+reach gestures. The notice hit-tests only itself, so the page under it stays
+usable; it goes on a tap, an upward swipe or its timer, which a pointer over it
+holds. One per overlay, the newest replacing the last rather than queueing
+behind it. An error's waits longer and copies its text, which a snack bar did by
+being selectable.

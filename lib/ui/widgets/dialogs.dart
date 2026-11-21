@@ -4,11 +4,14 @@ import "package:flutter/material.dart";
 
 import "../../core/platform/rich_clipboard.dart";
 import "../../domain/project.dart";
+import "notice.dart";
 import "text_input.dart";
+
+export "notice.dart" show notify, say;
 
 /// Put [text] on the clipboard and say so. Copying is silent otherwise — the
 /// button that did it looks the same afterwards — so what was copied is
-/// [said] in a snack bar. With [html], the same entry carries it formatted.
+/// [said] in a notice. With [html], the same entry carries it formatted.
 Future<void> copyToClipboard(
   BuildContext context,
   String text, {
@@ -18,22 +21,6 @@ Future<void> copyToClipboard(
   await writeClipboard(ClipboardContent(plain: text, html: html));
   if (!context.mounted) return;
   notify(context, said);
-}
-
-/// Says [message] in passing, in a snack bar.
-void notify(BuildContext context, String message) {
-  ScaffoldMessenger.maybeOf(
-    context,
-  )?.showSnackBar(SnackBar(content: Text(message)));
-}
-
-/// Report [error] in a snack bar. The one-line form several pages spell out
-/// for a caught failure, hoisted so they stop duplicating it. Selectable, so
-/// it can be copied into an issue.
-void say(BuildContext context, Object error) {
-  ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: SelectableText("$error")));
 }
 
 /// Run a [work] whose future nobody would await — a sync verb handed to an
