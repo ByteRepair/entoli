@@ -43,7 +43,6 @@ import "domain/agent_browser.dart";
 import "domain/app_update.dart";
 import "domain/app_theme.dart";
 import "domain/assistant_launch.dart";
-import "domain/assistant_view.dart";
 import "domain/attachment_picker.dart";
 import "domain/folder_picker.dart";
 import "domain/clipboard_files.dart";
@@ -51,7 +50,6 @@ import "domain/backup_handoff.dart";
 import "domain/background_work.dart";
 import "domain/builtin_project.dart";
 import "domain/chat_repository.dart";
-import "domain/corner_radius.dart";
 import "domain/chat_store.dart";
 import "domain/file_handoff.dart";
 import "domain/link_opener.dart";
@@ -64,7 +62,6 @@ import "domain/local_llm.dart";
 import "domain/local_model.dart";
 import "domain/models.dart";
 import "data/prompts/prompt_sources.dart" show promptTiers;
-import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
 import "domain/provider_usage.dart";
@@ -689,36 +686,12 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
         ..set(role.provider, choice.providerId)
         ..set(role.model, choice.modelId);
 
-  /// What a new chat is answered by, or nothing at all.
-  Future<void> setDefault(ModelChoice choice) => _update(
-    (s) => s
-      ..defaultProviderId = choice.providerId
-      ..defaultModelId = choice.modelId,
-  );
-
-  /// What names a new chat, or nothing at all.
-  Future<void> setTitleModel(ModelChoice choice) => _update(
-    (s) => s
-      ..titleProviderId = choice.providerId
-      ..titleModelId = choice.modelId,
-  );
-
-  /// What classifies commands when auto mode is on, or nothing at all.
-  Future<void> setClassifierModel(ModelChoice choice) => _update(
-    (s) => s
-      ..classifierProviderId = choice.providerId
-      ..classifierModelId = choice.modelId,
-  );
-
   /// Stars [model], or takes its star back.
   Future<void> toggleFavourite(ModelRef model) => _update((s) {
     s.favouriteModels = s.favouriteModels.contains(model)
         ? [...s.favouriteModels.where((f) => f != model)]
         : [...s.favouriteModels, model];
   });
-
-  Future<void> setImageQuality(ImageQuality value) =>
-      _update((s) => s.imageQuality = value);
 
   Future<void> setReasoningEffort(ReasoningEffort value) =>
       _update((s) => s.reasoningEffort = value);
@@ -761,26 +734,13 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ref.invalidate(availableModelsProvider);
   }
 
-  Future<void> setImageModel(ModelChoice choice) => _update(
-    (s) => s
-      ..imageProviderId = choice.providerId
-      ..imageModelId = choice.modelId,
-  );
-
   /// Read when a command runs, so an edit reaches the next one.
   Future<void> setEnvironment(Map<String, String> env) =>
       _update((s) => s.environment = Map.unmodifiable(env));
 
-  Future<void> setApproveMode(ApproveMode value) =>
-      _update((s) => s.approveMode = value);
-
   /// How many times a retryable turn failure is carried on automatically.
   Future<void> setTurnRetries(int value) =>
       _update((s) => s.turnRetries = value);
-
-  /// Whether a new project starts with Omada on.
-  Future<void> setOmadaByDefault(bool value) =>
-      _update((s) => s.omadaByDefault = value);
 
   /// How many handoff generations one Omada round may run, app-wide.
   Future<void> setOmadaMaxGenerations(int value) =>
@@ -803,57 +763,9 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setAutoCompactPercent(int value) =>
       _update((s) => s.autoCompactPercent = value);
 
-  /// The model's total context, in tokens — the whole the auto-compact
-  /// threshold's share is taken against, and the summarizer's own ceiling.
-  Future<void> setTotalContext(int value) =>
-      _update((s) => s.totalContext = value);
-
-  /// Whether every reply is held to the response length, over each model's
-  /// own limit.
-  Future<void> setCapResponseLength(bool value) =>
-      _update((s) => s.capResponseLength = value);
-
-  /// The most tokens one reply may run to: the cap, or the fallback for a
-  /// model whose limit is not known.
-  Future<void> setResponseLength(int value) =>
-      _update((s) => s.responseLength = value);
-
-  /// Whether `@path` references inside an AGENTS.md pull in more files.
-  Future<void> setInstructionImports(bool value) =>
-      _update((s) => s.instructionImports = value);
-
-  /// Whether reading a file pulls in a subdirectory's own AGENTS.md.
-  Future<void> setNestedInstructions(bool value) =>
-      _update((s) => s.nestedInstructions = value);
-
-  /// The glob patterns that keep an AGENTS.md out of a turn.
-  Future<void> setInstructionExcludes(List<String> value) =>
-      _update((s) => s.instructionExcludes = value);
-
   /// Whether the auto-memory subsystem runs at all.
   Future<void> setAutoMemory(bool value) =>
       _update((s) => s.autoMemory = value);
-
-  /// Whether relevant memories are recalled into each turn. A sub-gate of
-  /// [setAutoMemory], on by default.
-  Future<void> setMemoryRecall(bool value) =>
-      _update((s) => s.memoryRecall = value);
-
-  /// Whether a background model writes memories from a turn after it ends.
-  Future<void> setMemoryExtraction(bool value) =>
-      _update((s) => s.memoryExtraction = value);
-
-  /// Whether the agent is offered the memory tools.
-  Future<void> setMemoryAgentTool(bool value) =>
-      _update((s) => s.memoryAgentTool = value);
-
-  /// What writes memories in the background, or nothing at all — until one is
-  /// picked, extraction and consolidation stay off.
-  Future<void> setMemoryModel(ModelChoice choice) => _update(
-    (s) => s
-      ..memoryProviderId = choice.providerId
-      ..memoryModelId = choice.modelId,
-  );
 
   /// The user's profile (null clears it), how replies are worded, and whether
   /// they number the web pages they drew on: one write, since the profile
@@ -869,20 +781,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setAppTheme(AppTheme theme) =>
       _update((s) => s.appTheme = theme);
 
-  Future<void> setPrimaryColour(ThemeColour colour) =>
-      _update((s) => s.primaryColour = colour);
-
-  Future<void> setSecondaryColour(ThemeColour colour) =>
-      _update((s) => s.secondaryColour = colour);
-
   Future<void> setColourTheme(ColourTheme theme) => _update(
     (s) => s
       ..primaryColour = theme.primary
       ..secondaryColour = theme.secondary,
   );
-
-  Future<void> setCornerRadius(CornerRadius corner) =>
-      _update((s) => s.cornerRadius = corner);
 
   /// Whether the palette follows the system's. The two colours are left where
   /// they were, so turning it off again returns to what was picked.
@@ -894,31 +797,14 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setShowCommandChips(bool value) =>
       _update((s) => s.showCommandChips = value);
 
-  /// Whether the app replaces itself with a newer release it finds at
-  /// startup, where the platform it is on can do that.
-  Future<void> setAutoUpdate(bool value) =>
-      _update((s) => s.autoUpdate = value);
-
   /// Which browser the agent drives; null turns its tools off.
   Future<void> setAgentBrowser(String? value) =>
       _update((s) => s.agentBrowser = value);
-
-  Future<void> setAgentBrowserVisible(bool value) =>
-      _update((s) => s.agentBrowserVisible = value);
-
-  Future<void> setAgentBrowserApproval(BrowserApproval value) =>
-      _update((s) => s.agentBrowserApproval = value);
-
-  Future<void> setAgentBrowserUploads(BrowserUploadPolicy value) =>
-      _update((s) => s.agentBrowserUploads = value);
 
   /// Which project the assistant gesture opens a chat in. Null is the default
   /// project.
   Future<void> setAssistantProject(String? project) =>
       _update((s) => s.assistantProject = project);
-
-  Future<void> setAssistantView(AssistantView view) =>
-      _update((s) => s.assistantView = view);
 
   /// A pick from the model catalog; nothing picked is the device's.
   Future<void> setVoiceRecognition(ModelChoice choice) => _update(
@@ -942,12 +828,6 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> setVoiceSpeechModel(String? id) =>
       setVoiceSpeech((providerId: localProviderId, modelId: id));
-
-  Future<void> setVoiceSpeaker(int speaker) =>
-      _update((s) => s.voiceSpeaker = speaker);
-
-  Future<void> setVoiceSpeechVoice(String? voice) =>
-      _update((s) => s.voiceSpeechVoice = voice);
 
   /// Which language the system engines are asked for, or null for the
   /// device's. It reaches the next session rather than the one running: the
@@ -993,23 +873,6 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// (ten) and `0` for off.
   Future<void> setLocalKvCachePrompts(int? prompts) =>
       _applyLocal((s) => s.localModelKvCachePrompts = prompts);
-
-  Future<void> setDeviceName(String? name) =>
-      _update((s) => s.deviceName = name);
-
-  Future<void> setSyncRelayUrl(String? url) =>
-      _update((s) => s.syncRelayUrl = url);
-
-  Future<void> setSyncKeepAlive(bool on) =>
-      _update((s) => s.syncKeepAlive = on);
-
-  Future<void> setTurnUrl(String? url) => _update((s) => s.turnUrl = url);
-
-  /// The TURN username is not a secret: it stays in `settings.json` beside the
-  /// URL and the retries. The password goes to [setTurnPassword], in the
-  /// secret store.
-  Future<void> setTurnUsername(String? username) =>
-      _update((s) => s.turnUsername = username);
 
   /// Stored, and then the model list is rebuilt. One field at a time and never
   /// a sibling: threading the others through every setter is what lets a value
@@ -2050,10 +1913,6 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   /// ones stand alone.
   Future<void> setEnvironment(Map<String, String>? environment) =>
       _update((s) => s.environment = environment);
-
-  /// The project's standing permission rules, saved whole.
-  Future<void> setProjectPermissions(List<PermissionRule> value) =>
-      _update((s) => s.permissions = value);
 
   /// The machine directories this project's commands may write to, beside
   /// the workspace the sandbox grants.

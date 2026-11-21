@@ -39,8 +39,10 @@ struct EntoliApp: App {
   }
 }
 
-/// The Flutter view controller inside SwiftUI. Held by a container so
-/// SwiftUI re-making the representable never re-parents Flutter's own.
+/// The Flutter view controller inside SwiftUI. Held by a container rather
+/// than handed to SwiftUI: the window reopened after a close during a turn
+/// makes a new container, and the one Flutter controller can have one parent
+/// at a time, so each container takes it as it appears.
 struct FlutterPane: NSViewControllerRepresentable {
   let controller: NSViewController
 
@@ -63,6 +65,18 @@ final class FlutterContainer: NSViewController {
 
   override func loadView() {
     view = NSView()
+    adopt()
+  }
+
+  override func viewWillAppear() {
+    super.viewWillAppear()
+    adopt()
+  }
+
+  private func adopt() {
+    guard flutter.parent !== self else { return }
+    flutter.view.removeFromSuperview()
+    flutter.removeFromParent()
     addChild(flutter)
     flutter.view.frame = view.bounds
     flutter.view.autoresizingMask = [.width, .height]

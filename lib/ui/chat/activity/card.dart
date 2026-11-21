@@ -324,14 +324,6 @@ class ContextHandOff implements TranscriptHandOff {
       plan_page.openPlan(context, chatId);
 
   @override
-  Future<void> openLink(String href) async {
-    final uri = Uri.tryParse(href);
-    if (uri != null) {
-      await _container.read(linkOpenerProvider).open(context, uri);
-    }
-  }
-
-  @override
   Future<void> openDetail(OpensDetail detail) => showActivityCard<void>(
     context,
     (_) => _DetailCard(

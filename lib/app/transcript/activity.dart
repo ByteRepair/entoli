@@ -171,12 +171,10 @@ class Run {
   );
 }
 
-/// What a frontend opens with a page of its own from the conversation: a
-/// file, an artifact, a skill the model drafted, the plan, a link, an
-/// activity's detail, the browser. Each frontend implements it where it can
-/// push a page — Flutter's over the context of what was tapped, the native
-/// one over its own navigation — and hands it to whatever the core asks to
-/// run.
+/// What the UI opens with a page of its own from the conversation: a file,
+/// an artifact, a skill the model drafted, the plan, an activity's detail,
+/// the browser. Implemented over the context of what was tapped, and handed
+/// to whatever the core asks to run.
 abstract interface class TranscriptHandOff {
   Future<void> openFile(String path);
 
@@ -190,8 +188,6 @@ abstract interface class TranscriptHandOff {
   Future<void> installSkill(String chatId, String installId);
 
   Future<void> openPlan(String chatId);
-
-  Future<void> openLink(String href);
 
   Future<void> openDetail(OpensDetail detail);
 

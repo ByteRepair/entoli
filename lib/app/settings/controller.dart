@@ -1551,15 +1551,14 @@ class InfoRow {
   final TextPage? opens;
 }
 
-/// Pairing another device, through [flow], which a frontend's own screens
-/// drive step by step; [activity] is the pairing in flight as it stood when
+/// Pairing another device, through [flow], which the pairing screens drive
+/// step by step; [activity] is the pairing in flight as it stood when
 /// this was built.
 final class PairingController extends SettingController {
   PairingController(
     super.spec, {
     required this.flow,
     required this.activity,
-    this.scanner,
     super.title,
     super.description,
     super.footnote,
@@ -1572,17 +1571,6 @@ final class PairingController extends SettingController {
 
   /// The pairing in flight, or null.
   final PairingActivity? activity;
-
-  /// The camera page, answering the code it read: a phone's, the device
-  /// pointed at a code.
-  final Future<String?> Function()? scanner;
-
-  /// Reads a code another screen shows and pairs with it.
-  Future<String?> scan() async {
-    final code = await scanner?.call();
-    if (code == null || code.isEmpty) return null;
-    return flow.join(code);
-  }
 }
 
 /// Another page of settings, opened from a row on this one.

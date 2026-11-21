@@ -13,10 +13,6 @@ class SettingsHandOff {
   /// pair exists to compare.
   Future<void> Function(String deviceId)? pairedDevice;
 
-  /// The camera, pointed at a pairing code another screen shows, answering
-  /// the code read.
-  Future<String?> Function()? scanCode;
-
   /// Every Bot Avatar, to look through, import and delete.
   Future<void> Function()? browseBotAvatars;
 
@@ -28,7 +24,6 @@ class SettingsHandOff {
   void clear() {
     addModelByLink = null;
     pairedDevice = null;
-    scanCode = null;
     browseBotAvatars = null;
     openSettings = null;
   }

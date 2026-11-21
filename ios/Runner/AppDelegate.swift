@@ -64,8 +64,10 @@ final class AppDelegate: FlutterAppDelegate {
   }
 }
 
-/// The Flutter view controller inside SwiftUI. Held by a container so
-/// SwiftUI re-making the representable never re-parents Flutter's own.
+/// The Flutter view controller inside SwiftUI. Held by a container rather
+/// than handed to SwiftUI: a rebuilt window makes a new container, and the
+/// one Flutter controller can have one parent at a time, so each container
+/// takes it as it appears.
 struct FlutterPane: UIViewControllerRepresentable {
   let controller: UIViewController
 
@@ -92,11 +94,33 @@ final class FlutterContainer: UIViewController {
     // flashes white in the dark.
     view.backgroundColor = .systemBackground
     flutter.view.backgroundColor = .systemBackground
+    adopt()
+  }
+
+  override func viewWillAppear(_ animated: Bool) {
+    super.viewWillAppear(animated)
+    adopt()
+  }
+
+  /// Moved while on screen without the disappear and appear, Flutter keeps
+  /// its old surface and draws no new frame.
+  private func adopt() {
+    guard flutter.parent !== self else { return }
+    let shown = flutter.view.window != nil
+    if shown { flutter.beginAppearanceTransition(false, animated: false) }
+    flutter.willMove(toParent: nil)
+    flutter.view.removeFromSuperview()
+    flutter.removeFromParent()
+    if shown { flutter.endAppearanceTransition() }
     addChild(flutter)
     flutter.view.frame = view.bounds
     flutter.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     view.addSubview(flutter.view)
     flutter.didMove(toParent: self)
+    if view.window != nil {
+      flutter.beginAppearanceTransition(true, animated: false)
+      flutter.endAppearanceTransition()
+    }
   }
 }
 

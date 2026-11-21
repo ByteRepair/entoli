@@ -33,7 +33,7 @@ extension AppKeyCaps on AppKey {
   }
 }
 
-/// An [AppItem]'s keys as the Flutter frontend hears and prints them.
+/// An [AppItem]'s keys as Flutter hears them.
 extension AppItemKeys on AppItem {
   LogicalKeyboardKey? get logicalKey => key?.logicalKey;
 
@@ -48,10 +48,6 @@ extension AppItemKeys on AppItem {
     ),
     _ => null,
   };
-
-  /// The keys as they are printed on this platform's keyboard, in the order
-  /// it names them.
-  List<String> get keyCaps => key!.caps;
 }
 
 /// The item the keys held down with [event] make, if any. Exact on every

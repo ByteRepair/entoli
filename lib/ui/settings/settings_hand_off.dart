@@ -7,7 +7,6 @@ import "../../app/pages/add_local_model.dart";
 import "../app_pages.dart";
 import "settings_category.dart";
 import "paired_device_page.dart";
-import "sync_pairing.dart" show ScanQrPage;
 
 /// Binds the settings' hand-offs to the app's pages, pushed on [context]'s
 /// navigator: what opens for a setting that is more than a setting.
@@ -22,7 +21,6 @@ void bindSettingsHandOff(
     ..addModelByLink = (() async =>
         openAppPage(context, AddLocalModelAppPage()))
     ..pairedDevice = ((id) => push<void>(PairedDevicePage(deviceId: id)))
-    ..scanCode = (() => push<String>(const ScanQrPage()))
     ..browseBotAvatars = (() => push<void>(const BotAvatarEditorPage.browse()))
     ..openSettings = ((page) => openSettings(
       context,

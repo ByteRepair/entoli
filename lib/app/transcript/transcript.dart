@@ -64,8 +64,7 @@ class Transcript {
 }
 
 /// One row of the conversation. [key] is stable across a streamed delta,
-/// which is what a frontend keys its row by and what the wire sends a
-/// changed row under.
+/// which is what the list keys its row by.
 sealed class TranscriptRow {
   const TranscriptRow();
 
