@@ -24,7 +24,7 @@ struct WorkActivityWidget: Widget {
         Spacer()
         VStack(alignment: .trailing, spacing: 6) {
           Elapsed(since: context.attributes.started)
-          if context.state.turns > 0 { StopButton() }
+          if context.state.stoppable { StopButton() }
         }
       }
       .padding()
@@ -50,7 +50,7 @@ struct WorkActivityWidget: Widget {
               .font(.subheadline)
               .foregroundStyle(.secondary)
             Spacer()
-            if context.state.turns > 0 { StopButton().padding(.trailing, 8) }
+            if context.state.stoppable { StopButton().padding(.trailing, 8) }
           }
         }
       } compactLeading: {

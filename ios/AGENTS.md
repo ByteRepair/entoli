@@ -765,11 +765,12 @@ the background is refused and left as it was before, and so is a task the
 system expired. Both are held again when the app next becomes active. It is
 `.fail`, not queued: a queued task would say the work waits while it runs.
 
-**The task must report progress or it is expired as stalled**, and no turn
-knows its length. The backend counts steps (`AgentBackend.turnSteps`: a reply
-begun, a tool answered) and `TurnKeepAlive` sends them (`stepped`); the task
-reads them as done against one still to come per turn. A setup reports none.
-An expiry is the system's, so it drops the hold and leaves the turn running,
+**The task must report progress or it is expired as stalled**, and nothing
+it holds knows its length: a turn, its sub-agents, a long command, a setup.
+Dart already says exactly when work is held, so the progress is a native
+heartbeat, a tick a second against a total kept a minute ahead, for as long as
+the hold lasts. Counting the agent's steps was tried and left out what runs
+longest between them (a command, a sub-agent, a setup). An expiry is the system's, so it drops the hold and leaves the turn running,
 killable again, as Android's `onTimeout` does; the user's stop is the
 activity's.
 

@@ -99,10 +99,6 @@ abstract interface class BackgroundWork {
   /// How many turns are running. Zero releases whatever was held.
   Future<void> running(int turns);
 
-  /// The backend's step count, as it moves: the progress iOS reports for the
-  /// task that holds it. Nothing elsewhere.
-  Future<void> stepped(int steps);
-
   /// Whether voice mode has the microphone open.
   Future<void> listening(bool active);
 

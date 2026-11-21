@@ -9,22 +9,21 @@ import UIKit
 /// "Running off screen" in ios/AGENTS.md.
 enum WorkHold {
   private static let taskPrefix = "io.byterepair.entoli.work"
+  private static let title = "Entoli"
 
-  private static var channel: FlutterMethodChannel?
   private static var state = WorkAttributes.ContentState(turns: 0, settingUp: false)
-  private static var steps: Int64 = 0
-  private static var stepsAtStart: Int64 = 0
   private static var task: BGContinuedProcessingTask?
   /// Submitted, its launch handler not yet run.
   private static var pending = false
+  private static var heartbeat: Timer?
   private static var activity: Activity<WorkAttributes>?
+  private static var shown: WorkAttributes.ContentState?
 
   private static var busy: Bool { state.turns > 0 || state.settingUp }
 
   static func register(with messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(name: "agent_chat/background", binaryMessenger: messenger)
     channel.setMethodCallHandler(handle)
-    self.channel = channel
     NotificationCenter.default.addObserver(
       forName: StopWorkIntent.requested, object: nil, queue: .main
     ) { _ in channel.invokeMethod("stopRequested", arguments: "turns") }
@@ -43,10 +42,6 @@ enum WorkHold {
     switch call.method {
     case "running": state.turns = (call.arguments as? NSNumber)?.intValue ?? 0
     case "settingUp": state.settingUp = (call.arguments as? Bool) ?? false
-    case "stepped":
-      steps = (call.arguments as? NSNumber)?.int64Value ?? steps
-      report()
-      return result(nil)
     default: return result(FlutterMethodNotImplemented)
     }
     update()
@@ -60,8 +55,7 @@ enum WorkHold {
       return
     }
     if task == nil && !pending { submit() }
-    task?.updateTitle("Entoli", subtitle: state.summary)
-    report()
+    task?.updateTitle(title, subtitle: state.summary)
     show()
   }
 
@@ -76,13 +70,12 @@ enum WorkHold {
       return NSLog("[background] the continued task's handler was refused")
     }
     let request = BGContinuedProcessingTaskRequest(
-      identifier: identifier, title: "Entoli", subtitle: state.summary)
+      identifier: identifier, title: title, subtitle: state.summary)
     // Queued, the task would say the work is waiting while it already runs.
     request.strategy = .fail
     do {
       try BGTaskScheduler.shared.submit(request)
       pending = true
-      stepsAtStart = steps
     } catch {
       NSLog("[background] the continued task was refused: %@", "\(error)")
     }
@@ -92,49 +85,57 @@ enum WorkHold {
     pending = false
     guard busy, task == nil else { return started.setTaskCompleted(success: true) }
     task = started
-    started.updateTitle("Entoli", subtitle: state.summary)
+    started.updateTitle(title, subtitle: state.summary)
     // The system's, not the user's: the work goes on, killable again, as on
     // Android when its service times out. The user's stop is the activity's.
     started.expirationHandler = {
       DispatchQueue.main.async {
-        if task === started { task = nil }
+        if task === started { drop() }
         started.setTaskCompleted(success: false)
       }
     }
-    report()
+    // The system expires a task whose progress stalls, and nothing that holds
+    // it knows its length: a turn, its sub-agents, a long command, a setup.
+    // Held is alive, so the progress moves while it is held, a minute ahead.
+    started.progress.totalUnitCount = 60
+    heartbeat = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+      started.progress.completedUnitCount += 1
+      started.progress.totalUnitCount = started.progress.completedUnitCount + 60
+    }
   }
 
-  /// Steps taken against at least one still to come per turn: the task must
-  /// move or the system expires it as stalled, and no turn knows its length.
-  private static func report() {
-    guard let task else { return }
-    let done = steps - stepsAtStart
-    task.progress.totalUnitCount = done + Int64(max(state.turns, 1))
-    task.progress.completedUnitCount = done
+  private static func drop() {
+    heartbeat?.invalidate()
+    heartbeat = nil
+    task = nil
   }
 
   private static func finish() {
     guard let task else { return }
-    self.task = nil
+    drop()
     task.progress.completedUnitCount = task.progress.totalUnitCount
     task.setTaskCompleted(success: true)
   }
 
   private static func show() {
+    guard state != shown else { return }
     let content = ActivityContent(state: state, staleDate: nil)
     if let activity {
+      shown = state
       Task { await activity.update(content) }
       return
     }
     guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
     do {
       activity = try Activity.request(attributes: WorkAttributes(started: .now), content: content)
+      shown = state
     } catch {
       NSLog("[background] the Live Activity was refused: %@", "\(error)")
     }
   }
 
   private static func hide() {
+    shown = nil
     guard let activity else { return }
     self.activity = nil
     Task { await activity.end(nil, dismissalPolicy: .immediate) }

@@ -26,13 +26,6 @@ void main() {
     expect(work.told, [1, 2, 1, 0]);
   });
 
-  test("the platform is told each step the turns take", () {
-    backend.turnSteps.value = 1;
-    backend.turnSteps.value = 2;
-
-    expect(work.steps, [1, 2]);
-  });
-
   test("stop aborts every running turn", () async {
     backend.runningTurns.value = {"a", "b"};
 
@@ -49,9 +42,7 @@ void main() {
     keepAlive.dispose();
 
     backend.runningTurns.value = {"a"};
-    backend.turnSteps.value = 1;
 
     expect(work.told, isEmpty);
-    expect(work.steps, isEmpty);
   });
 }

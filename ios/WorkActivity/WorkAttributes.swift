@@ -14,11 +14,14 @@ struct WorkAttributes: ActivityAttributes {
     /// than in Dart since the port carries a count.
     var summary: String {
       switch turns {
-      case 0: settingUp ? "Setting up tools" : "Finishing"
+      case 0: "Setting up tools"
       case 1: "Running a turn"
       default: "Running \(turns) turns"
       }
     }
+
+    /// Stop ends turns; a setup alone has none to end.
+    var stoppable: Bool { turns > 0 }
   }
 
   /// When the hold began, which the activity counts up from.
