@@ -7,7 +7,8 @@ import "../log.dart";
 
 /// Android's foreground services, on the other end of `agent_chat/background`
 /// and implemented by `ForegroundWork.kt` and the services beside it (and
-/// `running` by the macOS Runner's `TurnHold`). Not behind the conditional
+/// `running` by the macOS Runner's `TurnHold`, `running` and `settingUp`
+/// by the iOS Runner's `WorkHold`). Not behind the conditional
 /// import: a `MethodChannel` compiles on every platform, and one with nothing
 /// answering it throws `MissingPluginException` — which is the no-op every other platform
 /// wants, so there is no need to ask which platform this is.

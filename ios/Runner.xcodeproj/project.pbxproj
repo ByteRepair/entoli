@@ -32,6 +32,12 @@
 		F01CE0000000000000F00003 /* WorkspaceTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000F00012 /* WorkspaceTree.swift */; };
 		F01CE0000000000000F00004 /* FilesChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000F00014 /* FilesChannel.swift */; };
 		F01CE0000000000000F00005 /* WorkspaceProvider.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000F00015 /* WorkspaceProvider.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		F01CE0000000000000B00001 /* WorkHold.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000B00011 /* WorkHold.swift */; };
+		F01CE0000000000000B00002 /* WorkAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000B00012 /* WorkAttributes.swift */; };
+		F01CE0000000000000B00003 /* WorkAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000B00012 /* WorkAttributes.swift */; };
+		F01CE0000000000000B00004 /* WorkActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000B00014 /* WorkActivityWidget.swift */; };
+		F01CE0000000000000B00006 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000B00016 /* Assets.xcassets */; };
+		F01CE0000000000000B00005 /* WorkActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000B00015 /* WorkActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -48,6 +54,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = F01CE0000000000000F00025;
 			remoteInfo = WorkspaceProvider;
+		};
+		F01CE0000000000000B00023 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F01CE0000000000000B00025;
+			remoteInfo = WorkActivity;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -70,6 +83,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				F01CE0000000000000F00005 /* WorkspaceProvider.appex in Embed Foundation Extensions */,
+				F01CE0000000000000B00005 /* WorkActivity.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -111,6 +125,13 @@
 		F01CE0000000000000F00015 /* WorkspaceProvider.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WorkspaceProvider.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		F01CE0000000000000F00016 /* WorkspaceProvider.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WorkspaceProvider.entitlements; sourceTree = "<group>"; };
 		F01CE0000000000000F00017 /* WorkspaceProvider.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = WorkspaceProvider.xcconfig; sourceTree = "<group>"; };
+		F01CE0000000000000B00011 /* WorkHold.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkHold.swift; sourceTree = "<group>"; };
+		F01CE0000000000000B00012 /* WorkAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkAttributes.swift; sourceTree = "<group>"; };
+		F01CE0000000000000B00013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F01CE0000000000000B00014 /* WorkActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkActivityWidget.swift; sourceTree = "<group>"; };
+		F01CE0000000000000B00015 /* WorkActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WorkActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		F01CE0000000000000B00016 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F01CE0000000000000B00017 /* WorkActivity.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = WorkActivity.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -125,6 +146,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		F01CE0000000000000F00027 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F01CE0000000000000B00027 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -162,6 +190,7 @@
 				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
 				F01CE0000000000000F00021 /* WorkspaceProvider */,
+				F01CE0000000000000B00021 /* WorkActivity */,
 				E2AD518B0A99A053D1A7C29F /* IshCore.xcframework */,
 				F01CE1A00000000000000040 /* EntoliMLX.xcframework */,
 			);
@@ -173,6 +202,7 @@
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
 				F01CE0000000000000F00015 /* WorkspaceProvider.appex */,
+				F01CE0000000000000B00015 /* WorkActivity.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -195,6 +225,7 @@
 				F01CE0000000000000000A10 /* GenerationChannel.swift */,
 				F01CE00000000000000000E0 /* BrowserChannel.swift */,
 				F01CE0000000000000F00014 /* FilesChannel.swift */,
+				F01CE0000000000000B00011 /* WorkHold.swift */,
 				E1D2B33A4C5D6E7F8A90B1C2 /* RemindersPlugin.swift */,
 				E1D2B33C4C5D6E7F8A90B1C2 /* RemindersShared.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
@@ -212,6 +243,18 @@
 				F01CE0000000000000F00017 /* WorkspaceProvider.xcconfig */,
 			);
 			path = WorkspaceProvider;
+			sourceTree = "<group>";
+		};
+		F01CE0000000000000B00021 /* WorkActivity */ = {
+			isa = PBXGroup;
+			children = (
+				F01CE0000000000000B00014 /* WorkActivityWidget.swift */,
+				F01CE0000000000000B00012 /* WorkAttributes.swift */,
+				F01CE0000000000000B00016 /* Assets.xcassets */,
+				F01CE0000000000000B00013 /* Info.plist */,
+				F01CE0000000000000B00017 /* WorkActivity.xcconfig */,
+			);
+			path = WorkActivity;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -250,6 +293,7 @@
 			);
 			dependencies = (
 				F01CE0000000000000F00024 /* PBXTargetDependency */,
+				F01CE0000000000000B00024 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			packageProductDependencies = (
@@ -275,6 +319,23 @@
 			productReference = F01CE0000000000000F00015 /* WorkspaceProvider.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		F01CE0000000000000B00025 /* WorkActivity */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F01CE0000000000000B0002B /* Build configuration list for PBXNativeTarget "WorkActivity" */;
+			buildPhases = (
+				F01CE0000000000000B00026 /* Sources */,
+				F01CE0000000000000B00027 /* Frameworks */,
+				F01CE0000000000000B0002C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WorkActivity;
+			productName = WorkActivity;
+			productReference = F01CE0000000000000B00015 /* WorkActivity.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -294,6 +355,9 @@
 						LastSwiftMigration = 1100;
 					};
 					F01CE0000000000000F00025 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					F01CE0000000000000B00025 = {
 						CreatedOnToolsVersion = 27.0;
 					};
 				};
@@ -317,6 +381,7 @@
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
 				F01CE0000000000000F00025 /* WorkspaceProvider */,
+				F01CE0000000000000B00025 /* WorkActivity */,
 			);
 		};
 /* End PBXProject section */
@@ -338,6 +403,14 @@
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				E00000001AAAAAAAAAAAAAAAA /* entoli.icon in Resources */,
 				E00000003AAAAAAAAAAAAAAAA /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F01CE0000000000000B0002C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F01CE0000000000000B00006 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -402,6 +475,8 @@
 				E1D2B33D4C5D6E7F8A90B1C2 /* RemindersShared.swift in Sources */,
 				F01CE0000000000000F00003 /* WorkspaceTree.swift in Sources */,
 				F01CE0000000000000F00004 /* FilesChannel.swift in Sources */,
+				F01CE0000000000000B00001 /* WorkHold.swift in Sources */,
+				F01CE0000000000000B00002 /* WorkAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -411,6 +486,15 @@
 			files = (
 				F01CE0000000000000F00001 /* WorkspaceProvider.swift in Sources */,
 				F01CE0000000000000F00002 /* WorkspaceTree.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F01CE0000000000000B00026 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F01CE0000000000000B00004 /* WorkActivityWidget.swift in Sources */,
+				F01CE0000000000000B00003 /* WorkAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -426,6 +510,11 @@
 			isa = PBXTargetDependency;
 			target = F01CE0000000000000F00025 /* WorkspaceProvider */;
 			targetProxy = F01CE0000000000000F00023 /* PBXContainerItemProxy */;
+		};
+		F01CE0000000000000B00024 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F01CE0000000000000B00025 /* WorkActivity */;
+			targetProxy = F01CE0000000000000B00023 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -485,7 +574,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -510,7 +599,7 @@
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -531,7 +620,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.byterepair.entoli.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -549,7 +638,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.byterepair.entoli.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -565,7 +654,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.byterepair.entoli.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -624,7 +713,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -678,7 +767,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -705,7 +794,7 @@
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -735,7 +824,7 @@
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -760,7 +849,7 @@
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = F9K3SJ2FD4;
 				INFOPLIST_FILE = WorkspaceProvider/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -788,7 +877,7 @@
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = F9K3SJ2FD4;
 				INFOPLIST_FILE = WorkspaceProvider/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -814,7 +903,7 @@
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = F9K3SJ2FD4;
 				INFOPLIST_FILE = WorkspaceProvider/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -822,6 +911,83 @@
 				);
 				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
 				PRODUCT_BUNDLE_IDENTIFIER = io.byterepair.entoli.WorkspaceProvider;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
+		};
+		F01CE0000000000000B00028 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F01CE0000000000000B00017 /* WorkActivity.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = F9K3SJ2FD4;
+				INFOPLIST_FILE = WorkActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = io.byterepair.entoli.WorkActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F01CE0000000000000B00029 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F01CE0000000000000B00017 /* WorkActivity.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = F9K3SJ2FD4;
+				INFOPLIST_FILE = WorkActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = io.byterepair.entoli.WorkActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		F01CE0000000000000B0002A /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F01CE0000000000000B00017 /* WorkActivity.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = F9K3SJ2FD4;
+				INFOPLIST_FILE = WorkActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = io.byterepair.entoli.WorkActivity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 5.0;
@@ -868,6 +1034,16 @@
 				F01CE0000000000000F00028 /* Debug */,
 				F01CE0000000000000F00029 /* Release */,
 				F01CE0000000000000F0002A /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F01CE0000000000000B0002B /* Build configuration list for PBXNativeTarget "WorkActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F01CE0000000000000B00028 /* Debug */,
+				F01CE0000000000000B00029 /* Release */,
+				F01CE0000000000000B0002A /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

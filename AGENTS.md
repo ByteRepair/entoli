@@ -50,7 +50,7 @@ named in a cross-reference is findable from this list.
 - `android/AGENTS.md` — Staying alive off screen, The workspaces in the Files
   app, Being the assistant, Waking for a trigger, The app icon, The debug
   build's own
-- `ios/AGENTS.md` — The icon, Export compliance, Privacy declarations, Why no host shell, The iSH driver, The rootfs, The SwiftUI host, The menu bar,
+- `ios/AGENTS.md` — The icon, Export compliance, Privacy declarations, Why no host shell, The iSH driver, The rootfs, Running off screen, The SwiftUI host, The menu bar,
   The workspace inside the guest, The workspaces in the Files app, Shortcuts
 - `macos/AGENTS.md` — Why no sandbox, The entitlements, What a command runs on,
   The menu bar, The SwiftUI host, Shortcuts, Closing the window during a turn,
