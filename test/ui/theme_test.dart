@@ -7,7 +7,6 @@ import "package:agent_chat/domain/app_theme.dart";
 import "package:agent_chat/domain/corner_radius.dart";
 import "package:agent_chat/domain/theme_colour.dart";
 import "package:agent_chat/ui/theme.dart";
-import "package:agent_chat/app/frontend.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 // Named, since the library's own `main` would otherwise be in scope beside the
 // test's.
@@ -282,80 +281,6 @@ void main() {
       await settleIo(tester);
 
       expect(AppSettings.load(app.config).showCommandChips, isTrue);
-    });
-  });
-
-  group("Liquid Glass", () {
-    testWidgets("a platform without it is not offered it", (tester) async {
-      await pumpAppearance(tester, app);
-      expect(find.text("Liquid Glass"), findsNothing);
-    });
-
-    group("on iOS and macOS", () {
-      setUp(
-        () => app = TestApp.create(
-          frontend: const FrontendChoice(
-            current: Frontend.swiftUI,
-            native: true,
-          ),
-        ),
-      );
-
-      testWidgets("on, the colours and corners are not the app's to pick", (
-        tester,
-      ) async {
-        await pumpAppearance(tester, app);
-        expect(find.text("Liquid Glass"), findsOneWidget);
-        expect(find.text("Theme colours"), findsNothing);
-        expect(find.text("Corners"), findsNothing);
-      });
-
-      testWidgets("off, they are back, and the switch asks for a restart", (
-        tester,
-      ) async {
-        await pumpAppearance(tester, app);
-        await tester.tap(find.text("Liquid Glass"));
-        await settleIo(tester);
-
-        expect(AppSettings.load(app.config).liquidGlass, isFalse);
-        expect(
-          find.text("Quit and reopen Entoli for Liquid Glass to turn off."),
-          findsOneWidget,
-        );
-        await tester.tap(find.text("OK"));
-        await settleIo(tester);
-        expect(find.text("Corners"), findsOneWidget);
-      });
-
-      testWidgets("switched back to how it launched, there is no restart", (
-        tester,
-      ) async {
-        await pumpAppearance(tester, app);
-        await tester.tap(find.text("Liquid Glass"));
-        await settleIo(tester);
-        await tester.tap(find.text("OK"));
-        await settleIo(tester);
-        await tester.tap(find.text("Liquid Glass"));
-        await settleIo(tester);
-
-        expect(AppSettings.load(app.config).liquidGlass, isTrue);
-        expect(find.text("Restart Entoli"), findsNothing);
-      });
-
-      testWidgets("on, the app wears the system's look whatever was picked", (
-        tester,
-      ) async {
-        app.seedSettings(AppSettings(primaryColour: ThemeColour.red));
-        final materialApp = await pumpApp(tester);
-        final apple = ThemeColour.apple.seed;
-        expect(
-          materialApp.theme?.colorScheme.primary,
-          ColorScheme.fromSeed(
-            seedColor: apple.colour,
-            dynamicSchemeVariant: apple.variant,
-          ).primary,
-        );
-      });
     });
   });
 

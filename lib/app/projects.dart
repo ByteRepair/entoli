@@ -1,5 +1,5 @@
 /// Which pages a project has beside its chats: the buttons beside the
-/// sidebar's switcher and the app's Project menu, in either frontend. The
+/// sidebar's switcher and the app's Project menu. The
 /// default project has no settings page, so its workspace and its memories;
 /// a built-in the halves its spec says it has, plus a settings page where
 /// its spec says it has one worth opening; a user's project its settings

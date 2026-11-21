@@ -15,8 +15,7 @@ import "widgets/dialogs.dart";
 import "widgets/page_bar.dart";
 import "widgets/section_header.dart";
 
-/// Opens [page] onto the core's stack, which whichever frontend is on
-/// screen draws: this one's [AppPagesFollower], or the native shell's.
+/// Opens [page] onto the core's stack, which [AppPagesFollower] draws.
 void openAppPage(BuildContext context, AppPage page) =>
     ProviderScope.containerOf(
       context,

@@ -567,10 +567,8 @@ verb; anything longer is an objective.
 
 `GoalStatus` is active, paused, met or blocked; only active is reviewed, the
 rest are kept for the goal row above the composer to show until cleared —
-`GoalStrip` in Flutter, `goalRow` in the native shell, fed by
-`TurnSnapshot.goal` and answering through `TurnIntents.goal`; either way a
-button is sent as the `/goal` command it is. The `+` menu's New Goal, in both,
-is `startGoal`: `/goal ` at the head of the field, so what was typed becomes
+`GoalStrip`, each button sent as the `/goal` command it is. The `+` menu's
+New Goal is `goalStarted`: `/goal ` at the head of the field, so what was typed becomes
 the objective.
 
 **No cap on rounds of its own.** A send-back is a step of the turn it happens

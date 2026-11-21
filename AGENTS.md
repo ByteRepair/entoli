@@ -32,7 +32,7 @@ named in a cross-reference is findable from this list.
   menu
 - `lib/app/pages/AGENTS.md` — The app's pages: every page that is not a
   setting as an `AppPage` of the settings' controllers, the core's stack of
-  them, and how each frontend draws it
+  them, and how the UI draws it
 - `lib/app/marketplace/AGENTS.md` — The marketplace page
 - `lib/data/builtin/AGENTS.md` — The agent loop, Tools, Running the commands, Background
   jobs, Running a command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
@@ -50,10 +50,10 @@ named in a cross-reference is findable from this list.
 - `android/AGENTS.md` — Staying alive off screen, The workspaces in the Files
   app, Being the assistant, Waking for a trigger, The app icon, The debug
   build's own
-- `ios/AGENTS.md` — The icon, Export compliance, Privacy declarations, Why no host shell, The iSH driver, The rootfs, The native shell, The menu bar,
+- `ios/AGENTS.md` — The icon, Export compliance, Privacy declarations, Why no host shell, The iSH driver, The rootfs, The SwiftUI host, The menu bar,
   The workspace inside the guest, The workspaces in the Files app, Shortcuts
 - `macos/AGENTS.md` — Why no sandbox, The entitlements, What a command runs on,
-  The menu bar, The native shell, Shortcuts, Closing the window during a turn,
+  The menu bar, The SwiftUI host, Shortcuts, Closing the window during a turn,
   What is absent, and honestly so, Voice mode, The icon, The DMG, Tests on
   this host
 - `macos/Runner/entoli.icon/AGENTS.md` — the app icon's Icon Composer package:
@@ -63,7 +63,7 @@ named in a cross-reference is findable from this list.
 - `lib/domain/room/AGENTS.md` — The room and its participants, The contract
   between direct and Omada chats, When a turn is over, Automatic retry rounds
 - `lib/ui/chat/AGENTS.md` — What the turn's extraction kept, Thinking and tool runs,
-  Activities, on screen (the transcript core), The conversation, natively,
+  Activities, on screen (the transcript core),
   What is running, on screen, The agent's browser, on screen,
   Selecting a reply, and copying it, Replying to a passage, How a reply
   is set, Formulas, Code
@@ -82,8 +82,7 @@ named in a cross-reference is findable from this list.
 - `lib/ui/share/AGENTS.md` — Sharing to Entoli
 - `lib/ui/AGENTS.md` — Opening a link, Links into Entoli, The theme, What the settings page can
   change about it, The keyboard and the caret, The app's commands, The menu
-  bar, Liquid Glass (the native shell on iOS and macOS: the bridge, the
-  layout, voice mode and the glow, where the platforms differ)
+  bar, The composer and the page bars
 - `lib/ui/settings/AGENTS.md` — Setting overrides, Work folders, What the app
   is, Backing it all up
 - `lib/ui/widgets/AGENTS.md` — Shared UI, A catalog of things to download, The
@@ -119,11 +118,10 @@ with nothing either, which is why nothing user-facing names it at all.
 No file in `lib/` reaches itself through its imports, `domain/` imports
 nothing of `data/`, `app/` or `ui/`, and `data/` and `app/` nothing of `ui/`;
 `test/core/import_graph_test.dart` fails on the first file that does.
-`app/` is the core the frontends render — the chat controllers, each
-surface's model (state and actions), the app's actions and destinations, the
-menu bar's layout — and imports no Flutter library but `foundation`, so a
-frontend decides everything about how it looks: the Flutter one in `ui/`,
-on every platform, and the SwiftUI one in `packages/entoli_glass` on Apple's. A cycle
+`app/` is the core `ui/` renders — the chat controllers, each surface's
+model (state and actions), the app's actions and destinations, the menu
+bar's layout — and imports no Flutter library but `foundation`, so how
+anything looks is `ui/`'s alone. A cycle
 is a file that is both something others build on and a user of those
 builders, and each place it could happen is held apart the same few ways:
 
@@ -584,7 +582,7 @@ is `logDetail`, which is debug-only.
   settings page says the device has no accelerator only when it has neither an
   NPU nor a Vulkan-1.1 GPU — see "What the NPU actually is".
 - Setup: `tool/prepare.sh` — packages plus codegen: build_runner, the
-  embedded prompts, and Pigeon for the native shell's protocol. The generated sources are
+  embedded prompts, and Pigeon for the menu bar's protocol. The generated sources are
   not in the repository, so a fresh clone does not compile until it has run,
   and it wants running again whenever a `@freezed` or `@JsonSerializable` type
   changes. `dart run build_runner watch` is the answer while editing

@@ -223,9 +223,6 @@ abstract class AppPage {
   /// What every part's id starts with, apart from the settings' own.
   static const _parts = "page:";
 
-  /// Whether [id] names a part of an app page rather than a setting.
-  static bool owns(String id) => id.startsWith(_parts);
-
   static SettingController _unfiled(SettingContext _) =>
       throw StateError("a page's part is built by the page");
 }

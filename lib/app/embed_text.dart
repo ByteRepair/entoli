@@ -40,11 +40,6 @@ class EmbedText<E extends Embed> {
       ? const []
       : [for (final u in text.codeUnits) ?_embeds[u]];
 
-  /// The embeds in [text] by the code unit standing for each.
-  Map<int, E> byCodeIn(String text) => _embeds.isEmpty
-      ? const {}
-      : {for (final u in text.codeUnits) u: ?_embeds[u]};
-
   /// [text] as runs of typed text and embeds, in order. Read on every
   /// keystroke, so a field that has never held an embed is one run.
   List<Object> parts(String text) {

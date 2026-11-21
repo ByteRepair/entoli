@@ -19,8 +19,8 @@ import "composer_words.dart";
 
 export "../../../app/composer.dart" show SendCallback;
 
-/// What a page asks of whichever composer it has, the Flutter one or the
-/// native shell's: a steer taken back put back, and a passage replied to.
+/// What a page asks of its composer: a steer taken back put back, and a
+/// passage replied to.
 abstract interface class ComposerHandle {
   void restore(Draft said);
   void embed(ComposerEmbed embed);
@@ -147,7 +147,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   /// Held only so [embed] can put the caret in the field.
   final FocusNode _focus = FocusNode();
 
-  /// The core's model, which the native shell's composer runs on too. This
+  /// The core's model. This
   /// build resolves the field's decoration and the buttons either side of
   /// it, so it follows the model's shape and leaves Send's flips to the
   /// buttons' own builders.

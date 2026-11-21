@@ -2,7 +2,6 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/app/frontend.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/project.dart";
@@ -271,23 +270,6 @@ void main() {
       expect(menus.shown, contains("Profile…"));
       expect(menus.shown, contains("Marketplace…"));
       expect(find.text("Marketplace"), findsNothing);
-    }, variant: mac);
-
-    // The Settings scene's own item opens an empty window under Flutter, so
-    // the menu bar drops it on both frontends; Dart's stands in for it,
-    // opening the native settings under SwiftUI.
-    testWidgets("keeps its own Settings under SwiftUI too", (tester) async {
-      menus = FakeAppMenus();
-      app.dispose();
-      app = TestApp.create(
-        menus: menus,
-        frontend: const FrontendChoice(current: Frontend.swiftUI, native: true),
-      );
-      await pumpAt(tester, const Size(1200, 800));
-
-      expect(menus.shown, contains("Settings…"));
-      expect(menus.shown, contains("About Entoli"));
-      expect(menus.shown, contains("Profile…"));
     }, variant: mac);
 
     testWidgets("puts new chat beside the sidebar's search, as elsewhere", (

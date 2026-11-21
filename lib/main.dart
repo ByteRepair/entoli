@@ -1,13 +1,11 @@
 import "dart:async";
 import "dart:ui" show AppExitResponse;
 
-import "package:entoli_glass/entoli_glass.dart" show NativeShell;
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "core/config.dart";
-import "core/log.dart";
 import "app/app_menus.dart";
 import "core/platform/app_menus.dart";
 import "core/platform/background_work.dart";
@@ -47,11 +45,7 @@ import "app/chat_edits.dart" show chatEditsProvider;
 import "ui/command_intents.dart";
 import "ui/routes.dart";
 import "app/chat_controller.dart";
-import "app/frontend.dart";
 import "ui/app_shell.dart";
-import "ui/shell/shell_bridge.dart";
-import "ui/shell/shell_overrides.dart";
-import "ui/app_chrome.dart" show appChromeProvider;
 import "app/controller_turn_sender.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
@@ -99,12 +93,6 @@ void main() async {
 /// on Windows — arm a second exit-waiter over the first's.
 var _updateChecked = false;
 
-/// Whether this process draws in the system's glass, settled by the first
-/// session's settings. The process's for the reason [_updateChecked] is: a
-/// restore's restart is this process still running, its window already set
-/// up one way or the other.
-Frontend? _frontendAtLaunch;
-
 /// The menu bar's, once per process: it answers the platform's channel.
 NativeAppMenus? _menus;
 
@@ -144,28 +132,6 @@ class AppSession {
     // last step to the launch after it.
     await recoverRestore(dataDir, deleteTree: platform.deleteTree);
     final config = await AppConfig.load(dataDir);
-    final glassAvailable = isApple;
-    // Once per process: a restore's restart is this process, its window
-    // already the frontend's. The host draws Flutter's until it is told.
-    if (_frontendAtLaunch == null) {
-      final chosen = chooseFrontend(
-        AppSettings.load(config),
-        native: glassAvailable,
-      );
-      _frontendAtLaunch = chosen;
-      if (glassAvailable) {
-        await NativeShell().shell(chosen == Frontend.swiftUI).catchError((
-          Object e,
-        ) {
-          logFailure("shell", "shell: $e");
-          _frontendAtLaunch = Frontend.flutter;
-        });
-      }
-    }
-    final frontend = FrontendChoice(
-      current: _frontendAtLaunch!,
-      native: glassAvailable,
-    );
     // Started here and awaited before the identity load below: the keyring
     // probe is decided once, so the identity's own first read must not race
     // this one, and the mirror the registry reads keys through is filled by
@@ -393,14 +359,11 @@ class AppSession {
         appUpdateHostProvider.overrideWithValue(
           platform.createAppUpdateHost(cache),
         ),
-        if (frontend.swiftUI)
-          ...shellOverrides
-        else if (isPhone)
+        if (isPhone)
           signInPagesProvider.overrideWithValue(const InAppSignInPages()),
         appMenusProvider.overrideWithValue(
-          glassAvailable ? _menus ??= NativeAppMenus() : const NoAppMenus(),
+          isApple ? _menus ??= NativeAppMenus() : const NoAppMenus(),
         ),
-        frontendProvider.overrideWithValue(frontend),
         agentBrowserProvider.overrideWithValue(browser),
         localEngineProvider.overrideWithValue(engine),
         appleFmProvider.overrideWithValue(apple),
@@ -662,7 +625,6 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       themeMode: mode,
       onGenerateRoute: appRoute,
       navigatorObservers: [ref.read(appRoutesProvider)],
-      builder: ref.watch(appChromeProvider).builder,
       // All wrapped rather than folded into the shell: what another app
       // shared has to be offered a workspace over whatever is on screen, an
       // entoli:// link has to open what it names over it and the assistant
@@ -671,22 +633,10 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       home: const FocusFollowsKeyboard(
         child: IncomingAssistant(
           child: IncomingShares(
-            child: IncomingLinks(child: IncomingTriggerOpen(child: _Shell())),
+            child: IncomingLinks(child: IncomingTriggerOpen(child: AppShell())),
           ),
         ),
       ),
     );
   }
-}
-
-/// The frontend's root: the Flutter app's own shell, or the Flutter half of
-/// the native one, which is the launch's and never moves.
-class _Shell extends ConsumerWidget {
-  const _Shell();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) =>
-      ref.watch(frontendProvider).swiftUI
-      ? const ShellBridge()
-      : const AppShell();
 }

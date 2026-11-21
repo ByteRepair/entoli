@@ -32,9 +32,7 @@ final chatSessionHostProvider = Provider<ChatSessionHost>(
 /// One chat as a frontend works with it, apart from how it is drawn: where
 /// its turns are read from and driven through — this device's controller,
 /// or a paired device's mirror — and its composer, the words and what they
-/// are sent with. Kept while something reads it, so a frontend that is not a
-/// widget tree — the native shell's — drives a chat the way the Flutter page
-/// does, and both send the same way.
+/// are sent with. Kept while something reads it.
 class ChatSession {
   ChatSession(this._ref, this.chatId) {
     text = _ref.read(chatSessionHostProvider).newText();

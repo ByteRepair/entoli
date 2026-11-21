@@ -68,7 +68,7 @@ const remoteGlyph = Icons.devices_outlined;
 typedef NewProjectAnswer = ({String name, String description, bool omada});
 
 /// Made on the device the sidebar is showing, which may be a paired one: the
-/// palette's new-project page and the native shell's sheet.
+/// palette's new-project page.
 PaletteAction createProject(NewProjectAnswer answer, String? device) =>
     (context, ref) async {
       if (device != null) {

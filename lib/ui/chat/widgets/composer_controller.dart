@@ -3,7 +3,7 @@ import "dart:math" show max;
 import "package:flutter/material.dart";
 import "package:flutter/rendering.dart";
 
-import "../../../app/composer.dart" show ComposerText, TextValue;
+import "../../../app/composer.dart" show ComposerText;
 import "../../../app/embed_text.dart";
 import "composer_embed.dart";
 
@@ -33,48 +33,6 @@ class ComposerController extends TextEditingController implements ComposerText {
   int? get caret => selection.isValid ? selection.baseOffset : null;
 
   @override
-  TextValue get textValue {
-    final at = selection.isValid
-        ? selection
-        : TextSelection.collapsed(offset: text.length);
-    return (text: text, start: at.start, end: at.end);
-  }
-
-  /// One clock for every field, so two fields never share a revision: the
-  /// shell's one field shows whichever page's composer is on screen.
-  static var _clock = 0;
-  var _revision = ++_clock;
-  var _reporting = false;
-
-  @override
-  int get revision => _revision;
-
-  /// Every set but a report bumps [revision]: the Flutter field's own
-  /// typing does too, which no other field reads.
-  @override
-  set value(TextEditingValue next) {
-    if (!_reporting && next != super.value) _revision = ++_clock;
-    super.value = next;
-  }
-
-  @override
-  void edited(TextValue value) {
-    int at(int offset) => offset.clamp(0, value.text.length);
-    _reporting = true;
-    try {
-      this.value = TextEditingValue(
-        text: value.text,
-        selection: TextSelection(
-          baseOffset: at(value.start),
-          extentOffset: at(value.end),
-        ),
-      );
-    } finally {
-      _reporting = false;
-    }
-  }
-
-  @override
   void edit(String text, int caret) => value = TextEditingValue(
     text: text,
     selection: TextSelection.collapsed(offset: caret),
@@ -82,10 +40,6 @@ class ComposerController extends TextEditingController implements ComposerText {
 
   /// The embeds in the field, in order.
   List<ComposerEmbed> get embeds => _text.embedsIn(text);
-
-  /// The embeds in the field by the code unit standing for each, for a field
-  /// that draws them itself.
-  Map<int, ComposerEmbed> get embedsByCode => _text.byCodeIn(text);
 
   /// What is sent: [text] with each embed written out.
   @override

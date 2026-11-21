@@ -1,11 +1,10 @@
 import Flutter
 import SwiftUI
 import UserNotifications
-import entoli_glass
 import entoli_menu
 
 /// The app, as SwiftUI's own template has one: a window whose content is
-/// the frontend the core picked, and the app's menus. The one Flutter engine
+/// the Flutter view, and the app's menus. The one Flutter engine
 /// is the delegate's, started before the window is asked for.
 @main
 struct EntoliApp: App {
@@ -13,7 +12,8 @@ struct EntoliApp: App {
 
   var body: some Scene {
     WindowGroup {
-      FrontendView(flutter: delegate.flutter)
+      FlutterPane(controller: delegate.flutter)
+        .ignoresSafeArea()
         // Scene URLs come to SwiftUI, not to the delegate: handed on, as
         // the plugins listen there (`app_links` for `entoli://`).
         .onOpenURL { url in
@@ -61,6 +61,66 @@ final class AppDelegate: FlutterAppDelegate {
     // delegate and its chat never opens.
     UNUserNotificationCenter.current().delegate = RemindersPlugin.shared
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+}
+
+/// The Flutter view controller inside SwiftUI. Held by a container rather
+/// than handed to SwiftUI: a rebuilt window makes a new container, and the
+/// one Flutter controller can have one parent at a time, so each container
+/// takes it as it appears.
+struct FlutterPane: UIViewControllerRepresentable {
+  let controller: UIViewController
+
+  func makeUIViewController(context: Context) -> FlutterContainer {
+    FlutterContainer(flutter: controller)
+  }
+
+  func updateUIViewController(_ container: FlutterContainer, context: Context) {}
+}
+
+final class FlutterContainer: UIViewController {
+  private let flutter: UIViewController
+
+  init(flutter: UIViewController) {
+    self.flutter = flutter
+    super.init(nibName: nil, bundle: nil)
+  }
+
+  required init?(coder: NSCoder) { fatalError("not from a nib") }
+
+  override func loadView() {
+    view = UIView()
+    // The launch screen's colour until Flutter's first frame, so nothing
+    // flashes white in the dark.
+    view.backgroundColor = .systemBackground
+    flutter.view.backgroundColor = .systemBackground
+    adopt()
+  }
+
+  override func viewWillAppear(_ animated: Bool) {
+    super.viewWillAppear(animated)
+    adopt()
+  }
+
+  /// Moved while on screen without the disappear and appear, Flutter keeps
+  /// its old surface and draws no new frame.
+  private func adopt() {
+    guard flutter.parent !== self else { return }
+    let shown = flutter.view.window != nil
+    if shown { flutter.beginAppearanceTransition(false, animated: false) }
+    flutter.willMove(toParent: nil)
+    flutter.view.removeFromSuperview()
+    flutter.removeFromParent()
+    if shown { flutter.endAppearanceTransition() }
+    addChild(flutter)
+    flutter.view.frame = view.bounds
+    flutter.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    view.addSubview(flutter.view)
+    flutter.didMove(toParent: self)
+    if view.window != nil {
+      flutter.beginAppearanceTransition(true, animated: false)
+      flutter.endAppearanceTransition()
+    }
   }
 }
 

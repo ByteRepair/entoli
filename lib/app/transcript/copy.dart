@@ -3,8 +3,6 @@ import "dart:typed_data";
 
 import "../../core/platform/rich_clipboard.dart";
 import "../../domain/formatted_text.dart";
-import "formula.dart";
-import "markdown.dart";
 
 /// A formula as it pastes: a picture, at the size it is drawn.
 typedef PastedFormula = ({Uint8List png, double width, double height});
@@ -32,36 +30,3 @@ String formulaHtml(String written, PastedFormula? picture) => picture == null
           'alt="${escapeHtmlAttribute(written)}" '
           'width="${picture.width.round()}" height="${picture.height.round()}" '
           'style="vertical-align: middle">';
-
-/// Every formula in [markdown] typeset by [renderer] in black, by its TeX
-/// as written: the pictures a copy pastes where no screen has drawn them.
-/// One that cannot be typeset is left out.
-Future<Map<String, PastedFormula>> formulaPicturesOf(
-  String markdown,
-  FormulaRenderer renderer,
-) async {
-  final out = <String, PastedFormula>{};
-  await Future.wait([
-    for (final MapEntry(key: written, value: (:tex, :display))
-        in MarkdownDocument.parse(markdown).formulas.entries)
-      Future.sync(
-        () => renderer.render(
-          tex,
-          FormulaStyle(
-            display: display,
-            fontSize: display ? 18 : 16,
-            argb: 0xFF000000,
-          ),
-        ),
-      ).then((image) {
-        if (image.error == null) {
-          out[written] = (
-            png: image.png,
-            width: image.width,
-            height: image.height,
-          );
-        }
-      }, onError: (_) {}),
-  ]);
-  return out;
-}

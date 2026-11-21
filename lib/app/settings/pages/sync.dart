@@ -128,15 +128,11 @@ final syncSettings = [
     weight: 0,
     title: "Pair a new device",
     hint: UiHint.row,
-    build: (c) {
-      final scanner = c.ref.read(settingsHandOffProvider).scanCode;
-      return PairingController(
-        c.spec,
-        flow: c.ref.watch(pairingFlowProvider),
-        activity: c.ref.watch(pairingActivityProvider),
-        scanner: isPhone ? scanner : null,
-      );
-    },
+    build: (c) => PairingController(
+      c.spec,
+      flow: c.ref.watch(pairingFlowProvider),
+      activity: c.ref.watch(pairingActivityProvider),
+    ),
   ),
   SettingSpec(
     id: "pairedDevices",
@@ -170,11 +166,7 @@ final syncSettings = [
           },
           actions: [
             if (handOff.pairedDevice != null)
-              ItemAction(
-                "open",
-                "Details…",
-                handsOff: !handOff.pairedDeviceInSettings,
-              ),
+              const ItemAction("open", "Details…"),
             if (peer.status == PeerStatus.online)
               const ItemAction("disconnect", "Disconnect")
             else

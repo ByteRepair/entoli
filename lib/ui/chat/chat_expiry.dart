@@ -9,8 +9,7 @@ import "../widgets/dialogs.dart";
 
 /// A temporary chat whose window has passed is offered a choice between
 /// keeping it — its TTL turned off — and deleting it, asked over [context].
-/// The chat page asks once per open, and so does the native shell's open
-/// chat, which has no page building to ask from.
+/// The chat page asks once per open.
 Future<void> checkChatExpiry(
   BuildContext context,
   String chatId,

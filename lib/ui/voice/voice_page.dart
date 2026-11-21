@@ -7,9 +7,7 @@ import "../../providers.dart";
 import "../../app/chat_controller.dart";
 import "../chat/widgets/turn_surface.dart";
 import "../settings/settings_category.dart";
-import "../app_chrome.dart";
 import "../widgets/dialogs.dart";
-import "../widgets/native_surfaces.dart";
 import "../widgets/nav_drawer.dart";
 import "transcript.dart";
 import "../../app/turn_surface.dart";
@@ -64,10 +62,6 @@ Future<bool> _haveModels(BuildContext context, WidgetRef ref) async {
 }
 
 Future<void> _push(BuildContext context, String? chatId, {ChatMeta? meta}) {
-  if (nativeSurfacesOf(context) case final native?) {
-    native.openVoice(chatId, meta);
-    return Future.value();
-  }
   return Navigator.of(context).push(
     MaterialPageRoute(
       builder: (_) => VoicePage(chatId: chatId, meta: meta),
@@ -117,20 +111,6 @@ class _VoicePageState extends ConsumerState<VoicePage> {
     // The session and nothing else: what the chat is doing changes sixty times
     // a second while a reply streams, and none of it reaches this page.
     final voice = ref.watch(voiceControllerProvider(widget.chatId));
-
-    // Where the frontend draws voice mode itself, this route stays, so
-    // leaving is still popping it and the session still lives as long as
-    // the page.
-    if (ref
-            .watch(appChromeProvider)
-            .voice(
-              voice: voice,
-              controller: _voice,
-              onDone: () => Navigator.of(context).maybePop(),
-            )
-        case final drawn?) {
-      return drawn;
-    }
 
     return Scaffold(
       // Nothing in the actions: the bar's own back arrow already pops this

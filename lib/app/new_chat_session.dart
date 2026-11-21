@@ -12,8 +12,7 @@ import "settings/spec.dart" show SettingReader;
 
 /// The new-chat screen apart from how it is drawn: its composer, the
 /// settings the chat it makes will run under, whether one is being made, and
-/// how the first message makes it. One for the app while the screen is up,
-/// so the Flutter page and the native shell drive the same draft.
+/// how the first message makes it. One for the app while the screen is up.
 class NewChatSession {
   NewChatSession(this._ref) {
     text = _ref.read(chatSessionHostProvider).newText();

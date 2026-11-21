@@ -179,7 +179,7 @@ class AppMenu {
   final List<List<AppItem>> groups;
 }
 
-/// The menu bar, as data: the one layout both frontends show. The app's
+/// The menu bar, as data. The app's
 /// menu is titled with the app's name by the platform whatever this says.
 const List<AppMenu> appMenus = [
   AppMenu("Entoli", MenuRole.app, [

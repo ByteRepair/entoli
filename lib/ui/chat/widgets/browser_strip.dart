@@ -9,12 +9,11 @@ import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../widgets/anchored_menu.dart";
-import "../../widgets/native_surfaces.dart";
 import "../../../core/log.dart";
 import "../../../domain/agent_browser.dart";
 import "../../../providers.dart";
 import "browser_input.dart";
-import "../../../app/running.dart" show OpensBrowser, browserTabOf;
+import "../../../app/running.dart" show browserTabOf;
 
 /// The chat's browser tab and the card that watches it, where there is one to
 /// show.
@@ -28,28 +27,19 @@ import "../../../app/running.dart" show OpensBrowser, browserTabOf;
   return (tab: tab, open: (context) => openBrowserTab(context, browser, tab));
 }
 
-/// [tab]'s live view: the native shell's where it is up, else the card.
+/// [tab]'s live view, in a card over the chat.
 void openBrowserTab(
   BuildContext context,
   AgentBrowser browser,
   BrowserTab tab,
-) {
-  final at = OpensBrowser(browser, tab);
-  if (nativeSurfacesOf(context) case final native?) {
-    return native.openBrowser(tab, onQuit: browser.close, window: at.window);
-  }
-  _openCard(context, browser, tab);
-}
-
-void _openCard(BuildContext context, AgentBrowser browser, BrowserTab tab) =>
-    showDialog<void>(
-      context: context,
-      builder: (_) => BrowserCard(
-        tab: tab,
-        onQuit: browser.close,
-        window: !browser.inApp || !tab.trustedInput,
-      ),
-    );
+) => showDialog<void>(
+  context: context,
+  builder: (_) => BrowserCard(
+    tab: tab,
+    onQuit: browser.close,
+    window: !browser.inApp || !tab.trustedInput,
+  ),
+);
 
 /// What the chat's browser is waiting on the user for, across the whole bar
 /// above the pills: a file to upload, a sign-in, or the agent's own words for

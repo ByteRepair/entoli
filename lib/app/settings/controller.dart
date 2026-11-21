@@ -385,7 +385,6 @@ final class KeyValuesController extends SettingController {
     super.spec, {
     required this.entries,
     required Future<void> Function(Map<String, String> entries) onSet,
-    this.masked = true,
     super.title,
     super.description,
     super.footnote,
@@ -395,9 +394,6 @@ final class KeyValuesController extends SettingController {
   }) : _write = onSet;
 
   final Map<String, String> entries;
-
-  /// Whether a value is shown as dots: they are mostly keys.
-  final bool masked;
 
   final Future<void> Function(Map<String, String>) _write;
 
@@ -1057,7 +1053,6 @@ class ItemAction {
     this.enabled = true,
     this.destructive = false,
     this.confirm,
-    this.handsOff = false,
     this.kind = ItemActionKind.run,
   });
 
@@ -1069,10 +1064,6 @@ class ItemAction {
   /// Whether the list runs it, or the frontend does it with a picker of its
   /// own and hands the list what was picked.
   final ItemActionKind kind;
-
-  /// Whether it opens a page of the Flutter app's, which a frontend drawing
-  /// the settings itself steps aside for.
-  final bool handsOff;
 
   /// What it asks first; null runs it straight away.
   final SettingConfirm? confirm;
@@ -1560,15 +1551,14 @@ class InfoRow {
   final TextPage? opens;
 }
 
-/// Pairing another device, through [flow], which a frontend's own screens
-/// drive step by step; [activity] is the pairing in flight as it stood when
+/// Pairing another device, through [flow], which the pairing screens drive
+/// step by step; [activity] is the pairing in flight as it stood when
 /// this was built.
 final class PairingController extends SettingController {
   PairingController(
     super.spec, {
     required this.flow,
     required this.activity,
-    this.scanner,
     super.title,
     super.description,
     super.footnote,
@@ -1581,19 +1571,6 @@ final class PairingController extends SettingController {
 
   /// The pairing in flight, or null.
   final PairingActivity? activity;
-
-  /// The camera page, answering the code it read: a phone's, the device
-  /// pointed at a code.
-  final Future<String?> Function()? scanner;
-
-  bool get canScan => scanner != null;
-
-  /// Reads a code another screen shows and pairs with it.
-  Future<String?> scan() async {
-    final code = await scanner?.call();
-    if (code == null || code.isEmpty) return null;
-    return flow.join(code);
-  }
 }
 
 /// Another page of settings, opened from a row on this one.

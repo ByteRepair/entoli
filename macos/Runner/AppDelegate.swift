@@ -1,7 +1,6 @@
 import Cocoa
 import FlutterMacOS
 import SwiftUI
-import entoli_glass
 import entoli_menu
 
 /// The process's one fork in the road, before anything of AppKit loads. A
@@ -25,24 +24,63 @@ enum Launch {
 }
 
 /// The app, as SwiftUI's own template has one: its one window, whose content
-/// is the frontend the core picked, and the app's menus. The Flutter engine
+/// is the Flutter view, and the app's menus. The Flutter engine
 /// is the delegate's, started before the window is asked for.
 struct EntoliApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
   var body: some Scene {
     Window("Entoli", id: "main") {
-      FrontendView(flutter: delegate.flutter)
-        .background(SettingsWindowOpener())
+      FlutterPane(controller: delegate.flutter)
     }
     .defaultSize(width: 1100, height: 760)
     .windowToolbarStyle(.unified)
     .commands { AppCommands() }
-    // The settings, as the platform's own window, built from what Dart sends.
-    // Its menu item is `AppCommands`' own: replacing `.appSettings` does not
-    // take the scene's away.
-    Settings { SettingsWindow() }
-      .commandsRemoved()
+  }
+}
+
+/// The Flutter view controller inside SwiftUI. Held by a container rather
+/// than handed to SwiftUI: the window reopened after a close during a turn
+/// makes a new container, and the one Flutter controller can have one parent
+/// at a time, so each container takes it as it appears.
+struct FlutterPane: NSViewControllerRepresentable {
+  let controller: NSViewController
+
+  func makeNSViewController(context: Context) -> FlutterContainer {
+    FlutterContainer(flutter: controller)
+  }
+
+  func updateNSViewController(_ container: FlutterContainer, context: Context) {}
+}
+
+final class FlutterContainer: NSViewController {
+  private let flutter: NSViewController
+
+  init(flutter: NSViewController) {
+    self.flutter = flutter
+    super.init(nibName: nil, bundle: nil)
+  }
+
+  required init?(coder: NSCoder) { fatalError("not from a nib") }
+
+  override func loadView() {
+    view = NSView()
+    adopt()
+  }
+
+  override func viewWillAppear() {
+    super.viewWillAppear()
+    adopt()
+  }
+
+  private func adopt() {
+    guard flutter.parent !== self else { return }
+    flutter.view.removeFromSuperview()
+    flutter.removeFromParent()
+    addChild(flutter)
+    flutter.view.frame = view.bounds
+    flutter.view.autoresizingMask = [.width, .height]
+    view.addSubview(flutter.view)
   }
 }
 
@@ -152,7 +190,7 @@ final class AppDelegate: FlutterAppDelegate {
   /// the app stays, windowless — the Dock says it is running in the
   /// background — and goes unwatched, so the turn's end quits it unless
   /// someone comes back first. Asked here rather than of the window's close,
-  /// since the native shell closes the window without `performClose`.
+  /// since SwiftUI closes the window without `performClose`.
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     guard TurnHold.isRunning else { return true }
     Self.watched = false

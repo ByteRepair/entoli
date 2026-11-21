@@ -91,7 +91,6 @@ class AppSettings {
     int? responseLength,
     bool? licenceAccepted,
     bool? autoUpdate,
-    bool? liquidGlass,
     String? agentBrowser,
     bool? agentBrowserVisible,
     BrowserApproval? agentBrowserApproval,
@@ -165,7 +164,6 @@ class AppSettings {
       ..set(SettingKeys.responseLength, responseLength)
       ..set(SettingKeys.licenceAccepted, licenceAccepted)
       ..set(SettingKeys.autoUpdate, autoUpdate)
-      ..set(SettingKeys.liquidGlass, liquidGlass)
       ..set(SettingKeys.agentBrowser, agentBrowser)
       ..set(SettingKeys.agentBrowserVisible, agentBrowserVisible)
       ..set(SettingKeys.agentBrowserApproval, agentBrowserApproval)
@@ -420,9 +418,6 @@ class AppSettings {
 
   bool get autoUpdate => doc.of(SettingKeys.autoUpdate);
   set autoUpdate(bool value) => doc.set(SettingKeys.autoUpdate, value);
-
-  bool get liquidGlass => doc.of(SettingKeys.liquidGlass);
-  set liquidGlass(bool value) => doc.set(SettingKeys.liquidGlass, value);
 
   String? get agentBrowser => doc.read(SettingKeys.agentBrowser);
   set agentBrowser(String? value) => doc.set(SettingKeys.agentBrowser, value);

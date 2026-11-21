@@ -1,8 +1,7 @@
 import "app_items.dart";
 
 /// The menu bar, where the platform has one: macOS's, and iPadOS's (whose
-/// keys an iPhone answers). Shown once at launch whichever frontend is on
-/// screen; the frontend on screen is what answers a pick.
+/// keys an iPhone answers). Shown once at launch.
 abstract interface class AppMenus {
   /// Whether this platform has a menu bar, which then holds the keys of
   /// every item in it.

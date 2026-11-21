@@ -752,11 +752,11 @@ setup runs before any — so `IshWorker` makes it before every init.
 channel, `ScreenHold` in the Runner): iOS gives the app no way to run
 locked, and a locked phone suspends the guest's download with it.
 
-## The native shell
+## The SwiftUI host
 
 **The Runner is a SwiftUI app**, as Xcode's own template makes one:
 `EntoliApp` (`AppDelegate.swift`) is the `@main` `App`, its `WindowGroup`
-showing `FrontendView` from `entoli_glass` and its `.commands` the menu bar
+showing the Flutter view (`FlutterPane`) and its `.commands` the menu bar
 (`AppCommands`, see "The menu bar"). The delegate, through
 `@UIApplicationDelegateAdaptor`, is still a `FlutterAppDelegate` — `app_links`
 and `record` hear the app's events through it — and owns the one
@@ -764,48 +764,14 @@ and `record` hear the app's events through it — and owns the one
 plugins, every channel of the Runner's, and the notification delegate before
 launch finishes. Scene URLs come to SwiftUI, so `.onOpenURL` and
 `.onContinueUserActivity` hand them to the delegate for the plugins. There is
-no storyboard and no scene delegate.
-
-**The Flutter view goes in one place per launch.** `FrontendView` shows
-only the launch colour until Dart says which frontend the core picked
-(`shell(on:)`, before `runApp`), then Flutter's view alone or the shell around
-it. The shell keeps its sidebar, title bar and toolbar out of the way until
-the app proper is up — its first window snapshot, which `ShellBridge` sends
-past the welcome tour and first-run setup — so the tour stands alone and
-nothing bypasses it. The launch screen and the view's background are
-`systemBackground`, so a dark device never flashes white.
+no storyboard and no scene delegate. The launch screen and the view's
+background are `systemBackground`, so a dark device never flashes white.
 
 The app is iOS 18 and macOS 15, the plugins' packages and the Runners'
-targets alike. iOS 18 runs on every iPhone 17 did, so the floor costs no
-device, and it is what the native UI is written for: the UIKit recognizers
-under the drawer and the pulled glass, `MeshGradient`, `onGeometryChange`,
-`presentationSizing`, with no branch for an older system — only Liquid
-Glass, which is 26's, is asked for. The Runner's targets say 18.0 outright
-rather than "the recommended version": Flutter writes its generated plugin
-package's platform from the targets', and the recommended one resolved to
-15, which an iOS 18 package refuses.
-
-An iPhone is a drawer rather than the split view (`Drawer.swift`), which
-starts on the detail (`compactColumn`), the new-chat screen being nothing
-selected rather than the list; the chat's bar leads with the shell's own
-sidebar button, a swipe slides the chat off the list under the finger, and
-a pick from the list slides back to the detail. The sidebar's snapshot is
-still sent from a provider's listener rather than a build (see "The bridge"
-in `lib/ui/AGENTS.md`), which an engine paused under the split view's list
-first made necessary. The app's pages — Settings, Profile,
-Marketplace — are a menu on the list's bar, the menu bar being iPadOS's and
-not there without a pointer. A Flutter page over the chat hides the native
-navigation bar, the page having its own. The keyboard reaches the native
-composer through the safe area, which carries it above the keys; the insets
-Dart is told reach over it with the composer, and Dart takes Flutter's own
-view insets out of them (see "The layout" in `lib/ui/AGENTS.md`). The
-simulator hides all of this behind a hardware keyboard: the on-screen one
-has to be shown to see it. The edge swipe to the list needs iOS 18's
-`UIGestureRecognizerRepresentable`, the Flutter view's touches being UIKit's;
-17 has the button alone. The appearance is
-the window's `overrideUserInterfaceStyle`, which a popover and a sheet
-presented from it take. iPad is the split view uncollapsed, and has had less
-looking at than either.
+targets alike. The Runner's targets say 18.0 outright rather than "the
+recommended version": Flutter writes its generated plugin package's platform
+from the targets', and the recommended one resolved to 15, which an iOS 18
+package refuses.
 
 ## The menu bar
 

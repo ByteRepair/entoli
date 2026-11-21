@@ -82,7 +82,7 @@ final class CliFailed extends CliAccountStage {
   bool get signingIn => true;
 }
 
-/// [config]'s program and its account, as both frontends draw it: whether it
+/// [config]'s program and its account: whether it
 /// is signed in, and a sign-in run through to the end — the program installed
 /// where Entoli has no copy, its own sign-in started, the page it prints
 /// named, a code pasted back.
