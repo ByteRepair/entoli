@@ -36,6 +36,7 @@
 		F01CE0000000000000B00002 /* WorkAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000B00012 /* WorkAttributes.swift */; };
 		F01CE0000000000000B00003 /* WorkAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000B00012 /* WorkAttributes.swift */; };
 		F01CE0000000000000B00004 /* WorkActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000B00014 /* WorkActivityWidget.swift */; };
+		F01CE0000000000000B00006 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000B00016 /* Assets.xcassets */; };
 		F01CE0000000000000B00005 /* WorkActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F01CE0000000000000B00015 /* WorkActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -129,6 +130,7 @@
 		F01CE0000000000000B00013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F01CE0000000000000B00014 /* WorkActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkActivityWidget.swift; sourceTree = "<group>"; };
 		F01CE0000000000000B00015 /* WorkActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WorkActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		F01CE0000000000000B00016 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F01CE0000000000000B00017 /* WorkActivity.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = WorkActivity.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -248,6 +250,7 @@
 			children = (
 				F01CE0000000000000B00014 /* WorkActivityWidget.swift */,
 				F01CE0000000000000B00012 /* WorkAttributes.swift */,
+				F01CE0000000000000B00016 /* Assets.xcassets */,
 				F01CE0000000000000B00013 /* Info.plist */,
 				F01CE0000000000000B00017 /* WorkActivity.xcconfig */,
 			);
@@ -322,6 +325,7 @@
 			buildPhases = (
 				F01CE0000000000000B00026 /* Sources */,
 				F01CE0000000000000B00027 /* Frameworks */,
+				F01CE0000000000000B0002C /* Resources */,
 			);
 			buildRules = (
 			);
@@ -399,6 +403,14 @@
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				E00000001AAAAAAAAAAAAAAAA /* entoli.icon in Resources */,
 				E00000003AAAAAAAAAAAAAAAA /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F01CE0000000000000B0002C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F01CE0000000000000B00006 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

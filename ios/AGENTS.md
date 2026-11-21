@@ -780,8 +780,11 @@ compiled into both targets, as `WorkspaceTree.swift` is. Stop is a
 `LiveActivityIntent`, which iOS performs in the app's process: it posts a
 notification `WorkHold` forwards as `stopRequested("turns")`, the path
 Android's Stop takes. The system draws the continued task's own progress too,
-so a running turn shows twice; the activity is the one with Stop. The wording
-is Swift's, the port carrying a count, as Android's is Kotlin's.
+so a running turn shows twice; the activity is the one with Stop. It reads as
+Android's turn notification does ("Running 2 turns"), worded in Swift since the
+port carries a count. The compiled app icon is out of an extension's reach, so
+its foreground layer is linked into the extension's catalog and drawn on the
+icon's fill.
 
 The task asks for no GPU: background GPU wants the
 `continued-processing.gpu` entitlement, so an MLX turn still stops off

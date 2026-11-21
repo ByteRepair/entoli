@@ -10,13 +10,13 @@ struct WorkAttributes: ActivityAttributes {
     var turns: Int
     var settingUp: Bool
 
-    /// The wording lives here rather than in Dart, the port carrying a count,
-    /// as Android's notification words it in Kotlin.
+    /// Android's notification text (`AgentService.kt`), worded here rather
+    /// than in Dart since the port carries a count.
     var summary: String {
       switch turns {
       case 0: settingUp ? "Setting up tools" : "Finishing"
-      case 1: "Working on a chat"
-      default: "Working on \(turns) chats"
+      case 1: "Running a turn"
+      default: "Running \(turns) turns"
       }
     }
   }
