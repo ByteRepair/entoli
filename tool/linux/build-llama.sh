@@ -139,7 +139,8 @@ echo "==> llama.cpp $LLAMA_CPP_VERSION"
       -DLLAMA_BUILD_TESTS=OFF \
       -DLLAMA_BUILD_EXAMPLES=OFF \
       -DLLAMA_BUILD_APP=OFF \
-      -DLLAMA_BUILD_UI=OFF
+      -DLLAMA_BUILD_UI=OFF \
+      -DLLAMA_USE_PREBUILT_UI=OFF
     cmake --build "$bdir" -j"$jobs" --target llama-server >/dev/null
     echo "$stamp" >"$bdir/.entoli-stamp"
   fi

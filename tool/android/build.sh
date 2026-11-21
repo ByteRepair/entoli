@@ -250,10 +250,12 @@ else
       -DLLAMA_BUILD_TESTS=OFF
       -DLLAMA_BUILD_EXAMPLES=OFF
       -DLLAMA_BUILD_APP=OFF
-      # Nothing here opens the server in a browser, and building it wants a host
-      # compiler and a download from HuggingFace — two things a build of this
-      # should not need.
+      # Nothing here opens the server in a browser. Both options are needed:
+      # BUILD_UI only stops building it from source, while USE_PREBUILT_UI
+      # still downloads it from a HuggingFace bucket whose contents change
+      # under the pinned version and then fail llama.cpp's own asset check.
       -DLLAMA_BUILD_UI=OFF
+      -DLLAMA_USE_PREBUILT_UI=OFF
       -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384"
       -DCMAKE_EXE_LINKER_FLAGS="-Wl,-z,max-page-size=16384"
     )
