@@ -151,28 +151,44 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   /// build resolves the field's decoration and the buttons either side of
   /// it, so it follows the model's shape and leaves Send's flips to the
   /// buttons' own builders.
-  late final ComposerModel _model =
-      (widget.model ??
-            ComposerModel(
-              widget.controller,
-              pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
-            ))
-        ..addListener(_reshaped);
-  late final Listenable _sendState = Listenable.merge([
-    _model.canSend,
-    _model.queues,
-  ]);
+  late ComposerModel _model;
+  late Listenable _sendState;
+
+  /// [Composer.model] where given — a chat's session owns it, and the page
+  /// keeps this state across a switch to another chat, so it is followed
+  /// rather than held — or one of this state's own.
+  void _adopt() {
+    _model =
+        (widget.model ??
+              ComposerModel(
+                widget.controller,
+                pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
+              ))
+          ..addListener(_reshaped);
+    _sendState = Listenable.merge([_model.canSend, _model.queues]);
+  }
+
+  void _release(Composer from) {
+    _model.removeListener(_reshaped);
+    if (from.model == null) _model.dispose();
+  }
 
   @override
   void initState() {
     super.initState();
+    _adopt();
     _configure();
   }
 
   @override
   void didUpdateWidget(Composer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.model == null) _model.field = widget.controller;
+    if (widget.model != oldWidget.model) {
+      _release(oldWidget);
+      _adopt();
+    } else if (widget.model == null) {
+      _model.field = widget.controller;
+    }
     _configure();
   }
 
@@ -180,8 +196,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
 
   @override
   void dispose() {
-    _model.removeListener(_reshaped);
-    if (widget.model == null) _model.dispose();
+    _release(widget);
     _focus.dispose();
     super.dispose();
   }

@@ -10,6 +10,7 @@ IconData iconOf(TranscriptGlyph glyph) => switch (glyph) {
   TranscriptGlyph.edit => Icons.edit_outlined,
   TranscriptGlyph.search => Icons.travel_explore_outlined,
   TranscriptGlyph.web => Icons.language_outlined,
+  TranscriptGlyph.globe => Icons.public,
   TranscriptGlyph.subAgent => Icons.account_tree_outlined,
   TranscriptGlyph.question => Icons.help_outline,
   TranscriptGlyph.permissionGranted => Icons.gpp_good_outlined,

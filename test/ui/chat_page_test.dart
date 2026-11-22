@@ -1017,6 +1017,31 @@ void main() {
         expect(second, greaterThan(500));
       },
     );
+
+    // The page keeps its state across a switch, and each chat's session
+    // owns its composer's model: back on a chat opened before, the composer
+    // must be that session's, not the one disposed on the way out.
+    testWidgets("sends from a chat switched back to", (tester) async {
+      final (first, second) = await io(tester, () async {
+        final a = await app.repo.createChat(title: "first");
+        final b = await app.repo.createChat(title: "second");
+        return (a.state.id, b.state.id);
+      });
+      final selection = app.container.read(selectedChatIdProvider.notifier);
+      await open(tester, first);
+      selection.select(second);
+      await settleIo(tester);
+      selection.select(first);
+      await settleIo(tester);
+
+      await tester.enterText(find.byType(TextField), "back again");
+      await tester.pump();
+      await tester.tap(find.byTooltip("Send"));
+      await settleIo(tester);
+
+      expect(app.backend.prompts.single.prompt.plainText, "back again");
+      expect(typed(tester), isEmpty);
+    });
   });
 
   group("the chapter rail", () {

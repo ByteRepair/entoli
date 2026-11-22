@@ -18,6 +18,8 @@ String? triggerRefusal(
         ScheduleSource(:final at, repeat: ScheduleRepeat.off)
             when isNew && !at.isAfter(now) =>
           "Pick a time in the future.",
+        TimerSource(:final duration) when duration <= Duration.zero =>
+          "Set a countdown of at least a minute.",
         FileSource(:final paths) when paths.isEmpty =>
           "Name at least one path to watch.",
         FileSource(:final events) when events.isEmpty =>
@@ -151,7 +153,11 @@ class TriggerForm extends SettingForm<Trigger> {
       ),
       "member": trigger?.member ?? "",
       "prompt": trigger?.prompt ?? "",
-      "project": trigger?.project ?? "",
+      // A project deleted since falls back to the default, which is where
+      // the trigger's chat would go now.
+      "project": projects.any((p) => p.$1 == trigger?.project)
+          ? trigger!.project!
+          : "",
       "ttl": trigger?.tempChatTtl?.name ?? "",
     };
   }
@@ -169,6 +175,10 @@ class TriggerForm extends SettingForm<Trigger> {
       events: {
         for (final name in FormMulti.decode(a["events"]))
           ?FileEvent.values.asNameMap()[name],
+      },
+      cooldown: switch (trigger?.source) {
+        FileSource(:final cooldown) => cooldown,
+        _ => const FileSource(paths: []).cooldown,
       },
     ),
     _ => ScheduleSource(

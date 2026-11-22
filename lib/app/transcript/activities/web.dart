@@ -90,7 +90,7 @@ final class WebFetchActivity extends WebActivity {
 
   @override
   (TranscriptGlyph, String) get approval =>
-      (TranscriptGlyph.web, "Fetch this page?");
+      (TranscriptGlyph.globe, "Fetch this page?");
 
   @override
   String get targetArg => "url";

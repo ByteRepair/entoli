@@ -89,5 +89,5 @@ Future<void> deleteChat(
     destructive: true,
   );
   if (!confirmed) return;
-  await ref.read(chatEditsProvider).delete(chat);
+  await ref.read(chatEditsProvider).delete(chat.id);
 }
