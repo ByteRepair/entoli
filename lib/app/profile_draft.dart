@@ -4,6 +4,7 @@ import "dart:io";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:path/path.dart" as p;
 
+import "../core/log.dart";
 import "../core/platform/form_factor.dart";
 import "../domain/documents.dart" show RenameWriter;
 import "../domain/profile.dart";
@@ -125,8 +126,9 @@ class ProfileEditor {
     try {
       final file = File(_instructionsPath(project));
       if (file.existsSync()) draft.instructions = await file.readAsString();
-    } catch (_) {
+    } catch (e) {
       // A file that will not read is shown as empty; saving overwrites it.
+      logFailure("profile", "could not read the instructions", e);
     }
     // Linking is by path, which only a desktop's picker hands back: a
     // phone's gives a copy.
