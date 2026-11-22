@@ -12,11 +12,13 @@ import "data_settings.dart";
 import "general_settings.dart";
 import "llm_settings.dart";
 import "memory_settings.dart";
-import "schema_view.dart";
+import "on_device_settings.dart";
+import "provider_settings.dart";
 import "settings_category.dart";
 import "skills_settings.dart";
 import "sync_settings.dart";
 import "terminal_settings.dart";
+import "trigger_settings.dart";
 import "voice_settings.dart";
 
 /// What [category] draws, in either of Settings' layouts.
@@ -47,7 +49,18 @@ Widget settingsCategoryBody(SettingsCategory category, {Key? key}) =>
       SettingsCategory.skills => SkillsSettings(key: key),
       SettingsCategory.agents => AgentsSettings(key: key),
       SettingsCategory.sync => SyncSettings(key: key),
-      _ => ListView(key: key, children: [SchemaSections(category.page)]),
+      SettingsCategory.providers => ListView(
+        key: key,
+        children: const [ProvidersSection()],
+      ),
+      SettingsCategory.onDevice => ListView(
+        key: key,
+        children: const [OnDeviceSection()],
+      ),
+      SettingsCategory.triggers => ListView(
+        key: key,
+        children: const [TriggersSection()],
+      ),
     };
 
 /// Whether [category] may not be left now: Byte Repair while its setup

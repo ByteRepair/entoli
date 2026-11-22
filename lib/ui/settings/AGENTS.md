@@ -153,23 +153,25 @@ plan someone pays for answers through (`welcomeProviders`), then Local Model
 and Advanced. A service is connected as its kind is — a CLI by `connectCli`,
 installed if Entoli has no copy of it, which is the one place a program is
 installed (no first-run step does it ahead of time), and signed in if it is
-not (`CliSignInAppPage` over a `CliAccount`: the program's own sign-in run,
-the page it prints opened from a link on it, a code the page shows pasted
-back), an API in the
+not (`showCliSignIn`, reached through the `cliSignIn` hand-off: a
+`CliSignInDialog` over a `CliAccount` of its own, the program's own sign-in
+run, the page it prints opened from a link on it, a code the page shows
+pasted back) — `connectCli` itself lives in `app/settings/cli_account.dart`
+and is handed the sign-in to run, so any frontend can call it — an API in the
 provider form started on its preset
-(`providerForm` and `saveProvider` beside the Providers page's spec) — and
+(`providerForm` and `saveProvider` in `app/settings/pages/providers.dart`) — and
 adopted, answering new
 chats, titles and the classifier at its own defaults; connecting one already
 configured adopts that entry rather than adding a second. The first
 on-device model downloaded fills those roles where nothing answers yet
 (`ModelDownloads.landed`), so Local Model needs no picking either.
-The provider form is the way to sign in outside the tour: a CLI's entry asks
-`FormSignIn`: whether the account in the entry's own folder is signed in,
+The provider dialog is the way to sign in outside the tour: a CLI's entry
+shows `CliAccountSection`: whether the account in the entry's own folder is signed in,
 Sign in where it is not, and Sign in again where it is, which signs the
 program out first so the sign-in is a new one, perhaps another account. The
 steps are `CliAccount` (`app/settings/cli_account.dart`), which every place
-that signs a program in draws: the form as `CliAccountSection`, and the
-tour's connect as `CliSignInAppPage`.
+that signs a program in draws through `CliSignInDialog`, which keeps the app
+alive while it is open and closes when the program exits.
 The default and title model pickers are drawn only where models are
 reachable and nothing answers new chats — a setup from before this — which is the one case Next
 would otherwise wait on with nothing to press. The extras page is optional throughout: a row into each extra, a row
@@ -306,22 +308,27 @@ recommended-provider card) goes to the secret store, under the provider's id,
 and the row says "Connected" rather than showing any of it — "Needs a key"
 where neither a stored key nor its named variable is there, "On this computer"
 for a local server, and an endpoint typed in by hand carries its address in
-front. Adding one is `ProviderForm` (`lib/app/settings/forms/provider.dart`),
-which opens on the presets alone, grouped as paid,
-free at a cost to privacy and on this machine, each with what it does with
-the prompts, and a free tier is agreed to (`FormConsent`) before anything
-else is asked. A preset's form is written for someone who has never seen a
-base URL: what a key is and a link to make one, the key field as "Access
-key", and the provider's privacy policy, with the technical fields — name,
-API, base URL, models, the named variable — folded under Advanced
-(`FormFold`); an endpoint typed in by hand opens on those alone. Which is
-which is the preset's `terms`. A typed key is put to the provider's own
-`checkKey` (`keyCheckProvider`) on Save: a no is a `FormRefusal` on the key,
-which the form says there with Save turned into Save anyway, and a provider
-that could not be asked is saved, since no answer is not a no. The form's
-key field is tri-state — typed text stores, an empty field over a stored key
-keeps it, and the explicit remove clears it — because an empty field alone
-cannot say keep from clear once the field no longer echoes what is stored.
+front (`ProvidersSection`, `provider_settings.dart`). Adding one opens
+`pickProviderPreset` (`provider_picker.dart`) on the presets alone, grouped
+as paid, free at a cost to privacy and on this machine, each with what it
+does with the prompts, and a free tier is agreed to in a second dialog
+before anything else is asked. Then `ProviderDialog` ("Connect X" for a
+preset), over a `ProviderEdit` (`lib/app/settings/provider_edit.dart`), which
+holds the entry being edited and builds what is saved: an empty name, base
+URL or models.dev id falls back to the preset's. A preset's dialog is
+written for someone who has never seen a base URL: what a key is and a link
+to make one, the key field as "Access key" and focused, and the provider's
+privacy policy, with the technical fields — name, API, base URL, models, the
+named variable — folded under Advanced; an endpoint typed in by hand opens
+on those alone. Which is which is the preset's `terms`. A typed key is put
+to the provider's own `checkKey` (`checkProviderKey` over
+`keyCheckProvider`) on Save: a no keeps the dialog open, said on the key,
+with Save turned into Save anyway, and a provider that could not be asked
+is saved, since no answer is not a no. The key is tri-state — typed text
+stores, an empty field over a stored key keeps it, and "Remove saved key"
+clears it — because an empty field alone cannot say keep from clear once
+the field no longer echoes what is stored. `editProvider` is the one way
+in, for the page and for a caller connecting a service by name (`adopt`).
 The TURN password is in the store the same way; the TURN username is not a
 secret and rides in `settings.json` beside the URL.
 **LLMs** is what a new chat is answered by and what names it, and how long
@@ -403,24 +410,28 @@ so" in `windows/AGENTS.md`); phones; and a Linux guest.
 
 ## The trigger editor
 
-`TriggerForm` (`lib/app/settings/forms/trigger.dart`), a form long enough to
-be a page: the name, the prompt, and one row of
+`TriggerEditorPage` (`trigger_settings.dart`), over a `TriggerDraft`
+(`lib/app/settings/triggers.dart`), which holds what is edited, says why it
+cannot be saved (`triggerRefusal`, shown on the page with Save off) and
+builds what is saved (`savedTrigger`): the name, the prompt, and one row of
 "When" — a segmented choice over the three sources, each kind bringing its
 own fields under it: a schedule its date and time and repeat, a timer its
-countdown minutes, a file watch its paths and its kinds of change. Beside
+countdown minutes, a file watch its paths, added one at a time, and its kinds
+of change. Beside
 them "Address to": the member the fire names, from the trigger's project's
 library, or nothing for the whole room — one field for both targets, since
 addressing is not a property of where the fire lands. A stored member the
 library has since lost keeps its place in the list marked `(deleted)` with
 the line saying a fire will reach the whole room, and is kept or exchanged
-rather than silently cleared. Each kind's fields are its own answers, so
-switching kinds does not carry one's data into another's; a `trigger_set`
-the agent registered is shown and not saved: the switch and the delete on
-its row are the whole of what is editable, since the prompt is its
+rather than silently cleared. Each kind keeps its own answers while another
+is showing, so switching to Countdown and back loses nothing; a project
+deleted since is saved as the default. A `trigger_set` the agent registered
+is shown and not saved: the page has no Save, and the list's switch and the
+bar's delete are the whole of what is editable, since the prompt is its
 conversation's and an edit would be a conversation rewrite from a settings
 page.
 
-**The prompt is a `FormPrompt`**, which Flutter draws as `PromptField`: what
+**The prompt is a `PromptField`**: what
 the trigger will send, rendered the way the chat will render it, over the
 button that opens its page, shared with an agent's system prompt and the
 instructions (see "Shared UI" in `lib/ui/widgets/AGENTS.md`). A trigger is
@@ -428,8 +439,8 @@ written once and read many times afterwards, so the page it is read on shows
 the message. What is typed in it is `CompletionField`, completing `/skills`
 and `@agents` from the trigger's project's library, since a trigger's prompt
 is dispatched through it. Leaving the page with something typed asks first
-(`SettingForm.discard`, drawn under `DiscardGuard`), on the prompt page and on
-the form under it alike.
+(`TriggerDraft.edited`, under `DiscardGuard`), on the prompt page and on the
+editor under it alike.
 
 **Temporary chat names its Default** as the chat settings page's combobox
 does: the new chat a trigger makes is a chat, so Default is the project's or

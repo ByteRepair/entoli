@@ -1,12 +1,10 @@
 import "../../../data/builtin/llm/providers/presets.dart";
 import "../../../domain/llm_provider.dart";
 import "../controller.dart";
+import "../provider_edit.dart";
 import "../spec.dart";
 
-/// What a provider form makes: the endpoint, and what becomes of its key —
-/// the text to store, "" to remove the stored one, null to leave it — which
-/// goes to the secret store rather than onto the config.
-typedef ProviderDraft = ({LlmProviderConfig config, String? setKey});
+export "../provider_edit.dart" show ProviderDraft;
 
 /// The answer a new entry's preset holds until one is picked: the form is
 /// then the list of presets and nothing else.
@@ -366,55 +364,22 @@ class ProviderForm extends SettingForm<ProviderDraft> {
   @override
   ProviderDraft build(Map<String, String> a) => _draft(a);
 
-  ProviderDraft _draft(Map<String, String> a) {
-    final preset = _preset(a)?.config;
-    final base = provider ?? preset;
-    final api = _api(a);
-    final name = _name(a);
-    final id = a["id"]!;
-    if (api.isCli) {
-      final command = a["command"]!.trim();
-      final cli = cliPresetOf(api).config;
-      return (
-        config: LlmProviderConfig(
-          id: id,
-          api: api,
-          baseUrl: "",
-          name: name,
-          defaultModelId: base?.defaultModelId ?? cli.defaultModelId,
-          defaultLightModelId:
-              base?.defaultLightModelId ?? cli.defaultLightModelId,
-          customModels: provider?.customModels ?? const [],
-          command: command.isEmpty ? null : command,
-          env: FormEntries.decode(a["env"]),
-        ),
-        // A program holds its own sign-in; whatever was stored stays put.
-        setKey: null,
-      );
-    }
-    final key = a["key"]!.trim();
-    final modelsEndpoint = a["modelsEndpoint"]!.trim();
-    final catalogId = a["catalogId"]!.trim();
-    return (
-      config: LlmProviderConfig(
-        id: id,
-        api: api,
-        baseUrl: _baseUrl(a),
-        name: name,
-        catalogId: catalogId.isEmpty ? base?.catalogId : catalogId,
-        apiKeyEnv: base?.apiKeyEnv,
-        defaultModelId: base?.defaultModelId,
-        defaultLightModelId: base?.defaultLightModelId,
-        customModels: provider?.customModels ?? const [],
-        modelsEndpoint: modelsEndpoint.isEmpty ? null : modelsEndpoint,
-      ),
-      setKey: key.isNotEmpty
-          ? key
-          : storedKey == null
-          ? ""
-          : a["keep"] == "keep"
-          ? null
-          : "",
-    );
-  }
+  ProviderDraft _draft(Map<String, String> a) =>
+      (ProviderEdit(
+              provider,
+              preset: _preset(a),
+              id: a["id"]!,
+              nameTaken: nameTaken,
+              storedKey: storedKey,
+            )
+            ..api = _api(a)
+            ..name = a["name"]!
+            ..key = a["key"]!
+            ..removeKey = a["keep"] != "keep"
+            ..baseUrl = a["baseUrl"]!
+            ..modelsEndpoint = a["modelsEndpoint"]!
+            ..catalogId = a["catalogId"]!
+            ..command = a["command"]!
+            ..env = FormEntries.decode(a["env"]))
+          .draft;
 }

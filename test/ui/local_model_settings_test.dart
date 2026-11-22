@@ -247,12 +247,12 @@ void main() {
     });
     await pumpOnDevice(tester);
 
-    await tester.tap(find.text("Unload ${model.name}"));
+    await tester.tap(find.byTooltip("Unload ${model.name}"));
     await settleIo(tester);
 
     expect(app.localRuntime.events.last, "stop ${model.id}");
-    expect(find.text("Unload ${model.name}"), findsNothing);
-    expect(find.text("Unload ${other.name}"), findsOneWidget);
+    expect(find.byTooltip("Unload ${model.name}"), findsNothing);
+    expect(find.byTooltip("Unload ${other.name}"), findsOneWidget);
   });
 
   testWidgets("what is loaded leads the On-device page, with what it takes "
@@ -448,6 +448,37 @@ void main() {
       contains("my-model-q8_0"),
     );
     expect(find.text("My model"), findsOneWidget);
+  });
+
+  testWidgets("a link or checksum that cannot be one says so", (tester) async {
+    app = TestApp.create(localRuntime: FakeLocalRuntime());
+    await pumpOnDevice(tester);
+    await scrollTo(tester, find.text("Add model"));
+    await tester.tap(find.text("Add model"));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, "Link"), "ftp://x");
+    await tester.enterText(find.widgetWithText(TextField, "SHA-256"), "abc");
+    await tester.pump();
+    expect(find.text("A link starting with https://"), findsOneWidget);
+    expect(find.text("64 hexadecimal characters"), findsOneWidget);
+    final download = find.widgetWithText(FilledButton, "Download");
+    expect(tester.widget<FilledButton>(download).onPressed, isNull);
+  });
+
+  testWidgets("with models loaded, Unload all says what it frees", (
+    tester,
+  ) async {
+    app = TestApp.create(
+      localRuntime: FakeLocalRuntime(),
+      localModels: {model.id},
+    );
+    await io(tester, () => app.serveLocal(model.id));
+    await pumpOnDevice(tester);
+
+    expect(find.widgetWithText(TextButton, "Unload all"), findsOneWidget);
+    expect(find.text("Frees what every loaded model holds."), findsOneWidget);
+    expect(find.text("Nothing loaded"), findsNothing);
   });
 
   testWidgets("turning the KV cache off is stored", (tester) async {

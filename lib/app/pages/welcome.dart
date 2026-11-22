@@ -10,6 +10,7 @@ import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../providers.dart";
 import "../selection.dart";
+import "../settings/cli_account.dart" show connectCli;
 import "../settings/controller.dart";
 import "../settings/forms/provider.dart";
 import "../settings/hand_off.dart";
@@ -18,7 +19,6 @@ import "../settings/scope.dart";
 import "../settings/settings.dart";
 import "../settings/spec.dart";
 import "app_page.dart";
-import "cli_sign_in.dart";
 import "marketplace.dart";
 import "setup.dart";
 import "../first_run.dart";
@@ -220,7 +220,8 @@ class WelcomeAppPage extends AppPage {
       ),
       label: "",
       run: () async {
-        await connectCli(app, pages, cli);
+        final signIn = app.read(settingsHandOffProvider).cliSignIn;
+        if (signIn != null) await connectCli(app.read, cli, signIn: signIn);
         return null;
       },
     ),
@@ -413,35 +414,4 @@ class WelcomeAppPage extends AppPage {
       "By the way, if you ever want to talk to me again, just type "
       "/entoli-welcome-party and I'll respond.\n\n"
       "I have a few brief questions for you. What's your name?";
-}
-
-/// Connects [service], Entoli's own copy of its program installed and
-/// signed in where it is not yet, and added once it is; where an entry for
-/// it is already configured, that one adopted rather than a second added.
-Future<void> connectCli(
-  SettingReader app,
-  AppPages pages,
-  CliProvider service,
-) async {
-  final notifier = app.read(appSettingsProvider.notifier);
-  final programs = app.read(cliProgramsProvider);
-  final existing = app
-      .read(appSettingsProvider)
-      .llmProviders
-      .where((p) => p.api == service.config.api && p.command == null)
-      .firstOrNull;
-  // A new entry's id first: its account is kept in a folder named by it.
-  final config = existing ?? service.config.copyWith(id: const Uuid().v4());
-  final page = CliSignInAppPage(config);
-  pages.open(page);
-  if (!await page.done) {
-    // A new entry given up on: its folders under every program go.
-    if (existing == null) {
-      for (final cli in programs) {
-        await cli.withConfig(cli.config.copyWith(id: config.id)).forget();
-      }
-    }
-    return;
-  }
-  await notifier.upsertProvider(config, adopt: true);
 }

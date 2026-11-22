@@ -1,9 +1,6 @@
 import "pages/general.dart";
 import "pages/llms.dart";
-import "pages/on_device.dart";
 import "pages/prompts.dart";
-import "pages/providers.dart";
-import "pages/triggers.dart";
 import "pages/terminal.dart";
 import "schema.dart";
 
@@ -13,18 +10,12 @@ final entoliSettings = SettingsSchema(
     ...generalSections,
     ...llmSections,
     ...terminalSections,
-    ...providerSections,
-    ...onDeviceSections,
-    ...triggerSections,
     ...promptSections,
   ],
   settings: [
     ...generalSettings,
     ...llmSettings,
     ...terminalSettings,
-    ...providerSettings,
-    ...onDeviceSettings,
-    ...triggerSettings,
     ...promptSettings,
   ],
 );
