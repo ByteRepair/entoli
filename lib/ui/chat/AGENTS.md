@@ -1213,4 +1213,6 @@ latest. The viewport shrinking — the keyboard coming up — keeps a following
 list at its end rather than leaving the end under the keys. And a touch drag
 toward the older messages drops focus, which takes a soft keyboard down
 (`KeyboardDismissOnScrollBack`); a wheel or a trackpad does not, so a
-desktop's composer keeps its caret.
+desktop's composer keeps its caret. The new-chat screen has no list to drag,
+and iOS's keyboard no key to hide it, so a touch tap or a swipe down in its
+empty space does the same (`KeyboardDismissOnTouch`).

@@ -233,18 +233,20 @@ class _NewChatState extends ConsumerState<_NewChat> {
       ),
       body: _ReadableColumn(
         bottom: _bottomBar(),
-        child: (_starting
+        child: _starting
             ? const Center(child: CircularProgressIndicator())
-            : _EmptyChat(
-                project: at.project,
-                device: at.device,
-                controller: _controller,
-                // The paired devices' badges are the new-chat screen's own — a
-                // chat that exists with nothing said in it yet is mid-turn at
-                // worst, and a list of other devices under its question would
-                // say nothing true about it.
-                showSyncedCards: true,
-              )),
+            : KeyboardDismissOnTouch(
+                child: _EmptyChat(
+                  project: at.project,
+                  device: at.device,
+                  controller: _controller,
+                  // The paired devices' badges are the new-chat screen's own
+                  // — a chat that exists with nothing said in it yet is
+                  // mid-turn at worst, and a list of other devices under its
+                  // question would say nothing true about it.
+                  showSyncedCards: true,
+                ),
+              ),
       ),
     );
   }
