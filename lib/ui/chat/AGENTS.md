@@ -713,9 +713,8 @@ A `present_plan` call is drawn as the plan it put to the user (`PresentPlanUI`):
 every task with whether it is done, each opening to its details as markdown.
 It is not a slim activity label, since the plan is what the turn stopped to
 show. The bar carries a checklist button beside the running-turn spinner for
-as long as the chat has a plan, and it opens the plan's `AppPage`, the same
-list with
-the progress over it.
+as long as the chat has a plan, and it opens `PlanPage` (`plan_page.dart`),
+the same list (`PlanTaskList`) with a progress bar over it.
 
 Both read `PLAN.md` off the chat's workspace through `planProvider`, not off
 the call: the card shows where the work stands now, ticks included. The
@@ -972,22 +971,27 @@ picked, nothing selected is the new-chat screen for that project, its question
 and starters that device's, and the first message asks the device to make the
 chat.
 
-`NewChatSettingsAppPage` (`lib/app/pages/chat_settings.dart`) is the
-settings of a chat that does not exist yet: the model, the approve mode, the
-memory switch and the TTL, which are values and need nothing to hang on.
-Save hands a `ChatMeta` back rather than writing a file, and the new-chat
-session holds it until `createChat` spends it. It edits a copy, so a page
-backed out of leaves the screen with what it had.
+`NewChatSettingsPage` (`chat_settings_page.dart`) is the settings of a chat
+that does not exist yet: the model, the approve mode, the sandbox, the memory
+switch and the TTL, which are values and need nothing to hang on. Save hands
+a `ChatMeta` back rather than writing a file, and the new-chat session holds
+it until `createChat` spends it. Its `ChatSettingsDraft` edits a copy, so a
+page backed out of leaves the screen with what it had.
 
-**A page of its own rather than a mode of `ChatSettingsAppPage`** — the two
-share their fields through `ChatSettingsFields` — and the session's state
-state rather than a provider — both for the same reason. Folded into the chat's
-own page it was five null checks and two `!`s through a page whose subject
-ordinarily exists, which is the shape this change spent its effort removing
-from the repository; and held in a provider the settings outlive the screen,
-staying armed to land on whatever chat is created next, in whatever project.
-The fields are the base both pages extend, so the new chat's adds nothing
-but its Save.
+**A page of its own rather than a mode of `ChatSettingsPage`** — the two
+share their rows through `ChatSettingsFields` — and the session's state
+rather than a provider, both for the same reason. Folded into the chat's own
+page it was null checks through a page whose subject ordinarily exists; and
+held in a provider the settings outlive the screen, staying armed to land on
+whatever chat is created next, in whatever project.
+
+A chat's own page adds what a chat on disk has: its id, its workspace, the
+context (`ContextPage`, a card per participant with one bar of what fills
+its window) and Delete. Delete closes the pages over the chat first, and
+works where the chat has no `state.json` to read. A failed Save says so and
+leaves Save to try again. A mirrored chat's page leaves off what is its home
+device's — the model, the sandbox, the workspace — is not saved while the
+device is away, and is read again when it comes back.
 
 `_EmptyChat` is the body of both empty screens — `_NewChat`'s, and a chat that
 exists with nothing said in it yet, which is what voice mode and a trigger can

@@ -1,17 +1,21 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/app/pages/chat_settings.dart";
+import "package:agent_chat/ui/chat/chat_settings_page.dart";
 import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry;
 import "package:agent_chat/domain/ask.dart";
+import "package:agent_chat/domain/chat_meta.dart";
+import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/view_only_bar.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/selection.dart";
 
+import "../fakes.dart";
 import "../harness.dart";
 
 /// A chat whose home device is somewhere else: its writes go there, and what
@@ -121,7 +125,7 @@ void main() {
 
       await tester.tap(find.text("On the desktop"));
       await settleIo(tester);
-      expect(findPage<ChatSettingsAppPage>(), findsOneWidget);
+      expect(find.byType(ChatSettingsPage), findsOneWidget);
       expect(find.text("This chat lives on Desktop."), findsOneWidget);
       expect(find.text("Context"), findsOneWidget);
       await tester.scrollUntilVisible(
@@ -129,7 +133,7 @@ void main() {
         200,
         scrollable: find
             .descendant(
-              of: findPage<ChatSettingsAppPage>(),
+              of: find.byType(ChatSettingsPage),
               matching: find.byType(Scrollable),
             )
             .first,
@@ -151,6 +155,42 @@ void main() {
       );
       expect(save.onPressed, isNull);
       expect(find.text("Delete Chat"), findsNothing);
+    });
+
+    testWidgets("the settings are read again when the device comes back", (
+      tester,
+    ) async {
+      app = appWith(online: false);
+      await openMirror(tester);
+      await tester.tap(find.text("On the desktop"));
+      await settleIo(tester);
+      expect(find.text(approveModeLabels[ApproveMode.never]!), findsNothing);
+
+      // Changed at home while this device was not hearing it.
+      await io(
+        tester,
+        () =>
+            app.seedChatMeta(chatId, ChatMeta(approveMode: ApproveMode.never)),
+      );
+      (app.container.read(remoteChatsProvider.notifier) as FakeRemoteChats)
+          .set([
+            RemoteChatEntry(
+              chatId: chatId,
+              deviceId: "device-1",
+              deviceName: "Desktop",
+              state: state,
+              online: true,
+            ),
+          ]);
+      await settleIo(tester);
+
+      expect(find.text(approveModeLabels[ApproveMode.never]!), findsOneWidget);
+      expect(
+        tester
+            .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.check))
+            .onPressed,
+        isNotNull,
+      );
     });
 
     testWidgets("offline it is a snapshot: said twice, and nothing to type or "

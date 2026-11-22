@@ -7,7 +7,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 import "package:super_sliver_list/super_sliver_list.dart";
 
-import "package:agent_chat/app/pages/plan.dart";
+import "package:agent_chat/ui/chat/plan_page.dart";
 import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
@@ -1806,10 +1806,10 @@ void main() {
     expect(button, findsOneWidget);
     await tester.tap(button);
     await settleIo(tester);
-    expect(findPage<PlanAppPage>(), findsOneWidget);
+    expect(find.byType(PlanPage), findsOneWidget);
     expect(
       find.descendant(
-        of: findPage<PlanAppPage>(),
+        of: find.byType(PlanPage),
         matching: find.text("1. read the parser"),
       ),
       findsOneWidget,

@@ -141,13 +141,28 @@ class ScopedChoice<T extends Object> extends ConsumerWidget {
     }
     if (_unsettable(scope, setting)) {
       final inherited = scope.inherited(setting) ?? unsetMeans;
-      return InheritableDropdown<T>(
+      final dropdown = InheritableDropdown<T>(
         label: title,
         value: value,
         inherited: inherited == null ? null : options[inherited],
         options: options,
         disabled: disabled,
         onChanged: set,
+      );
+      final description = this.description;
+      if (description == null) return dropdown;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          dropdown,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              description,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
       );
     }
     return LabelledField(

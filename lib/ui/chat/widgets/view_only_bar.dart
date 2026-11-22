@@ -84,3 +84,38 @@ class MirrorStrip extends StatelessWidget {
     );
   }
 }
+
+/// A settings page's line saying whose values it shows: [deviceName]'s, and
+/// while it is away, that nothing changes until it is back.
+class DeviceNotice extends StatelessWidget {
+  const DeviceNotice({
+    super.key,
+    required this.what,
+    required this.deviceName,
+    required this.online,
+  });
+
+  /// What lives there: "chat", "project".
+  final String what;
+  final String deviceName;
+  final bool online;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Text(
+        online
+            ? "This $what lives on $deviceName."
+            : "$deviceName is offline. These settings can be changed once it "
+                  "is back.",
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: online
+              ? theme.colorScheme.onSurfaceVariant
+              : theme.colorScheme.error,
+        ),
+      ),
+    );
+  }
+}

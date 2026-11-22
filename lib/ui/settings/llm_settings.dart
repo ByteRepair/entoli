@@ -119,56 +119,65 @@ class ImageSettings extends ConsumerWidget {
 
 /// The built-in agent's command gate. The classifier travels with the mode
 /// because auto mode is unusable without one.
-class _AgentSection extends ConsumerWidget {
+class _AgentSection extends StatelessWidget {
   const _AgentSection();
 
   @override
+  Widget build(BuildContext context) => const Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SectionHeader(
+        "Agent",
+        description:
+            "The built-in agent, running inside Entoli. It calls the "
+            "model itself and runs its commands in the chat's workspace.",
+      ),
+      ApproveModeChoice(at: _app),
+      ScopedModel(
+        keys: (
+          provider: SettingKeys.classifierProviderId,
+          model: SettingKeys.classifierModelId,
+        ),
+        at: _app,
+        title: "Classifier LLM",
+        nullLabel: "Off",
+        defaultOf: LlmProviderConfig.lightDefaultOf,
+        role: ModelRole.shortAsk,
+        description:
+            "Classifies commands as safe, dangerous, or "
+            "uncertain. Off, auto mode asks for every command.",
+      ),
+    ],
+  );
+}
+
+/// Whether a command waits for the user, at [at]: the app's answer, or a
+/// chat's own.
+class ApproveModeChoice extends ConsumerWidget {
+  const ApproveModeChoice({super.key, required this.at});
+
+  final ScopeAddress at;
+
+  @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scope = scopeOf(ref, _app);
+    final scope = scopeOf(ref, at);
     final noClassifier =
         scope.resolve(SettingKeys.classifierProviderId) == null;
     final auto = scope.resolve(SettingKeys.approveMode) == ApproveMode.auto;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader(
-          "Agent",
-          description:
-              "The built-in agent, running inside Entoli. It calls the "
-              "model itself and runs its commands in the chat's workspace.",
-        ),
-        ScopedChoice(
-          setting: SettingKeys.approveMode,
-          at: _app,
-          title: "Running commands",
-          options: approveModeLabels,
-          disabled: {if (noClassifier) ApproveMode.auto},
-          description: !auto
-              ? null
-              : noClassifier
-              ? "No classifier model set — auto mode will ask for "
-                    "every command."
-              : "The classifier can also refuse a command outright, "
-                    "without asking you. Reads and writes inside the "
-                    "chat's workspace pass; anything past it waits for "
-                    "you. After several escalations in a turn, the rest "
-                    "of the turn asks.",
-        ),
-        const ScopedModel(
-          keys: (
-            provider: SettingKeys.classifierProviderId,
-            model: SettingKeys.classifierModelId,
-          ),
-          at: _app,
-          title: "Classifier LLM",
-          nullLabel: "Off",
-          defaultOf: LlmProviderConfig.lightDefaultOf,
-          role: ModelRole.shortAsk,
-          description:
-              "Classifies commands as safe, dangerous, or "
-              "uncertain. Off, auto mode asks for every command.",
-        ),
-      ],
+    return ScopedChoice(
+      setting: SettingKeys.approveMode,
+      at: at,
+      title: "Running commands",
+      options: approveModeLabels,
+      disabled: {if (noClassifier) ApproveMode.auto},
+      description: !auto
+          ? null
+          : noClassifier
+          ? "No classifier model set — auto mode will ask for every command."
+          : "The classifier can also refuse a command outright, without "
+                "asking you. Reads and writes inside the chat's workspace "
+                "pass; anything past it waits for you. After several "
+                "escalations in a turn, the rest of the turn asks.",
     );
   }
 }

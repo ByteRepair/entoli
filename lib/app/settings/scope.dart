@@ -41,6 +41,26 @@ final class ProjectAddress extends ScopeAddress {
   int get hashCode => Object.hash(ProjectAddress, project, device);
 }
 
+/// A chat's settings as its page holds them until Save: [document] is the
+/// draft's `meta.json`, [project]'s level above it, and [onChange] is told of
+/// each change written to it.
+final class ChatAddress extends ScopeAddress {
+  const ChatAddress(this.document, {this.project, required this.onChange});
+
+  final SettingsDocument document;
+  final String? project;
+  final void Function() onChange;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ChatAddress &&
+      identical(other.document, document) &&
+      other.project == project;
+
+  @override
+  int get hashCode => Object.hash(identityHashCode(document), project);
+}
+
 /// The object that reads and writes a level's values: a controller asks it
 /// what is set here, what would be inherited from above, and writes through
 /// it. A level reads only its own document; what it inherits is its
@@ -181,6 +201,11 @@ SettingsScope scopeAt(SettingReader reader, ScopeAddress address) =>
         reader.read(appSettingsProvider.notifier),
       ),
       final ProjectAddress at => projectScopeAt(reader, at),
+      final ChatAddress at => ChatScope(
+        at.document,
+        projectScopeAt(reader, ProjectAddress(at.project)),
+        onChange: at.onChange,
+      ),
     };
 
 /// [at]'s scope, the app's above it on whichever device it is.

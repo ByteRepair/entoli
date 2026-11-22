@@ -72,13 +72,21 @@ default and title model pickers are widgets (`newChatModelField`,
 The welcome tour is not settings: it is a widget page (`WelcomePage`,
 `welcome_page.dart`), and Settings' Welcome opens it by `welcomeRoute`.
 
-The chat and project settings pages are `AppPage`s (see
-`lib/app/pages/AGENTS.md`): sections of these same controllers over a
-`ChatScope` or a `ProjectScope`, a setting's own spec built at that level
-where the page shows one (`AppPage.shared`), so no page holds a copy. Every row of a level that inherits carries its reset,
-dimmed while nothing of the level's is set, and a choice shows where it
-stands unset (`ChoiceController.inherited`) — the thinking slider at the
-level above's answer.
+The chat and project settings pages are widgets too:
+`ChatSettingsPage` and `NewChatSettingsPage` (`lib/ui/chat/chat_settings_page.dart`)
+and `ProjectSettingsPage` (`lib/ui/sidebar/project_settings_page.dart`). Their
+rows are the same `scoped.dart` widgets at the page's level, and where a row
+is a setting another page draws too — Running commands (`ApproveModeChoice`),
+the sandbox (`SandboxSettings`), the permission rules — it is that page's
+widget given the level, so the rules and the words are said once. A chat's
+level is a `ChatAddress`: its draft's `meta.json` (`ChatSettingsDraft` in
+`lib/app/chat_settings_draft.dart`), written as the page changes it and saved
+whole by Save. What a project's page does beyond its settings — counting and
+deleting it, here or on a paired device, and its work folders — is
+`ProjectEdits` (`lib/app/project_edits.dart`). Every row of a level that
+inherits carries its reset, and a choice shows where it stands unset — the
+thinking slider at the level above's answer. While a paired device is away,
+its project's rows are drawn and do nothing.
 
 ## Setting overrides
 
@@ -385,8 +393,8 @@ moving it would cost a migration, and a path that reaches another machine by
 backup or sync names a folder that is not there, which grants nothing (below).
 
 A folder comes from the platform's picker (`FolderPicker`, `file_selector`'s
-`getDirectoryPath` under it) and is never typed. It is refused, with a snack
-bar, by `refuseFolder` in `lib/domain/work_folders.dart`, the one test any
+`getDirectoryPath` under it) and is never typed. It is refused, with a
+notice, by `refuseFolder` in `lib/domain/work_folders.dart`, the one test any
 grant takes, `add_directory`'s banner included. It refuses a path that is not
 a directory, the root, the home or anything holding it, the app's own data
 tree (the data directory, anything under it, or anything holding it), and
