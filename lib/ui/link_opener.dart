@@ -1,9 +1,11 @@
+import "dart:async";
 import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:url_launcher/url_launcher.dart";
 
 import "../core/log.dart";
+import "../core/platform/artifact_server.dart";
 import "../core/platform/form_factor.dart";
 import "../core/platform/remote_artifact.dart" show RemoteArtifacts;
 import "../data/sync/sync_hub.dart";
@@ -11,8 +13,8 @@ import "../domain/chat_store.dart";
 import "../domain/link_opener.dart";
 import "../domain/sign_in_page.dart";
 import "widgets/dialogs.dart";
-import "../app/pages/web.dart";
-import "app_pages.dart";
+import "widgets/page_bar.dart";
+import "widgets/web_view.dart";
 
 /// Web, mail and phone links alone: anything else, `file:` included, would
 /// hand the OS whatever scheme a model wrote.
@@ -65,7 +67,11 @@ class PlatformLinkOpener implements LinkOpener {
       return;
     }
     if (isAndroid && (url.scheme == "http" || url.scheme == "https")) {
-      openAppPage(context, WebAppPage(url));
+      unawaited(
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute<void>(builder: (_) => _WebViewPage(url: url))),
+      );
       return;
     }
     await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -113,11 +119,22 @@ class PlatformLinkOpener implements LinkOpener {
       return;
     }
     if (!context.mounted) return;
-    openAppPage(
-      context,
-      ArtifactAppPage(dir: dir, entryFile: entryFile, label: title),
-    );
+    _openInApp(context, dir, entryFile, title);
   }
+
+  void _openInApp(
+    BuildContext context,
+    String dir,
+    String entryFile,
+    String? title,
+  ) => unawaited(
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            _ArtifactWebViewPage(dir: dir, entryFile: entryFile, title: title),
+      ),
+    ),
+  );
 
   /// The remote arm, where [chatId] is a mirror: fetch the zip, stage it, and
   /// open it by the same viewer a local artifact takes. False is everything
@@ -150,10 +167,7 @@ class PlatformLinkOpener implements LinkOpener {
       return true;
     }
     if (!context.mounted) return true;
-    openAppPage(
-      context,
-      ArtifactAppPage(dir: dir, entryFile: entryFile, label: title),
-    );
+    _openInApp(context, dir, entryFile, title);
     return true;
   }
 
@@ -182,10 +196,6 @@ class PlatformLinkOpener implements LinkOpener {
   }
 }
 
-/// The plugin's Android default draws the WebView into a texture Flutter
-/// composites, which lags scrolling by a frame and makes flings stutter;
-/// hybrid composition puts the native view on screen to scroll by itself.
-
 /// The page [PlatformLinkOpener.openSignIn] opened inside the app: an
 /// SFSafariViewController closes, and a Custom Tab, which nothing outside
 /// it may close, stays.
@@ -197,5 +207,130 @@ class InAppSignInPages implements SignInPages {
     if (await supportsCloseForLaunchMode(LaunchMode.inAppBrowserView)) {
       await closeInAppWebView();
     }
+  }
+}
+
+/// A web page in the app on Android, so a link tap keeps the user here.
+/// Copy link and Open in browser act on the page navigated to rather than
+/// the link that opened it.
+class _WebViewPage extends StatefulWidget {
+  const _WebViewPage({required this.url});
+
+  final Uri url;
+
+  @override
+  State<_WebViewPage> createState() => _WebViewPageState();
+}
+
+class _WebViewPageState extends State<_WebViewPage> {
+  late Uri _at = widget.url;
+  String? _title;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: PageBar(
+      title: _title ?? _at.host,
+      actions: [
+        PageAction.icon(
+          icon: Icons.copy,
+          label: "Copy link",
+          onPressed: () =>
+              copyToClipboard(context, "$_at", said: "Copied link"),
+        ),
+        PageAction.icon(
+          icon: Icons.open_in_browser,
+          label: "Open in browser",
+          onPressed: () => catchAndSay(
+            context,
+            () => launchUrl(_at, mode: LaunchMode.externalApplication),
+          ),
+        ),
+      ],
+    ),
+    body: WebPageView(
+      url: widget.url,
+      onNavigated: (at, title) => setState(() {
+        _at = at;
+        _title = (title?.isEmpty ?? true) ? null : title;
+      }),
+    ),
+  );
+}
+
+/// An artifact on a phone: its directory served on loopback while the page
+/// is open, so its relative references resolve. No Copy link or Open in
+/// browser, since the port is gone by the time anything else could follow
+/// it. See "Artifacts" in the root notes.
+class _ArtifactWebViewPage extends StatefulWidget {
+  const _ArtifactWebViewPage({
+    required this.dir,
+    required this.entryFile,
+    this.title,
+  });
+
+  final String dir;
+  final String entryFile;
+  final String? title;
+
+  @override
+  State<_ArtifactWebViewPage> createState() => _ArtifactWebViewPageState();
+}
+
+class _ArtifactWebViewPageState extends State<_ArtifactWebViewPage> {
+  ArtifactServer? _server;
+  String? _error;
+
+  /// What the page calls itself in its `<title>`, once it has loaded.
+  String? _named;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  Future<void> _start() async {
+    final ArtifactServer server;
+    try {
+      server = await ArtifactServer.start(widget.dir);
+    } catch (e) {
+      logFailure("artifact", "could not serve ${widget.dir}", e);
+      if (mounted) setState(() => _error = "Failed to open the artifact: $e");
+      return;
+    }
+    if (!mounted) return server.stop();
+    setState(() => _server = server);
+  }
+
+  @override
+  void dispose() {
+    _server?.stop();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final server = _server;
+    final error = _error;
+    return Scaffold(
+      appBar: PageBar(title: _named ?? widget.title ?? "Artifact"),
+      body: server != null
+          ? WebPageView(
+              url: Uri.parse("${server.baseUrl}/${widget.entryFile}"),
+              onNavigated: (_, title) {
+                if (title != null && title.isNotEmpty && title != _named) {
+                  setState(() => _named = title);
+                }
+              },
+            )
+          : Center(
+              child: error == null
+                  ? const CircularProgressIndicator()
+                  : Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Text(error),
+                    ),
+            ),
+    );
   }
 }

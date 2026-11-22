@@ -1,7 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../app/settings/spec.dart" show WidgetReader;
+import "../../../app/reader.dart" show WidgetReader;
 import "../../../app/transcript/activity.dart";
 import "card.dart";
 import "nodes.dart";

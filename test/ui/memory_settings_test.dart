@@ -49,5 +49,34 @@ void main() {
       expect(find.text("Memory tools"), findsOneWidget);
       expect(find.text("Memory LLM"), findsOneWidget);
     });
+
+    testWidgets("excluded files are one pattern a line, and clear at once", (
+      tester,
+    ) async {
+      await pumpSettings(tester, app, SettingsCategory.memory);
+
+      await tester.tap(find.text("Excluded files"));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        " vendor/** \n\n*.lock",
+      );
+      await tester.tap(find.text("Save"));
+      await settleIo(tester);
+
+      expect(app.container.read(appSettingsProvider).instructionExcludes, [
+        "vendor/**",
+        "*.lock",
+      ]);
+      expect(find.text("vendor/**\n*.lock"), findsOneWidget);
+
+      await tester.tap(find.byTooltip("Clear exclusions"));
+      await settleIo(tester);
+      expect(app.container.read(appSettingsProvider).instructionExcludes, []);
+      expect(find.text("None"), findsOneWidget);
+    });
   });
 }

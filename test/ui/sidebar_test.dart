@@ -16,11 +16,11 @@ import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/sidebar/chat_headings.dart";
 import "package:agent_chat/ui/sidebar/project_palette.dart";
-import "package:agent_chat/app/pages/project_settings.dart";
+import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/widgets/search_field.dart";
-import "package:agent_chat/app/pages/workspace.dart";
+import "package:agent_chat/ui/workspace/workspace_page.dart";
 
 import "../harness.dart";
 
@@ -310,7 +310,7 @@ void main() {
       await settleIo(tester);
 
       // That it is the right root is workspace_page_test's.
-      expect(findPage<WorkspaceAppPage>(), findsOneWidget);
+      expect(find.byType(WorkspacePage), findsOneWidget);
     });
 
     // A built-in project is in the menu like any other, but it is not one the
@@ -601,7 +601,7 @@ void main() {
       await tester.tap(find.byTooltip("Project settings"));
       await settleIo(tester);
 
-      expect(findPage<ProjectSettingsAppPage>(), findsOneWidget);
+      expect(find.byType(ProjectSettingsPage), findsOneWidget);
     });
 
     testWidgets("a named project's still goes to its settings", (tester) async {
@@ -613,7 +613,7 @@ void main() {
       await tester.tap(find.byTooltip("Project settings"));
       await settleIo(tester);
 
-      expect(findPage<ProjectSettingsAppPage>(), findsOneWidget);
+      expect(find.byType(ProjectSettingsPage), findsOneWidget);
     });
 
     testWidgets("only the chats of the project shown are listed", (

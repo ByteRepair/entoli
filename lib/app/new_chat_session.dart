@@ -8,7 +8,7 @@ import "../providers.dart";
 import "chat_session.dart" show chatSessionHostProvider;
 import "composer.dart";
 import "selection.dart";
-import "settings/spec.dart" show SettingReader;
+import "reader.dart" show SettingReader;
 
 /// The new-chat screen apart from how it is drawn: its composer, the
 /// settings the chat it makes will run under, whether one is being made, and

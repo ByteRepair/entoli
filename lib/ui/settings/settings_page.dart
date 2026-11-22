@@ -1,12 +1,9 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../app/settings/settings.dart";
 import "../widgets/side_panel_frame.dart";
 import "settings_category.dart";
-import "schema_view.dart";
-import "../../app/pages/welcome.dart" show WelcomeAppPage;
-import "../app_pages.dart";
+import "settings_pages.dart";
 import "../widgets/page_bar.dart";
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -40,16 +37,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   /// Back from a category to the list, by the bar's button or the back key.
   void _showList() => setState(() => _categoryShown = false);
 
-  bool _holds(SettingsCategory category) =>
-      ref.watch(settingsPageHeldProvider(category.page));
-
   @override
   Widget build(BuildContext context) {
     // A category this platform does not offer is not opened, whoever names it.
     if (widget.initialCategory case final initial?
         when widget.focus && initial.offered(ref)) {
       return PopScope(
-        canPop: !_holds(initial),
+        canPop: !initial.held(ref),
         child: Scaffold(
           appBar: PageBar(title: initial.label),
           body: _categoryBody(initial),
@@ -60,7 +54,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ? _category
         : SettingsCategory.general;
     // Held, every way out is shut: back, the bar's button and another pick.
-    final held = _holds(category);
+    final held = category.held(ref);
     return PopScope(
       canPop: !held,
       child: SidePanelFrame(
@@ -90,21 +84,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 }
 
-/// What a category draws in either layout: its schema page. Welcome is the
-/// way to the tour, a page of the app's own.
 Widget _categoryBody(SettingsCategory category, {Key? key}) =>
-    switch (category) {
-      SettingsCategory.welcome => Builder(
-        key: key,
-        builder: (context) => Center(
-          child: FilledButton(
-            onPressed: () => openAppPage(context, WelcomeAppPage(replay: true)),
-            child: const Text("Take the Welcome Tour"),
-          ),
-        ),
-      ),
-      _ => ListView(key: key, children: [SchemaSections(category.page)]),
-    };
+    settingsCategoryBody(category, key: key);
 
 /// The categories as a list: beside the page where there is room for one, and
 /// the page itself where there is not. Material, not Scaffold, since the

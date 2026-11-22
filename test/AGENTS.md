@@ -72,8 +72,8 @@ thing `Downloads` owns that no page draws. `installing` on both store fakes
 holds a download open so there is a mid-flight to assert about, and `failWith`
 on the voice one is a download that stops.
 
-`TestApp.create(clis: …)` is the CLI programs the welcome tour signs in and
-first-run setup installs, and the default is a `FakeCli` of each, installed
+`TestApp.create(clis: …)` is the CLI programs the welcome tour installs and
+signs in, and the default is a `FakeCli` of each, installed
 and signed in, so no test spawns a program. `installed: false` with an
 `installing` completer holds an install open; `signedIn: false` makes
 connecting one run a sign-in, a `FakeCliProcess` in `processes` that the test

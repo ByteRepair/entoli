@@ -4,7 +4,7 @@ import "../../../core/config.dart" show instructionFileName;
 import "../../../domain/artifact.dart";
 import "../../../domain/models.dart";
 import "../../../domain/permission.dart";
-import "../../settings/spec.dart" show SettingReader;
+import "../../reader.dart" show SettingReader;
 import "../activity.dart";
 import "tool_run.dart";
 

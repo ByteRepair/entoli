@@ -1,6 +1,4 @@
-import "../app/pages/welcome.dart" show openFirstRun;
-import "../app/settings/spec.dart" show WidgetReader;
-import "app_pages.dart";
+import "settings/welcome_page.dart" show openFirstRun;
 import "package:flutter/material.dart";
 import "../app/chat_session.dart" show chatSessionHostProvider;
 import "chat_session_host.dart";
@@ -14,7 +12,6 @@ import "command_intents.dart";
 import "commands.dart";
 import "sidebar/sidebar.dart";
 import "selection.dart";
-import "settings/settings_hand_off.dart";
 import "widgets/side_panel_frame.dart";
 
 /// The sidebar and the chat pane, in a [SidePanelFrame]: beside each other
@@ -40,7 +37,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     _host?.attach(context, ref);
     // A first launch's setup and tour, over the shell once it is up.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) openFirstRun(WidgetReader(ref));
+      if (mounted) openFirstRun(context, ref);
     });
   }
 
@@ -69,17 +66,13 @@ class _AppShellState extends ConsumerState<AppShell> {
   bool _key(KeyEvent event) => runKey(event, ref, _commands);
 
   @override
-  Widget build(BuildContext context) => SettingsHandOffs(
-    child: AppPagesFollower(
-      child: AppMenuSync(
-        child: SidePanelFrame(
-          panel: const Sidebar(),
-          panelWidth: sidebarWidth,
-          shown: ref.watch(sidebarShownProvider),
-          onShow: () => ref.read(sidebarShownProvider.notifier).set(true),
-          child: const ChatPage(),
-        ),
-      ),
+  Widget build(BuildContext context) => AppMenuSync(
+    child: SidePanelFrame(
+      panel: const Sidebar(),
+      panelWidth: sidebarWidth,
+      shown: ref.watch(sidebarShownProvider),
+      onShow: () => ref.read(sidebarShownProvider.notifier).set(true),
+      child: const ChatPage(),
     ),
   );
 }

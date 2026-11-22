@@ -19,9 +19,8 @@ import "../widgets/page_bar.dart";
 /// that are pointed at a code another screen shows.
 bool get _canScan => isPhone;
 
-/// The buttons that start a pairing, plus the paste-a-code field: the
-/// Flutter frontend's drawing of the pairing setting, under its header. Every
-/// pairing goes to a screen of its own — the window's, the invite's, the
+/// The buttons that start a pairing, plus the paste-a-code field, under the
+/// Sync page's pairing header. Every pairing goes to a screen of its own — the window's, the invite's, the
 /// joiner's — where the wait, the codes and the end are shown. Nothing
 /// renders inline here, and the section keeps these controls the whole time.
 class PairingControls extends ConsumerStatefulWidget {

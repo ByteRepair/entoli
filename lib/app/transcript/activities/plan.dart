@@ -3,7 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../../domain/plan.dart";
 import "../../../domain/tool_arg.dart";
 import "../../plan.dart" show planProgressLine, planProvider;
-import "../../settings/spec.dart" show SettingReader;
+import "../../reader.dart" show SettingReader;
 import "../activity.dart";
 import "tool_run.dart";
 

@@ -52,6 +52,12 @@ String safeCut(String text, int end) {
   return text.substring(0, last >= 0xD800 && last <= 0xDBFF ? at - 1 : at);
 }
 
+/// [s] trimmed, or null where that leaves nothing.
+String? nonBlank(String s) {
+  final trimmed = s.trim();
+  return trimmed.isEmpty ? null : trimmed;
+}
+
 /// The last [count] UTF-16 code units of [text], one fewer where the cut
 /// would split a surrogate pair: [safeCut] from the other end.
 String safeTail(String text, int count) {

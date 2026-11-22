@@ -1,22 +1,16 @@
 import "../../domain/settings/setting.dart";
 import "../../domain/project.dart" show ProjectRef;
 import "../../providers.dart";
-import "spec.dart";
+import "../reader.dart";
 
-/// Which level a controller is bound to, as a value: what a controller's
-/// provider is keyed by, and what a frontend names when it asks for one.
+/// Which level a setting is read and written at, as a value: what a page
+/// names when it asks for a scope.
 sealed class ScopeAddress {
   const ScopeAddress();
 }
 
 final class AppAddress extends ScopeAddress {
   const AppAddress();
-
-  @override
-  bool operator ==(Object other) => other is AppAddress;
-
-  @override
-  int get hashCode => (AppAddress).hashCode;
 }
 
 final class ProjectAddress extends ScopeAddress {
@@ -30,21 +24,22 @@ final class ProjectAddress extends ScopeAddress {
   final String? device;
 
   ProjectRef get ref => (device: device, project: project);
-
-  @override
-  bool operator ==(Object other) =>
-      other is ProjectAddress &&
-      other.project == project &&
-      other.device == device;
-
-  @override
-  int get hashCode => Object.hash(ProjectAddress, project, device);
 }
 
-/// The object that reads and writes a level's values: a controller asks it
-/// what is set here, what would be inherited from above, and writes through
-/// it. A level reads only its own document; what it inherits is its
-/// [parent]'s answer.
+/// A chat's settings as its page holds them until Save: [document] is the
+/// draft's `meta.json`, [project]'s level above it, and [onChange] is told of
+/// each change written to it.
+final class ChatAddress extends ScopeAddress {
+  const ChatAddress(this.document, {this.project, required this.onChange});
+
+  final SettingsDocument document;
+  final String? project;
+  final void Function() onChange;
+}
+
+/// The object that reads and writes a level's values: what is set here,
+/// what would be inherited from above, and the write. A level reads only
+/// its own document; what it inherits is its [parent]'s answer.
 sealed class SettingsScope {
   SettingsScope get root;
 
@@ -65,6 +60,18 @@ sealed class SettingsScope {
   /// What this level answers: its own value, or what it inherits.
   T? resolve<T extends Object>(Setting<T> setting) =>
       own(setting) ?? inherited(setting);
+
+  /// Whether unset is offered for [setting] here: where the level inherits —
+  /// a project, a chat — or where the key has no fallback even at the app's.
+  /// A control then stands where the level above does, with a reset back to
+  /// it once this level picks.
+  bool offersUnset(Setting setting) =>
+      parent != null || setting is! DefaultedSetting;
+
+  /// What a control over [setting] shows: this level's own value where
+  /// unset is offered, else what it answers.
+  T? shown<T extends Object>(Setting<T> setting) =>
+      offersUnset(setting) ? own(setting) : resolve(setting);
 
   /// Sets [setting] here, or clears it where [value] is null.
   Future<void> write<T extends Object>(Setting<T> setting, T? value) =>
@@ -181,6 +188,11 @@ SettingsScope scopeAt(SettingReader reader, ScopeAddress address) =>
         reader.read(appSettingsProvider.notifier),
       ),
       final ProjectAddress at => projectScopeAt(reader, at),
+      final ChatAddress at => ChatScope(
+        at.document,
+        projectScopeAt(reader, ProjectAddress(at.project)),
+        onChange: at.onChange,
+      ),
     };
 
 /// [at]'s scope, the app's above it on whichever device it is.

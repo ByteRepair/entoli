@@ -6,7 +6,7 @@ import "../domain/room/room_state.dart" show ChatViewState;
 import "../domain/shell_job.dart" show firstLine;
 import "../providers.dart";
 import "mirror_controller.dart" show chatViewProvider;
-import "settings/spec.dart" show SettingReader;
+import "reader.dart" show SettingReader;
 import "transcript/activities/command.dart" show JobActivity;
 import "transcript/activities/task.dart" show SubAgentActivity;
 import "transcript/activity.dart"

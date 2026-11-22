@@ -2,6 +2,8 @@ import "dart:async";
 
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:flutter_riverpod/misc.dart" show ProviderListenable;
+import "package:uuid/uuid.dart";
 
 import "../../core/log.dart";
 import "../../data/builtin/llm/providers/cli_sign_in.dart";
@@ -12,6 +14,38 @@ import "../downloads/downloads.dart" show DownloadState;
 import "../../domain/llm_provider.dart";
 import "../../providers.dart";
 import "../downloads/cli_downloads.dart";
+
+/// A new entry given up on: its folders under every program go, and any
+/// sign-in made in them, since its form may have been switched to another
+/// program first.
+Future<void> forgetCliEntry(List<CliProvider> programs, String id) async {
+  for (final cli in programs) {
+    await cli.withConfig(cli.config.copyWith(id: id)).forget();
+  }
+}
+
+/// Connects [service], Entoli's own copy of its program installed and
+/// signed in by [signIn] where it is not yet, and added once it is; where an
+/// entry for it is already configured, that one adopted rather than a
+/// second added.
+Future<void> connectCli(
+  T Function<T>(ProviderListenable<T> provider) read,
+  CliProvider service, {
+  required Future<bool> Function(LlmProviderConfig config) signIn,
+}) async {
+  final notifier = read(appSettingsProvider.notifier);
+  final programs = read(cliProgramsProvider);
+  final existing = read(appSettingsProvider).llmProviders
+      .where((p) => p.api == service.config.api && p.command == null)
+      .firstOrNull;
+  // A new entry's id first: its account is kept in a folder named by it.
+  final config = existing ?? service.config.copyWith(id: const Uuid().v4());
+  if (!await signIn(config)) {
+    if (existing == null) await forgetCliEntry(programs, config.id);
+    return;
+  }
+  await notifier.upsertProvider(config, adopt: true);
+}
 
 /// Where a CLI program's account stands, and where a sign-in into it has got.
 sealed class CliAccountStage {

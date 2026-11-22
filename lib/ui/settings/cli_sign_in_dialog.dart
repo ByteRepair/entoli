@@ -8,6 +8,29 @@ import "../../app/settings/cli_account.dart";
 import "../../domain/llm_provider.dart";
 import "../../providers.dart";
 
+/// [CliSignInDialog] over an account of [config]'s own, which goes with the
+/// dialog. True once the program says it is signed in.
+Future<bool> showCliSignIn(
+  BuildContext context,
+  LlmProviderConfig config, {
+  bool again = false,
+}) async {
+  final account = CliAccount(
+    ProviderScope.containerOf(context, listen: false),
+    config,
+  );
+  try {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => CliSignInDialog(account: account, again: again),
+        ) ??
+        false;
+  } finally {
+    account.dispose();
+  }
+}
+
 /// Installs [account]'s program where Entoli has no copy of it, asks it
 /// whether it is signed in, and where it is not, runs its sign-in — out of
 /// its account first where [again]: the page it prints is shown here to

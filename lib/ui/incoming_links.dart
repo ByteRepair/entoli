@@ -6,9 +6,9 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../core/log.dart";
 import "../domain/app_link.dart";
 import "../providers.dart";
-import "../app/pages/bot_avatar_install.dart";
-import "../app/pages/marketplace.dart";
-import "app_pages.dart";
+import "../app/marketplace/preview.dart";
+import "bot_avatar/bot_avatar_install.dart";
+import "marketplace/marketplace_entry_preview.dart";
 import "selection.dart";
 import "widgets/dialogs.dart";
 
@@ -62,12 +62,16 @@ class _IncomingLinksState extends ConsumerState<IncomingLinks> {
         if (link.bytes == null) {
           logFailure("links", "a shared ${kind.name} link arrived cut short");
         }
-        openAppPage(
-          context,
-          MarketplaceEntryAppPage(kind: kind, entry: entry, preview: preview),
+        unawaited(
+          openMarketplaceEntry(
+            context,
+            kind: kind,
+            entry: entry,
+            preview: preview,
+          ),
         );
       case AvatarLink(:final import):
-        openAppPage(context, BotAvatarInstallAppPage(import));
+        unawaited(openBotAvatarInstall(context, import));
       case InstallLink(:final kind, :final slug):
         // The provider logs a failed fetch; a missing slug is this one's.
         final entries = await ref
@@ -81,7 +85,7 @@ class _IncomingLinksState extends ConsumerState<IncomingLinks> {
           say(context, "Could not find $slug in the marketplace.");
           return;
         }
-        openAppPage(context, MarketplaceEntryAppPage(kind: kind, entry: entry));
+        unawaited(openMarketplaceEntry(context, kind: kind, entry: entry));
     }
   }
 

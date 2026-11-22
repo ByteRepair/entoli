@@ -30,9 +30,6 @@ named in a cross-reference is findable from this list.
   and the editor
 - `lib/ui/sidebar/AGENTS.md` — The sidebar's list, Pinned chats, A chat's row
   menu
-- `lib/app/pages/AGENTS.md` — The app's pages: every page that is not a
-  setting as an `AppPage` of the settings' controllers, the core's stack of
-  them, and how the UI draws it
 - `lib/app/marketplace/AGENTS.md` — The marketplace page
 - `lib/data/builtin/AGENTS.md` — The agent loop, Tools, Running the commands, Background
   jobs, Running a command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
@@ -83,8 +80,8 @@ named in a cross-reference is findable from this list.
 - `lib/ui/AGENTS.md` — Opening a link, Links into Entoli, The theme, What the settings page can
   change about it, The keyboard and the caret, The app's commands, The menu
   bar, The composer and the page bars
-- `lib/ui/settings/AGENTS.md` — Setting overrides, Work folders, What the app
-  is, Backing it all up
+- `lib/ui/settings/AGENTS.md` — How Settings is built, Setting overrides,
+  Work folders, What the app is, Backing it all up
 - `lib/ui/widgets/AGENTS.md` — Shared UI, A catalog of things to download, The
   model catalog
 - `.github/workflows/AGENTS.md` — Releasing

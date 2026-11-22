@@ -5,3 +5,6 @@ import "package:flutter/foundation.dart" show kDebugMode;
 /// build names itself so the two installs are told apart anywhere both are
 /// seen.
 const appBrand = kDebugMode ? "Entoli (Debug)" : "Entoli";
+
+/// Who made it: on the About page, and under the licences.
+const madeBy = "Made by Yiannis Charalambous";

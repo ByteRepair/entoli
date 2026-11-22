@@ -1,8 +1,14 @@
 # The marketplace page
 
-`MarketplaceAppPage` (`lib/app/pages/marketplace.dart`, an `AppPage`) is what the sidebar's Marketplace tile opens: the site's
-entries, Skills or Agents picked above them. Tapping an entry opens
-`MarketplaceEntryAppPage`, which previews and installs it.
+`MarketplacePage` (`lib/ui/marketplace/marketplace_page.dart`) is what the
+sidebar's Marketplace tile opens: the site's entries over two tabs, Skills
+and Agents, each kept alive across a flip so its autoDispose list is not
+fetched again, under one search box. Tapping an entry opens
+`MarketplaceEntryPreviewPage`, which previews and installs it. What is logic
+stays here: the fetch (`marketplace.dart`), the grouping and filtering
+(`groups.dart`), the faces (`face.dart`), the list provider, the preview's
+load and a link's entry (`preview.dart`), and the installs every route shares
+(`install.dart`).
 
 The list is organized, and the organizing is `groups.dart`, pure
 and tested on its own. **Collections** come first: `/<folder>/collections.json`
@@ -12,25 +18,23 @@ marketplace declares in `collections/<folder>.toml` — and a listed entry is
 that collection's rather than a front-page row. Membership is the list and
 nothing else, so a site from before the file (a 404, read as no records)
 leaves every entry on the front page as it was, and a key the index no
-longer has drops out. A collection row opens `MarketplaceCollectionAppPage`,
-the members already fetched, with a search and tags of its own, its address
-scoped by slug, since `open` raises a page already open at an address. With
+longer has drops out. A collection card opens `MarketplaceCollectionPage`,
+the members already fetched, with a search and tags of its own. With
 a query the front page also shows the matching collections and, under each
 collection's name, its matching members, so a search finds a skill wherever
-it is filed. **The front page's tags filter its own entries only**, so their
-row heads the entries' section, under the collections rather than over them,
-and stays there while a tick is set even if a search empties it. A tag every
+it is filed. **The front page's tags filter its own entries only**, and their
+section stays while a tick is set even if a search empties it. A tag every
 entry of a list carries narrows nothing and is not offered (`tagsOf`), which
 is what keeps `external` off a collection of remote entries; a list no tag
-narrows has no Tags row. A search row searches — name and description alike, over the entries the fetch already
+narrows has no filter icon in its bar. The search box searches — name and description alike, over the entries the fetch already
 holds, nothing re-read off disk; the needle is the sidebar's
 `searchNeedle` (`domain/chat_search.dart`), the one shared rule for what a typed query compares as, and
 the lowercased name and description the match reads are `late final` on the
-entry, once per entry rather than once per keystroke — and the Tags row
-opens the section's tag picker. Both filter the list in the order it is drawn
+entry, once per entry rather than once per keystroke — and the filter icon
+opens the tab's tag picker. Both filter the list in the order it is drawn
 rather than re-ordering it — a description-only match keeps the alphabetical
-row it belongs in. The ticks are a **per-section** set the page owns — the
-picker page (`MarketplaceTagsAppPage`) ticks into it, so going back is
+row it belongs in. The ticks are a **per-tab** notifier the page owns — the
+picker page (`MarketplaceTagPickerPage`, a checkbox per tag) ticks into it, so going back is
 already filtered — and passing means carrying **every** tag ticked: the
 intersection, where an empty set filters nothing. Search and tags hold
 together, and a no-match result says "Nothing matches here.", distinct from
@@ -41,10 +45,9 @@ entry count under a search of its own, and Clear when anything is ticked.
 preset at `hashString(key) % presets.length`, coloured `ownColour(key)`, so a
 row looks the same on every device with nothing fetched. It follows the
 bundled presets' order, so reordering them changes every row's face; that is
-accepted. The faces are stills (`AvatarRowFace(animate: false)`, `botLive` on
-the wire): a collection of hundreds of live faces is a ticker per row. Until
-the presets load the rows keep their glyph, and a row with a face has none,
-since the native row draws both.
+accepted. The faces are stills (`MarketplaceFace`, `animate: false`): a
+collection of hundreds of live faces is a ticker per row. Until the presets
+load a row shows its kind's icon instead.
 
 The list is the site's `index.json` per section
 (`byterepair.github.io/entoli-marketplace`). The URL is
@@ -85,13 +88,16 @@ as no locations, which is every entry local — the old behavior, unbroken.
 cannot do. What is absent in an entry's frontmatter — `version`, `tags` — is
 null or empty here; nothing is invented for it. Entries are sorted by name,
 the way the library below sorts its own. The list's row is for scanning:
-its byline (`CollectionItem.byline`) says who made it and the version, the
+its byline says who made it and the version, the
 description is cut at a word near 140 characters, and **an entry another
 repository serves is badged External** (`MarketplaceEntry.external`, a
 location record), as is a collection whose every member is. A remote entry's
 author is up to ten contributors, so the byline names the first and counts
 the rest; the preview lists them all. Collections are drawn as cards
-(`UiHint.cards`), their count as the byline, and a collection's page opens on
+(`CollectionCards`, up to three across: a face, the title, the byline under
+it set apart from the words, a few lines of those, and the External pill),
+their count as the byline, and a
+collection's page opens on
 its own card; headings say how many sit under them, and a search that finds
 nothing names what was typed.
 
@@ -119,12 +125,16 @@ rather than as a failure — an agent's `profile.png` is there and then absent.
 
 ## From list to preview
 
-The preview opens on the entry's own card — face, byline, External — and
-keeps what it says apart: the description as a paragraph of its own, then
-Details, a labelled row each for the authors, the version and the tags, and
-for a remote entry its source directory on GitHub as a link.
+The preview opens on the entry's own card — face (an agent's own
+`profile.png` where it serves one), byline, External — and keeps what it
+says apart: the description as a paragraph of its own, then Details, a
+labelled row each for the authors, the version and the tags, and for a
+remote entry its source directory on GitHub as a link; then the README drawn
+as markdown, or "This entry ships no README.", and a package's files beside
+its SKILL.md where it has any.
 
-`EntryPreview` is what the page fetched at open: the README, the parsed
+`EntryPreview` is what the page fetched at open (`loadEntryPreview`): the
+README, the parsed
 `.skill` (or the parser's reason it refused one), the agent's prompt and its
 picture. The fetches go out together — the entry's files are independent
 round-trips to one host, and serially each is a round-trip on the spinner the
@@ -172,8 +182,10 @@ does not, so an agent installed over another does not keep the face of the
 one it replaced. The library reload after it is what refreshes the face:
 `agentPictureProvider` watches the project's library.
 
-The destination is the page's last row, `Global` default — `InstallsPrompts`,
-the mixin the skill-install page shares, so every install route offers the
-same list, asks the same replace question and lands the same way. Install is
-the page's bar action; what it says once the page has closed goes through
-the stack's `saying`.
+The destination is the page's last row, `Global` default
+(`InstallDestination`), shown only where there is something to install. `PromptInstall` is the
+install every route shares — this preview, a shared link's, a drafted
+skill's (`SkillInstallPreviewPage`) — so each offers the same list, asks the
+same replace question and lands the same way. Install is the `InstallBar`
+under the page, dead and spinning while it runs (`runInstall`, which asks
+the replace question first and says what landed once the page is gone).

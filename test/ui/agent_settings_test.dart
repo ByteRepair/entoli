@@ -275,12 +275,7 @@ void main() {
 
         expect(find.textContaining("free tier is not private"), findsOneWidget);
         expect(dialogField("Access key"), findsNothing);
-        expect(
-          tester
-              .widget<FilledButton>(find.widgetWithText(FilledButton, "Save"))
-              .onPressed,
-          isNull,
-        );
+        expect(find.widgetWithText(FilledButton, "Save"), findsNothing);
 
         await tester.tap(find.text("I understand, add it"));
         await settleIo(tester);

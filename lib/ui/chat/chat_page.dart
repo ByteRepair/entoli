@@ -25,7 +25,7 @@ import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "../../app/chat_controller.dart";
 import "../../app/chat_session.dart";
-import "../../app/settings/spec.dart" show WidgetReader;
+import "../../app/reader.dart" show WidgetReader;
 import "../../app/new_chat_session.dart";
 import "chat_expiry.dart";
 import "../../app/composer.dart"

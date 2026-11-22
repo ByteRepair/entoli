@@ -1,6 +1,6 @@
 import "../../../domain/agent_backend.dart" show taskToolName;
 import "../../../domain/tool_arg.dart";
-import "../../settings/spec.dart" show SettingReader;
+import "../../reader.dart" show SettingReader;
 import "../../sub_agent_transcript.dart" show subAgentLiveProvider;
 import "../activity.dart";
 import "tool_run.dart";

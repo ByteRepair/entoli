@@ -6,7 +6,7 @@ import "../../domain/llm_provider.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 import "../../app/model_picker.dart" show ModelField;
-import "../../app/settings/spec.dart" show WidgetReader;
+import "../../app/reader.dart" show WidgetReader;
 import "model_catalog_page.dart";
 import "resettable_field.dart";
 

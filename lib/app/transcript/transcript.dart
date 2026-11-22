@@ -10,7 +10,7 @@ import "../../domain/reaction.dart";
 import "../../domain/room/room_state.dart" show ChatViewState;
 import "../../providers.dart" show agentPictureProvider;
 import "../chat_controller.dart" show TurnDriver;
-import "../settings/spec.dart" show SettingReader;
+import "../reader.dart" show SettingReader;
 import "activity.dart";
 import "message.dart" show MessageMoment;
 

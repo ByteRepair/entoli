@@ -1176,9 +1176,17 @@ class FakeChatStore implements ChatStore {
   Future<ChatMeta> loadMeta(String chatId) async =>
       _metas[chatId] ?? ChatMeta();
 
+  /// Thrown by the next [saveMeta] instead of writing: a disk that refused.
+  Object? failSaveMeta;
+
   @override
-  Future<void> saveMeta(String chatId, ChatMeta meta) async =>
-      _metas[chatId] = meta;
+  Future<void> saveMeta(String chatId, ChatMeta meta) async {
+    if (failSaveMeta case final error?) {
+      failSaveMeta = null;
+      throw error;
+    }
+    _metas[chatId] = meta;
+  }
 }
 
 /// Listening and speaking, with neither. [hear] is the user saying something
@@ -1649,6 +1657,9 @@ class FakeRemoteChats extends RemoteChats {
 
   @override
   List<RemoteChatEntry> build() => entries;
+
+  /// What the hub says next: a device gone away or come back.
+  void set(List<RemoteChatEntry> next) => state = next;
 }
 
 /// A [SecretStore] with nothing behind it. `encrypted` is false, which is

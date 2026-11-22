@@ -2,6 +2,37 @@ import "dart:typed_data";
 
 import "package:flutter/material.dart";
 
+import "../../app/marketplace/install.dart" show ReplaceQuestion;
+import "busy.dart";
+import "dialogs.dart" show confirm;
+import "notice.dart";
+
+/// Install pressed: [replacing], where there is one, asked first, then
+/// [install] run with [busy] up, and the page closed saying what landed.
+Future<void> runInstall(
+  BuildContext context,
+  ValueNotifier<bool> busy, {
+  ReplaceQuestion? replacing,
+  required Future<String> Function() install,
+}) async {
+  if (busy.value) return;
+  if (replacing != null) {
+    final ok = await confirm(
+      context,
+      title: replacing.title,
+      message: replacing.message,
+      confirmLabel: "Replace",
+    );
+    if (!ok || !context.mounted) return;
+  }
+  await whileBusy(context, busy, () async {
+    final said = await install();
+    if (!context.mounted) return;
+    notify(context, said);
+    Navigator.of(context).pop();
+  });
+}
+
 /// The bar under an install: the one Install button, dead while
 /// [installing] runs and showing the spinner for it. Shared by the
 /// skill-install preview page and the marketplace's entry preview, so the

@@ -2,14 +2,14 @@ import "package:flutter/material.dart";
 import "package:webview_flutter/webview_flutter.dart";
 import "package:webview_flutter_android/webview_flutter_android.dart";
 
-import "../../app/settings/controller.dart";
-
-/// A [WebController]'s page in the platform's web view, scripts on; back
-/// goes back through the page's own history before it leaves.
+/// [url] in the platform's web view, scripts on; back goes back through the
+/// page's own history before it leaves. [onNavigated] hears each place it
+/// lands and that page's title.
 class WebPageView extends StatefulWidget {
-  const WebPageView(this.c, {super.key});
+  const WebPageView({super.key, required this.url, this.onNavigated});
 
-  final WebController c;
+  final Uri url;
+  final void Function(Uri url, String? title)? onNavigated;
 
   @override
   State<WebPageView> createState() => _WebPageViewState();
@@ -29,14 +29,14 @@ class _WebPageViewState extends State<WebPageView> {
         onUrlChange: (change) => _said(change.url),
       ),
     )
-    ..loadRequest(widget.c.url);
+    ..loadRequest(widget.url);
   var _canGoBack = false;
 
   Future<void> _said(String? url) async {
     final at = url == null ? null : Uri.tryParse(url);
     if (at == null) return;
     final title = await _controller.getTitle();
-    if (mounted) widget.c.navigated(at, title);
+    if (mounted) widget.onNavigated?.call(at, title);
   }
 
   @override
@@ -47,6 +47,9 @@ class _WebPageViewState extends State<WebPageView> {
       onPopInvokedWithResult: (didPop, _) async {
         if (!didPop && _canGoBack) await _controller.goBack();
       },
+      // The plugin's Android default draws into a texture Flutter
+      // composites, which lags scrolling by a frame; hybrid composition
+      // puts the native view on screen to scroll by itself.
       child: WebViewWidget.fromPlatformCreationParams(
         params: platform is AndroidWebViewController
             ? AndroidWebViewWidgetCreationParams(

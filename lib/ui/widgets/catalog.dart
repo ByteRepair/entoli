@@ -247,28 +247,46 @@ List<Widget> modelTags(ModelFacts facts) => [
     }, text),
 ];
 
+/// Whether an [InfoTag]'s fact is good news, a warning, or neither.
+enum InfoTone { plain, good, warn }
+
 /// One fact about a thing, as a small labelled chip.
 class InfoTag extends StatelessWidget {
-  const InfoTag(this.icon, this.label, {super.key});
+  const InfoTag(this.icon, this.label, {super.key, this.tone = InfoTone.plain});
 
   final IconData icon;
   final String label;
+  final InfoTone tone;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final (bg, fg) = switch (tone) {
+      InfoTone.plain => (colors.surfaceContainerHigh, colors.onSurfaceVariant),
+      InfoTone.good => (colors.primaryContainer, colors.onPrimaryContainer),
+      InfoTone.warn => (colors.errorContainer, colors.onErrorContainer),
+    };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHigh,
+        color: bg,
+        // Not a full pill: on a narrow screen the label wraps to two lines.
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+          Icon(icon, size: 14, color: fg),
           const SizedBox(width: 4),
-          Text(label, style: theme.textTheme.labelSmall),
+          Flexible(
+            child: Text(
+              label,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: tone == InfoTone.plain ? null : fg,
+              ),
+            ),
+          ),
         ],
       ),
     );
