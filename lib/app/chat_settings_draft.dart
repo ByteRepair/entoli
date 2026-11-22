@@ -110,7 +110,7 @@ class ChatSettingsEditor {
   /// Works with no `state.json` to read, which is when a broken chat is
   /// most wanted gone.
   Future<void> delete(String chatId) =>
-      _ref.read(chatEditsProvider).deleteById(chatId);
+      _ref.read(chatEditsProvider).delete(chatId);
 }
 
 final chatSettingsEditorProvider = Provider(ChatSettingsEditor.new);
