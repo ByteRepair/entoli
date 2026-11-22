@@ -138,7 +138,10 @@ class SettingRow extends StatelessWidget {
         height: 480,
         child: DocumentView(c),
       ),
-      final WebController c => SizedBox(height: 480, child: WebPageView(c)),
+      final WebController c => SizedBox(
+        height: 480,
+        child: WebPageView(url: c.url, onNavigated: c.navigated),
+      ),
       final NoticeController c => switch (c.hint) {
         UiHint.banner => _Banner(c),
         UiHint.installed || UiHint.field => LabelledField(

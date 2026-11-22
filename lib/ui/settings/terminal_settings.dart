@@ -157,9 +157,10 @@ class SandboxStatusCard extends ConsumerWidget {
 }
 
 /// The sandbox switch at [at], and a switch for each folder granted beside
-/// the workspaces that nobody named. The default project's are plain
-/// switches, the tier every project inherits; a project's or a chat's
-/// inherit what is above them until set.
+/// the workspaces that nobody named, where [at] holds them: a chat holds
+/// only the sandbox. The default project's are plain switches, the tier
+/// every project inherits; a project's or a chat's inherit what is above
+/// them until set.
 class SandboxSettings extends ConsumerWidget {
   const SandboxSettings({super.key, required this.at});
 
@@ -170,6 +171,7 @@ class SandboxSettings extends ConsumerWidget {
     final scope = scopeOf(ref, at);
     final base = scope is ProjectScope && scope.project == null;
     final sandboxed = scope.resolve(SettingKeys.sandbox) ?? true;
+    final chat = scope is ChatScope;
     Widget toggle(Setting<bool> setting, String title, String? subtitle) {
       void set(bool? value) =>
           guarded(context, () => scope.write(setting, value));
@@ -201,10 +203,13 @@ class SandboxSettings extends ConsumerWidget {
                     "directories granted. A project can override this."
               : sandboxed
               ? null
+              : chat
+              ? "Off: this chat's commands write wherever you can."
               : "Off: commands write wherever you can.",
         ),
-        for (final grant in SandboxGrant.values)
-          toggle(grant.setting, grant.title, grant.description),
+        if (!chat)
+          for (final grant in SandboxGrant.values)
+            toggle(grant.setting, grant.title, grant.description),
       ],
     );
   }

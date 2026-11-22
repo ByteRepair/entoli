@@ -1,21 +1,20 @@
 # The app's pages
 
-Every page of the app's that is not a setting is an `AppPage` here: a
-chat's settings and a new chat's, the context, the plan, a workspace folder
-and a text file, a project's settings and its skills and agents, the
-memories, the profile, the marketplace and an entry's preview, a drafted
-skill's install, a Bot Avatar a link carried, a share's destination, a CLI's
-sign-in, adding a model by its link, the first launch's setup and the
-welcome tour, a web page and an artifact. The UI draws them and holds no
-page of its own. This is "Settings as data" (see
-`lib/ui/settings/AGENTS.md`) taken to the rest of the app, and it is built on
-the same pieces.
+The pages here are `AppPage`s: the marketplace and an entry's preview, a
+drafted skill's install, a Bot Avatar a link carried, the first launch's
+setup and the welcome tour. The UI draws them. This is "Settings as data"
+(see `lib/ui/settings/AGENTS.md`) taken to the rest of the app, and it is
+built on the same pieces.
 
-The workspace explorer, a text file, the memories and the profile are plain
-widget pages instead (`lib/ui/workspace/`, `lib/ui/widgets/text_file_page.dart`,
-`lib/ui/memory/`, `lib/ui/profile/`), their rules in `lib/app/memories.dart`
-and `lib/app/profile_draft.dart`. Their `AppPage`s here are what a chat's and
-a project's settings page still open from a row.
+The rest are plain widget pages instead: the workspace explorer, a text
+file, the memories and the profile (`lib/ui/workspace/`,
+`lib/ui/widgets/text_file_page.dart`, `lib/ui/memory/`, `lib/ui/profile/`),
+a chat's settings and a new chat's, the context and the plan
+(`lib/ui/chat/`), a project's settings (`lib/ui/sidebar/`), a share's
+destination (`lib/ui/share/`), and a web page and an artifact
+(`lib/ui/link_opener.dart`). Their rules are in `lib/app/`:
+`memories.dart`, `profile_draft.dart`, `chat_settings_draft.dart` and
+`project_edits.dart`.
 
 **A page is its sections of the settings' controllers.** `sections` returns
 `PageSection`s of `SettingController`s — the toggles, choices, collections,
@@ -24,11 +23,10 @@ forms, notices, info rows and actions settings are made of — read through a
 actions, the first its own (Save, Done, Install); `leaving` is what going
 back asks, null to go. A part of a page is built with `part`, whose id is
 `page:<address>/<part>` — what an intent names the controller by. Where a
-row is a setting's own — Running commands on a chat's page, a project's
-permissions and sandbox — `shared` builds that spec at the page's level,
-under the page's id, so its rules and its words are said once; and
-`settingsPage` is a whole settings page at a level, a project's skills or
-agents. Two kinds were added for these pages: `DocumentController`, a
+row is a setting's own — the welcome tour's models — `shared` builds that
+spec at the page's level, under the page's id, so its rules and its words
+are said once; and `settingsPage` is a whole settings page at a level. Two
+kinds were added for these pages: `DocumentController`, a
 file's text as the whole of a page, edited in place with each edit said back,
 and `WebController`, a web page. A `CollectionItem`'s `RowFace` says who
 leads its row: an agent in their face, or a Bot Avatar of its own, live or
@@ -46,13 +44,14 @@ A few pieces keep the look the pages had before they were data.
 previewed as markdown, a tap opening `PromptPage` (`prompt_field.dart`), a
 wrapping prose field, Save handing the text to its `onSet` and so to the
 page's draft. An `ItemMeter` with `segments` is one bar of parts end to end
-with a legend and a `MeterMark` across it: the context page's window. A bar
+with a legend and a `MeterMark` across it, drawn by `SegmentedMeter`, which
+the context page draws its windows with. A bar
 action with a glyph is drawn as its icon. The page's own action is the
 first in its bar unless that one is `secondary`, and is drawn last in the
 bar. An action with `adds` opens the new-item form of the
 collection it names instead of running, which is how a folder's New Folder
-sits in the bar; an `iconOnly` action is its glyph alone on its row (a
-chat's Copy ID). Anything a tap runs is a `Pressable`. A section's `footnote` is said
+sits in the bar; an `iconOnly` action is its glyph alone on its row.
+Anything a tap runs is a `Pressable`. A section's `footnote` is said
 under its rows, its `detail` over them.
 
 The code editor is `re_editor`'s.

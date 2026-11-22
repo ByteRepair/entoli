@@ -119,7 +119,10 @@ class AppPageView extends ConsumerWidget {
         body: switch (sections) {
           [PageSection(fills: true, controllers: [final c])] => switch (c) {
             DocumentController() => DocumentView(c),
-            WebController() => WebPageView(c),
+            WebController() => WebPageView(
+              url: c.url,
+              onNavigated: c.navigated,
+            ),
             _ => SettingRow(c),
           },
           _ => ListView(

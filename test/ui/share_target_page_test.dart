@@ -66,9 +66,20 @@ void main() {
       File("${app.config.projectWorkspaceDir()}/notes.md").readAsStringSync(),
       "from another app",
     );
-    // Closed, so the app is back where the share found it.
+    // Closed, so the app is back where the share found it, and it says so.
     expect(find.text("chat"), findsOneWidget);
     expect(find.text("Share 1 File To"), findsNothing);
+    expect(find.text("Saved notes.md to Default"), findsOneWidget);
+  });
+
+  testWidgets("a long chat title stays on its row", (tester) async {
+    final long = "A chat whose title runs on " * 8;
+    await io(tester, () => app.seedChat(title: long));
+    app.handoff.pendingShare = [incomingFile("notes.md")];
+    await start(tester);
+
+    final title = tester.widget<Text>(find.text(long));
+    expect((title.maxLines, title.overflow), (1, TextOverflow.ellipsis));
   });
 
   testWidgets("picking a project writes into that project's workspace", (

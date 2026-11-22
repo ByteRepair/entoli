@@ -13,9 +13,8 @@ import "../domain/project.dart";
 import "../providers.dart";
 
 export "../app/projects.dart";
-import "../app/pages/project_settings.dart";
-import "app_pages.dart";
 import "memory/memory_page.dart";
+import "sidebar/project_settings_page.dart";
 import "workspace/workspace_page.dart";
 
 void openProjectWorkspace(BuildContext context, WidgetRef ref, ProjectRef at) =>
@@ -36,7 +35,10 @@ void openProjectMemories(BuildContext context, ProjectRef at) => openMemories(
   title: "Memories",
 );
 
-void openProjectSettings(BuildContext context, ProjectRef at) => openAppPage(
-  context,
-  ProjectSettingsAppPage(at.project!, device: at.device),
-);
+void openProjectSettings(BuildContext context, ProjectRef at) =>
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            ProjectSettingsPage(project: at.project!, device: at.device),
+      ),
+    );

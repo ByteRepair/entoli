@@ -15,11 +15,13 @@ class TempChatTtlField extends ConsumerWidget {
     required this.value,
     required this.onChanged,
     required this.project,
+    this.label = "Temporary chat",
   });
 
   final TempChatTtl? value;
   final ValueChanged<TempChatTtl?> onChanged;
   final String? project;
+  final String label;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -29,7 +31,7 @@ class TempChatTtlField extends ConsumerWidget {
       app: ref.watch(appSettingsProvider).tempChatTtl,
     );
     return InheritableDropdown<TempChatTtl>(
-      label: "Temporary chat",
+      label: label,
       value: value,
       inherited: inherited.label,
       options: tempChatTtlLabels,

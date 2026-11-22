@@ -58,7 +58,7 @@ void main() {
   }
 
   Future<void> tapCopyLink(WidgetTester tester) async {
-    await tester.tap(find.text("Copy Link"));
+    await tester.tap(find.byTooltip("Copy link"));
     await settleIo(tester);
   }
 
@@ -75,6 +75,7 @@ void main() {
     expect(copied, ["https://example.com/two"]);
     expect(find.text("Copied link"), findsOneWidget);
     expect(find.text("Two"), findsOneWidget);
+    expect(find.byTooltip("Open in browser"), findsOneWidget);
   });
 
   androidTest("a page that only rewrites its URL is still copied as it is", (

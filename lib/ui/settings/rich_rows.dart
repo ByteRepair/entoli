@@ -34,9 +34,12 @@ Color _hue(MeterHue hue) => switch (hue) {
 /// A meter of segments laid end to end, its mark a line across it named
 /// over it, and a legend of what each segment is under it.
 class SegmentedMeter extends StatelessWidget {
-  const SegmentedMeter(this.meter, {super.key});
+  const SegmentedMeter(this.meter, {super.key, this.unit});
 
   final ItemMeter meter;
+
+  /// What a segment's amount counts, said in its tooltip: "tokens".
+  final String? unit;
 
   static const _height = 14.0;
 
@@ -84,7 +87,9 @@ class SegmentedMeter extends StatelessWidget {
                             Expanded(
                               flex: flex(s.fraction),
                               child: Tooltip(
-                                message: "${s.label}: ${s.amount}",
+                                message:
+                                    "${s.label}: ${s.amount}"
+                                    "${unit == null ? "" : " $unit"}",
                                 child: Container(color: _hue(s.hue)),
                               ),
                             ),
