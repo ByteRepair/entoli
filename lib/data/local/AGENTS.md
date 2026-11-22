@@ -475,7 +475,7 @@ It also means a launch loads nothing at all, where it used to spend a minute and
 a gigabyte restoring a pick the user might not have been about to use.
 
 **What is loaded leads the On-device page.** "Running models"
-(the `running` section of `lib/app/settings/pages/on_device.dart`) is the page's
+(`OnDeviceSection`, `lib/ui/settings/on_device_settings.dart`) is the page's
 first section rather than a row of LLM
 settings, three taps deep: it is what the page is most often opened for. Each
 row has an Unload button (`LocalEngine.stop`), loading and failed rows

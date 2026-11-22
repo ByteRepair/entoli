@@ -11,7 +11,7 @@ import "package:agent_chat/ui/triggers/incoming_open.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/prompt_field.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart"
-    show defaultOptionLabel;
+    show LabelledField, defaultOptionLabel;
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -183,8 +183,10 @@ void main() {
 
     /// The member dropdown, by its label — the project dropdown beside it is
     /// the same type.
-    Finder memberDropdown() =>
-        find.widgetWithText(DropdownButtonFormField<String>, "Address to");
+    Finder memberDropdown() => find.descendant(
+      of: find.widgetWithText(LabelledField, "Address to"),
+      matching: find.byType(DropdownButtonFormField<String?>),
+    );
 
     Future<void> openEditor(WidgetTester tester, {Trigger? trigger}) async {
       app = TestApp.create(
@@ -325,9 +327,9 @@ void main() {
       await writePrompt(tester, "check builds");
       await scrollTo(tester, find.text("Temporary chat"));
 
-      final ttl = find.widgetWithText(
-        DropdownButtonFormField<String>,
-        "Temporary chat",
+      final ttl = find.descendant(
+        of: find.widgetWithText(LabelledField, "Temporary chat"),
+        matching: find.byType(DropdownButtonFormField<TempChatTtl?>),
       );
       expect(ttl, findsOneWidget);
       expect(find.textContaining("$defaultOptionLabel ("), findsWidgets);
@@ -368,6 +370,59 @@ void main() {
       await settleIo(tester);
 
       await pumpUntil(tester, find.textContaining("@explore"));
+    });
+
+    testWidgets("files to watch are added one at a time, and saved", (
+      tester,
+    ) async {
+      await openEditor(tester);
+      await writePrompt(tester, "Summarise the log");
+      await tester.tap(find.text("Files"));
+      await tester.pump();
+      expect(find.text("Name at least one path to watch."), findsOneWidget);
+
+      for (final path in ["build.log", "project:notes.md"]) {
+        await tester.enterText(
+          find.widgetWithText(TextField, "Path to watch"),
+          path,
+        );
+        await tester.tap(find.byTooltip("Add path"));
+        await tester.pump();
+      }
+      expect(find.text("build.log"), findsOneWidget);
+      await _save(tester);
+
+      final source =
+          app.container.read(triggersProvider).single.source as FileSource;
+      expect(source.paths, ["build.log", "project:notes.md"]);
+    });
+
+    testWidgets("one the agent set has no Save, and is deleted from its bar", (
+      tester,
+    ) async {
+      await openEditor(
+        tester,
+        trigger: Trigger(
+          id: "r1",
+          name: "Morning sweep",
+          prompt: "check builds",
+          source: ScheduleSource(at: _now.add(const Duration(hours: 3))),
+          byAgent: true,
+        ),
+      );
+
+      expect(find.textContaining("set by the agent"), findsOneWidget);
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: find.text("Save")),
+        findsNothing,
+      );
+      await tester.tap(find.byTooltip("Delete trigger"));
+      await settleIo(tester);
+      await tester.tap(find.text("Delete").last);
+      await settleIo(tester);
+
+      expect(app.container.read(triggersProvider), isEmpty);
+      expect(find.text("Edit trigger"), findsNothing);
     });
 
     testWidgets("a member the library has lost keeps its name and says so", (

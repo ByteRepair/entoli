@@ -1,14 +1,12 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/llm_provider.dart";
 import "spec.dart" show SettingsPageId;
 
 /// What the UI opens as a page of its own rather than as a setting: a
 /// paired device's page, every Bot Avatar. The UI at the window's root
 /// binds them; unbound, a setting that needs one does not offer it.
 class SettingsHandOff {
-  /// The page that adds an on-device model by its link.
-  Future<void> Function()? addModelByLink;
-
   /// A paired device's own page: its name to change, and the fingerprints a
   /// pair exists to compare.
   Future<void> Function(String deviceId)? pairedDevice;
@@ -20,12 +18,16 @@ class SettingsHandOff {
   /// sends the user to.
   Future<void> Function(SettingsPageId? page)? openSettings;
 
+  /// [config]'s program signed in, true once it says it is: what the
+  /// welcome tour connects a CLI through.
+  Future<bool> Function(LlmProviderConfig config)? cliSignIn;
+
   /// Unbinds every hook, for the UI going away.
   void clear() {
-    addModelByLink = null;
     pairedDevice = null;
     browseBotAvatars = null;
     openSettings = null;
+    cliSignIn = null;
   }
 }
 

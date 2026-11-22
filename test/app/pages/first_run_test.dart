@@ -12,10 +12,11 @@ import "package:agent_chat/domain/download.dart";
 
 import "package:agent_chat/app/first_run.dart";
 import "package:agent_chat/app/pages/app_page.dart";
-import "package:agent_chat/app/pages/cli_sign_in.dart";
 import "package:agent_chat/app/pages/setup.dart";
 import "package:agent_chat/app/pages/welcome.dart";
+import "package:agent_chat/app/settings/cli_account.dart";
 import "package:agent_chat/app/settings/controller.dart";
+import "package:agent_chat/app/settings/hand_off.dart";
 import "package:agent_chat/app/settings/spec.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/llm_provider.dart";
@@ -91,9 +92,32 @@ void main() {
       );
     });
 
+    /// The account the sign-in dialog would draw, run with no dialog.
+    CliAccount? signIn;
+    void bindSignIn() =>
+        app.container.read(settingsHandOffProvider).cliSignIn = (config) async {
+          final account = signIn = CliAccount(app.container, config);
+          try {
+            return await account.signIn();
+          } finally {
+            account.dispose();
+          }
+        };
+
+    Future<void> until(bool Function() holds) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (!holds()) {
+        if (DateTime.now().isAfter(deadline)) {
+          throw TimeoutException("the sign-in never came to it");
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    }
+
     test("a signed-in service is added at once, and only once", () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      bindSignIn();
       final page = open();
       await next(page);
       await page.at<ActionController>("ChatGPT").run();
@@ -109,27 +133,23 @@ void main() {
       final codex = FakeCli.codex(installed: false, signedIn: false);
       app.dispose();
       app = TestApp.create(clis: [FakeCli.claude(), codex]);
+      bindSignIn();
       final page = open();
       await next(page);
       final connecting = page.at<ActionController>("ChatGPT").run();
-      final signIn = PageDriver(
-        app,
-        stack().whereType<CliSignInAppPage>().single,
-      );
-      await signIn.until(() => codex.processes.isNotEmpty);
+      await until(() => codex.processes.isNotEmpty);
       expect(codex.installs, 1);
       codex.processes.single
         ..complain("Open https://auth.openai.com/oauth/auth")
         ..complain("orize?client_id=x\nWaiting…");
-      await signIn.until(() => signIn.find<InfoController>("open") != null);
+      await until(() => signIn?.stage is CliWaiting);
       expect(
-        signIn.at<InfoController>("open").rows.single.link,
+        (signIn!.stage as CliWaiting).page,
         Uri.parse("https://auth.openai.com/oauth/authorize?client_id=x"),
       );
       expect(settings().llmProviders, isEmpty);
       codex.finishSignIn();
       await connecting;
-      expect(signIn.open, isFalse);
       expect(settings().llmProviders.map((p) => p.api), [LlmApi.codexCli]);
     });
 
@@ -141,15 +161,12 @@ void main() {
         final claude = FakeCli.claude(signedIn: false);
         app.dispose();
         app = TestApp.create(clis: [claude, FakeCli.codex()]);
+        bindSignIn();
         final page = open();
         await next(page);
         final connecting = page.at<ActionController>("Claude Pro").run();
-        final signIn = PageDriver(
-          app,
-          stack().whereType<CliSignInAppPage>().single,
-        );
-        await signIn.until(() => claude.processes.isNotEmpty);
-        signIn.close();
+        await until(() => claude.processes.isNotEmpty);
+        await signIn!.cancel();
         await connecting;
         expect(settings().llmProviders, isEmpty);
         await expectLater(claude.processes.single.exitCode, completes);
