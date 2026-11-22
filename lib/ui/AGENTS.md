@@ -335,8 +335,9 @@ until it does something. It reads the field through `ComposerText`, which
 hint, the send label, how far the field grows — is `composer_words.dart`'s,
 and where each action sits is the `Composer`'s `_place`, a switch over the
 same list with no default. The chat page owns one model per chat and one
-`ComposerBinding` (the turn it sends into, where it is). `ComposerHandle` is
-what the page asks of it: Reply, and a steer taken back put back.
+`ComposerBinding` (the turn it sends into, where it is). A steer taken back
+goes back into the model; Reply embeds into the composer on screen, or into
+the field while a question stands in its place.
 
 `PageBar` (`widgets/page_bar.dart`) is the bar of every pushed page, said as
 data — a `title` and a `subtitle`, how it is left, and its `PageAction`s — and

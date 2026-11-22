@@ -19,14 +19,7 @@ import "composer_words.dart";
 
 export "../../../app/composer.dart" show SendCallback;
 
-/// What a page asks of its composer: a steer taken back put back, and a
-/// passage replied to.
-abstract interface class ComposerHandle {
-  void restore(Draft said);
-  void embed(ComposerEmbed embed);
-}
-
-/// Where the Flutter composer puts a [ComposerAction]: a button of its own,
+/// Where the composer puts a [ComposerAction]: a button of its own,
 /// laid out by hand, or an entry of the `+` menu, divided by [_Plus.group].
 sealed class _Place {
   const _Place();
@@ -134,7 +127,7 @@ class Composer extends ConsumerStatefulWidget {
   ConsumerState<Composer> createState() => ComposerState();
 }
 
-class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
+class ComposerState extends ConsumerState<Composer> {
   final GlobalKey<CompletionFieldState> _field = GlobalKey();
 
   /// Held only so [embed] can put the caret in the field.
@@ -144,7 +137,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   /// of it, so it follows the model's shape and leaves Send's flips to the
   /// buttons' own builders.
   ComposerModel get _model => widget.model;
-  ComposerController get _controller => _model.field as ComposerController;
+  ComposerController get _controller => _model.field.controller;
   late Listenable _sendState;
 
   void _adopt() {
@@ -211,16 +204,10 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   /// what is typed next answers it. Focused, unlike everything else here:
   /// choosing Reply is asking to write, and a caret left wherever the field
   /// last had one lands what is typed beside the card.
-  @override
   void embed(ComposerEmbed embed) {
     _controller.append(embed);
     _focus.requestFocus();
   }
-
-  /// Put back a message that was sent and taken back, ahead of whatever has
-  /// been typed or attached since.
-  @override
-  void restore(Draft said) => _model.restore(said);
 
   void _submit({bool queue = false}) => _model.submit(queue: queue);
 

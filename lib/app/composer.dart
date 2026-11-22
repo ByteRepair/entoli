@@ -108,7 +108,7 @@ class ComposerBinding {
   const ComposerBinding({
     required this.agentSpeaking,
     required this.onSend,
-    required this.onAbort,
+    this.onAbort = _none,
     this.onQueue,
     this.steers,
     this.onVoice,
@@ -121,7 +121,10 @@ class ComposerBinding {
   /// A participant is speaking: Send becomes Stop.
   final bool agentSpeaking;
   final SendCallback onSend;
+
+  /// Stop; nothing where there is no turn to stop.
   final VoidCallback onAbort;
+  static void _none() {}
 
   /// Send for after the running turn rather than into it; null where there
   /// is no turn to wait on.
@@ -166,11 +169,9 @@ class ComposerModel extends ChangeNotifier {
   ComposerBinding _turn = const ComposerBinding(
     agentSpeaking: false,
     onSend: _nothing,
-    onAbort: _none,
   );
 
   static void _nothing(String text, List<Attachment> attachments) {}
-  static void _none() {}
 
   /// What the composer sends to: the binding's `agentSpeaking` makes an
   /// empty field's button Stop, and over it `steers` — the room's rule,

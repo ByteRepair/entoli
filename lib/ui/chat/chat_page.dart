@@ -158,10 +158,13 @@ class _NewChat extends ConsumerStatefulWidget {
 }
 
 class _NewChatState extends ConsumerState<_NewChat> {
+  /// Found once, not on every build: the root overlay does not move.
+  late final _say = sayLater(context);
+
   /// The screen's session: its composer, its settings, and how the first
   /// message makes a chat. Watched in the build, which keeps it.
   NewChatSession get _session => ref.read(newChatSessionProvider);
-  ComposerController get _controller => _session.text as ComposerController;
+  ComposerController get _controller => _session.text.controller;
   ComposerModel get _model => _session.composer;
   bool get _starting => _session.starting.value;
 
@@ -180,7 +183,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
     final slot = _session.slot(
       WidgetReader(ref),
       ref.watch(selectedProjectProvider),
-      say: sayLater(context),
+      say: _say,
       startVoice: (meta) {
         if (mounted) startVoiceChat(context, ref, meta: meta);
       },
@@ -638,6 +641,10 @@ final _measureAll = _MeasureAll();
 
 class _ChatBodyState extends ConsumerState<_ChatBody>
     with SingleTickerProviderStateMixin {
+  /// Found once, not on every streamed token's build: the root overlay does
+  /// not move.
+  late final _say = sayLater(context);
+
   /// How far off the end still counts as reading the latest: inside it a turn
   /// keeps the view pinned, outside it the jump button appears.
   static const _slack = 200.0;
@@ -645,14 +652,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// The chat's session: its composer, and how a message is sent. Watched in
   /// the build, which keeps it while the page is up.
   ChatSession get _session => ref.read(chatSessionProvider(widget.chatId));
-  ComposerController get _controller => _session.text as ComposerController;
+  ComposerController get _controller => _session.text.controller;
   ComposerModel get _model => _session.composer;
 
-  /// What a steer taken back is put back into, attachments and all.
-  final GlobalKey _composer = GlobalKey();
-
-  /// The composer on screen, whichever draws it.
-  ComposerHandle? get _handle => _composer.currentState as ComposerHandle?;
+  /// The composer on screen, which a reply's quote focuses.
+  final GlobalKey<ComposerState> _composer = GlobalKey();
   late final ScrollController _scroll = ScrollController();
   late final ScrollFollow _follow = ScrollFollow(_scroll);
 
@@ -1154,7 +1158,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       WidgetReader(ref),
       view,
       driver,
-      say: sayLater(context),
+      say: _say,
       openVoice: () {
         if (mounted) openVoice(context, ref, widget.chatId);
       },
@@ -1164,11 +1168,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     Widget over(Widget below) => Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        TurnSurface(
-          view: view,
-          notifier: driver!,
-          onWithdrawn: (said) => _handle?.restore(said),
-        ),
+        TurnSurface(view: view, notifier: driver!, onWithdrawn: _model.restore),
         below,
       ],
     );
@@ -1185,7 +1185,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// A passage being answered, into the composer — or, while a question
   /// stands in its place, into what the composer will hold when it is back.
   void _reply(ComposerEmbed quote) {
-    final composer = _handle;
+    final composer = _composer.currentState;
     composer == null ? _controller.append(quote) : composer.embed(quote);
   }
 

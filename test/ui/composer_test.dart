@@ -263,11 +263,10 @@ void main() {
   testWidgets("a message put back keeps its files, ahead of what came since", (
     tester,
   ) async {
-    final key = GlobalKey<ComposerState>();
-    await pump(tester, key: key);
+    await pump(tester);
     await type(tester, "typed since");
 
-    key.currentState!.restore((
+    model.restore((
       text: "taken back",
       attachments: [
         Attachment(
@@ -425,11 +424,10 @@ void main() {
     });
 
     testWidgets("a message put back comes back with its cards", (tester) async {
-      final key = GlobalKey<ComposerState>();
-      await pump(tester, key: key);
+      await pump(tester);
       await type(tester, "typed since");
 
-      key.currentState!.restore((
+      model.restore((
         text: "> @scout\n>\n> one\n\nanswer",
         attachments: const [],
       ));

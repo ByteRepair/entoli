@@ -81,7 +81,6 @@ class NewChatSession {
         ComposerBinding(
           agentSpeaking: false,
           onSend: go,
-          onAbort: () {},
           project: at.project,
           device: at.device,
         ),
@@ -94,7 +93,6 @@ class NewChatSession {
       ComposerBinding(
         agentSpeaking: false,
         onSend: go,
-        onAbort: () {},
         project: at.project,
         onVoice: () => startVoice(meta.value),
       ),

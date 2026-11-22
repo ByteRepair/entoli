@@ -7,6 +7,12 @@ import "../../../app/composer.dart" show ComposerText;
 import "../../../app/embed_text.dart";
 import "composer_embed.dart";
 
+/// The field a [ComposerText] is: `composerTextProvider` is bound to
+/// [ComposerController.new], the one kind the core cannot name.
+extension ComposerTextField on ComposerText {
+  ComposerController get controller => this as ComposerController;
+}
+
 /// The composer's field, holding typed text and [ComposerEmbed]s together.
 ///
 /// Each embed is one character of [text], a private-use code point the
