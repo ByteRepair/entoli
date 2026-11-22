@@ -12,130 +12,137 @@ import "../chat/widgets/code_block.dart";
 import "../chat/widgets/markdown_text.dart";
 import "../fonts.dart";
 
-/// A [DocumentController]'s text as the whole of a page: markdown rendered
-/// while it is read, anything else in `re_editor`'s editor, read-only until
-/// the page says it is being edited, each edit said back to the controller.
-class DocumentView extends ConsumerStatefulWidget {
-  const DocumentView(this.c, {super.key});
+/// How a document is read: the reader's, not the file's, so both outlive the
+/// page for the session and every document page shares them.
+abstract final class DocumentReading {
+  static final wrap = ValueNotifier(false);
+  static final textScale = ValueNotifier(1.0);
 
-  final DocumentController c;
+  static void scaleTo(double scale) =>
+      textScale.value = scale.clamp(minScale, maxScale);
 
-  @override
-  ConsumerState<DocumentView> createState() => _DocumentViewState();
+  static const minScale = 0.6;
+  static const maxScale = 2.4;
 }
 
-class _DocumentViewState extends ConsumerState<DocumentView> {
-  late final CodeLineEditingController _controller =
-      CodeLineEditingController.fromText(
-        widget.c.text,
-        CodeLineOptions(
-          lineBreak: widget.c.text.contains("\r\n")
-              ? TextLineBreak.crlf
-              : TextLineBreak.lf,
-        ),
-      )..addListener(_changed);
-  late final _grammar = grammarOfFile(widget.c.name);
-  CodeLines? _lines;
+/// An editor's controller over [text], keeping the line break the text was
+/// written with: its `text` is then what a save writes back.
+CodeLineEditingController documentController(String text) =>
+    CodeLineEditingController.fromText(
+      text,
+      CodeLineOptions(
+        lineBreak: text.contains("\r\n")
+            ? TextLineBreak.crlf
+            : TextLineBreak.lf,
+      ),
+    );
 
-  /// The reader's, not the file's, so they outlive the page for the session.
-  static bool _wrap = false;
-  static double _textScale = 1;
+/// A document's text as the whole of a page: markdown rendered while it is
+/// read, anything else in `re_editor`'s editor, read-only until [editing].
+/// The caller owns [controller] and hears its edits there.
+class DocumentEditor extends ConsumerWidget {
+  const DocumentEditor({
+    super.key,
+    required this.controller,
+    required this.name,
+    required this.markdown,
+    this.editing = false,
+    this.placeholder,
+    this.shortcuts = const {},
+  });
+
+  final CodeLineEditingController controller;
+
+  /// The file's name, which says how it is highlighted.
+  final String name;
+
+  /// Rendered rather than shown as source while it is read.
+  final bool markdown;
+  final bool editing;
+  final String? placeholder;
+
+  /// The page's own keys, beside the reading ones.
+  final Map<ShortcutActivator, VoidCallback> shortcuts;
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _changed() {
-    // The controller notifies on every caret move too; a selection change
-    // keeps the same lines.
-    final lines = _controller.codeLines;
-    if (identical(lines, _lines)) return;
-    _lines = lines;
-    widget.c.edit(_controller.text);
-  }
-
-  void _setScale(double scale) =>
-      setState(() => _textScale = scale.clamp(0.6, 2.4));
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final mod = Theme.of(context).platform == TargetPlatform.macOS;
-    final c = widget.c;
-    final body = c.text.isEmpty && !c.editing
-        ? const Center(child: Text("This file is empty"))
-        : c.editing || !c.markdown
-        ? _editor()
-        : _markdown(c.text);
+    SingleActivator key(LogicalKeyboardKey k) =>
+        SingleActivator(k, control: !mod, meta: mod);
+    final scale = DocumentReading.textScale;
     return CallbackShortcuts(
       bindings: {
-        SingleActivator(
-          LogicalKeyboardKey.equal,
-          control: !mod,
-          meta: mod,
-        ): () =>
-            _setScale(_textScale + 0.1),
-        SingleActivator(
-          LogicalKeyboardKey.minus,
-          control: !mod,
-          meta: mod,
-        ): () =>
-            _setScale(_textScale - 0.1),
-        SingleActivator(
-          LogicalKeyboardKey.digit0,
-          control: !mod,
-          meta: mod,
-        ): () =>
-            _setScale(1),
-        SingleActivator(LogicalKeyboardKey.keyW, alt: true): () =>
-            setState(() => _wrap = !_wrap),
+        ...shortcuts,
+        key(LogicalKeyboardKey.equal): () =>
+            DocumentReading.scaleTo(scale.value + 0.1),
+        key(LogicalKeyboardKey.minus): () =>
+            DocumentReading.scaleTo(scale.value - 0.1),
+        key(LogicalKeyboardKey.digit0): () => DocumentReading.scaleTo(1),
+        const SingleActivator(LogicalKeyboardKey.keyW, alt: true): () =>
+            DocumentReading.wrap.value = !DocumentReading.wrap.value,
       },
-      child: Focus(autofocus: true, child: body),
+      child: Focus(
+        autofocus: true,
+        child: ListenableBuilder(
+          listenable: Listenable.merge([scale, DocumentReading.wrap]),
+          builder: (context, _) {
+            final text = controller.text;
+            if (text.isEmpty && !editing) {
+              return const Center(child: Text("This file is empty"));
+            }
+            return editing || !markdown
+                ? _editor(context)
+                : _markdown(context, ref, text);
+          },
+        ),
+      ),
     );
   }
 
-  Widget _markdown(String text) => MediaQuery.withClampedTextScaling(
-    minScaleFactor: _textScale,
-    maxScaleFactor: _textScale,
-    child: SelectionArea(
-      child: Scrollbar(
-        child: SingleChildScrollView(
-          primary: true,
-          padding: const EdgeInsets.all(16),
-          child: MarkdownText(
-            text,
-            onTapLink: (href) {
-              final uri = Uri.tryParse(href);
-              // A relative link names a workspace file, which is no URL.
-              if (uri != null && uri.hasScheme) {
-                ref.read(linkOpenerProvider).open(context, uri);
-              }
-            },
+  Widget _markdown(BuildContext context, WidgetRef ref, String text) {
+    final scale = DocumentReading.textScale.value;
+    return MediaQuery.withClampedTextScaling(
+      minScaleFactor: scale,
+      maxScaleFactor: scale,
+      child: SelectionArea(
+        child: Scrollbar(
+          child: SingleChildScrollView(
+            primary: true,
+            padding: const EdgeInsets.all(16),
+            child: MarkdownText(
+              text,
+              onTapLink: (href) {
+                final uri = Uri.tryParse(href);
+                // A relative link names a workspace file, which is no URL.
+                if (uri != null && uri.hasScheme) {
+                  ref.read(linkOpenerProvider).open(context, uri);
+                }
+              },
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
-  Widget _editor() {
+  Widget _editor(BuildContext context) {
     final theme = Theme.of(context);
     final base = codeBlockStyle(theme);
-    final grammar = _grammar;
+    final grammar = grammarOfFile(name);
     final scheme = theme.colorScheme;
-    final editing = widget.c.editing;
+    final scale = DocumentReading.textScale.value;
     return CodeEditor(
       // Keyed so flipping read-only rebuilds the field with the caret it
       // should have, rather than carrying focus over from a read.
       key: ValueKey(editing),
-      controller: _controller,
+      controller: controller,
       readOnly: !editing,
       autofocus: editing,
-      hint: widget.c.placeholder,
-      wordWrap: _wrap,
+      hint: placeholder,
+      wordWrap: DocumentReading.wrap.value,
       padding: const EdgeInsets.fromLTRB(4, 8, 16, 8),
       style: CodeEditorStyle(
-        fontSize: base.fontSize! * _textScale,
+        fontSize: base.fontSize! * scale,
         fontFamily: monoFamily,
         fontHeight: base.height,
         textColor: scheme.onSurface,
@@ -160,11 +167,11 @@ class _DocumentViewState extends ConsumerState<DocumentView> {
             controller: editing,
             notifier: notifier,
             textStyle: base.copyWith(
-              fontSize: base.fontSize! * _textScale,
+              fontSize: base.fontSize! * scale,
               color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
             ),
             focusedTextStyle: base.copyWith(
-              fontSize: base.fontSize! * _textScale,
+              fontSize: base.fontSize! * scale,
               color: scheme.onSurface,
             ),
           ),
@@ -172,4 +179,45 @@ class _DocumentViewState extends ConsumerState<DocumentView> {
       ),
     );
   }
+}
+
+/// A [DocumentController]'s text as a [DocumentEditor], each edit said back
+/// to the controller.
+class DocumentView extends StatefulWidget {
+  const DocumentView(this.c, {super.key});
+
+  final DocumentController c;
+
+  @override
+  State<DocumentView> createState() => _DocumentViewState();
+}
+
+class _DocumentViewState extends State<DocumentView> {
+  late final _controller = documentController(widget.c.text)
+    ..addListener(_changed);
+  CodeLines? _lines;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _changed() {
+    // The controller notifies on every caret move too; a selection change
+    // keeps the same lines.
+    final lines = _controller.codeLines;
+    if (identical(lines, _lines)) return;
+    _lines = lines;
+    widget.c.edit(_controller.text);
+  }
+
+  @override
+  Widget build(BuildContext context) => DocumentEditor(
+    controller: _controller,
+    name: widget.c.name,
+    markdown: widget.c.markdown,
+    editing: widget.c.editing,
+    placeholder: widget.c.placeholder,
+  );
 }

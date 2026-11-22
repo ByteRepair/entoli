@@ -1,11 +1,19 @@
 # The workspace explorer
 
-A workspace is where the agent's work lands, and until now the only way to see
-it was to leave the app. A row on the chat and project settings pages opens
-`WorkspaceAppPage` (`lib/app/pages/workspace.dart`, an `AppPage`) over one folder — the chat's own `workspace/` or the
-project's shared one, resolved by the page that knows which it is. A folder
-inside opens as a page of its own over it, so back climbs the way the taps
-went down, and its bar says where it sits under the root.
+A workspace is where the agent's work lands. `WorkspacePage`
+(`workspace_page.dart`, opened by `openWorkspace`) shows one folder of it —
+the chat's own `workspace/` or the project's shared one, resolved by whoever
+opens it. A folder inside opens in the same page, and back — the bar's arrow
+and the system gesture alike — climbs a folder before it leaves, the way the
+taps went down; the bar says where the folder sits under the root. The listing
+is read off the disk on each visit, a read for a folder already left is
+dropped, and one that fails says so with Try again.
+
+Long-press, or Select in the bar, starts a selection: checkboxes on the rows,
+"N selected" as the title, Delete and Cancel in the bar in place of the
+browsing actions, and a Share button where there is a share sheet. A
+selection is one folder's, so leaving the folder ends it. New Folder and
+Select are offered once the folder has been read.
 
 The default project's is reached from the sidebar instead, from the slot beside
 the project switcher that a named project fills with its settings gear. The
@@ -25,22 +33,33 @@ Listing, making a folder and deleting (`listWorkspace`, `createFolder`,
 folder name is sanitised by `safeRelativePath` like anything else joined onto a
 workspace — `../` is a name a folder can be asked for. Deleting looks each path
 up rather than trusting what the listing said it was, and asks first; it, and
-sharing where there is a share sheet, are actions on an entry's own row.
+sharing where there is a share sheet, are on an entry's own row menu as well as
+on a selection.
 
 A text file is the one thing a tap does not leave the app for.
-`TextFileAppPage` (`lib/app/pages/text_file.dart`, opened by the profile for
-linked instruction files too) reads it off the disk the listing came from and
-holds the draft, so the rules are one page's on every platform; its text is a
-`DocumentController`. It opens as a preview: markdown rendered, anything else
-as code — in Flutter `re_editor`'s `CodeEditor` (`DocumentView`),
-read-only and highlighted by the grammar `grammarOfFile` picks from the name —
+`TextFilePage` (`lib/ui/widgets/text_file_page.dart`; `openTextFile` where the
+profile opens a linked instruction file or a chat a job's log) reads it off the
+disk the listing came from and holds the draft. It opens as a preview: markdown
+rendered, anything else as code — `re_editor`'s `CodeEditor` in
+`DocumentEditor` (`document_view.dart`, the core shared with every other
+document page), read-only and highlighted by the grammar `grammarOfFile` picks
+from the name —
 the same thirty-one `CodeBlockBuilder` registers, found by a grammar's alias the
 way a fence names one. Edit turns the editor writable (markdown switches to its
 source), and the save is a plain write rather than `writeThroughRename`, since a
 rename makes a new file and drops the mode an agent gave its script, and would
-replace a linked CLAUDE.md that is a symlink with a file of its own. Wrapping
-and text size belong to the reader rather than the file, so they are held for
-the session rather than per page.
+replace a linked CLAUDE.md that is a symlink with a file of its own. Whether it
+is changed is measured against the controller's text, not the file as read: the
+editor writes every line break as the file's first kind, so a file of mixed
+breaks would otherwise read as edited before a key was pressed.
+
+The bar is icons — Save and Preview while editing, Edit while reading — and a
+More menu holding Wrap lines, Text size (a slider sheet, since a menu closes
+on every step), Copy and Open in another app, so it fits a phone's width. The
+title carries "•" while there is something unsaved, and leaving then asks.
+Ctrl+S (Cmd+S on a Mac) saves, Ctrl +/-/0 size the text and Alt+W wraps.
+Wrapping and text size belong to the reader rather than the file, so they are
+`DocumentReading`'s, held for the session rather than per page.
 
 Not Monaco, which was asked for: its Flutter wrapper is a webview, and
 `webview_flutter` has no Linux backend, so the one desktop this is developed on
@@ -56,7 +75,7 @@ its table has no entry for `py`, `go`, `yaml`, `ts`, `kt`, `rb` or most of what
 a coding agent writes, and it calls `rs` an XML dialect. The bytes settle the
 rest: `readTextHead` returns null for a NUL byte or a decode that fails, and the
 viewer closes and hands the file off itself, so a `.log` the agent wrote as a
-gzip ends up where it would have gone anyway. The bar keeps that route out
+gzip ends up where it would have gone anyway. The More menu keeps that route out
 for the files that *are* text, since a `.md` is often wanted in a real
 editor.
 
@@ -64,7 +83,8 @@ editor.
 holds logs with no upper bound on them, so only the head is read — enough to
 tell text from binary — and a file past it gets a pane with two buttons: open it
 in another app, or copy the whole of it, which is the one read of the full file
-and happens only on that tap. The head is never shown on its own: it is not the
+and happens only on that tap; the bar is empty then, the pane saying both. The
+head is never shown on its own: it is not the
 file, and an editor over it would cut the rest off on a save.
 The cap falls on a byte rather than a
 character, which is the one thing `readTextHead` has to undo before it decodes:

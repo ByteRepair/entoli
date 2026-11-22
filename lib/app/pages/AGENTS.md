@@ -11,6 +11,12 @@ page of its own. This is "Settings as data" (see
 `lib/ui/settings/AGENTS.md`) taken to the rest of the app, and it is built on
 the same pieces.
 
+The workspace explorer, a text file, the memories and the profile are plain
+widget pages instead (`lib/ui/workspace/`, `lib/ui/widgets/text_file_page.dart`,
+`lib/ui/memory/`, `lib/ui/profile/`), their rules in `lib/app/memories.dart`
+and `lib/app/profile_draft.dart`. Their `AppPage`s here are what a chat's and
+a project's settings page still open from a row.
+
 **A page is its sections of the settings' controllers.** `sections` returns
 `PageSection`s of `SettingController`s — the toggles, choices, collections,
 forms, notices, info rows and actions settings are made of — read through a
@@ -37,8 +43,8 @@ in `schema_view.dart`, up to three across, and native's `CardsRow`, an adaptive
 
 A few pieces keep the look the pages had before they were data.
 `PromptController` is prose the model reads — the profile's instructions —
-previewed as markdown, a tap opening `PromptAppPage` over the page: the
-text as a `DocumentController` being edited, Save handing it back to the
+previewed as markdown, a tap opening `PromptPage` (`prompt_field.dart`), a
+wrapping prose field, Save handing the text to its `onSet` and so to the
 page's draft. An `ItemMeter` with `segments` is one bar of parts end to end
 with a legend and a `MeterMark` across it: the context page's window. A bar
 action with a glyph is drawn as its icon. The page's own action is the
