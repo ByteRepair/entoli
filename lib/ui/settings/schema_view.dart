@@ -15,7 +15,7 @@ import "../../core/log.dart";
 import "../../app/settings/scope.dart";
 import "../../app/settings/settings.dart";
 import "../../app/settings/spec.dart";
-import "../../app/settings/pages/about.dart" show madeBy;
+import "../../core/brand.dart" show madeBy;
 import "../app_command.dart";
 import "../theme.dart" show appTitle;
 import "../widgets/app_mark.dart";
@@ -27,7 +27,6 @@ import "../widgets/add_button_row.dart";
 import "../widgets/catalog.dart";
 import "../widgets/settings_warning_banner.dart";
 import "../widgets/page_bar.dart";
-import "byte_repair_settings.dart";
 import "form_dialog.dart";
 import "setting_icons.dart";
 import "sync_pairing.dart";
@@ -169,7 +168,8 @@ class SettingRow extends StatelessWidget {
       final CatalogController c when c.hint == UiHint.single => _Single(c),
       final CatalogController c => _Catalog(c),
       final InfoController c => _Info(c),
-      final SetupController c => SetupView(c),
+      // Byte Repair, the one setup, draws itself.
+      SetupController() => const SizedBox.shrink(),
       final NumberController c => _Number(c, labelled: !nested),
       final ModelPickController c => LabelledField(
         label: c.title,

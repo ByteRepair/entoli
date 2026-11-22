@@ -1,15 +1,33 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../app/byte_repair.dart";
 import "../../app/pages/welcome.dart" show WelcomeAppPage;
-import "../../app/settings/settings.dart" show settingsPageHeldProvider;
 import "../app_pages.dart";
+import "about_settings.dart";
+import "browser_settings.dart";
+import "byte_repair_settings.dart";
+import "data_settings.dart";
+import "general_settings.dart";
+import "llm_settings.dart";
+import "memory_settings.dart";
 import "schema_view.dart";
 import "settings_category.dart";
+import "voice_settings.dart";
 
 /// What [category] draws, in either of Settings' layouts.
 Widget settingsCategoryBody(SettingsCategory category, {Key? key}) =>
     switch (category) {
+      SettingsCategory.general => GeneralSettings(key: key),
+      SettingsCategory.llms => LlmSettings(key: key),
+      SettingsCategory.images => ImageSettings(key: key),
+      SettingsCategory.memory => MemorySettings(key: key),
+      SettingsCategory.voice => VoiceSettings(key: key),
+      SettingsCategory.agentBrowser => BrowserSettings(key: key),
+      SettingsCategory.byteRepair => ByteRepairSettings(key: key),
+      SettingsCategory.data => DataSettings(key: key),
+      SettingsCategory.shortcuts => ShortcutsSettings(key: key),
+      SettingsCategory.about => AboutSettings(key: key),
       SettingsCategory.welcome => Builder(
         key: key,
         builder: (context) => Center(
@@ -25,4 +43,5 @@ Widget settingsCategoryBody(SettingsCategory category, {Key? key}) =>
 /// Whether [category] may not be left now: Byte Repair while its setup
 /// runs.
 bool settingsCategoryHeld(WidgetRef ref, SettingsCategory category) =>
-    ref.watch(settingsPageHeldProvider(category.page));
+    category == SettingsCategory.byteRepair &&
+    ref.watch(byteRepairHeldProvider);

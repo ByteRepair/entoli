@@ -58,6 +58,16 @@ one below it:
   item the way its `CollectionItem` says and saves through the controller's
   `submit`, so a hint changes only how a list is laid out.
 
+General, LLMs, Image Generation, Memory, Voice, Agent Browser, Byte Repair,
+Data, Shortcuts and About are plain widgets instead, one file each beside
+`settings_pages.dart`, which picks a category's widget: a setting is drawn
+at its level by `scoped.dart`'s widgets, and what has rules is in `lib/app/`
+— the backup's two directions (`backup_actions.dart`), the browser pick
+(`browser_settings.dart`) and Byte Repair's setup (`byte_repair.dart`). What
+other pages share of General and LLMs — the environment, Omada's order and
+depth, the default and title models, the approval mode, the step limit —
+stays as specs for them.
+
 The welcome tour is not settings: it is an `AppPage` (see
 `lib/app/pages/AGENTS.md`), and Settings' Welcome opens it.
 
@@ -259,6 +269,9 @@ carries the same copy button; the setup cannot run that installer itself,
 which wants sudo. Both are the store's (`setupNotice`, `prerequisite`), so the
 page names no platform. A delete takes the links and leaves what Homebrew
 installed, and its confirm says that.
+While a setup or an import runs, the category cannot be left
+(`byteRepairHeldProvider`): back, the bar's button and another category's tile
+are all shut, since the run's log and error are the page's to show.
 See "Byte Repair's environment, in five variables" in `lib/data/local/AGENTS.md`.
 The
 banner asks the same env question everywhere, the store naming the platform's
@@ -421,10 +434,9 @@ the app's answer, and the pick is written onto `meta.json` as it is.
 
 ## What the app is
 
-About is four tiles: the icon the app is wearing beside its name and version,
-who made it, a link to the repository, and the libraries. Private in
-`settings_page.dart` like every other category with no state — the files beside
-it are the ones with logic.
+About is five tiles: the icon the app is wearing beside its name and version,
+who made it, a link to the repository, the privacy policy, and the libraries.
+It is `about_settings.dart`, beside the keyboard shortcuts.
 
 The version is read out of the bundle rather than written into Dart, so
 pubspec's number stays the only one. `tool/prepare.sh` writes `version.json`
