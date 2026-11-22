@@ -100,15 +100,6 @@ void main() {
     expect(queued, isEmpty);
   });
 
-  test("a new controller is followed", () {
-    final other = ComposerController()..text = "!pwd";
-    addTearDown(other.dispose);
-    logic.field = other;
-    expect(logic.mode, ComposerMode.shell);
-    controller.text = "plain";
-    expect(logic.mode, ComposerMode.shell, reason: "the old one is let go");
-  });
-
   test("the send button names the callback typed, not every callback's", () {
     String label() =>
         logic.mode.sendLabel(queues: false, callback: logic.callback);

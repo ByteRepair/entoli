@@ -153,22 +153,15 @@ class ComposerBinding {
 /// change. [canSend] and [queues] are notifiers of their own, since they flip
 /// on keystrokes and only the buttons draw them.
 class ComposerModel extends ChangeNotifier {
-  ComposerModel(ComposerText field, {required this.pick}) : _field = field {
+  ComposerModel(this.field, {required this.pick}) {
     field.addListener(_sync);
     _sync();
   }
 
-  /// Runs the frontend's picker: the files the user chose.
+  /// Runs the platform's picker: the files the user chose.
   final Future<List<Attachment>> Function(AttachmentKind kind) pick;
 
-  ComposerText _field;
-  ComposerText get field => _field;
-  set field(ComposerText value) {
-    if (value == _field) return;
-    _field.removeListener(_sync);
-    _field = value..addListener(_sync);
-    _sync();
-  }
+  final ComposerText field;
 
   ComposerBinding _turn = const ComposerBinding(
     agentSpeaking: false,
@@ -220,7 +213,7 @@ class ComposerModel extends ChangeNotifier {
 
   @override
   void dispose() {
-    _field.removeListener(_sync);
+    field.removeListener(_sync);
     canSend.dispose();
     queues.dispose();
     super.dispose();
@@ -247,21 +240,21 @@ class ComposerModel extends ChangeNotifier {
       case ComposerAction.insertAgent:
         _openTrigger(CompletionKind.agent);
       case ComposerAction.newGoal:
-        final goal = goalStarted(_field.text);
-        _field.edit(goal, goal.length);
+        final goal = goalStarted(field.text);
+        field.edit(goal, goal.length);
     }
   }
 
   void _openTrigger(CompletionKind kind) {
-    final (:text, :caret) = triggerOpened(_field.text, _field.caret, kind);
-    _field.edit(text, caret);
+    final (:text, :caret) = triggerOpened(field.text, field.caret, kind);
+    field.edit(text, caret);
   }
 
   void _sync() {
     _refresh();
     // The field's text rather than the message: an embed is never `!` or a
     // `/skill`, so the answer is the same without writing the message out.
-    final text = _field.text;
+    final text = field.text;
     final shell = shellBypassCommand(text) != null;
     final wired = shell ? null : wiredSkillFromText(text);
     final mode = shell
@@ -269,7 +262,7 @@ class ComposerModel extends ChangeNotifier {
         : wired != null
         ? ComposerMode.callback
         : ComposerMode.message;
-    final embeds = _field.embedCount;
+    final embeds = field.embedCount;
     final reshaped = mode != _mode || embeds != _embeds || wired != _callback;
     _mode = mode;
     _callback = wired;
@@ -286,13 +279,13 @@ class ComposerModel extends ChangeNotifier {
         worth &&
         _turn.agentSpeaking &&
         _turn.onQueue != null &&
-        (_turn.steers?.call(_field.message) ?? false);
+        (_turn.steers?.call(field.message) ?? false);
   }
 
   /// A file on its own is worth sending, and whitespace on its own is not. An
   /// embed's character is not whitespace, so a quote alone is worth sending.
   bool get worthSending =>
-      _field.text.trim().isNotEmpty || _attachments.isNotEmpty;
+      field.text.trim().isNotEmpty || _attachments.isNotEmpty;
 
   void attach(List<Attachment> files) {
     if (files.isEmpty) return;
@@ -310,7 +303,7 @@ class ComposerModel extends ChangeNotifier {
   /// been typed or attached since.
   void restore(Draft said) {
     final (:text, :attachments) = said;
-    _field.prepend(text);
+    field.prepend(text);
     _attachments.insertAll(0, attachments);
     _changed();
   }
@@ -322,8 +315,8 @@ class ComposerModel extends ChangeNotifier {
   void submit({bool queue = false}) {
     if (!worthSending) return;
     final send = queue && queues.value ? _turn.onQueue! : _turn.onSend;
-    send(_field.message.trim(), List.of(_attachments));
-    _field.clear();
+    send(field.message.trim(), List.of(_attachments));
+    field.clear();
     _attachments.clear();
     _changed();
   }

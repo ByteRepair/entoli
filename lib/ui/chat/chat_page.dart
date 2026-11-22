@@ -194,7 +194,6 @@ class _NewChatState extends ConsumerState<_NewChat> {
         const _CommandHint(),
         switch (slot) {
           ComposerReady(:final binding) => Composer(
-            controller: _controller,
             model: _model,
             binding: binding,
           ),
@@ -1179,12 +1178,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
     );
     return switch (slot) {
       ComposerReady(:final binding) => over(
-        Composer(
-          key: _composer,
-          controller: _controller,
-          model: _model,
-          binding: binding,
-        ),
+        Composer(key: _composer, model: _model, binding: binding),
       ),
       ComposerAnswering() => over(TurnQuestions(view: view, notifier: driver!)),
       ComposerNeedsSetup() => const NeedsSetupBar(),

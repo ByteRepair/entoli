@@ -3,7 +3,9 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/app/composer.dart" show ComposerBinding;
+import "package:agent_chat/app/composer.dart"
+    show ComposerBinding, ComposerModel;
+import "package:agent_chat/providers.dart" show attachmentPickerProvider;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/quote.dart";
@@ -19,6 +21,7 @@ import "../harness.dart";
 
 void main() {
   late TestApp app;
+  late ComposerModel model;
   final controller = ComposerController();
   final sent = <String>[];
   final sentAttachments = <List<Attachment>>[];
@@ -26,12 +29,19 @@ void main() {
 
   setUp(() {
     app = TestApp.create();
+    model = ComposerModel(
+      controller,
+      pick: (kind) => app.container.read(attachmentPickerProvider).pick(kind),
+    );
     controller.clear();
     queued.clear();
     sent.clear();
     sentAttachments.clear();
   });
-  tearDown(() => app.dispose());
+  tearDown(() {
+    model.dispose();
+    app.dispose();
+  });
   tearDownAll(controller.dispose);
 
   Future<void> pump(
@@ -49,7 +59,7 @@ void main() {
       Scaffold(
         body: Composer(
           key: key,
-          controller: controller,
+          model: model,
           binding: ComposerBinding(
             agentSpeaking: agentSpeaking,
             onSend: (text, attachments) {
