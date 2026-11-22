@@ -4,7 +4,8 @@ import "../../app/settings/controller.dart";
 import "../widgets/prompt_field.dart";
 
 /// A [PromptController] as a [PromptField]: the text as it will be read, a
-/// tap opening the core's editor page.
+/// tap opening [PromptPage], whose field wraps prose, where the controller
+/// takes the text back, else the core's editor page.
 class PromptPreview extends StatelessWidget {
   const PromptPreview(this.c, {super.key});
 
@@ -16,7 +17,9 @@ class PromptPreview extends StatelessWidget {
     value: c.text,
     hint: c.placeholder,
     editable: c.enabled,
-    onEdit: c.run,
+    completions: false,
+    onChanged: c.onSet,
+    onEdit: c.onSet == null ? c.run : null,
   );
 }
 

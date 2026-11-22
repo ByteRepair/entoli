@@ -627,6 +627,7 @@ final class PromptController extends SettingController implements Pressable {
     required this.text,
     required this.placeholder,
     required Future<void> Function() onOpen,
+    this.onSet,
     super.title,
     super.description,
     super.footnote,
@@ -639,6 +640,10 @@ final class PromptController extends SettingController implements Pressable {
 
   /// What the preview says while [text] is empty.
   final String placeholder;
+
+  /// Takes the edited text where a frontend edits it in a page of its own
+  /// rather than through [run].
+  final void Function(String text)? onSet;
 
   final Future<void> Function() _open;
 

@@ -84,6 +84,7 @@ extension PromptFields on AppPage {
     part(id, title, description: description),
     text: text,
     placeholder: placeholder,
+    onSet: onSet,
     onOpen: () async => pages.open(
       PromptAppPage(
         from: "$address/$id",

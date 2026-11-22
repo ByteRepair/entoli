@@ -13,28 +13,27 @@ import "../domain/project.dart";
 import "../providers.dart";
 
 export "../app/projects.dart";
-import "../app/pages/memory.dart";
 import "../app/pages/project_settings.dart";
-import "../app/pages/workspace.dart";
 import "app_pages.dart";
+import "memory/memory_page.dart";
+import "workspace/workspace_page.dart";
 
 void openProjectWorkspace(BuildContext context, WidgetRef ref, ProjectRef at) =>
-    openAppPage(
+    openWorkspace(
       context,
-      WorkspaceAppPage(
-        root: ref
-            .read(appConfigProvider)
-            .projectWorkspaceDir(project: at.project),
-        owner: "${projectLabel(at.project)} workspace",
-      ),
+      root: ref
+          .read(appConfigProvider)
+          .projectWorkspaceDir(project: at.project),
+      title: "${projectLabel(at.project)} workspace",
     );
 
 /// The app's own store: what the default project shows beside its workspace
 /// in place of a settings page, and what a built-in with [MemoryPolicy.app]
 /// shows for the same reason.
-void openProjectMemories(BuildContext context, ProjectRef at) => openAppPage(
+void openProjectMemories(BuildContext context, ProjectRef at) => openMemories(
   context,
-  MemoryAppPage(project: (device: at.device, project: null), owner: "Memories"),
+  project: (device: at.device, project: null),
+  title: "Memories",
 );
 
 void openProjectSettings(BuildContext context, ProjectRef at) => openAppPage(
