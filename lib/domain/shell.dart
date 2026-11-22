@@ -25,6 +25,9 @@ const bashToolName = "bash";
 String? shellBypassCommand(String text) =>
     text.startsWith("!") ? text.substring(1).trim() : null;
 
+/// [command] as the user typed it: [shellBypassCommand] the other way.
+String shellBypassLine(String command) => "!$command";
+
 /// [text] as one single-quoted POSIX shell word, whatever it holds.
 String shellQuoted(String text) => "'${text.replaceAll("'", r"'\''")}'";
 

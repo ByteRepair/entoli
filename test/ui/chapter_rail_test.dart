@@ -63,7 +63,7 @@ void main() {
 
     final chapters = chaptersOf(chat);
     expect(chapters.map((c) => c.id), ["u1", "run", "u2"]);
-    expect(chapters[1].preview, r"$ git status");
+    expect(chapters[1].preview, "!git status");
   });
 
   testWidgets("a branched chapter is marked, and says how many threads", (

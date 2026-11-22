@@ -1,5 +1,4 @@
 import "package:agent_chat/app/app_menus.dart";
-
 import "dart:async";
 import "dart:io";
 
@@ -72,7 +71,6 @@ import "package:agent_chat/ui/theme.dart";
 import "package:agent_chat/ui/widgets/decorative_motion.dart";
 
 import "fakes.dart";
-
 import "package:agent_chat/ui/settings/settings_category.dart";
 import "package:agent_chat/domain/rootfs.dart";
 

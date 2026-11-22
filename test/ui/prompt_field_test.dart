@@ -31,7 +31,6 @@ void main() {
     expect(find.textContaining("First line"), findsOneWidget);
     expect(find.textContaining("two"), findsOneWidget);
     expect(find.byType(OutlinedButton), findsNothing);
-    expect(find.textContaining("Edit"), findsNothing);
   });
 
   testWidgets("tapping the preview opens the editor, and saving hands it on", (

@@ -1141,7 +1141,7 @@ It is laid over the margin rather than beside the column, so the column stays
 centred whether it is there or not, and it is drawn only where the margin has
 room for it — `_ReadableColumn`'s `side` — from the first prompt on: a lone
 tick still says where the conversation starts. A command the user ran is a
-chapter as well, its tooltip the `$` line, since it is something they did
+chapter as well, its tooltip the `!` line as typed, since it is something they did
 there. A chapter is a prompt and the turn
 under it, so a branch anywhere in that turn — an edit at the prompt, a
 regenerate under it — puts a fork beside its tick (`chaptersOf`, off

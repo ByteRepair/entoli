@@ -1,5 +1,6 @@
 import "../../domain/end_turn.dart" show drawnAsRow;
 import "../../domain/models.dart";
+import "../../domain/shell.dart" show shellBypassLine;
 
 /// One thing the user said, as a place in the conversation to go back to.
 typedef Chapter = ({
@@ -65,16 +66,13 @@ List<Chapter> chaptersOf(Chat chat) {
   return chapters;
 }
 
-/// What a user message says, a command it ran written as the shell line:
-/// a command has no text of its own.
+/// What a user message says, a command it ran written as it was typed: a
+/// command has no text of its own.
 String _said(Message message) => [
-  for (final part in message.parts)
-    switch (part) {
-      TextPart(:final text) => text,
-      ShellRunPart(:final command) => "\$ $command",
-      _ => null,
-    },
-].nonNulls.join("\n");
+  if (message.hasText) message.plainText,
+  for (final run in message.parts.whereType<ShellRunPart>())
+    shellBypassLine(run.command),
+].join("\n");
 
 /// How much of a prompt the tooltip shows.
 const _previewLength = 50;

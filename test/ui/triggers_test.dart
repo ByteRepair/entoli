@@ -15,7 +15,6 @@ import "package:agent_chat/ui/widgets/resettable_field.dart"
 
 import "../fakes.dart";
 import "../harness.dart";
-
 import "package:agent_chat/ui/settings/settings_category.dart";
 
 /// The field on the prompt page, and not the editor's Name behind it.
