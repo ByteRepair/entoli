@@ -8,7 +8,6 @@ import "pages/memory.dart";
 import "pages/on_device.dart";
 import "pages/prompts.dart";
 import "pages/providers.dart";
-import "pages/sync.dart";
 import "pages/triggers.dart";
 import "pages/terminal.dart";
 import "pages/voice.dart";
@@ -24,7 +23,6 @@ final entoliSettings = SettingsSchema(
     ...terminalSections,
     ...browserSections,
     ...aboutSections,
-    ...syncSections,
     ...dataSections,
     ...providerSections,
     ...onDeviceSections,
@@ -40,7 +38,6 @@ final entoliSettings = SettingsSchema(
     ...terminalSettings,
     ...browserSettings,
     ...aboutSettings,
-    ...syncSettings,
     ...dataSettings,
     ...providerSettings,
     ...onDeviceSettings,

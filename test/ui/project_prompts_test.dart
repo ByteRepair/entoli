@@ -5,7 +5,8 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/prompts/skill_import.dart";
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/app/pages/project_settings.dart";
+import "package:agent_chat/ui/settings/agents_settings.dart";
+import "package:agent_chat/ui/widgets/install_destination.dart";
 
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
@@ -27,10 +28,7 @@ void main() {
         await writeSkill(app, "local-note", project: "work");
       });
 
-      await app.pumpPage(tester, ProjectSettingsAppPage("work"));
-      await scrollTo(tester, find.text("Skills"));
-      await tester.tap(find.text("Skills"));
-      await settleIo(tester);
+      await pumpProjectPrompts(tester, app, CompletionKind.skill, "work");
       await reloadLibrary(tester, app, project: "work");
 
       // The bundled presets sort ahead of the user's entries, and the list
@@ -38,10 +36,14 @@ void main() {
       // first, and `review` is then below it, still a forward scroll away.
       await scrollTo(tester, find.text("local-note"));
       expect(find.text("local-note"), findsOneWidget);
+      expect(find.byIcon(Icons.close), findsOneWidget);
 
-      // Removing it deletes the project's own directory, not the default's.
-      await rowAction(tester, "local-note", "Remove");
-      await tester.tap(find.text("Remove").last);
+      // Removing it deletes the project's own directory, not the default's —
+      // tapped while the row is on screen, since bringing `review` up from
+      // below would take this one off the top of the window again.
+      await tester.tap(find.byIcon(Icons.close));
+      await settleIo(tester);
+      await tester.tap(find.text("Remove"));
       await settleIo(tester, least: 15);
 
       final dir = app.config.promptsDir(CompletionKind.skill, project: "work");
@@ -62,10 +64,7 @@ void main() {
     testWidgets("a user project's page imports, without the destination "
         "combobox the global page carries", (tester) async {
       await io(tester, () => app.repo.createProject("work"));
-      await app.pumpPage(tester, ProjectSettingsAppPage("work"));
-      await scrollTo(tester, find.text("Skills"));
-      await tester.tap(find.text("Skills"));
-      await settleIo(tester);
+      await pumpProjectPrompts(tester, app, CompletionKind.skill, "work");
 
       expect(find.text("Import skill"), findsOneWidget);
       expect(find.text("Install to"), findsNothing);
@@ -75,9 +74,8 @@ void main() {
       tester,
     ) async {
       await pumpSettings(tester, app, SettingsCategory.skills);
-      await scrollTo(tester, find.text("Import skill"));
       expect(find.text("Import skill"), findsOneWidget);
-      expect(find.text("Install to"), findsOneWidget);
+      expect(find.byType(InstallDestination), findsOneWidget);
     });
   });
 
@@ -88,33 +86,25 @@ void main() {
     ) async {
       await io(tester, () => app.repo.createProject("work"));
 
-      await app.pumpPage(tester, ProjectSettingsAppPage("work"));
-      await scrollTo(tester, find.text("Agents"));
-      await tester.tap(find.text("Agents"));
-      await settleIo(tester);
+      await pumpProjectPrompts(tester, app, CompletionKind.agent, "work");
       await reloadLibrary(tester, app, project: "work");
 
       // Reloaded, the library is the real sources: the bundled agents for
       // both projects, and none of the test's seed. The default project's
       // are inherited here.
+      expect(find.byType(AgentsSettings), findsOneWidget);
       expect(find.text("general"), findsOneWidget);
       expect(find.text("Bundled"), findsNWidgets(3));
-      await openRowMenu(tester, "general");
-      expect(find.text("Remove"), findsNothing);
-      await tester.tapAt(Offset.zero);
-      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+      expect(find.text("Add agent"), findsOneWidget);
 
-      await scrollTo(tester, find.text("Add agent"));
       await tester.tap(find.text("Add agent"));
       await settleIo(tester);
 
       await tester.enterText(find.byType(TextField).at(0), "tester");
       await tester.enterText(find.byType(TextField).at(1), "A test agent");
       await writePrompt(tester, "You test things.", label: "System prompt");
-      await tester.pump();
-      await tester.tap(
-        find.descendant(of: find.byType(AppBar), matching: find.text("Save")),
-      );
+      await tester.tap(find.text("Save"));
       await settleIo(tester, least: 15);
 
       final file = File(
@@ -123,9 +113,11 @@ void main() {
       expect(file.existsSync(), isTrue);
       expect(file.readAsStringSync(), contains("You test things."));
 
-      // Own rows remove; removing takes the project's file only.
-      await rowAction(tester, "tester", "Remove");
-      await tester.tap(find.text("Remove").last);
+      // Own rows edit and remove; removing takes the project's file only.
+      expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.close));
+      await settleIo(tester);
+      await tester.tap(find.text("Remove"));
       await settleIo(tester, least: 15);
       expect(file.existsSync(), isFalse);
       // The default project's agents are untouched.
@@ -141,10 +133,12 @@ void main() {
     testWidgets("Byte Repair's page lists its bundled agent read-only", (
       tester,
     ) async {
-      await app.pumpPage(tester, ProjectSettingsAppPage("byte-repair"));
-      await scrollTo(tester, find.text("Agents"));
-      await tester.tap(find.text("Agents"));
-      await settleIo(tester);
+      await pumpProjectPrompts(
+        tester,
+        app,
+        CompletionKind.agent,
+        "byte-repair",
+      );
       await reloadLibrary(tester, app, project: "byte-repair");
 
       // Its own bundled agent, and the three defaults it inherits — all
@@ -153,18 +147,19 @@ void main() {
       expect(find.text("Bundled"), findsNWidgets(4));
       expect(find.text("Inherited"), findsNothing);
       expect(find.text("Add agent"), findsNothing);
-      expect(find.text("Import agent"), findsNothing);
-      await openRowMenu(tester, "esbmc-verifier");
-      expect(find.text("Remove"), findsNothing);
+      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+      expect(find.byIcon(Icons.close), findsNothing);
     });
 
     testWidgets(
       "Byte Repair's skills page is read-only and has no destination",
       (tester) async {
-        await app.pumpPage(tester, ProjectSettingsAppPage("byte-repair"));
-        await scrollTo(tester, find.text("Skills"));
-        await tester.tap(find.text("Skills"));
-        await settleIo(tester);
+        await pumpProjectPrompts(
+          tester,
+          app,
+          CompletionKind.skill,
+          "byte-repair",
+        );
         await reloadLibrary(tester, app, project: "byte-repair");
 
         // The bundled presets the library serves every project — the
@@ -173,9 +168,8 @@ void main() {
         expect(find.text("artifact"), findsOneWidget);
         expect(find.text("Bundled"), findsWidgets);
         expect(find.text("Import skill"), findsNothing);
-        expect(find.text("Install to"), findsNothing);
-        await openRowMenu(tester, "artifact");
-        expect(find.text("Remove"), findsNothing);
+        expect(find.byType(InstallDestination), findsNothing);
+        expect(find.byIcon(Icons.close), findsNothing);
       },
     );
   });

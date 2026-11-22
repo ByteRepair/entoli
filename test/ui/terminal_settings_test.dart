@@ -6,6 +6,9 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/domain/confinement.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/app/settings/scope.dart";
+import "package:agent_chat/domain/settings/keys.dart";
+import "package:agent_chat/ui/settings/terminal_settings.dart";
 
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
@@ -268,6 +271,63 @@ void main() {
       await pumpTerminal(tester);
 
       expect(find.text(unsupported), findsOneWidget);
+    });
+  });
+
+  group("the sandbox's grants", () {
+    testWidgets("each is on by default and its switch turns it off", (
+      tester,
+    ) async {
+      app = TestApp.create(shell: LocalShell(environment: () => const {}));
+      await pumpTerminal(tester);
+
+      final caches = find.widgetWithText(
+        SwitchListTile,
+        "Package and build caches",
+      );
+      await scrollTo(tester, caches);
+      expect(tester.widget<SwitchListTile>(caches).value, isTrue);
+      await tester.tap(caches);
+      await settleIo(tester);
+
+      expect(
+        app.container
+            .read(projectSettingsProvider(null))
+            .doc
+            .read(SettingKeys.sandboxCaches),
+        isFalse,
+      );
+      expect(tester.widget<SwitchListTile>(caches).value, isFalse);
+    });
+
+    testWidgets("a project's inherit the default project's until set", (
+      tester,
+    ) async {
+      app = TestApp.create(shell: LocalShell(environment: () => const {}));
+      await io(tester, () async {
+        await app.repo.createProject("work");
+        await app.container
+            .read(projectSettingsProvider(null).notifier)
+            .setProjectSandbox(false);
+      });
+      await app.pump(
+        tester,
+        const Scaffold(
+          body: SingleChildScrollView(
+            child: SandboxSettings(at: ProjectAddress("work")),
+          ),
+        ),
+      );
+      await settleIo(tester);
+
+      expect(find.text("Sandbox — Default (off)"), findsOneWidget);
+      await tester.tap(find.widgetWithText(SwitchListTile, "Sandbox"));
+      await settleIo(tester);
+      expect(
+        app.container.read(projectSettingsProvider("work")).sandbox,
+        isTrue,
+      );
+      expect(find.text("Sandbox — Default (off)"), findsNothing);
     });
   });
 }
