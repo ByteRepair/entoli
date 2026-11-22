@@ -1,7 +1,6 @@
 import "../../app/custom_model.dart" show customModelDraft, pickerProviders;
 import "../../app/reader.dart" show WidgetReader;
 import "custom_model_page.dart";
-import "../../app/model_facts.dart" show providerHue;
 import "../../app/model_picker.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -540,6 +539,11 @@ class _ModelCard extends StatelessWidget {
     );
   }
 }
+
+/// The hue a provider's monogram wears, 0 to 359, from its name's characters
+/// rather than `hashCode`, which is not the same from one run to the next.
+int providerHue(String name) =>
+    name.codeUnits.fold(0, (a, c) => a * 31 + c) % 360;
 
 /// The provider's initial on a colour of its own, so a long list reads by
 /// provider at a glance.

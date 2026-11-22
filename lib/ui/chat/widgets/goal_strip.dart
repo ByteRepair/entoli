@@ -1,7 +1,9 @@
 import "package:flutter/material.dart";
 
+import "../../../app/transcript/transcript.dart" show goalGlyph;
 import "../../../domain/goal.dart";
 import "../../widgets/action_icon.dart";
+import "../activity/glyphs.dart";
 
 /// The chat's goal, one row above the composer while there is one: what it
 /// is, where it stands, and the buttons `/goal pause`, `resume` and `clear`
@@ -87,9 +89,4 @@ class GoalStrip extends StatelessWidget {
 
 /// A goal standing at [status], as an icon — the row's, and the marks that
 /// leave it there.
-IconData goalStatusIcon(GoalStatus status) => switch (status) {
-  GoalStatus.active => Icons.track_changes,
-  GoalStatus.paused => Icons.pause_circle_outline,
-  GoalStatus.met => Icons.check_circle_outline,
-  GoalStatus.blocked => Icons.block,
-};
+IconData goalStatusIcon(GoalStatus status) => iconOf(goalGlyph(status));

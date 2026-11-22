@@ -16,7 +16,7 @@ import "../settings/settings_category.dart";
 import "../selection.dart";
 import "../widgets/nothing.dart";
 import "../widgets/search_field.dart";
-import "chat_headings.dart";
+import "../../app/chat_groups.dart";
 import "project_palette.dart";
 import "../../app/remote_projects.dart";
 
@@ -344,7 +344,7 @@ class _ChatList extends ConsumerWidget {
         return CustomScrollView(
           slivers: [
             for (final group in groupChatsByDate(found, now: now)) ...[
-              SliverToBoxAdapter(child: ListHeading(group.headingAt(now))),
+              SliverToBoxAdapter(child: ListHeading(group.heading)),
               SliverList.builder(
                 itemCount: group.chats.length,
                 itemBuilder: (context, i) => _ChatTile(

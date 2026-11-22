@@ -668,10 +668,8 @@ is. The layers, each knowing only the one below:
   `MessageActions` is what can be done to a message and does it: the
   threads and the steps between them, delete and its question, edit,
   regenerate, react — every rule of when each is on offer.
-- **Ports.** The core draws nothing, so highlighting is an interface bound
-  at the root (`core/transcript_bindings.dart`, which `main` and the harness
-  both spread): `CodeHighlighter` (tokens with highlight.js's scope names, the grammars in
-  `core/code_grammars.dart`), and `ActivityCatalog`, which
+- **Ports**, bound at the root (`core/transcript_bindings.dart`, which
+  `main` and the harness both spread): `ActivityCatalog`, which
   `TranscriptActivities` implements over every kind. The catalogue is bound
   rather than imported because a sub-agent's detail holds a transcript that
   is made of activities: the layout depends on the abstraction, and the

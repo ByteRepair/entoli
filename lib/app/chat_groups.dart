@@ -1,17 +1,13 @@
 import "../domain/models.dart";
 
-/// How long ago a group's chats last changed, or that they are pinned:
-/// what the sidebar heads each group with, worded by each frontend.
-enum ChatPeriod { pinned, today, yesterday, previousWeek, previousMonth, month }
+/// The heading pinned chats sit under, ahead of every date group.
+const pinnedHeading = "Pinned";
 
 /// The chats under one of the sidebar's headings.
 class ChatGroup {
-  const ChatGroup(this.period, this.chats, {this.month});
+  const ChatGroup(this.heading, this.chats);
 
-  final ChatPeriod period;
-
-  /// For [ChatPeriod.month], the month: its first day, local.
-  final DateTime? month;
+  final String heading;
   final List<ChatState> chats;
 }
 
@@ -34,28 +30,46 @@ List<ChatGroup> groupChatsByDate(
     ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
   final pinned = sorted.where((c) => c.pinned).toList();
   final rest = sorted.where((c) => !c.pinned).toList();
-  final groups = <(ChatPeriod, DateTime?), List<ChatState>>{};
+  final groups = <String, List<ChatState>>{};
   for (final chat in rest) {
-    final key = _period(chat.updatedAt.toLocal(), now.toLocal());
-    groups.putIfAbsent(key, () => []).add(chat);
+    final heading = _heading(chat.updatedAt.toLocal(), now.toLocal());
+    groups.putIfAbsent(heading, () => []).add(chat);
   }
   return [
-    if (pinned.isNotEmpty) ChatGroup(ChatPeriod.pinned, pinned),
-    for (final MapEntry(key: (period, month), value: chats) in groups.entries)
-      ChatGroup(period, chats, month: month),
+    if (pinned.isNotEmpty) ChatGroup(pinnedHeading, pinned),
+    for (final MapEntry(key: heading, value: chats) in groups.entries)
+      ChatGroup(heading, chats),
   ];
 }
 
-(ChatPeriod, DateTime?) _period(DateTime at, DateTime now) {
+/// A month of an earlier year says the year, or August 2025 and August 2026
+/// would read as one.
+String _heading(DateTime at, DateTime now) {
   final days = _daysBetween(at, now);
   // A chat dated in the future is a clock that has gone back, and today is the
   // least surprising place for it.
-  if (days <= 0) return (ChatPeriod.today, null);
-  if (days == 1) return (ChatPeriod.yesterday, null);
-  if (days < 7) return (ChatPeriod.previousWeek, null);
-  if (days < 30) return (ChatPeriod.previousMonth, null);
-  return (ChatPeriod.month, DateTime(at.year, at.month));
+  if (days <= 0) return "Today";
+  if (days == 1) return "Yesterday";
+  if (days < 7) return "Previous 7 days";
+  if (days < 30) return "Previous 30 days";
+  final month = _months[at.month - 1];
+  return at.year == now.year ? month : "$month ${at.year}";
 }
+
+const _months = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
 
 /// Whole days from one local date to another, counted on a UTC calendar: a
 /// local day either side of a clock change is 23 or 25 hours long, and

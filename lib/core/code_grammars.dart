@@ -32,8 +32,6 @@ import "package:re_highlight/languages/typescript.dart";
 import "package:re_highlight/languages/xml.dart";
 import "package:re_highlight/languages/yaml.dart";
 
-import "../app/transcript/code.dart";
-
 /// The grammars a fence can name. `re_highlight` ships 197, and registering
 /// all of them costs 359 KB gzipped where these thirty-one cost 56 KB — a
 /// grammar is data, so nothing tree-shakes the ones nobody names and every
@@ -123,44 +121,3 @@ const _grammarByExtension = {
   "env": "properties",
   "htm": "xml",
 };
-
-/// [CodeHighlighter] over the grammars above.
-class GrammarHighlighter implements CodeHighlighter {
-  const GrammarHighlighter();
-
-  @override
-  List<CodeToken> tokens(String code, String? language) {
-    final plain = [CodeToken(code)];
-    if (language == null || highlighter.getLanguage(language) == null) {
-      return plain;
-    }
-    final result = highlighter.highlight(code: code, language: language);
-    // A run that broke off emitted only the code up to the break.
-    if (result.errorRaised != null) return plain;
-    final renderer = _TokenRenderer();
-    result.render(renderer);
-    return renderer.tokens;
-  }
-}
-
-class _TokenRenderer implements HighlightRenderer {
-  final tokens = <CodeToken>[];
-  final _scopes = <String?>[];
-
-  @override
-  void addText(String text) {
-    final scope = _scopes.lastWhere((s) => s != null, orElse: () => null);
-    final last = tokens.lastOrNull;
-    if (last != null && last.scope == scope) {
-      tokens[tokens.length - 1] = CodeToken(last.text + text, scope);
-    } else {
-      tokens.add(CodeToken(text, scope));
-    }
-  }
-
-  @override
-  void openNode(DataNode node) => _scopes.add(node.scope);
-
-  @override
-  void closeNode(DataNode node) => _scopes.removeLast();
-}
