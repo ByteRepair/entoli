@@ -18,10 +18,10 @@ const stillGaze = Gaze(0.7, 0.7);
 Gaze? _stillGaze(BotMood mood, Gaze? given) =>
     given ?? (mood == BotMood.idle ? stillGaze : null);
 
-/// One avatar on screen, as every frontend animates it: its mood eased from
-/// the last, the reaction a tap plays — happy for a while, now and then a
-/// spin — and the frame for a moment on its own clock. A frontend keeps the
-/// clock, the pointer and the drag, and draws what this returns.
+/// One avatar on screen, animated: its mood eased from the last, the
+/// reaction a tap plays — happy for a while, now and then a spin — and the
+/// frame for a moment on its own clock. The widget keeps the clock, the
+/// pointer and the drag, and draws what this returns.
 class BotActor {
   BotActor(BotAvatarDefinition definition, {math.Random? random})
     : _prepared = PreparedBotAvatar.of(definition),

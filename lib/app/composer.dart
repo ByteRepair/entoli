@@ -197,7 +197,7 @@ class ComposerModel extends ChangeNotifier {
   ComposerMode _mode = ComposerMode.message;
   ComposerMode get mode => _mode;
 
-  /// The callback typed, which a frontend names; null where there is none.
+  /// The callback typed, which Send is named after; null where there is none.
   WiredCall? _callback;
   WiredCall? get callback => _callback;
 

@@ -7,7 +7,7 @@ import "../../providers.dart" show syncHubProvider;
 
 export "../../data/sync/pairing.dart" show PairingActivity, PairingStage;
 
-/// Pairing another device, as every frontend drives it: a window this
+/// Pairing another device, apart from how it is drawn: a window this
 /// device shows a code in, an invite pasted across by hand, or a code from
 /// the other device; then the codes both screens show, confirmed matching,
 /// and paired or failed — [activity] says which, as it changes.

@@ -4,9 +4,8 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 /// What the app's Navigator holds over the conversation, which is its first
-/// route. On the Navigator from `main`, whichever shell draws the app: the
-/// Flutter one asks it how to get back to the conversation, and the native
-/// one also whether a page covers it.
+/// route: what [toConversation] closes to get back to it. On the Navigator
+/// from `main`.
 class AppRoutes extends NavigatorObserver {
   final List<Route<Object?>> _stack = [];
 

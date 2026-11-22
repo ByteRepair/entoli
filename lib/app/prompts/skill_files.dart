@@ -13,8 +13,7 @@ import "../../domain/frontmatter.dart";
 import "../../domain/models.dart";
 
 /// A project's own skills on disk: what each folder is wrong about, and
-/// every write a page makes to them, each through the directory's lock. One
-/// copy for every frontend's skills page.
+/// every write a page makes to them, each through the directory's lock.
 class SkillFiles {
   const SkillFiles(this.config, {this.project});
 

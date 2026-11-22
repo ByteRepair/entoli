@@ -23,7 +23,7 @@ class ComposerController extends TextEditingController implements ComposerText {
   ComposerController({List<EmbedReader> readers = const [QuoteEmbed.read]})
     : _text = EmbedText<ComposerEmbed>(readers: readers);
 
-  /// The encoding, which is the core's: this is the Flutter field over it.
+  /// The encoding, which is the core's: this is the field over it.
   final EmbedText<ComposerEmbed> _text;
 
   @override

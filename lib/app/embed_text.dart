@@ -2,7 +2,7 @@ import "dart:math" show max;
 
 /// Something in the composer that is not typed text, as the core sees it:
 /// what it stands for in the message, and whether it is a paragraph of its
-/// own. How it is drawn is each frontend's.
+/// own. How it is drawn is the UI's.
 abstract interface class Embed {
   /// A block sends as a paragraph of its own, with a blank line either side
   /// whatever was typed around it. An inline one sends exactly where it is.
@@ -15,7 +15,7 @@ abstract interface class Embed {
 /// The composer's text and its embeds together, with no widget in it: each
 /// embed is one character of the text, a private-use code point handed out
 /// here and kept in a map, so a field that edits the text edits the embeds
-/// with it. Every frontend's field keeps one.
+/// with it. The composer's field keeps one.
 class EmbedText<E extends Embed> {
   EmbedText({required this.readers});
 

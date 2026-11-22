@@ -138,8 +138,7 @@ class _BotAvatarViewState extends State<BotAvatarView>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_tick);
 
-  /// The motion, the mood's easing and a tap's reaction: the core's, which
-  /// the native frontend's avatars run too.
+  /// The motion, the mood's easing and a tap's reaction: the core's.
   late final _actor = BotActor(widget.spec.definition);
 
   /// Made by the first [_sync], with the frame it would otherwise replace.

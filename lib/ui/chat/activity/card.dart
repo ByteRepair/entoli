@@ -281,8 +281,8 @@ class _ActivityCardState extends State<ActivityCard> {
   }
 }
 
-/// The conversation's hand-off as the Flutter frontend makes it: a page
-/// pushed over the [context] of what was tapped.
+/// The conversation's hand-off: a page pushed over the [context] of what was
+/// tapped.
 class ContextHandOff implements TranscriptHandOff {
   const ContextHandOff(this.context);
 

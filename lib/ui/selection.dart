@@ -1,5 +1,5 @@
-/// The Flutter frontend's ways to change what is open, each closing the
-/// drawer it was pressed in. The state is the core's: `lib/app/selection.dart`.
+/// The UI's ways to change what is open, each closing the drawer it was
+/// pressed in. The state is the core's: `lib/app/selection.dart`.
 library;
 
 import "package:flutter/material.dart";
