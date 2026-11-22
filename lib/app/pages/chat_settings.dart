@@ -273,11 +273,12 @@ class ChatSettingsAppPage extends ChatSettingsFields {
         }
       }
     } finally {
-      // A failed write leaves the page up to try again.
+      // A failed write leaves the page up to try again, the sidebar showing
+      // whatever half of it landed.
       _saving = false;
       changed();
+      app.invalidate(chatListProvider);
     }
-    app.invalidate(chatListProvider);
     pages.leave(this);
     return null;
   }

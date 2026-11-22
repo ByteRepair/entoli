@@ -100,7 +100,9 @@ final triggerSettings = [
     hint: UiHint.triggers,
     build: (c) {
       final triggers = c.ref.watch(triggersProvider);
-      final named = c.ref.watch(projectListProvider).value ?? const <String>[];
+      final listed = c.ref.watch(projectListProvider).value;
+      final loaded = listed != null;
+      final named = listed ?? const <String>[];
       final now = c.ref.watch(clockProvider).now();
       final exact = c.ref.watch(triggerPermissionsProvider).value?.exact;
       final notifier = c.ref.read(triggersProvider.notifier);
@@ -128,8 +130,14 @@ final triggerSettings = [
       TriggerForm form(Trigger? trigger) => TriggerForm(
         trigger,
         now: now,
+        // Until the list loads, the trigger's own project stays offered, so
+        // a save does not move it to the default.
         projects: [
-          for (final project in everyProject(named))
+          for (final project in everyProject([
+            ...named,
+            if (!loaded)
+              if (trigger?.project case final own? when isProjectName(own)) own,
+          ]))
             (project ?? "", projectLabel(project)),
         ],
         // As a new chat's resolves it, minus the chat's own value.

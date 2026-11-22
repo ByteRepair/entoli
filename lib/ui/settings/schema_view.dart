@@ -266,23 +266,27 @@ Future<bool> _agreed(BuildContext context, SettingConfirm? ask) async {
 /// Says what a change had to say, where it said anything: in a dialog where
 /// it has a title, in passing where it does not. One that threw says so,
 /// since most end at a plugin or the filesystem, where refusing is ordinary.
-Future<void> _tell(BuildContext context, Future<SettingNotice?> change) async {
+/// False where it threw.
+Future<bool> _tell(BuildContext context, Future<SettingNotice?> change) async {
   final SettingNotice? notice;
   try {
     notice = await change;
   } catch (e) {
     logFailure("settings", "an action failed", e);
     if (context.mounted) say(context, "That did not work: $e");
-    return;
+    return false;
   }
-  if (notice == null || !context.mounted) return;
+  if (notice == null || !context.mounted) return true;
   if (notice.copy case final text?) {
     await writeClipboard(ClipboardContent(plain: text));
-    if (!context.mounted) return;
+    if (!context.mounted) return true;
   }
-  final title = notice.title;
-  if (title == null) return notify(context, notice.message);
-  await tell(context, title: title, message: notice.message);
+  if (notice.title case final title?) {
+    await tell(context, title: title, message: notice.message);
+  } else {
+    notify(context, notice.message);
+  }
+  return true;
 }
 
 /// A setting's accessory, as the icon button at its end.
@@ -1244,11 +1248,11 @@ class _InputState extends State<_Input> {
   /// What is typed, handed over whole: a field with a [TextController.submitLabel]
   /// is said once, not a keystroke at a time — a sign-in code goes to a
   /// program that reads each line it is given as an answer.
-  void _submit() {
+  /// Cleared only once saved, so a refused key is still there to retry.
+  Future<void> _submit() async {
     final value = _text.text;
     if (value.trim().isEmpty && !widget.c.allowBlank) return;
-    _text.clear();
-    widget.c.set(value);
+    if (await _tell(context, widget.c.set(value)) && mounted) _text.clear();
   }
 
   @override
