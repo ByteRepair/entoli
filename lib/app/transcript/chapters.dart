@@ -20,14 +20,10 @@ typedef Chapter = ({
   int threads,
 });
 
-/// Whether [chapters] are drawn as a rail: one prompt has nowhere to jump
-/// to.
-bool railShown(List<Chapter> chapters) => chapters.length > 1;
-
-/// The chapters of the thread being read: every prompt, and every steer said
-/// over a turn, oldest first; not a command the user ran. A turn is the prompt and what answered it, up
-/// to the next prompt, so a branch at any message in it marks the prompt's
-/// chapter.
+/// The chapters of the thread being read: every prompt, every command the
+/// user ran, and every steer said over a turn, oldest first. A turn is the
+/// prompt and what answered it, up to the next prompt, so a branch at any
+/// message in it marks the prompt's chapter.
 List<Chapter> chaptersOf(Chat chat) {
   final chapters = <Chapter>[];
   int? prompt;
@@ -36,13 +32,11 @@ List<Chapter> chaptersOf(Chat chat) {
     if (!drawnAsRow(message)) continue;
     final threads = chat.threadsAt(message.id).length;
     if (message.role == MessageRole.user) {
-      // A command the user ran is not something said to the agent.
-      if (message.parts.every((p) => p is ShellRunPart)) continue;
       prompt = chapters.length;
       chapters.add((
         id: message.id,
         row: message.id,
-        preview: _firstLine(message.plainText),
+        preview: _firstLine(_said(message)),
         threads: threads,
       ));
       continue;
@@ -70,6 +64,17 @@ List<Chapter> chaptersOf(Chat chat) {
   }
   return chapters;
 }
+
+/// What a user message says, a command it ran written as the shell line:
+/// a command has no text of its own.
+String _said(Message message) => [
+  for (final part in message.parts)
+    switch (part) {
+      TextPart(:final text) => text,
+      ShellRunPart(:final command) => "\$ $command",
+      _ => null,
+    },
+].nonNulls.join("\n");
 
 /// How much of a prompt the tooltip shows.
 const _previewLength = 50;

@@ -15,6 +15,7 @@ import "package:agent_chat/ui/widgets/resettable_field.dart"
 
 import "../fakes.dart";
 import "../harness.dart";
+
 import "package:agent_chat/ui/settings/settings_category.dart";
 
 /// The field on the prompt page, and not the editor's Name behind it.
@@ -273,7 +274,7 @@ void main() {
     testWidgets("discarding leaves the prompt as it was", (tester) async {
       await openEditor(tester, trigger: seeded());
 
-      await tester.tap(find.text("Edit prompt"));
+      await tester.tap(promptPreview("Prompt"));
       await settleIo(tester);
       await tester.enterText(_promptField, "something else entirely");
       await tester.tap(find.byTooltip("Discard"));
@@ -292,7 +293,7 @@ void main() {
       "the prompt page completes a command, the way the composer does",
       (tester) async {
         await openEditor(tester);
-        await tester.tap(find.text("Edit prompt"));
+        await tester.tap(promptPreview("Prompt"));
         await settleIo(tester);
 
         await tester.enterText(_promptField, "/rev");
@@ -309,7 +310,7 @@ void main() {
 
     testWidgets("the + button opens the agent menu there too", (tester) async {
       await openEditor(tester);
-      await tester.tap(find.text("Edit prompt"));
+      await tester.tap(promptPreview("Prompt"));
       await settleIo(tester);
 
       await tester.tap(find.byIcon(Icons.add));

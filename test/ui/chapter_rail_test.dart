@@ -39,7 +39,7 @@ void main() {
     expect(chapters.map((c) => c.threads), [2, 3, 1]);
   });
 
-  test("a command the user ran is not a chapter", () {
+  test("a command the user ran is a chapter, its line the preview", () {
     final chat = Chat(
       state: makeState("c"),
       messages: [
@@ -61,7 +61,9 @@ void main() {
       ],
     );
 
-    expect(chaptersOf(chat).map((c) => c.id), ["u1", "u2"]);
+    final chapters = chaptersOf(chat);
+    expect(chapters.map((c) => c.id), ["u1", "run", "u2"]);
+    expect(chapters[1].preview, r"$ git status");
   });
 
   testWidgets("a branched chapter is marked, and says how many threads", (
@@ -88,20 +90,24 @@ void main() {
     expect(find.byTooltip("second\n2 threads branch here"), findsOneWidget);
   });
 
-  testWidgets("one prompt has no rail, having nowhere to jump to", (
-    tester,
-  ) async {
+  testWidgets("one prompt has a rail of one tick", (tester) async {
+    final current = ValueNotifier<int?>(null);
+    addTearDown(current.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        home: ChapterRail(
-          chapters: const [(id: "u1", row: "u1", preview: "first", threads: 1)],
-          current: ValueNotifier(null),
-          onSelect: (_, {required scrubbing}) {},
+        home: Scaffold(
+          body: ChapterRail(
+            chapters: const [
+              (id: "u1", row: "u1", preview: "first", threads: 1),
+            ],
+            current: current,
+            onSelect: (_, {required scrubbing}) {},
+          ),
         ),
       ),
     );
 
-    expect(find.byTooltip("first"), findsNothing);
+    expect(find.byTooltip("first"), findsOneWidget);
   });
 
   test("a steer is a chapter in the reply it was read into", () {

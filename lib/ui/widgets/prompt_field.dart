@@ -7,8 +7,8 @@ import "resettable_field.dart";
 import "page_bar.dart";
 
 /// Prose the model reads — a trigger's prompt, an agent's system prompt, a
-/// set of instructions — shown as the chat will render it, over the button
-/// that opens [PromptPage] to change it. Formatted rather than raw: it is
+/// set of instructions — shown as the chat will render it, the preview itself
+/// opening [PromptPage] to change it. Formatted rather than raw: it is
 /// markdown everywhere it is read, so a list in it is checked here. Written
 /// once and read many times afterwards, so the page it sits on shows it, and
 /// one long enough to need the room gets a whole page to grow in rather than
@@ -50,6 +50,10 @@ class PromptField extends StatelessWidget {
   /// prompt does not push the rest of its page out of sight.
   static const _previewHeight = 320.0;
 
+  /// A few lines even when short or empty, so it reads as a passage to open
+  /// rather than a one-line field.
+  static const _previewMinHeight = 96.0;
+
   Future<void> _edit(BuildContext context) async {
     if (onEdit case final edit?) return edit();
     final edited = await PromptPage.open(
@@ -69,22 +73,27 @@ class PromptField extends StatelessWidget {
     return LabelledField(
       label: label,
       padding: padding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
-            onTap: editable ? () => _edit(context) : null,
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              constraints: const BoxConstraints(maxHeight: _previewHeight),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: theme.colorScheme.outlineVariant),
-              ),
-              // Clipped rather than overflowing: the whole of it is a tap
-              // away, and this is only the look of it.
+      child: Semantics(
+        button: editable,
+        label: editable ? "Edit ${label.toLowerCase()}" : null,
+        child: InkWell(
+          onTap: editable ? () => _edit(context) : null,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            constraints: const BoxConstraints(
+              minHeight: _previewMinHeight,
+              maxHeight: _previewHeight,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+            ),
+            // Clipped rather than overflowing: the whole of it is a tap
+            // away, and this is only the look of it. The tap lands on the
+            // box, not on a link in the markdown.
+            child: IgnorePointer(
               child: SingleChildScrollView(
                 physics: const NeverScrollableScrollPhysics(),
                 child: value.trim().isEmpty
@@ -98,18 +107,7 @@ class PromptField extends StatelessWidget {
               ),
             ),
           ),
-          if (editable) ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: () => _edit(context),
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                label: Text("Edit ${label.toLowerCase()}"),
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }

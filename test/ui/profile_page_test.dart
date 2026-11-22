@@ -54,7 +54,7 @@ void main() {
     await open(tester);
     await tester.enterText(field("Name").first, "Ada");
 
-    await tester.tap(find.text("Edit general instructions"));
+    await tester.tap(promptPreview("General instructions"));
     await tester.pumpAndSettle();
     // A prose field, which wraps.
     final editor = tester.widget<TextField>(

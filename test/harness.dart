@@ -1,4 +1,5 @@
 import "package:agent_chat/app/app_menus.dart";
+
 import "dart:async";
 import "dart:io";
 
@@ -71,6 +72,7 @@ import "package:agent_chat/ui/theme.dart";
 import "package:agent_chat/ui/widgets/decorative_motion.dart";
 
 import "fakes.dart";
+
 import "package:agent_chat/ui/settings/settings_category.dart";
 import "package:agent_chat/domain/rootfs.dart";
 
@@ -1203,6 +1205,12 @@ Future<void> writeSkill(
   );
 }
 
+/// The preview of the [PromptField] labelled [label], which opens its page.
+Finder promptPreview(String label) => find.descendant(
+  of: find.byWidgetPredicate((w) => w is PromptField && w.label == label),
+  matching: find.byType(InkWell),
+);
+
 /// Write [text] into the [PromptField] labelled [label], through the page
 /// that edits it. Every finder is anchored to that page: a route under
 /// another is still in the tree, and its fields with it.
@@ -1211,7 +1219,7 @@ Future<void> writePrompt(
   String text, {
   String label = "Prompt",
 }) async {
-  final edit = find.text("Edit ${label.toLowerCase()}");
+  final edit = promptPreview(label);
   await scrollTo(tester, edit);
   await tester.tap(edit);
   await settleIo(tester);
