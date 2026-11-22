@@ -8,19 +8,13 @@ import "app_command.dart";
 import "commands.dart";
 
 /// [appMenus] in the platform's menu bar, greyed and titled as the app
-/// stands, each pick run by the frontend that mounts this — through its own
-/// [navigate] for a [Destination]. Nothing where the platform has no menu
-/// bar. Must sit below the Navigator, as the items open their pages from
-/// here. The last mounted answers: a restart builds the next before it takes
-/// this one down.
+/// stands, each pick run through [Commands]. Nothing where the platform has
+/// no menu bar. Must sit below the Navigator, as the items open their pages
+/// from here. The last mounted answers: a restart builds the next before it
+/// takes this one down.
 class AppMenuSync extends ConsumerStatefulWidget {
-  const AppMenuSync({
-    super.key,
-    this.navigate = flutterNavigate,
-    required this.child,
-  });
+  const AppMenuSync({super.key, required this.child});
 
-  final Navigate navigate;
   final Widget child;
 
   @override
@@ -48,14 +42,14 @@ class _AppMenuSyncState extends ConsumerState<AppMenuSync> {
   }
 
   void _picked(AppItem item) {
-    if (mounted) Commands.read(context, ref, widget.navigate).run(item);
+    if (mounted) Commands.read(context, ref).run(item);
   }
 
   @override
   Widget build(BuildContext context) {
     final menus = _menus;
     if (menus.available && identical(_answering, this)) {
-      final commands = Commands.watch(context, ref, widget.navigate);
+      final commands = Commands.watch(context, ref);
       menus.show(
         appMenus,
         title: commands.label,

@@ -3,8 +3,8 @@ import "../domain/models.dart" show ToolApproval;
 import "../domain/room/room_state.dart";
 
 /// What a running turn puts on screen above whatever answers it — the
-/// offer to carry on, the question, the approvals — and when each shows, for
-/// every frontend that draws a turn.
+/// offer to carry on, the question, the approvals — and when each shows: the
+/// chat page's rule and voice mode's alike.
 extension type const TurnSurfaceModel(ChatViewState view) {
   /// The offer to carry on an interrupted turn, from when it started. Only
   /// while nothing runs: the turn carried on is the one at the end, so the

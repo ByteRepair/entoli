@@ -12,9 +12,9 @@ class AppKey {
 }
 
 /// Everything the app can be told to do by name, wherever it is told: a key,
-/// the menu bar, Shortcuts. An [AppAction], which the core runs, or a
-/// [Destination], which the frontend on screen goes to. The name is the id,
-/// so it is never renamed.
+/// the menu bar, Shortcuts. An [AppAction], which changes what happens, or a
+/// [Destination], which changes what is on screen. The name is the id, so it
+/// is never renamed.
 sealed class AppItem {
   /// The enum's name: what Shortcuts and the menu bar know it by.
   String get id;
@@ -26,9 +26,8 @@ sealed class AppItem {
   bool get anywhere;
 }
 
-/// What changes what happens: run by the core, its availability the core's.
-/// Where one needs an answer first (a name, a project, a confirmation), the
-/// frontend asks in its own way and passes it on.
+/// What changes what happens. Where one needs an answer first (a name, a
+/// project, a confirmation), it is asked before the action runs.
 enum AppAction implements AppItem {
   newChat("New Chat", key: AppKey("n")),
   newAnonymousChat("New Anonymous Chat", key: AppKey("n", shift: true)),
@@ -51,9 +50,8 @@ enum AppAction implements AppItem {
   bool get anywhere => false;
 }
 
-/// Where the app can be taken: each frontend reaches every one through its
-/// own exhaustive `navigate`, so a new one compiles in neither until both
-/// can.
+/// Where the app can be taken, each reached by an exhaustive switch in
+/// `Commands`, so a new one does not compile until it is.
 enum Destination implements AppItem {
   about("About Entoli", anywhere: true),
   settings("Settings…", key: AppKey(","), anywhere: true),
