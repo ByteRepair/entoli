@@ -33,13 +33,15 @@ void main() {
         ];
       },
     );
-    logic.configure(
-      agentSpeaking: false,
-      onSend: (text, files) => sent.add((text, files)),
-      onQueue: (text, _) => queued.add(text),
-      steers: (_) => true,
-      onAbort: () => stopped++,
-      onVoice: () => voiced++,
+    logic.bind(
+      ComposerBinding(
+        agentSpeaking: false,
+        onSend: (text, files) => sent.add((text, files)),
+        onQueue: (text, _) => queued.add(text),
+        steers: (_) => true,
+        onAbort: () => stopped++,
+        onVoice: () => voiced++,
+      ),
     );
     sent.clear();
     queued.clear();
@@ -76,11 +78,14 @@ void main() {
   test("Queue is on offer only over a running turn that would be steered", () {
     controller.text = "wait";
     expect(logic.queues.value, isFalse);
-    logic.configure(
-      agentSpeaking: true,
-      onSend: (text, files) => sent.add((text, files)),
-      onQueue: (text, _) => queued.add(text),
-      steers: (_) => true,
+    logic.bind(
+      ComposerBinding(
+        agentSpeaking: true,
+        onSend: (text, files) => sent.add((text, files)),
+        onQueue: (text, _) => queued.add(text),
+        steers: (_) => true,
+        onAbort: () => stopped++,
+      ),
     );
     expect(logic.queues.value, isTrue);
     logic.submit(queue: true);

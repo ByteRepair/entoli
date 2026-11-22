@@ -53,7 +53,8 @@ import "widgets/message_text.dart";
 import "widgets/omada_separator.dart" show ConversationSeparator;
 import "widgets/needs_setup_bar.dart";
 import "widgets/view_only_bar.dart";
-import "../widgets/dialogs.dart" show notify;
+import "../voice/voice_page.dart" show openVoice, startVoiceChat;
+import "../widgets/dialogs.dart" show notify, say;
 
 class ChatPage extends ConsumerWidget {
   const ChatPage({super.key});
@@ -179,6 +180,12 @@ class _NewChatState extends ConsumerState<_NewChat> {
     final slot = _session.slot(
       WidgetReader(ref),
       ref.watch(selectedProjectProvider),
+      say: (message) {
+        if (mounted) say(context, message);
+      },
+      startVoice: (meta) {
+        if (mounted) startVoiceChat(context, ref, meta: meta);
+      },
     );
     if (slot is ComposerStarting) return const SizedBox.shrink();
     return Column(
@@ -1141,11 +1148,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
   /// What a running turn puts on screen, and what answers it. A question takes
   /// the composer's place rather than sitting above it: the turn is waiting on
   /// this answer, and there is nothing useful to type until it has it.
-  ///
-  /// [workspace] is where this chat's shell stands, for the composer's bar —
-  /// null on a mirrored chat, whose commands run on the device they are
-  /// driven to rather than this one. [workspaceHome] is the project workspace
-  /// beside it, what the bar's fallback words in the guest's vocabulary.
   Widget _turnBar({
     required ChatViewState view,
     required TurnDriver? driver,
@@ -1155,6 +1157,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       WidgetReader(ref),
       view,
       driver,
+      say: (message) {
+        if (mounted) say(context, message);
+      },
+      openVoice: () {
+        if (mounted) openVoice(context, ref, widget.chatId);
+      },
       device: device,
       sent: _follow.attach,
     );

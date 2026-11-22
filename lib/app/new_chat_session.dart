@@ -5,7 +5,6 @@ import "../domain/chat_meta.dart";
 import "../domain/models.dart";
 import "../domain/project.dart";
 import "../providers.dart";
-import "chat_session.dart" show chatSessionHostProvider;
 import "composer.dart";
 import "selection.dart";
 import "reader.dart" show SettingReader;
@@ -15,7 +14,7 @@ import "reader.dart" show SettingReader;
 /// how the first message makes it. One for the app while the screen is up.
 class NewChatSession {
   NewChatSession(this._ref) {
-    text = _ref.read(chatSessionHostProvider).newText();
+    text = _ref.read(composerTextProvider)();
     composer = ComposerModel(
       text,
       pick: (kind) => _ref.read(attachmentPickerProvider).pick(kind),
@@ -42,10 +41,14 @@ class NewChatSession {
   /// A chat being made on a paired device, until it has answered.
   final starting = ValueNotifier<bool>(false);
 
-  /// Makes a chat in the selected project and says [text] in it. One that
+  /// Makes a chat in the selected project and says [said] in it. One that
   /// could not be made puts the message back, since the composer has already
-  /// cleared itself, and says so.
-  Future<void> send(String said, List<Attachment> attachments) async {
+  /// cleared itself, and tells [say].
+  Future<void> send(
+    String said,
+    List<Attachment> attachments, {
+    required void Function(String message) say,
+  }) async {
     starting.value = true;
     final made = await _ref
         .read(selectedChatIdProvider.notifier)
@@ -53,15 +56,23 @@ class NewChatSession {
     starting.value = false;
     if (!made) {
       text.edit(said, said.length);
-      _ref.read(chatSessionHostProvider).say("Could not start a chat.");
+      say("Could not start a chat.");
     }
   }
 
   /// What stands where the composer goes at [at], what it depends on
   /// watched through [reader]. A paired device's project has its setup and
-  /// its voice on that device.
-  ComposerSlot slot(SettingReader reader, ProjectRef at) {
+  /// its voice on that device. [say] is told what did not work, and
+  /// [startVoice] opens voice mode whose first word makes a chat under
+  /// [meta].
+  ComposerSlot slot(
+    SettingReader reader,
+    ProjectRef at, {
+    required void Function(String message) say,
+    required void Function(ChatMeta meta) startVoice,
+  }) {
     if (starting.value) return const ComposerStarting();
+    void go(String said, List<Attachment> files) => send(said, files, say: say);
     if (at.device != null) {
       if (reader.watch(projectFrozenProvider(at))) {
         return const ComposerViewOnly();
@@ -69,7 +80,7 @@ class NewChatSession {
       return ComposerReady(
         ComposerBinding(
           agentSpeaking: false,
-          onSend: send,
+          onSend: go,
           onAbort: () {},
           project: at.project,
           device: at.device,
@@ -82,11 +93,10 @@ class NewChatSession {
     return ComposerReady(
       ComposerBinding(
         agentSpeaking: false,
-        onSend: send,
+        onSend: go,
         onAbort: () {},
         project: at.project,
-        onVoice: () =>
-            _ref.read(chatSessionHostProvider).startVoiceChat(meta.value),
+        onVoice: () => startVoice(meta.value),
       ),
     );
   }

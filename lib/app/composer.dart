@@ -1,4 +1,5 @@
 import "package:flutter/foundation.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../domain/file_tools.dart" show guestWorkspacePath;
 import "../domain/models.dart";
@@ -24,8 +25,8 @@ enum ComposerMode {
   callback,
 }
 
-/// What a user can do in the composer. Each frontend places every one of
-/// these, or leaves it out, in an exhaustive switch of its own.
+/// What a user can do in the composer. The composer places every one of
+/// these, or leaves it out, in an exhaustive switch.
 enum ComposerAction {
   send,
 
@@ -42,8 +43,10 @@ enum ComposerAction {
   newGoal,
 }
 
-/// What the composer needs of the field that holds its text. [message] is what is sent, [text] what the field holds:
-/// the two differ by the embeds, each one character of [text].
+/// What the composer needs of the field that holds its text: the field is a
+/// widget's controller, which the core cannot name. [message] is what is
+/// sent, [text] what the field holds: the two differ by the embeds, each one
+/// character of [text].
 abstract interface class ComposerText implements Listenable {
   String get text;
   String get message;
@@ -59,6 +62,11 @@ abstract interface class ComposerText implements Listenable {
   void prepend(String said);
   void clear();
 }
+
+/// Makes a field for a session's composer, bound where the app is assembled.
+final composerTextProvider = Provider<ComposerText Function()>(
+  (ref) => throw UnimplementedError("bound where the app is assembled"),
+);
 
 /// What stands where a chat's composer goes: the composer itself, or what
 /// is drawn in its place.
@@ -162,53 +170,27 @@ class ComposerModel extends ChangeNotifier {
     _sync();
   }
 
-  var _turn = (
+  ComposerBinding _turn = const ComposerBinding(
     agentSpeaking: false,
     onSend: _nothing,
-    onQueue: null as SendCallback?,
-    steers: null as bool Function(String text)?,
-    onAbort: null as VoidCallback?,
-    onVoice: null as VoidCallback?,
+    onAbort: _none,
   );
 
   static void _nothing(String text, List<Attachment> attachments) {}
+  static void _none() {}
 
-  /// What the composer sends to: [agentSpeaking] makes an empty field's
-  /// button Stop, and over it [steers] — the room's rule, asked rather than
-  /// copied, since only it knows who is speaking — says whether what is typed
-  /// would steer, putting [onQueue] on offer beside Send. No [onVoice] is no
-  /// voice mode from here.
-  void configure({
-    required bool agentSpeaking,
-    required SendCallback onSend,
-    SendCallback? onQueue,
-    bool Function(String text)? steers,
-    VoidCallback? onAbort,
-    VoidCallback? onVoice,
-  }) {
+  /// What the composer sends to: the binding's `agentSpeaking` makes an
+  /// empty field's button Stop, and over it `steers` — the room's rule,
+  /// asked rather than copied, since only it knows who is speaking — says
+  /// whether what is typed would steer, putting `onQueue` on offer beside
+  /// Send. No `onVoice` is no voice mode from here.
+  void bind(ComposerBinding binding) {
     final changed =
-        agentSpeaking != _turn.agentSpeaking ||
-        (onVoice == null) != (_turn.onVoice == null);
-    _turn = (
-      agentSpeaking: agentSpeaking,
-      onSend: onSend,
-      onQueue: onQueue,
-      steers: steers,
-      onAbort: onAbort,
-      onVoice: onVoice,
-    );
+        binding.agentSpeaking != _turn.agentSpeaking ||
+        (binding.onVoice == null) != (_turn.onVoice == null);
+    _turn = binding;
     if (changed) _changed();
   }
-
-  /// [binding]'s turn, as [configure] takes it.
-  void bind(ComposerBinding binding) => configure(
-    agentSpeaking: binding.agentSpeaking,
-    onSend: binding.onSend,
-    onQueue: binding.onQueue,
-    steers: binding.steers,
-    onAbort: binding.onAbort,
-    onVoice: binding.onVoice,
-  );
 
   /// A participant is speaking: an empty field's button is Stop.
   bool get speaking => _turn.agentSpeaking;
@@ -253,7 +235,7 @@ class ComposerModel extends ChangeNotifier {
       case ComposerAction.queue:
         submit(queue: true);
       case ComposerAction.stop:
-        _turn.onAbort?.call();
+        _turn.onAbort();
       case ComposerAction.voice:
         _turn.onVoice?.call();
       case ComposerAction.attachImage:
