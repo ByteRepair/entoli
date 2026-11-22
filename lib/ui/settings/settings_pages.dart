@@ -5,6 +5,7 @@ import "../../app/byte_repair.dart";
 import "../../app/pages/welcome.dart" show WelcomeAppPage;
 import "../app_pages.dart";
 import "about_settings.dart";
+import "agents_settings.dart";
 import "browser_settings.dart";
 import "byte_repair_settings.dart";
 import "data_settings.dart";
@@ -13,6 +14,9 @@ import "llm_settings.dart";
 import "memory_settings.dart";
 import "schema_view.dart";
 import "settings_category.dart";
+import "skills_settings.dart";
+import "sync_settings.dart";
+import "terminal_settings.dart";
 import "voice_settings.dart";
 
 /// What [category] draws, in either of Settings' layouts.
@@ -37,6 +41,12 @@ Widget settingsCategoryBody(SettingsCategory category, {Key? key}) =>
           ),
         ),
       ),
+      SettingsCategory.terminal => TerminalSettings(key: key),
+      // Skills and Agents scroll their own list, to keep their footers
+      // fixed to the bottom.
+      SettingsCategory.skills => SkillsSettings(key: key),
+      SettingsCategory.agents => AgentsSettings(key: key),
+      SettingsCategory.sync => SyncSettings(key: key),
       _ => ListView(key: key, children: [SchemaSections(category.page)]),
     };
 

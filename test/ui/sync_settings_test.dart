@@ -8,6 +8,8 @@ import "package:qr_flutter/qr_flutter.dart";
 import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/sync/devices.dart";
+import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/settings/paired_device_page.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -86,6 +88,19 @@ void main() {
       expect(hub.deviceName, "Desk");
     });
 
+    testWidgets("the reset clears a typed name back to the default", (
+      tester,
+    ) async {
+      await open(tester, hostname: "yiannis-laptop", deviceName: "Desk");
+      expect(find.widgetWithText(TextFormField, "Desk"), findsOneWidget);
+
+      await tester.tap(find.byTooltip("Reset to Default"));
+      await settleIo(tester);
+
+      expect(app.container.read(appSettingsProvider).deviceName, isNull);
+      expect(find.widgetWithText(TextFormField, "Desk"), findsNothing);
+    });
+
     testWidgets("with no hostname it falls back to the key", (tester) async {
       await open(tester);
 
@@ -103,6 +118,15 @@ void main() {
       expect(find.text("Laptop"), findsOneWidget);
       expect(find.text("Connect"), findsOneWidget);
       expect(find.text("Disconnect"), findsNothing);
+    });
+
+    testWidgets("a tap on its row opens its own page", (tester) async {
+      await open(tester, paired: [testPairedDevice("d1", name: "Laptop")]);
+
+      await tester.tap(find.text("Laptop"));
+      await settleIo(tester);
+
+      expect(find.byType(PairedDevicePage), findsOneWidget);
     });
 
     testWidgets("one that pairs while the page is open appears at once", (

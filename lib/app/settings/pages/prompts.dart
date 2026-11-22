@@ -1,8 +1,6 @@
 import "package:file_selector/file_selector.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../data/builtin/tools/agent_tool.dart";
-import "../../../data/builtin/tools/registry.dart";
 import "../../../data/prompts/agent_pictures.dart" show readOwnAgentFace;
 import "../../../data/prompts/prompt_export.dart";
 import "../../../data/prompts/skill_import.dart";
@@ -14,27 +12,13 @@ import "../../../domain/project.dart" show projectLabel, promptsDirUserWritable;
 import "../../../domain/prompt_library.dart";
 import "../../../providers.dart";
 import "../../prompts/agent_files.dart";
+import "../../prompts/agent_tools.dart";
+import "../../prompts/own_prompts.dart";
 import "../../prompts/skill_files.dart";
 import "../controller.dart";
 import "../hand_off.dart";
 import "../scope.dart";
 import "../spec.dart";
-
-/// A project's own agents and skills, by name: which entries of its library
-/// its directory holds, the rest inherited or bundled; and for a skill, what
-/// its folder is wrong about. Asked again after every write, and each time a
-/// page shows them, so a file put there behind the app's back is found.
-final ownAgentsProvider = FutureProvider.autoDispose
-    .family<Set<String>, String?>(
-      (ref, project) =>
-          AgentFiles(ref.watch(appConfigProvider), project: project).own(),
-    );
-
-final ownSkillsProvider = FutureProvider.autoDispose
-    .family<Map<String, List<String>>, String?>(
-      (ref, project) =>
-          SkillFiles(ref.watch(appConfigProvider), project: project).own(),
-    );
 
 /// Which project's agents and skills a page is about, and whether they are
 /// this device's: a paired device's are shown, its files being there.
@@ -47,31 +31,8 @@ final ownSkillsProvider = FutureProvider.autoDispose
       _ => (project: null, device: null),
     };
 
-/// Where an imported skill goes: null is the default project, the base set
-/// every project inherits.
-final skillDestinationProvider = NotifierProvider<SkillDestination, String?>(
-  SkillDestination.new,
-);
-
-class SkillDestination extends Notifier<String?> {
-  @override
-  String? build() => null;
-
-  void pick(String? project) => state = project;
-}
-
-/// Re-read the library a change to [project]'s directory landed in, and
-/// what lists the project's own. The default project's is a rung of every
-/// project's library, so a change there reloads every one.
-Future<void> _reload(SettingReader ref, String? project) async {
-  if (project == null) {
-    await reloadAllPromptLibraries(ref.read);
-  } else {
-    await ref.read(promptLibraryProvider(project).notifier).reload();
-  }
-  ref.invalidate(ownAgentsProvider(project));
-  ref.invalidate(ownSkillsProvider(project));
-}
+Future<void> _reload(SettingReader ref, String? project) =>
+    ref.read(promptChangesProvider).reload(project);
 
 /// [name]'s install link, copied, or why it cannot be one.
 Future<SettingNotice> _link(
@@ -94,10 +55,8 @@ Future<SettingNotice> _link(
   return SettingNotice("Copied an install link for $name.", copy: link);
 }
 
-/// Where an entry a project's directory does not hold came from: a preset
-/// the binary embeds, or a default-project entry this project inherits.
 String _origin(CompletionKind kind, String name, String? project) =>
-    isBundledPromptName(kind, name, project: project) ? "Bundled" : "Inherited";
+    promptOrigin(kind, name, project);
 
 const promptSections = [
   SectionSpec(
@@ -114,12 +73,7 @@ const promptSections = [
   ),
 ];
 
-/// What an agent may be granted, listed whatever this device can run: the
-/// file means the same on every device it reaches.
-final _grantable = [
-  for (final tool in agentTools(const ToolOffer()))
-    if (tool.group != null) tool,
-];
+final _grantable = grantableAgentTools;
 
 /// An agent written by hand: its name, which is its file's, what it is for,
 /// the system prompt, and the tools it is granted, group by group.
@@ -134,10 +88,7 @@ class AgentForm extends SettingForm<PromptDocument> {
   /// Whether a name is another agent's already.
   final bool Function(String name) taken;
 
-  Set<String> get _defaults => {
-    for (final tool in _grantable)
-      if (tool.onByDefault) tool.id,
-  };
+  Set<String> get _defaults => AgentToolPicks.defaults;
 
   /// The ids switched on to begin with. Ids this build does not know stay,
   /// so a save keeps what a newer build's list named.

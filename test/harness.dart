@@ -43,6 +43,8 @@ import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/model_registry.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/app/settings/scope.dart" show ProjectAddress;
+import "package:agent_chat/ui/settings/project_prompts_page.dart";
 import "package:agent_chat/domain/room/room_state.dart";
 import "package:agent_chat/core/transcript_bindings.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart" show LabelledField;
@@ -985,6 +987,20 @@ Future<void> scrollTo(WidgetTester tester, Finder target) async {
   // exists, which can leave half of it under the edge of the window.
   await tester.ensureVisible(target);
   await tester.pumpAndSettle();
+}
+
+/// A project's own skills or agents page.
+Future<void> pumpProjectPrompts(
+  WidgetTester tester,
+  TestApp app,
+  CompletionKind kind,
+  String? project,
+) async {
+  await app.pump(
+    tester,
+    ProjectPromptsPage(kind: kind, at: ProjectAddress(project)),
+  );
+  await settleIo(tester);
 }
 
 /// The settings page opened on [category]. A default would mean two different

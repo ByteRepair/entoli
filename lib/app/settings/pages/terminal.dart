@@ -9,6 +9,7 @@ import "../../../domain/settings/keys.dart";
 import "../../../providers.dart";
 import "../../downloads/rootfs_downloads.dart";
 import "../bind.dart";
+import "../confinement.dart";
 import "../controller.dart";
 import "../forms/permission_rule.dart";
 import "../scope.dart";
@@ -24,15 +25,8 @@ bool _hasTerminal(SettingReader ref) =>
     ref.watch(shellProvider.select((s) => s.canRunCommands)) ||
     ref.watch(linuxHostProvider).runsLinux;
 
-/// What the picked driver does about the sandbox: the environment's own
-/// answer, with nothing installed falling back to the host's.
-Confinement pickedConfinement(SettingReader ref) {
-  final selected = ref.watch(appSettingsProvider.select((s) => s.rootfsId));
-  final installed = ref.watch(installedRootfsProvider);
-  return selected == null || !installed.contains(selected)
-      ? ref.watch(hostConfinementProvider)
-      : Confinement.guest;
-}
+Confinement pickedConfinement(SettingReader ref) =>
+    ref.watch(pickedConfinementProvider);
 
 final terminalSections = [
   // A phone with no Linux installed has nothing to run, but the catalog
