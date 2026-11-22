@@ -7,7 +7,7 @@ import "../../domain/project.dart";
 import "notice.dart";
 import "text_input.dart";
 
-export "notice.dart" show notify, say;
+export "notice.dart" show notify, say, sayLater;
 
 /// Put [text] on the clipboard and say so. Copying is silent otherwise — the
 /// button that did it looks the same afterwards — so what was copied is

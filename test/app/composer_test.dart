@@ -132,7 +132,7 @@ void main() {
       expect((stopped, voiced), (1, 1));
     });
 
-    test("an attach runs the frontend's picker and attaches", () async {
+    test("an attach runs the page's picker and attaches", () async {
       await logic.run(ComposerAction.attachImage);
       await logic.run(ComposerAction.attachFile);
       expect(picked, [AttachmentKind.image, AttachmentKind.file]);

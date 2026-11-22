@@ -54,7 +54,7 @@ import "widgets/omada_separator.dart" show ConversationSeparator;
 import "widgets/needs_setup_bar.dart";
 import "widgets/view_only_bar.dart";
 import "../voice/voice_page.dart" show openVoice, startVoiceChat;
-import "../widgets/dialogs.dart" show notify, say;
+import "../widgets/dialogs.dart" show notify, sayLater;
 
 class ChatPage extends ConsumerWidget {
   const ChatPage({super.key});
@@ -180,9 +180,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
     final slot = _session.slot(
       WidgetReader(ref),
       ref.watch(selectedProjectProvider),
-      say: (message) {
-        if (mounted) say(context, message);
-      },
+      say: sayLater(context),
       startVoice: (meta) {
         if (mounted) startVoiceChat(context, ref, meta: meta);
       },
@@ -1156,9 +1154,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody>
       WidgetReader(ref),
       view,
       driver,
-      say: (message) {
-        if (mounted) say(context, message);
-      },
+      say: sayLater(context),
       openVoice: () {
         if (mounted) openVoice(context, ref, widget.chatId);
       },

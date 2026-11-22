@@ -224,8 +224,9 @@ final class OpensDetail implements Opens {
 
 /// What an activity is on screen. A sealed set, each a kind of drawing
 /// rather than a kind of activity, so the UI's switch over them stays short
-/// and a new one is a compile error until it is drawn. Each knows the activity and run it came from, and what pressing it
-/// opens: its detail, following [source], unless the kind says otherwise.
+/// and a new one is a compile error until it is drawn. Each knows the
+/// activity and run it came from, and what pressing it opens: its detail,
+/// following [source], unless the kind says otherwise.
 sealed class ActivityNode {
   const ActivityNode(this.activity, this.run);
 

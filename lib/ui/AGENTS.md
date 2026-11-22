@@ -308,7 +308,7 @@ else. Before the app is up nothing is sent, so the welcome tour has no app
 items to reach past it by.
 
 `AppMenuSync` (`app_menu.dart`), mounted in `AppShell` below the Navigator,
-shows the layout as the app stands and runs a pick through `Navigate`. **The
+shows the layout as the app stands and runs a pick through `Commands`. **The
 menu holds the keys of every item in it**, as its own key equivalents, and
 `runKey` — the app's one key handler — stands down for those wherever there
 is a menu bar, so no key runs twice. Elsewhere Flutter's handler has every
