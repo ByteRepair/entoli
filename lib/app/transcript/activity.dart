@@ -16,6 +16,9 @@ enum TranscriptGlyph {
   edit,
   search,
   web,
+
+  /// A page about to be fetched, asked about before it is.
+  globe,
   subAgent,
   question,
   permissionGranted,

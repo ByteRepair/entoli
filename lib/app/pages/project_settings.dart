@@ -320,8 +320,17 @@ class ProjectSettingsAppPage extends AppPage {
               // Counted once the list is read, not from what was drawn.
               message: deleteProjectMessage(
                 project,
+                // Read rather than watched: `app` is the page stack's own
+                // ref, and a watch there rebuilds the stack empty.
                 remote
-                    ? _count(app)
+                    ? app
+                          .read(remoteChatsProvider)
+                          .where(
+                            (c) =>
+                                c.deviceId == device &&
+                                c.state.project == project,
+                          )
+                          .length
                     : (await app.read(
                         chatListProvider.future,
                       )).where((c) => c.project == project).length,

@@ -230,12 +230,11 @@ class ChatSettingsAppPage extends ChatSettingsFields {
               confirmLabel: "Delete",
               destructive: true,
             ),
+            // Through the stack's reader, which outlives this page.
             run: () async {
-              final state = _state;
+              final edits = app.read(chatEditsProvider);
               pages.closeAll();
-              if (state != null) {
-                await reader.read(chatEditsProvider).delete(state);
-              }
+              await edits.deleteById(chatId);
               return null;
             },
           ),
@@ -262,18 +261,23 @@ class ChatSettingsAppPage extends ChatSettingsFields {
     _saving = true;
     changed();
     final repo = app.read(chatRepositoryProvider);
-    await repo.saveMeta(chatId, meta);
-    // Anchored again at once, so the countdown shows without waiting for a
-    // turn; the write decides the anchor, so the bar is told what it wrote.
-    if (_state case final state?) {
-      final written = await repo.saveState(state, reanchor: true);
-      // A mirror's controller hears it from the home device.
-      if (!mirrored) {
-        app.read(chatControllerProvider(chatId).notifier).applyState(written);
+    try {
+      await repo.saveMeta(chatId, meta);
+      // Anchored again at once, so the countdown shows without waiting for a
+      // turn; the write decides the anchor, so the bar is told what it wrote.
+      if (_state case final state?) {
+        final written = await repo.saveState(state, reanchor: true);
+        // A mirror's controller hears it from the home device.
+        if (!mirrored) {
+          app.read(chatControllerProvider(chatId).notifier).applyState(written);
+        }
       }
+    } finally {
+      // A failed write leaves the page up to try again.
+      _saving = false;
+      changed();
     }
     app.invalidate(chatListProvider);
-    _saving = false;
     pages.leave(this);
     return null;
   }

@@ -59,11 +59,14 @@ class ChatEdits implements ChatEditor {
   }
 
   @override
-  Future<void> delete(ChatState chat) async {
-    if (_ref.read(selectedChatIdProvider) == chat.id) {
+  Future<void> delete(ChatState chat) => deleteById(chat.id);
+
+  /// The same, for a chat whose state could not be read.
+  Future<void> deleteById(String id) async {
+    if (_ref.read(selectedChatIdProvider) == id) {
       _ref.read(selectedChatIdProvider.notifier).select(null);
     }
-    await _ref.read(chatRepositoryProvider).deleteChat(chat.id);
+    await _ref.read(chatRepositoryProvider).deleteChat(id);
     _ref.invalidate(chatListProvider);
   }
 }

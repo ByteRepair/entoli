@@ -11,6 +11,7 @@ import "../../domain/bot_avatar/spec.dart";
 import "../bot_avatar/bot_avatar_editor.dart";
 import "../widgets/agent_picture.dart";
 import "../../core/formatting.dart";
+import "../../core/log.dart";
 import "../../app/settings/scope.dart";
 import "../../app/settings/settings.dart";
 import "../../app/settings/spec.dart";
@@ -249,7 +250,7 @@ Future<bool> _agreed(BuildContext context, SettingConfirm? ask) async {
   if (ask == null) return true;
   if (ask.cancelled) return false;
   if (ask.brief) {
-    say(context, ask.message);
+    notify(context, ask.message);
     return false;
   }
   return await confirm(
@@ -263,16 +264,24 @@ Future<bool> _agreed(BuildContext context, SettingConfirm? ask) async {
 }
 
 /// Says what a change had to say, where it said anything: in a dialog where
-/// it has a title, in passing where it does not.
+/// it has a title, in passing where it does not. One that threw says so,
+/// since most end at a plugin or the filesystem, where refusing is ordinary.
 Future<void> _tell(BuildContext context, Future<SettingNotice?> change) async {
-  final notice = await change;
+  final SettingNotice? notice;
+  try {
+    notice = await change;
+  } catch (e) {
+    logFailure("settings", "an action failed", e);
+    if (context.mounted) say(context, "That did not work: $e");
+    return;
+  }
   if (notice == null || !context.mounted) return;
   if (notice.copy case final text?) {
     await writeClipboard(ClipboardContent(plain: text));
     if (!context.mounted) return;
   }
   final title = notice.title;
-  if (title == null) return say(context, notice.message);
+  if (title == null) return notify(context, notice.message);
   await tell(context, title: title, message: notice.message);
 }
 
@@ -718,19 +727,38 @@ class _Action extends StatelessWidget {
           )
         : null;
     final onPressed = c.enabled ? () => _press(context) : null;
+    final label = Text(c.label);
+    final button = switch ((c.secondary, icon)) {
+      (true, null) => OutlinedButton(onPressed: onPressed, child: label),
+      (true, final icon?) => OutlinedButton.icon(
+        icon: Icon(icon),
+        label: label,
+        onPressed: onPressed,
+      ),
+      (false, null) => FilledButton(
+        style: style,
+        onPressed: onPressed,
+        child: label,
+      ),
+      (false, final icon?) => FilledButton.icon(
+        style: style,
+        icon: Icon(icon),
+        label: label,
+        onPressed: onPressed,
+      ),
+    };
+    final description = c.description;
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: icon == null
-          ? FilledButton(
-              style: style,
-              onPressed: onPressed,
-              child: Text(c.label),
-            )
-          : FilledButton.icon(
-              style: style,
-              icon: Icon(icon),
-              label: Text(c.label),
-              onPressed: onPressed,
+      child: description == null
+          ? button
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                button,
+                const SizedBox(height: 8),
+                mutedParagraph(context, description),
+              ],
             ),
     );
   }
@@ -1213,15 +1241,44 @@ class _InputState extends State<_Input> {
     super.dispose();
   }
 
+  /// What is typed, handed over whole: a field with a [TextController.submitLabel]
+  /// is said once, not a keystroke at a time — a sign-in code goes to a
+  /// program that reads each line it is given as an answer.
+  void _submit() {
+    final value = _text.text;
+    if (value.trim().isEmpty && !widget.c.allowBlank) return;
+    _text.clear();
+    widget.c.set(value);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
+    final submits = c.submitLabel != null;
+    final multiline = c.lines > 1;
     final field = TextFormField(
       controller: _text,
       obscureText: c.secret,
       enabled: c.enabled,
-      decoration: InputDecoration(hintText: c.prompt, isDense: true),
-      onChanged: (value) => c.set(value),
+      minLines: multiline ? c.lines : null,
+      maxLines: multiline ? null : 1,
+      keyboardType: multiline ? TextInputType.multiline : null,
+      textInputAction: submits ? TextInputAction.send : null,
+      decoration: InputDecoration(
+        hintText: c.prompt,
+        helperText: c.description,
+        helperMaxLines: 4,
+        isDense: true,
+        suffixIcon: submits
+            ? IconButton(
+                icon: const Icon(Icons.send),
+                tooltip: c.submitLabel,
+                onPressed: c.enabled ? _submit : null,
+              )
+            : null,
+      ),
+      onChanged: submits ? null : (value) => c.set(value),
+      onFieldSubmitted: submits ? (_) => _submit() : null,
     );
     final clear = c.clearLabel;
     final footnote = c.footnote;
@@ -1596,10 +1653,15 @@ class _Collection<T> extends StatelessWidget {
                       child: Text(badge),
                     ),
                   if (row.on case final on?)
-                    Switch(value: on, onChanged: (_) => c.act(index, "toggle")),
+                    Switch(
+                      value: on,
+                      onChanged: (_) => _tell(context, c.act(index, "toggle")),
+                    ),
                   // A few side by side where there is room; more, or a
                   // narrow window, in a menu.
-                  if (actions.length <= 3 && inline)
+                  if (actions.isEmpty)
+                    const SizedBox.shrink()
+                  else if (actions.length <= 3 && inline)
                     for (final action in actions)
                       TextButton(
                         onPressed: action.enabled
@@ -1634,7 +1696,8 @@ class _Collection<T> extends StatelessWidget {
                     IconButton(
                       icon: const Icon(Icons.close),
                       tooltip: row.removeLabel ?? c.removeLabel,
-                      onPressed: () => c.remove(index),
+                      onPressed: () =>
+                          _tell(context, c.remove(index).then((_) => null)),
                     ),
                 ],
               ),

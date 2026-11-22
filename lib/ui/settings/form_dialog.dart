@@ -567,10 +567,9 @@ class _DateField extends StatelessWidget {
       context: context,
       initialTime: TimeOfDay.fromDateTime(value),
     );
-    if (time == null) return;
-    onChanged?.call(
-      DateTime(day.year, day.month, day.day, time.hour, time.minute),
-    );
+    // A cancelled time keeps the day picked, at the time it had.
+    final at = time ?? TimeOfDay.fromDateTime(value);
+    onChanged?.call(DateTime(day.year, day.month, day.day, at.hour, at.minute));
   }
 
   @override

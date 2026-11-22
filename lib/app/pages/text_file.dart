@@ -142,7 +142,11 @@ class TextFileAppPage extends AppPage {
   List<ActionController> toolbar(SettingReader reader) => [
     if (_content != null && !_tooLarge) ...[
       if (_editing)
-        ActionController(part("save", "Save"), enabled: _dirty, run: _save),
+        ActionController(
+          part("save", "Save", glyph: SettingGlyph.check),
+          enabled: _dirty,
+          run: _save,
+        ),
       ActionController(
         part("mode", _editing ? "Preview" : "Edit"),
         label: _editing ? "Preview" : "Edit",
@@ -153,9 +157,15 @@ class TextFileAppPage extends AppPage {
           return null;
         },
       ),
-      ActionController(part("copy", "Copy"), label: "Copy", run: _copy),
+      ActionController(
+        part("copy", "Copy", glyph: SettingGlyph.copy),
+        run: _copy,
+      ),
     ],
-    ActionController(part("open", "Open in Another App"), run: _handOff),
+    ActionController(
+      part("open", "Open in Another App", glyph: SettingGlyph.reveal),
+      run: _handOff,
+    ),
   ];
 
   /// A plain write rather than through a rename: a rename makes a new file,
