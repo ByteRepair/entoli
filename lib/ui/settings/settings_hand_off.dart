@@ -3,7 +3,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/settings/hand_off.dart";
 import "../bot_avatar/bot_avatar_editor.dart";
-import "cli_sign_in_dialog.dart" show showCliSignIn;
 import "settings_category.dart";
 import "paired_device_page.dart";
 
@@ -19,7 +18,6 @@ void bindSettingsHandOff(
   handOff
     ..pairedDevice = ((id) => push<void>(PairedDevicePage(deviceId: id)))
     ..browseBotAvatars = (() => push<void>(const BotAvatarEditorPage.browse()))
-    ..cliSignIn = ((config) => showCliSignIn(context, config))
     ..openSettings = ((page) => openSettings(
       context,
       category: SettingsCategory.values

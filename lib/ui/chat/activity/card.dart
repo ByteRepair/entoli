@@ -6,16 +6,15 @@ import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "package:path/path.dart" as p;
 
-import "../../../app/pages/marketplace.dart";
 import "../../../app/settings/spec.dart" show WidgetReader;
 import "../../../app/transcript/activity.dart";
 import "../../../domain/agent_browser.dart" show AgentBrowser, BrowserTab;
 import "../../../providers.dart";
-import "../../app_pages.dart";
 import "../../widgets/dialogs.dart" show say;
 import "../plan_page.dart" as plan_page;
 import "../widgets/browser_strip.dart" show openBrowserTab;
 import "../../widgets/scrolling.dart" show ScrollFollow;
+import "../../skills/skill_install_preview.dart" show openSkillInstall;
 import "../../widgets/text_file_page.dart" show openTextFile;
 import "../widgets/code_block.dart" show codeBlockDecoration, codeBlockStyle;
 import "../widgets/message_text.dart" show StreamingCaret;
@@ -313,11 +312,8 @@ class ContextHandOff implements TranscriptHandOff {
       );
 
   @override
-  Future<void> installSkill(String chatId, String installId) async =>
-      openAppPage(
-        context,
-        SkillInstallAppPage(chatId: chatId, installId: installId),
-      );
+  Future<void> installSkill(String chatId, String installId) =>
+      openSkillInstall(context, chatId: chatId, installId: installId);
 
   @override
   Future<void> openPlan(String chatId) async =>

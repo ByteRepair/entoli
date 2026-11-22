@@ -1,17 +1,14 @@
-import "../../../domain/llm_provider.dart";
 import "../../../domain/permission.dart";
 import "../../../domain/settings/keys.dart";
-import "../../model_role.dart";
 import "../bind.dart";
 import "../controller.dart";
 import "../spec.dart";
 
 const _llms = SettingsPageId.llms;
 
-// What the welcome tour, a project's and a chat's settings pages share of
-// LLMs; the category itself is `ui/settings/llm_settings.dart`.
+// What a project's and a chat's settings pages share of LLMs; the category
+// itself is `ui/settings/llm_settings.dart`.
 const llmSections = [
-  SectionSpec(page: _llms, id: "newChats", title: "New chats", weight: 0),
   SectionSpec(
     page: _llms,
     id: "agent",
@@ -25,35 +22,6 @@ const llmSections = [
 ];
 
 final llmSettings = [
-  // What a new chat gets. A live reference, not a snapshot: retargeting it
-  // retargets every chat that pinned nothing.
-  SettingSpec(
-    id: "defaultModel",
-    path: (page: _llms, section: "newChats"),
-    weight: 0,
-    title: "LLM",
-    hint: UiHint.dropdown,
-    build: (c) => c.model((
-      provider: SettingKeys.defaultProviderId,
-      model: SettingKeys.defaultModelId,
-    ), nullLabel: "None"),
-  ),
-  SettingSpec(
-    id: "titleModel",
-    path: (page: _llms, section: "newChats"),
-    weight: 10,
-    title: "Title LLM",
-    description:
-        "Names a chat from its first message. Off, chats "
-        "stay \"New chat\" until you rename them.",
-    hint: UiHint.dropdown,
-    build: (c) => c.model(
-      (provider: SettingKeys.titleProviderId, model: SettingKeys.titleModelId),
-      nullLabel: "Off",
-      defaultOf: LlmProviderConfig.lightDefaultOf,
-      role: ModelRole.shortAsk,
-    ),
-  ),
   SettingSpec(
     id: "approveMode",
     path: (page: _llms, section: "agent"),

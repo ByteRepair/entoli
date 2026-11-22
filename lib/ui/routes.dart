@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 
 import "settings/settings_category.dart";
 import "settings/settings_page.dart";
+import "settings/welcome_page.dart";
 
 /// The pages reached by name rather than built where they are opened: those
 /// a page they contain opens again, so the two do not depend on each other.
@@ -16,6 +17,10 @@ Route<void>? appRoute(RouteSettings settings) => switch (settings.name) {
         focus: args?.focus ?? false,
       );
     },
+  ),
+  welcomeRoute => MaterialPageRoute(
+    settings: settings,
+    builder: (_) => const WelcomePage(replay: true),
   ),
   _ => null,
 };

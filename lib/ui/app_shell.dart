@@ -1,6 +1,5 @@
-import "../app/pages/welcome.dart" show openFirstRun;
-import "../app/settings/spec.dart" show WidgetReader;
 import "app_pages.dart";
+import "settings/welcome_page.dart" show openFirstRun;
 import "package:flutter/material.dart";
 import "../app/chat_session.dart" show chatSessionHostProvider;
 import "chat_session_host.dart";
@@ -40,7 +39,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     _host?.attach(context, ref);
     // A first launch's setup and tour, over the shell once it is up.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) openFirstRun(WidgetReader(ref));
+      if (mounted) openFirstRun(context, ref);
     });
   }
 

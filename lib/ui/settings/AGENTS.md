@@ -65,11 +65,12 @@ at its level by `scoped.dart`'s widgets, and what has rules is in `lib/app/`
 — the backup's two directions (`backup_actions.dart`), the browser pick
 (`browser_settings.dart`) and Byte Repair's setup (`byte_repair.dart`). What
 other pages share of General and LLMs — the environment, Omada's order and
-depth, the default and title models, the approval mode, the step limit —
-stays as specs for them.
+depth, the approval mode, the step limit — stays as specs for them. The
+default and title model pickers are widgets (`newChatModelField`,
+`titleModelField` in `llm_settings.dart`), which the welcome tour draws too.
 
-The welcome tour is not settings: it is an `AppPage` (see
-`lib/app/pages/AGENTS.md`), and Settings' Welcome opens it.
+The welcome tour is not settings: it is a widget page (`WelcomePage`,
+`welcome_page.dart`), and Settings' Welcome opens it by `welcomeRoute`.
 
 The chat and project settings pages are `AppPage`s (see
 `lib/app/pages/AGENTS.md`): sections of these same controllers over a
@@ -124,13 +125,16 @@ Providers, On-device, LLMs** (the app and the plumbing that answers a chat);
 Repair** (where commands run); **Sync, Data** (the device and all of it at
 once); and **Welcome, About** (the app rather than anything it does), last.
 **Welcome** is the
-tour rather than a list of sections: an `AppPage`, `WelcomeAppPage`
-(`lib/app/pages/welcome.dart`), which the category opens. It is the first-run
+tour rather than a list of sections: `WelcomePage`, a `PageView` walked by
+swipe or by Back and Next under its dots, each page fading as it leaves,
+which the category's button opens. It is the first-run
 screen too: `openFirstRun`, asked as the app starts, opens it
 over the app while `licenceAccepted` in `settings.json` is still false, and
 on a first launch it cannot be left but by its Done, which writes the flag.
-Ahead of it, `SetupAppPage` runs over the device's `SetupPlan`
-(`lib/app/first_run.dart`) while a step of it is not done. A plan is what a platform hands
+Ahead of it, `SetupPage` (`lib/ui/initial_setup_gate.dart`) runs over the
+device's `SetupPlan` while a step of it is not done, its sequencing the
+`FirstRunSetup` notifier (`firstRunSetupProvider`, `lib/app/first_run.dart`)
+and the page only what it draws. A plan is what a platform hands
 the one setup screen: its `SetupStep`s in order and a `SetupProgress` — the
 bar's policy. `setupPlanProvider` is where each platform submits its plan: where a
 Linux can run (proot on Android, the emulator on iOS) Alpine as the terminal,
@@ -153,13 +157,12 @@ plan someone pays for answers through (`welcomeProviders`), then Local Model
 and Advanced. A service is connected as its kind is — a CLI by `connectCli`,
 installed if Entoli has no copy of it, which is the one place a program is
 installed (no first-run step does it ahead of time), and signed in if it is
-not (`showCliSignIn`, reached through the `cliSignIn` hand-off: a
+not (`showCliSignIn`: a
 `CliSignInDialog` over a `CliAccount` of its own, the program's own sign-in
 run, the page it prints opened from a link on it, a code the page shows
 pasted back) — `connectCli` itself lives in `app/settings/cli_account.dart`
 and is handed the sign-in to run, so any frontend can call it — an API in the
-provider form started on its preset
-(`providerForm` and `saveProvider` in `app/settings/pages/providers.dart`) — and
+provider dialog started on its preset (`editProvider`) — and
 adopted, answering new
 chats, titles and the classifier at its own defaults; connecting one already
 configured adopts that entry rather than adding a second. The first
@@ -191,7 +194,7 @@ whatever the session was running and lands on the tour: a restart rather than a
 close, since iOS cannot close itself and Apple rejects apps
 that try. Done, on
 the first run or a replay, opens a "Welcome to Entoli" chat in the default
-project and leaves settings for it: its log is seeded with a
+project and leaves settings for it (`finishWelcomeTour`): its log is seeded with a
 `/entoli-welcome-party` message, composed like any `/skill` message so the
 skill's instructions ride every later turn without a system record, and the
 skill's greeting as a finished assistant turn under it. **General** is the app itself:

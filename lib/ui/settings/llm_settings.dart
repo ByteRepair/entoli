@@ -18,6 +18,34 @@ import "scoped.dart";
 
 const _app = AppAddress();
 
+/// What answers a new chat. A live reference, not a snapshot: retargeting it
+/// retargets every chat that pinned nothing.
+const newChatModelField = ScopedModel(
+  keys: (
+    provider: SettingKeys.defaultProviderId,
+    model: SettingKeys.defaultModelId,
+  ),
+  at: _app,
+  title: "LLM",
+  nullLabel: noneOptionLabel,
+);
+
+/// What names a new chat.
+const titleModelField = ScopedModel(
+  keys: (
+    provider: SettingKeys.titleProviderId,
+    model: SettingKeys.titleModelId,
+  ),
+  at: _app,
+  title: "Title LLM",
+  nullLabel: "Off",
+  defaultOf: LlmProviderConfig.lightDefaultOf,
+  role: ModelRole.shortAsk,
+  description:
+      "Names a chat from its first message. Off, chats "
+      "stay \"New chat\" until you rename them.",
+);
+
 /// Settings > LLMs: what a new chat is answered by and what names it, how
 /// long it thinks, the agent's command gate, and how a turn is bounded.
 class LlmSettings extends StatelessWidget {
@@ -27,31 +55,8 @@ class LlmSettings extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
     children: const [
       SectionHeader("New chats"),
-      // A live reference, not a snapshot: retargeting it retargets every
-      // chat that pinned nothing.
-      ScopedModel(
-        keys: (
-          provider: SettingKeys.defaultProviderId,
-          model: SettingKeys.defaultModelId,
-        ),
-        at: _app,
-        title: "LLM",
-        nullLabel: noneOptionLabel,
-      ),
-      ScopedModel(
-        keys: (
-          provider: SettingKeys.titleProviderId,
-          model: SettingKeys.titleModelId,
-        ),
-        at: _app,
-        title: "Title LLM",
-        nullLabel: "Off",
-        defaultOf: LlmProviderConfig.lightDefaultOf,
-        role: ModelRole.shortAsk,
-        description:
-            "Names a chat from its first message. Off, chats "
-            "stay \"New chat\" until you rename them.",
-      ),
+      newChatModelField,
+      titleModelField,
       ScopedLevels(
         setting: SettingKeys.reasoningEffort,
         at: _app,

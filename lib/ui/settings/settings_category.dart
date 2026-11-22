@@ -1,5 +1,3 @@
-import "../../app/pages/welcome.dart" show WelcomeAppPage;
-import "../app_pages.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -60,21 +58,23 @@ enum SettingsCategory {
 /// building the page.
 const settingsRoute = "/settings";
 
+/// The welcome tour replayed, by name for the same reason: it opens
+/// Settings' categories from its rows.
+const welcomeRoute = "/welcome";
+
 /// What [settingsRoute] opens at: [category] alone where [focus], the way a
 /// setup row or a bar points at one thing to set.
 typedef SettingsArgs = ({SettingsCategory? category, bool focus});
 
 /// Open Settings, at [category] where there is one. The welcome tour is not
-/// settings, and opens as an app page.
+/// settings, and opens as a page of its own.
 Future<void> openSettings(
   BuildContext context, {
   SettingsCategory? category,
   bool focus = false,
 }) {
-  // The tour is a page of the app's, not a settings page.
   if (category == SettingsCategory.welcome) {
-    openAppPage(context, WelcomeAppPage(replay: true));
-    return Future.value();
+    return Navigator.of(context).pushNamed(welcomeRoute);
   }
   return Navigator.of(
     context,

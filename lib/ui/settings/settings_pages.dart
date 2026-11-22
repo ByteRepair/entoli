@@ -2,8 +2,6 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/byte_repair.dart";
-import "../../app/pages/welcome.dart" show WelcomeAppPage;
-import "../app_pages.dart";
 import "about_settings.dart";
 import "agents_settings.dart";
 import "browser_settings.dart";
@@ -38,7 +36,7 @@ Widget settingsCategoryBody(SettingsCategory category, {Key? key}) =>
         key: key,
         builder: (context) => Center(
           child: FilledButton(
-            onPressed: () => openAppPage(context, WelcomeAppPage(replay: true)),
+            onPressed: () => Navigator.of(context).pushNamed(welcomeRoute),
             child: const Text("Take the Welcome Tour"),
           ),
         ),

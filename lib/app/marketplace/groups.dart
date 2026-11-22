@@ -2,7 +2,19 @@ import "../../domain/chat_search.dart" show searchNeedle;
 import "marketplace.dart";
 
 // The marketplace's list, grouped and filtered: the pure half of what
-// `MarketplaceAppPage` draws.
+// `MarketplacePage` draws.
+
+/// [listing] split into front page and collections, made once per fetch
+/// rather than on every keystroke.
+(List<MarketplaceEntry>, List<MarketplaceCollection>) grouped(
+  MarketplaceListing listing,
+) => _grouped[listing] ??= groupIntoCollections(
+  listing.entries,
+  listing.collections,
+);
+
+final _grouped =
+    Expando<(List<MarketplaceEntry>, List<MarketplaceCollection>)>();
 
 /// One ext manifest's entries under the name the site gives them.
 class MarketplaceCollection {

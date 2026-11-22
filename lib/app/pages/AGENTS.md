@@ -3,11 +3,8 @@
 Every page of the app's that is not a setting is an `AppPage` here: a
 chat's settings and a new chat's, the context, the plan, a workspace folder
 and a text file, a project's settings and its skills and agents, the
-memories, the profile, the marketplace and an entry's preview, a drafted
-skill's install, a Bot Avatar a link carried, a share's destination, a CLI's
-sign-in, adding a model by its link, the first launch's setup and the
-welcome tour, a web page and an artifact. The UI draws them and holds no
-page of its own. This is "Settings as data" (see
+memories, the profile, a share's destination, adding a model by its link, a
+web page and an artifact. This is "Settings as data" (see
 `lib/ui/settings/AGENTS.md`) taken to the rest of the app, and it is built on
 the same pieces.
 
@@ -15,7 +12,12 @@ The workspace explorer, a text file, the memories and the profile are plain
 widget pages instead (`lib/ui/workspace/`, `lib/ui/widgets/text_file_page.dart`,
 `lib/ui/memory/`, `lib/ui/profile/`), their rules in `lib/app/memories.dart`
 and `lib/app/profile_draft.dart`. Their `AppPage`s here are what a chat's and
-a project's settings page still open from a row.
+a project's settings page still open from a row. So are the marketplace and
+its previews (`lib/ui/marketplace/`, see `lib/app/marketplace/AGENTS.md`), a
+drafted skill's install (`lib/ui/skills/skill_install_preview.dart`), a Bot
+Avatar a link carried (`lib/ui/bot_avatar/bot_avatar_install.dart`), and the
+first launch's setup and the welcome tour (`lib/ui/initial_setup_gate.dart`,
+`lib/ui/settings/welcome_page.dart`, see `lib/ui/settings/AGENTS.md`).
 
 **A page is its sections of the settings' controllers.** `sections` returns
 `PageSection`s of `SettingController`s — the toggles, choices, collections,
@@ -39,7 +41,7 @@ drawn as a grid of cards instead of rows, each its face, title, byline,
 subtitle (three lines at most) and its badge as a pill in the corner, a tap
 running the item's `tap`: Flutter's `_Cards`
 in `schema_view.dart`, up to three across, and native's `CardsRow`, an adaptive
-`LazyVGrid` of glass surfaces. The marketplace's collections are the first.
+`LazyVGrid` of glass surfaces.
 
 A few pieces keep the look the pages had before they were data.
 `PromptController` is prose the model reads — the profile's instructions —
@@ -68,8 +70,7 @@ watch would. A page reads its stack through `pages`, never through `app`: the
 stack's own ref reading the stack is the dependency Riverpod refuses.
 
 Every caller opens a page the same way, `openAppPage(context, page)`
-(`lib/ui/app_pages.dart`), and `openFirstRun` opens the first launch's setup
-and tour as the app starts.
+(`lib/ui/app_pages.dart`).
 
 The UI follows the stack in `AppPagesFollower`, mounted in
 `AppShell`: a page opened is pushed as an `AppPageView`, one closed is taken

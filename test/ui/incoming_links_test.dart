@@ -73,8 +73,8 @@ void main() {
     await open(tester, link);
 
     expect(find.text("diary"), findsWidgets);
-    expect(find.text("Write it down."), findsOneWidget);
-    await tester.tap(find.text("Install"));
+    await scrollTo(tester, find.text("Write it down."));
+    await tester.tap(find.text("Install agent"));
     await settleIo(tester, least: 20, tries: 80);
 
     final agentsDir = app.config.promptsDir(CompletionKind.agent);
@@ -92,7 +92,7 @@ void main() {
     await open(tester, link.substring(0, link.length - 6));
 
     expect(find.textContaining("This link is incomplete"), findsOneWidget);
-    expect(find.text("Install"), findsNothing);
+    expect(find.text("Install agent"), findsNothing);
   });
 
   testWidgets("a new-chat link leaves its prompt for the new chat", (
