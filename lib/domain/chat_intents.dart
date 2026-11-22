@@ -95,7 +95,8 @@ abstract interface class ChatEditor {
 
   Future<void> move(ChatState chat, String? project);
 
-  Future<void> delete(ChatState chat);
+  /// By id, since a chat whose state cannot be read still has to go.
+  Future<void> delete(String chatId);
 }
 
 /// What Shortcuts can do with chats, typed. Nothing here knows about the
@@ -319,8 +320,10 @@ final class ChatIntents {
     await editor.move(await _chat(chatId), project.dir);
   }
 
-  Future<void> delete(String chatId) async =>
-      editor.delete(await _chat(chatId));
+  Future<void> delete(String chatId) async {
+    await _chat(chatId);
+    await editor.delete(chatId);
+  }
 
   /// This device's chats, less the temporary ones whose time is up — the
   /// sidebar hides those, and the sweep deletes them.

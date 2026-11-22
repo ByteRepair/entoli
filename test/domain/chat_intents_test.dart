@@ -46,7 +46,7 @@ class _Editor implements ChatEditor {
       calls.add("move ${chat.id} $project");
 
   @override
-  Future<void> delete(ChatState chat) async => calls.add("delete ${chat.id}");
+  Future<void> delete(String chatId) async => calls.add("delete $chatId");
 }
 
 class _Presenter implements ChatPresenter {

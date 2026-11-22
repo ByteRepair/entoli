@@ -1,5 +1,6 @@
 import "dart:io";
 
+import "../../data/sync/sync_hub.dart" show RemoteChatEntry;
 import "../../domain/builtin_project.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
@@ -68,14 +69,20 @@ class ProjectSettingsAppPage extends AppPage {
   ProjectScope _scope(SettingReader reader) =>
       projectScopeAt(reader, ProjectAddress(project, device: device));
 
-  int _count(SettingReader reader) => remote
-      ? reader
-            .watch(remoteChatsProvider)
+  int _count(SettingReader reader) => _countIn(
+    remote: reader.watch(remoteChatsProvider),
+    local: reader.watch(chatListProvider).value ?? const [],
+  );
+
+  /// The project's chats among [remote]'s or [local]'s, whichever it is in.
+  int _countIn({
+    required Iterable<RemoteChatEntry> remote,
+    required Iterable<ChatState> local,
+  }) => this.remote
+      ? remote
             .where((c) => c.deviceId == device && c.state.project == project)
             .length
-      : (reader.watch(chatListProvider).value ?? const [])
-            .where((c) => c.project == project)
-            .length;
+      : local.where((c) => c.project == project).length;
 
   @override
   List<PageSection> sections(SettingReader reader) {
@@ -322,18 +329,12 @@ class ProjectSettingsAppPage extends AppPage {
                 project,
                 // Read rather than watched: `app` is the page stack's own
                 // ref, and a watch there rebuilds the stack empty.
-                remote
-                    ? app
-                          .read(remoteChatsProvider)
-                          .where(
-                            (c) =>
-                                c.deviceId == device &&
-                                c.state.project == project,
-                          )
-                          .length
-                    : (await app.read(
-                        chatListProvider.future,
-                      )).where((c) => c.project == project).length,
+                _countIn(
+                  remote: app.read(remoteChatsProvider),
+                  local: remote
+                      ? const []
+                      : await app.read(chatListProvider.future),
+                ),
               ),
               confirmLabel: "Delete",
               destructive: true,

@@ -234,7 +234,7 @@ class ChatSettingsAppPage extends ChatSettingsFields {
             run: () async {
               final edits = app.read(chatEditsProvider);
               pages.closeAll();
-              await edits.deleteById(chatId);
+              await edits.delete(chatId);
               return null;
             },
           ),
