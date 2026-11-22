@@ -30,27 +30,18 @@ class ScopedSwitch extends ConsumerWidget {
     required this.at,
     required this.title,
     this.subtitle,
-    this.enabled = true,
-    this.write,
   });
 
   final Setting<bool> setting;
   final ScopeAddress at;
   final String title;
   final String? subtitle;
-  final bool enabled;
-
-  /// Where a change goes instead of the level's document: a setting whose
-  /// write has more to it than the key.
-  final Future<void> Function(bool? value)? write;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scope = scopeOf(ref, at);
-    void set(bool? value) => guarded(
-      context,
-      () => write?.call(value) ?? scope.write(setting, value),
-    );
+    void set(bool? value) =>
+        guarded(context, () => scope.write(setting, value));
     final effective = scope.resolve(setting) ?? false;
     final subtitle = this.subtitle;
     if (scope.offersUnset(setting)) {
@@ -59,7 +50,6 @@ class ScopedSwitch extends ConsumerWidget {
         subtitle: subtitle,
         value: scope.own(setting),
         inherited: effective,
-        enabled: enabled,
         onChanged: set,
       );
     }
@@ -67,7 +57,7 @@ class ScopedSwitch extends ConsumerWidget {
       title: Text(title),
       subtitle: subtitle == null ? null : Text(subtitle),
       value: effective,
-      onChanged: enabled ? set : null,
+      onChanged: set,
     );
   }
 }
@@ -187,7 +177,6 @@ class ScopedLevels<T extends Object> extends ConsumerWidget {
     required this.at,
     required this.title,
     required this.stops,
-    this.unsetMeans,
     this.help,
   });
 
@@ -195,14 +184,13 @@ class ScopedLevels<T extends Object> extends ConsumerWidget {
   final ScopeAddress at;
   final String title;
   final Map<T, String> stops;
-  final T? unsetMeans;
   final String? help;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scope = scopeOf(ref, at);
     final own = scope.shown(setting);
-    final inherited = scope.inherited(setting) ?? unsetMeans;
+    final inherited = scope.inherited(setting);
     final shown = own ?? inherited ?? stops.keys.first;
     void set(T? value) => guarded(context, () => scope.write(setting, value));
     final slider = ThinkingSlider<T>(
@@ -226,53 +214,32 @@ class ScopedLevels<T extends Object> extends ConsumerWidget {
   }
 }
 
-/// A count over [setting] at [at], from [stops] or every number from [min]
-/// to [max].
+/// A count over [setting] at [at], from [stops].
 class ScopedCount extends ConsumerWidget {
   const ScopedCount({
     super.key,
     required this.setting,
     required this.at,
     required this.title,
-    this.stops,
-    this.min = 0,
-    this.max = 0,
+    required this.stops,
     this.unsetMeans = 0,
   });
 
   final Setting<int> setting;
   final ScopeAddress at;
   final String title;
-  final List<int>? stops;
-  final int min;
-  final int max;
+  final List<int> stops;
   final int unsetMeans;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scope = scopeOf(ref, at);
-    void set(int? value) => guarded(context, () => scope.write(setting, value));
-    final inherited = scope.inherited(setting) ?? unsetMeans;
-    if (stops == null && !scope.offersUnset(setting)) {
-      final value = (scope.resolve(setting) ?? inherited).clamp(min, max);
-      return LabelledField(
-        label: title,
-        child: Slider(
-          value: value.toDouble(),
-          min: min.toDouble(),
-          max: max.toDouble(),
-          divisions: max > min ? max - min : null,
-          label: "$value",
-          onChanged: (v) => set(v.round()),
-        ),
-      );
-    }
     return InheritableSlider(
       label: title,
       value: scope.shown(setting),
-      stops: stops ?? [for (var i = min; i <= max; i++) i],
-      inherited: inherited,
-      onChanged: set,
+      stops: stops,
+      inherited: scope.inherited(setting) ?? unsetMeans,
+      onChanged: (value) => guarded(context, () => scope.write(setting, value)),
     );
   }
 }

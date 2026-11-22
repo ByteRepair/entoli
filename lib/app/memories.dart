@@ -61,11 +61,10 @@ class MemoryListController extends Notifier<MemoryList> {
     final query = _query;
     List<MemoryEntry>? entries;
     try {
-      final all = await _store.entries();
       // Newest first as the store holds them read back; a search best first,
       // the order the recall would have offered them in.
       entries = query.isEmpty
-          ? all.reversed.toList()
+          ? (await _store.entries()).reversed.toList()
           : await _store.search(query);
     } catch (e) {
       // A paired device gone: what was drawn stays.
@@ -98,7 +97,9 @@ class MemoryListController extends Notifier<MemoryList> {
       } else {
         // Counted over the whole store: a search is a window, and a pin made
         // inside it must not slip past the limit the full list shows.
-        final pinned = (await store.entries()).where((e) => e.pinned).length;
+        final shown = state.query.isEmpty ? state.entries : null;
+        final all = shown ?? await store.entries();
+        final pinned = all.where((e) => e.pinned).length;
         if (pinned >= pinnedLimit) {
           return "Four is the most that can be pinned.";
         }

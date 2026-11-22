@@ -1,5 +1,7 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../data/sync/sync_hub.dart" show RemoteChatEntry;
+import "../domain/models.dart" show ChatState;
 import "../domain/project.dart";
 import "../domain/work_folders.dart";
 import "../providers.dart";
@@ -15,16 +17,14 @@ class ProjectEdits {
 
   /// How many chats [at] holds, counted once the list is read rather than
   /// from what was last drawn.
-  Future<int> chatCount(ProjectRef at) async {
-    if (at.device case final device?) {
-      return _ref
-          .read(remoteChatsProvider)
-          .where((c) => c.deviceId == device && c.state.project == at.project)
-          .length;
-    }
-    final chats = await _ref.read(chatListProvider.future);
-    return chats.where((c) => c.project == at.project).length;
-  }
+  Future<int> chatCount(ProjectRef at) async => switch (at.device) {
+    final device? => _remoteIn(
+      device,
+      at.project,
+      _ref.read(remoteChatsProvider),
+    ),
+    null => _localIn(at.project, await _ref.read(chatListProvider.future)),
+  };
 
   /// Deletes [project], its chats and its shared workspace, and lets go of
   /// every reference to it: the selection, the assistant's project and the
@@ -98,6 +98,31 @@ class ProjectEdits {
 }
 
 final projectEditsProvider = Provider(ProjectEdits.new);
+
+/// How many chats [at] holds, as the lists stand: what a page draws, where
+/// [ProjectEdits.chatCount] is the count a confirm reads.
+final projectChatCountProvider = Provider.autoDispose.family<int, ProjectRef>(
+  (ref, at) => switch (at.device) {
+    final device? => ref.watch(
+      remoteChatsProvider.select(
+        (chats) => _remoteIn(device, at.project, chats),
+      ),
+    ),
+    null => ref.watch(
+      chatListProvider.select(
+        (chats) => _localIn(at.project, chats.value ?? const []),
+      ),
+    ),
+  },
+);
+
+int _remoteIn(String device, String? project, List<RemoteChatEntry> chats) =>
+    chats
+        .where((c) => c.deviceId == device && c.state.project == project)
+        .length;
+
+int _localIn(String? project, List<ChatState> chats) =>
+    chats.where((c) => c.project == project).length;
 
 /// What deleting [project] with its [count] chats asks.
 String deleteProjectMessage(String project, int count) =>

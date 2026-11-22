@@ -4,6 +4,7 @@ import "dart:io";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:path/path.dart" as p;
 
+import "../core/formatting.dart" show nonBlank;
 import "../core/log.dart";
 import "../core/platform/form_factor.dart";
 import "../domain/documents.dart" show RenameWriter;
@@ -123,16 +124,20 @@ class ProfileEditor {
   Future<ProfileDraft> load({String? project}) async {
     final config = _ref.read(appConfigProvider);
     final draft = ProfileDraft._(project, config.globalInstructionsFile);
-    try {
-      final file = File(_instructionsPath(project));
-      if (file.existsSync()) draft.instructions = await file.readAsString();
-    } catch (e) {
-      // A file that will not read is shown as empty; saving overwrites it.
-      logFailure("profile", "could not read the instructions", e);
+    Future<void> readInstructions() async {
+      try {
+        final file = File(_instructionsPath(project));
+        if (file.existsSync()) draft.instructions = await file.readAsString();
+      } catch (e) {
+        // A file that will not read is shown as empty; saving overwrites it.
+        logFailure("profile", "could not read the instructions", e);
+      }
     }
+
     // Linking is by path, which only a desktop's picker hands back: a
     // phone's gives a copy.
-    if (isDesktop) {
+    Future<void> readLinked() async {
+      if (!isDesktop) return;
       final linked = await _ref.read(linkedInstructionsStoreProvider).load();
       draft.linked = [...linked.files];
       draft.off = {...?linked.off[project]};
@@ -141,6 +146,8 @@ class ProfileEditor {
         ...draft.linked,
       ]);
     }
+
+    await Future.wait([readInstructions(), readLinked()]);
     final settings = _ref.read(appSettingsProvider);
     if (project == null) {
       final profile = settings.profile;
@@ -187,10 +194,10 @@ class ProfileEditor {
     if (isDesktop) await _saveLinked(draft);
     if (draft.global) {
       final profile = Profile(
-        name: _blank(draft.name),
-        dateOfBirth: _blank(draft.dob),
-        religion: _blank(draft.religion),
-        profession: _blank(draft.profession),
+        name: nonBlank(draft.name),
+        dateOfBirth: nonBlank(draft.dob),
+        religion: nonBlank(draft.religion),
+        profession: nonBlank(draft.profession),
       );
       // One write of settings.json rather than three.
       await _ref
@@ -209,8 +216,6 @@ class ProfileEditor {
     draft._opened = draft._snapshot();
     return null;
   }
-
-  String? _blank(String s) => s.trim().isEmpty ? null : s.trim();
 
   Future<void> _saveLinked(ProfileDraft draft) {
     final store = _ref.read(linkedInstructionsStoreProvider);

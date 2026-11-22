@@ -1,3 +1,4 @@
+import "../core/formatting.dart" show nonBlank;
 import "../domain/llm_provider.dart";
 import "../domain/model_info.dart";
 import "../providers.dart";
@@ -111,18 +112,17 @@ class CustomModelDraft {
   /// entry it replaces where it was an edit. A model that does not chat can
   /// do none of what [caps] says.
   ({String providerId, ModelInfo info, (String, String)? replacing}) build() {
-    String? text(String s) => s.trim().isEmpty ? null : s.trim();
     bool can(ModelCap cap) => chat && caps.contains(cap);
     final before = model;
     return (
       providerId: provider,
       info: ModelInfo(
         id: id.trim(),
-        name: text(name),
-        context: int.tryParse(text(context) ?? ""),
-        output: int.tryParse(text(output) ?? ""),
-        inputCost: double.tryParse(text(inputCost) ?? ""),
-        outputCost: double.tryParse(text(outputCost) ?? ""),
+        name: nonBlank(name),
+        context: int.tryParse(nonBlank(context) ?? ""),
+        output: int.tryParse(nonBlank(output) ?? ""),
+        inputCost: double.tryParse(nonBlank(inputCost) ?? ""),
+        outputCost: double.tryParse(nonBlank(outputCost) ?? ""),
         talks: chat,
         transcribes: kind == ModelRole.transcription,
         speaks: kind == ModelRole.speech,

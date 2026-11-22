@@ -2,10 +2,10 @@ import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../app/marketplace/install.dart" show PromptInstall;
 import "../../app/prompts/own_prompts.dart";
 import "../../app/prompts/skill_files.dart";
 import "../../app/settings/scope.dart";
-import "../../data/prompts/prompt_export.dart";
 import "../../data/prompts/skill_import.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart" show promptsDirUserWritable;
@@ -33,10 +33,11 @@ const _skillFiles = XTypeGroup(
 /// The import flow, and on the app's page where it lands, is the footer,
 /// fixed to the bottom of the page so it does not scroll with the list.
 class SkillsSettings extends ConsumerStatefulWidget {
-  const SkillsSettings({super.key, this.at = const AppAddress()});
+  const SkillsSettings({super.key, this.at});
 
-  /// The app's page imports into any project; a project's into itself.
-  final ScopeAddress at;
+  /// Null is the app's page, the default project's, which imports into any
+  /// project; a project's imports into itself.
+  final ProjectAddress? at;
 
   @override
   ConsumerState<SkillsSettings> createState() => _SkillsSettingsState();
@@ -45,12 +46,9 @@ class SkillsSettings extends ConsumerStatefulWidget {
 class _SkillsSettingsState extends ConsumerState<SkillsSettings> {
   final _busy = ValueNotifier(false);
 
-  ProjectAddress get _address => switch (widget.at) {
-    final ProjectAddress at => at,
-    _ => const ProjectAddress(null),
-  };
+  ProjectAddress get _address => widget.at ?? const ProjectAddress(null);
 
-  bool get _global => widget.at is! ProjectAddress;
+  bool get _global => widget.at == null;
 
   String? get _project => _address.project;
 
@@ -85,13 +83,15 @@ class _SkillsSettingsState extends ConsumerState<SkillsSettings> {
     });
     final skill = package;
     if (skill == null || !mounted) return;
-    if (_files.has(skill.name, target: target) &&
+    final replacing = PromptInstall(
+      ref.read,
+      target: target,
+    ).replacingSkill(skill, doing: "Importing");
+    if (replacing != null &&
         !await confirm(
           context,
-          title: "Replace ${skill.name}?",
-          message:
-              "A skill with that name is already installed there. Importing "
-              "this one replaces it, files included.",
+          title: replacing.title,
+          message: replacing.message,
           confirmLabel: "Replace",
         )) {
       return;
@@ -124,16 +124,6 @@ class _SkillsSettingsState extends ConsumerState<SkillsSettings> {
       if (mounted) notify(context, "Removed $name.");
     });
   }
-
-  Future<void> _export(String name) => _guard(
-    () => exportAndSave(
-      ref.read(appConfigProvider),
-      ref.read(backupHandoffProvider),
-      CompletionKind.skill,
-      name,
-      project: _project,
-    ),
-  );
 
   void _open(String name, String origin) => Navigator.of(context).push(
     MaterialPageRoute(
@@ -245,29 +235,14 @@ class _SkillsSettingsState extends ConsumerState<SkillsSettings> {
                 color: Theme.of(context).colorScheme.error,
               ),
             ),
-          if (_local) ...[
-            if (loaded)
-              IconButton(
-                icon: const Icon(Icons.link),
-                tooltip: "Copy install link for $name",
-                onPressed: () => _guard(
-                  () => copyInstallLink(
-                    context,
-                    ref.read(appConfigProvider),
-                    CompletionKind.skill,
-                    name,
-                    project: _project,
-                  ),
-                ),
-              )
-            else
-              const SizedBox(width: 48),
-            IconButton(
-              icon: const Icon(Icons.download),
-              tooltip: "Export $name",
-              onPressed: () => _export(name),
+          if (_local)
+            PromptRowActions(
+              kind: CompletionKind.skill,
+              name: name,
+              project: _project,
+              guard: _guard,
+              linkable: loaded,
             ),
-          ],
         ],
       ),
     );

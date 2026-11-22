@@ -268,7 +268,7 @@ which wants sudo. Both are the store's (`setupNotice`, `prerequisite`), so the
 page names no platform. A delete takes the links and leaves what Homebrew
 installed, and its confirm says that.
 While a setup or an import runs, the category cannot be left
-(`byteRepairHeldProvider`): back, the bar's button and another category's tile
+(`SettingsCategory.held`): back, the bar's button and another category's tile
 are all shut, since the run's log and error are the page's to show.
 See "Byte Repair's environment, in five variables" in `lib/data/local/AGENTS.md`.
 The
@@ -405,8 +405,8 @@ so" in `windows/AGENTS.md`); phones; and a Linux guest.
 
 `TriggerEditorPage` (`trigger_settings.dart`), over a `TriggerDraft`
 (`lib/app/settings/triggers.dart`), which holds what is edited, says why it
-cannot be saved (`triggerRefusal`, shown on the page with Save off) and
-builds what is saved (`savedTrigger`): the name, the prompt, and one row of
+cannot be saved (`refusal`, shown on the page with Save off) and
+builds what is saved (`build`): the name, the prompt, and one row of
 "When" — a segmented choice over the three sources, each kind bringing its
 own fields under it: a schedule its date and time and repeat, a timer its
 countdown minutes, a file watch its paths, added one at a time, and its kinds

@@ -37,15 +37,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   /// Back from a category to the list, by the bar's button or the back key.
   void _showList() => setState(() => _categoryShown = false);
 
-  bool _holds(SettingsCategory category) => settingsCategoryHeld(ref, category);
-
   @override
   Widget build(BuildContext context) {
     // A category this platform does not offer is not opened, whoever names it.
     if (widget.initialCategory case final initial?
         when widget.focus && initial.offered(ref)) {
       return PopScope(
-        canPop: !_holds(initial),
+        canPop: !initial.held(ref),
         child: Scaffold(
           appBar: PageBar(title: initial.label),
           body: _categoryBody(initial),
@@ -56,7 +54,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ? _category
         : SettingsCategory.general;
     // Held, every way out is shut: back, the bar's button and another pick.
-    final held = _holds(category);
+    final held = category.held(ref);
     return PopScope(
       canPop: !held,
       child: SidePanelFrame(

@@ -7,6 +7,7 @@ import "../../data/prompts/skill_import.dart";
 import "../../domain/agent_face.dart";
 import "../../providers.dart";
 import "../prompts/agent_files.dart";
+import "../prompts/own_prompts.dart";
 import "../prompts/skill_files.dart";
 
 /// What an install asks before it replaces something already there.
@@ -22,12 +23,15 @@ class PromptInstall {
   final T Function<T>(ProviderListenable<T> provider) read;
   final String? target;
 
-  ReplaceQuestion? replacingSkill(SkillPackage package) =>
-      SkillFiles(read(appConfigProvider)).has(package.name, target: target)
+  /// [doing] is how the question names the write.
+  ReplaceQuestion? replacingSkill(
+    SkillPackage package, {
+    String doing = "Installing",
+  }) => SkillFiles(read(appConfigProvider)).has(package.name, target: target)
       ? (
           title: "Replace ${package.name}?",
           message:
-              "A skill with that name is already installed there. Installing "
+              "A skill with that name is already installed there. $doing "
               "this one replaces it, files included.",
         )
       : null;
@@ -35,7 +39,7 @@ class PromptInstall {
   /// Returns what to say once it has landed.
   Future<String> skill(SkillPackage package) async {
     await SkillFiles(read(appConfigProvider)).install(package, target: target);
-    await reloadAllPromptLibraries(read);
+    await read(promptChangesProvider).reload(target);
     return installedSnack("Installed", package.name, target);
   }
 
@@ -44,12 +48,12 @@ class PromptInstall {
       ? null
       : "This agent cannot be installed: its name cannot be a file name.";
 
-  ReplaceQuestion? replacingAgent(String name) =>
+  ReplaceQuestion? replacingAgent(String name, {String doing = "Installing"}) =>
       AgentFiles(read(appConfigProvider), project: target).has(name)
       ? (
           title: "Replace $name?",
           message:
-              "An agent with that name is already installed. Installing this "
+              "An agent with that name is already installed. $doing this "
               "one replaces it.",
         )
       : null;
@@ -62,7 +66,7 @@ class PromptInstall {
       read(appConfigProvider),
       project: target,
     ).write(name, source, face: picture == null ? null : AgentPhoto(picture));
-    await reloadAllPromptLibraries(read);
+    await read(promptChangesProvider).reload(target);
     return installedSnack("Installed", name, target);
   }
 }

@@ -1,7 +1,5 @@
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../app/byte_repair.dart";
 import "about_settings.dart";
 import "agents_settings.dart";
 import "browser_settings.dart";
@@ -60,9 +58,3 @@ Widget settingsCategoryBody(SettingsCategory category, {Key? key}) =>
         children: const [TriggersSection()],
       ),
     };
-
-/// Whether [category] may not be left now: Byte Repair while its setup
-/// runs.
-bool settingsCategoryHeld(WidgetRef ref, SettingsCategory category) =>
-    category == SettingsCategory.byteRepair &&
-    ref.watch(byteRepairHeldProvider);

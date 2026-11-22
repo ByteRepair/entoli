@@ -16,16 +16,17 @@ final triggerPermissionsProvider =
     FutureProvider<({bool notifications, bool exact})>((ref) async {
       ref.watch(appResumesProvider);
       final alarms = ref.watch(reminderAlarmsProvider);
-      return (
-        notifications: await alarms.notificationsAllowed(),
-        exact: await alarms.exactAllowed(),
-      );
+      final (notifications, exact) = await (
+        alarms.notificationsAllowed(),
+        alarms.exactAllowed(),
+      ).wait;
+      return (notifications: notifications, exact: exact);
     });
 
 /// Why [source] with [prompt] cannot be saved, or null where it can. A
 /// one-shot set in the past would be born already fired; a repeating one in
 /// the past is fine, since it has occurrences ahead of it.
-String? triggerRefusal(
+String? _triggerRefusal(
   TriggerSource source,
   String prompt, {
   required bool isNew,
@@ -49,7 +50,7 @@ String? triggerRefusal(
 /// [trigger] saved with what was edited: a countdown set again from [now],
 /// the next fire worked out afresh — an edit into the past means the next
 /// occurrence after now, never a fire in the past — and armed.
-Trigger savedTrigger(
+Trigger _savedTrigger(
   Trigger? trigger, {
   required String name,
   required String prompt,
@@ -68,15 +69,7 @@ Trigger savedTrigger(
   };
   final base =
       trigger ??
-      Trigger(
-        id: const Uuid().v4(),
-        name: "",
-        prompt: prompt,
-        source: set,
-        project: project,
-        member: member,
-        tempChatTtl: tempChatTtl,
-      );
+      Trigger(id: const Uuid().v4(), name: "", prompt: "", source: set);
   return base
       .copyWith(
         name: name.trim(),
@@ -210,13 +203,13 @@ class TriggerDraft {
   /// Why it cannot be saved, or null where it can.
   String? get refusal => registered
       ? null
-      : triggerRefusal(source, prompt, isNew: isNew, now: now);
+      : _triggerRefusal(source, prompt, isNew: isNew, now: now);
 
   /// The trigger saved, at [at], into one of [projects] or the default; into
   /// its own project where the list of them has not loaded, so a save then
   /// does not move it.
   Trigger build({required DateTime at, required List<String>? projects}) =>
-      savedTrigger(
+      _savedTrigger(
         trigger,
         name: name,
         prompt: prompt,

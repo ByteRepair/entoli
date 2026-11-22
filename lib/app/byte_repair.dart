@@ -14,11 +14,6 @@ final byteRepairRunProvider = NotifierProvider<ByteRepairRun, SetupRun>(
   ByteRepairRun.new,
 );
 
-/// Whether Byte Repair's settings may not be left now: while its setup runs.
-final byteRepairHeldProvider = Provider<bool>(
-  (ref) => ref.watch(byteRepairRunProvider.select((run) => run.running)),
-);
-
 /// The Byte Repair tooling's setup, import and delete, one at a time.
 class ByteRepairRun extends Notifier<SetupRun> {
   @override

@@ -4,6 +4,7 @@ import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
+import "../../core/formatting.dart" show nonBlank;
 import "../../core/log.dart";
 import "../../data/local/local_engine.dart" show LocalEngine;
 import "../../data/local/local_instance.dart" show LocalUsage;
@@ -152,7 +153,6 @@ void addLocalModelByLink(
   String licence = "",
   String sha256 = "",
 }) {
-  String? optional(String text) => text.trim().isEmpty ? null : text.trim();
   final link = url.trim();
   final engine = read(localEngineProvider);
   final taken = {
@@ -164,9 +164,9 @@ void addLocalModelByLink(
     id: localModelIdFor(link, taken),
     name: name.trim(),
     url: link,
-    parameters: optional(parameters),
-    licence: optional(licence),
-    sha256: optional(sha256),
+    parameters: nonBlank(parameters),
+    licence: nonBlank(licence),
+    sha256: nonBlank(sha256),
   ));
   read(addedLocalModelsProvider.notifier).add(model);
   read(

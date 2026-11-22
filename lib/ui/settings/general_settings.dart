@@ -337,25 +337,21 @@ class _CornerChoice extends StatelessWidget {
 /// What a new project starts as, how deep its agent rounds may go, and the
 /// scheduling a project that never chose runs under. A project's own page
 /// overrides the last two.
-class _OmadaSection extends ConsumerWidget {
+class _OmadaSection extends StatelessWidget {
   const _OmadaSection();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final ordering =
-        scopeOf(ref, _app).resolve(SettingKeys.omadaOrdering) ??
-        defaultOmadaOrdering;
-    final small = Theme.of(context).textTheme.bodySmall;
-    return Column(
+  Widget build(BuildContext context) {
+    return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader(
+        SectionHeader(
           "Omada",
           description:
               "Team chats: several named agents take part in a "
               "project's replies, alongside the main one.",
         ),
-        const ScopedSwitch(
+        ScopedSwitch(
           setting: SettingKeys.omadaByDefault,
           at: _app,
           title: "On by default for new projects",
@@ -363,33 +359,64 @@ class _OmadaSection extends ConsumerWidget {
               "The new-project dialog starts with team chats switched on. "
               "Existing projects are untouched.",
         ),
-        const ScopedChoice(
-          setting: SettingKeys.omadaOrdering,
+        OmadaRows(
           at: _app,
+          footnotePadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          footnoteMuted: false,
+        ),
+      ],
+    );
+  }
+}
+
+/// How rounds run at [at] where Omada is on: their order, and how many
+/// waves one may run.
+class OmadaRows extends ConsumerWidget {
+  const OmadaRows({
+    super.key,
+    required this.at,
+    this.footnotePadding = const EdgeInsets.fromLTRB(16, 0, 16, 8),
+    this.footnoteMuted = true,
+  });
+
+  final ScopeAddress at;
+  final EdgeInsets footnotePadding;
+  final bool footnoteMuted;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ordering =
+        scopeOf(ref, at).resolve(SettingKeys.omadaOrdering) ??
+        defaultOmadaOrdering;
+    Widget footnote(String text) => Padding(
+      padding: footnotePadding,
+      child: footnoteMuted
+          ? mutedParagraph(context, text)
+          : Text(text, style: Theme.of(context).textTheme.bodySmall),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ScopedChoice(
+          setting: SettingKeys.omadaOrdering,
+          at: at,
           title: "Default round order",
           options: omadaOrderingLabels,
           unsetMeans: defaultOmadaOrdering,
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Text(omadaOrderingDescriptions[ordering]!, style: small),
-        ),
-        const ScopedCount(
+        footnote(omadaOrderingDescriptions[ordering]!),
+        ScopedCount(
           setting: SettingKeys.omadaMaxGenerations,
-          at: _app,
+          at: at,
           title: "Max generations per round",
           stops: SettingKeys.omadaGenerationStops,
           unsetMeans: SettingKeys.defaultOmadaMaxGenerations,
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Text(
-            "How many waves of agent-to-agent work one round may run before "
-            "it stops for you — your message starts the round, and a member "
-            "handing off to another starts the next wave. A project can set "
-            "its own.",
-            style: small,
-          ),
+        footnote(
+          "How many waves of agent-to-agent work one round may run before "
+          "it stops for you — your message starts the round, and a member "
+          "handing off to another starts the next wave. A project can set "
+          "its own.",
         ),
       ],
     );
@@ -469,7 +496,7 @@ class _DeleteAllChats extends ConsumerWidget {
 
   Future<void> _confirmAndDelete(BuildContext context, WidgetRef ref) async {
     final repository = ref.read(chatRepositoryProvider);
-    final count = (await repository.listChats()).length;
+    final count = (await ref.read(chatListProvider.future)).length;
     if (!context.mounted) return;
     final confirmed = await confirm(
       context,

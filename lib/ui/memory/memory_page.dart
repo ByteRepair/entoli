@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/memories.dart";
+import "../../core/formatting.dart" show safeCut;
 import "../../data/builtin/memory/store.dart";
 import "../../domain/project.dart" show ProjectRef;
 import "../../providers.dart";
@@ -70,7 +71,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
 
   Future<void> _delete(MemoryEntry entry) async {
     final shown = entry.text.length > 80
-        ? "${entry.text.substring(0, 80)}…"
+        ? "${safeCut(entry.text, 80)}…"
         : entry.text;
     if (!await confirm(
       context,
@@ -133,7 +134,8 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       body: Column(
         children: [
           if (widget.project.device case final device?)
-            if (ref.watch(syncPeersProvider)[device]?.name ?? "The device"
+            if (ref.watch(syncPeersProvider.select((p) => p[device]?.name)) ??
+                    "The device"
                 case final name)
               frozen
                   ? MirrorStrip.offline(deviceName: name)

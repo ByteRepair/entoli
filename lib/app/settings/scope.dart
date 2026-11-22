@@ -11,12 +11,6 @@ sealed class ScopeAddress {
 
 final class AppAddress extends ScopeAddress {
   const AppAddress();
-
-  @override
-  bool operator ==(Object other) => other is AppAddress;
-
-  @override
-  int get hashCode => (AppAddress).hashCode;
 }
 
 final class ProjectAddress extends ScopeAddress {
@@ -30,15 +24,6 @@ final class ProjectAddress extends ScopeAddress {
   final String? device;
 
   ProjectRef get ref => (device: device, project: project);
-
-  @override
-  bool operator ==(Object other) =>
-      other is ProjectAddress &&
-      other.project == project &&
-      other.device == device;
-
-  @override
-  int get hashCode => Object.hash(ProjectAddress, project, device);
 }
 
 /// A chat's settings as its page holds them until Save: [document] is the
@@ -50,15 +35,6 @@ final class ChatAddress extends ScopeAddress {
   final SettingsDocument document;
   final String? project;
   final void Function() onChange;
-
-  @override
-  bool operator ==(Object other) =>
-      other is ChatAddress &&
-      identical(other.document, document) &&
-      other.project == project;
-
-  @override
-  int get hashCode => Object.hash(identityHashCode(document), project);
 }
 
 /// The object that reads and writes a level's values: what is set here,

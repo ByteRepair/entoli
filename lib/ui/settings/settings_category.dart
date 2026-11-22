@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../app/byte_repair.dart" show byteRepairRunProvider;
 import "../../providers.dart";
 
 /// The page's categories, in the order they are offered and the groups they
@@ -55,6 +56,12 @@ enum SettingsCategory {
           ref.watch(voiceProvider).hasModelCatalog,
     _ => true,
   };
+
+  /// Whether the category may not be left now: Byte Repair while its setup
+  /// or an import runs.
+  bool held(WidgetRef ref) =>
+      this == byteRepair &&
+      ref.watch(byteRepairRunProvider.select((run) => run.running));
 }
 
 /// The route Settings is reached by, registered once with the app's

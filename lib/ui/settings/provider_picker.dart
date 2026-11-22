@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../domain/llm_provider.dart";
 import "../../providers.dart";
+import "../widgets/catalog.dart" show InfoTag, InfoTone;
 
 /// Ask which provider to add, saying beside each preset what it does with the
 /// prompts it is sent. A free tier paid for in privacy is accepted here, in a
@@ -121,7 +122,7 @@ class _CliTile extends StatelessWidget {
         children: [
           Text(cli.about),
           const SizedBox(height: 6),
-          _Tag(Icons.account_circle_outlined, cli.account),
+          InfoTag(Icons.account_circle_outlined, cli.account),
         ],
       ),
       isThreeLine: true,
@@ -221,10 +222,14 @@ class _PresetTile extends StatelessWidget {
             runSpacing: 4,
             children: [
               if (terms?.freeTier != null)
-                _Tag(Icons.warning_amber_rounded, "Free", tone: _Tone.warn),
+                const InfoTag(
+                  Icons.warning_amber_rounded,
+                  "Free",
+                  tone: InfoTone.warn,
+                ),
               if (terms != null) _promptsTag(terms.prompts),
               if (preset.imageModel != null)
-                const _Tag(Icons.image_outlined, "Images"),
+                const InfoTag(Icons.image_outlined, "Images"),
             ],
           ),
         ],
@@ -234,76 +239,30 @@ class _PresetTile extends StatelessWidget {
     );
   }
 
-  static _Tag _promptsTag(PromptUse use) => switch (use) {
-    PromptUse.local => const _Tag(
+  static InfoTag _promptsTag(PromptUse use) => switch (use) {
+    PromptUse.local => const InfoTag(
       Icons.lock_outline,
       "Stays on your machine",
-      tone: _Tone.good,
+      tone: InfoTone.good,
     ),
-    PromptUse.notTrained => const _Tag(
+    PromptUse.notTrained => const InfoTag(
       Icons.shield_outlined,
       "Doesn't train on prompts",
-      tone: _Tone.good,
+      tone: InfoTone.good,
     ),
-    PromptUse.dependsOnRoute => const _Tag(
+    PromptUse.dependsOnRoute => const InfoTag(
       Icons.alt_route,
       "Training depends on the model",
     ),
-    PromptUse.trainedWhenFree => const _Tag(
+    PromptUse.trainedWhenFree => const InfoTag(
       Icons.visibility_outlined,
       "Free tier trains on prompts",
-      tone: _Tone.warn,
+      tone: InfoTone.warn,
     ),
-    PromptUse.unstated => const _Tag(
+    PromptUse.unstated => const InfoTag(
       Icons.help_outline,
       "Free tier terms unclear",
-      tone: _Tone.warn,
+      tone: InfoTone.warn,
     ),
   };
-}
-
-enum _Tone { neutral, good, warn }
-
-class _Tag extends StatelessWidget {
-  const _Tag(this.icon, this.label, {this.tone = _Tone.neutral});
-
-  final IconData icon;
-  final String label;
-  final _Tone tone;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final (bg, fg) = switch (tone) {
-      _Tone.neutral => (
-        colors.surfaceContainerHighest,
-        colors.onSurfaceVariant,
-      ),
-      _Tone.good => (colors.primaryContainer, colors.onPrimaryContainer),
-      _Tone.warn => (colors.errorContainer, colors.onErrorContainer),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        // Not a full pill: on a narrow screen the label wraps to two lines.
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: fg),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              label,
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: fg),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

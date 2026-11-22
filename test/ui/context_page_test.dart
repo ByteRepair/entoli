@@ -58,9 +58,9 @@ void main() {
     expect(names, ["@athena", "@reviewer"]);
     // One bar each, its parts laid end to end and named under it.
     expect(find.text("Instructions"), findsNWidgets(2));
-    expect(find.text("3.0k"), findsOneWidget);
+    expect(find.text("3K"), findsOneWidget);
     expect(find.text("Auto-compact 80%"), findsNWidgets(2));
-    expect(find.byTooltip("Instructions: 3.0k tokens"), findsOneWidget);
+    expect(find.byTooltip("Instructions: 3K tokens"), findsOneWidget);
     expect(find.textContaining("four characters a token"), findsOneWidget);
   });
 

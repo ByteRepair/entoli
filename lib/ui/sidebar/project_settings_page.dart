@@ -8,7 +8,6 @@ import "../../app/settings/confinement.dart";
 import "../../app/settings/scope.dart";
 import "../../domain/builtin_project.dart";
 import "../../domain/models.dart";
-import "../../domain/omada_ordering.dart";
 import "../../domain/project.dart";
 import "../../domain/settings/keys.dart";
 import "../../domain/shell.dart" show isTildePath;
@@ -20,6 +19,7 @@ import "../memory/memory_page.dart";
 import "../profile/profile_page.dart";
 import "../settings/permissions_section.dart";
 import "../settings/project_prompts_page.dart";
+import "../settings/general_settings.dart" show OmadaRows;
 import "../settings/scoped.dart";
 import "../settings/terminal_settings.dart" show SandboxSettings;
 import "../widgets/add_button_row.dart";
@@ -71,14 +71,7 @@ class ProjectSettingsPage extends ConsumerWidget {
     final config = ref.watch(appConfigProvider);
     final settings = ref.watch(projectSettingsOf(at));
     final omada = builtIn?.omada ?? settings.omada;
-    final count = _remote
-        ? ref
-              .watch(remoteChatsProvider)
-              .where((c) => c.deviceId == device && c.state.project == project)
-              .length
-        : (ref.watch(chatListProvider).value ?? const [])
-              .where((c) => c.project == project)
-              .length;
+    final count = ref.watch(projectChatCountProvider(at));
     final rows = <Widget>[
       ListTile(
         title: const Text("Project name"),
@@ -178,7 +171,7 @@ class ProjectSettingsPage extends ConsumerWidget {
                 () => ref.read(projectSettingsOf(at).notifier).setOmada(on),
               ),
       ),
-      if (omada) _OmadaRows(at: address),
+      if (omada) OmadaRows(at: address),
       // A turn is a turn in every project, built-ins included.
       ScopedCount(
         setting: SettingKeys.turnMaxSteps,
@@ -227,7 +220,8 @@ class ProjectSettingsPage extends ConsumerWidget {
             DeviceNotice(
               what: "project",
               deviceName:
-                  ref.watch(syncPeersProvider)[device]?.name ?? "The device",
+                  ref.watch(syncPeersProvider.select((p) => p[device]?.name)) ??
+                  "The device",
               online: !frozen,
             ),
           // What the device last said, readable and not written until it is
@@ -351,18 +345,29 @@ class _InstructionsRow extends ConsumerStatefulWidget {
 }
 
 class _InstructionsRowState extends ConsumerState<_InstructionsRow> {
+  late bool _set;
+
+  @override
+  void initState() {
+    super.initState();
+    _set = _isSet();
+  }
+
+  bool _isSet() => File(
+    ref
+        .read(appConfigProvider)
+        .projectInstructionsFile(project: widget.project),
+  ).existsSync();
+
   @override
   Widget build(BuildContext context) {
-    final file = ref
-        .watch(appConfigProvider)
-        .projectInstructionsFile(project: widget.project);
     return _Opener(
       icon: Icons.edit_outlined,
       title: "Instructions",
-      label: File(file).existsSync() ? "Set" : "Not set",
+      label: _set ? "Set" : "Not set",
       onTap: () async {
         await openProfile(context, project: widget.project);
-        if (mounted) setState(() {});
+        if (mounted) setState(() => _set = _isSet());
       },
     );
   }
@@ -406,51 +411,6 @@ class _MemoryChoice extends ConsumerWidget {
           }),
         ],
       ),
-    );
-  }
-}
-
-/// How the project's rounds run where Omada is on: their order, and how
-/// many waves one may run.
-class _OmadaRows extends ConsumerWidget {
-  const _OmadaRows({required this.at});
-
-  final ProjectAddress at;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final ordering =
-        scopeOf(ref, at).resolve(SettingKeys.omadaOrdering) ??
-        defaultOmadaOrdering;
-    Widget footnote(String text) => Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: mutedParagraph(context, text),
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ScopedChoice(
-          setting: SettingKeys.omadaOrdering,
-          at: at,
-          title: "Default round order",
-          options: omadaOrderingLabels,
-          unsetMeans: defaultOmadaOrdering,
-        ),
-        footnote(omadaOrderingDescriptions[ordering]!),
-        ScopedCount(
-          setting: SettingKeys.omadaMaxGenerations,
-          at: at,
-          title: "Max generations per round",
-          stops: SettingKeys.omadaGenerationStops,
-          unsetMeans: SettingKeys.defaultOmadaMaxGenerations,
-        ),
-        footnote(
-          "How many waves of agent-to-agent work one round may run before "
-          "it stops for you — your message starts the round, and a member "
-          "handing off to another starts the next wave. A project can set "
-          "its own.",
-        ),
-      ],
     );
   }
 }

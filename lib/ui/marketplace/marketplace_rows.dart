@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../app/marketplace/face.dart";
 import "../../app/marketplace/groups.dart";
 import "../../app/marketplace/marketplace.dart";
+import "../../core/formatting.dart" show plural, safeCut;
 import "../../domain/models.dart";
 import "../../providers.dart";
 import "../bot_avatar/bot_avatar_view.dart";
@@ -12,16 +13,16 @@ import "../bot_avatar/bot_avatar_view.dart";
 const externalBadge = "External";
 
 /// How many [kind] there are, as a heading or a card says it.
-String countOf(CompletionKind kind, int n) => switch (kind) {
-  CompletionKind.skill => n == 1 ? "1 skill" : "$n skills",
-  CompletionKind.agent => n == 1 ? "1 agent" : "$n agents",
-};
+String countOf(CompletionKind kind, int n) => plural(n, switch (kind) {
+  CompletionKind.skill => "skill",
+  CompletionKind.agent => "agent",
+});
 
 /// [text] cut at a word to about two lines of a row.
 String _short(String text, [int max = 140]) {
   if (text.length <= max) return text;
   final cut = text.lastIndexOf(" ", max);
-  return "${text.substring(0, cut > max ~/ 2 ? cut : max).trimRight()}…";
+  return "${safeCut(text, cut > max ~/ 2 ? cut : max).trimRight()}…";
 }
 
 /// A row's face: a still Bot Avatar picked from [slug], or the kind's icon

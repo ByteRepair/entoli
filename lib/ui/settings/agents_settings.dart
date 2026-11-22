@@ -2,13 +2,13 @@ import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../app/marketplace/install.dart" show PromptInstall;
 import "../../app/prompts/agent_files.dart";
 import "../../app/prompts/agent_tools.dart";
 import "../../app/prompts/own_prompts.dart";
 import "../../app/settings/scope.dart";
 import "../../data/builtin/tools/agent_tool.dart";
 import "../../data/prompts/agent_pictures.dart" show readOwnAgentFace;
-import "../../data/prompts/prompt_export.dart";
 import "../../data/prompts/skill_import.dart" show isFolderName;
 import "../../domain/agent_definition.dart";
 import "../../domain/agent_face.dart";
@@ -44,10 +44,10 @@ const _agentFiles = XTypeGroup(
 /// Add, Import and View Bot Avatars are the footer, fixed to the bottom of
 /// the page so they do not scroll with the list.
 class AgentsSettings extends ConsumerStatefulWidget {
-  const AgentsSettings({super.key, this.at = const AppAddress()});
+  const AgentsSettings({super.key, this.at});
 
-  /// The app's page is the default project's.
-  final ScopeAddress at;
+  /// Null is the app's page, the default project's.
+  final ProjectAddress? at;
 
   @override
   ConsumerState<AgentsSettings> createState() => _AgentsSettingsState();
@@ -56,10 +56,7 @@ class AgentsSettings extends ConsumerStatefulWidget {
 class _AgentsSettingsState extends ConsumerState<AgentsSettings> {
   final _busy = ValueNotifier(false);
 
-  ProjectAddress get _address => switch (widget.at) {
-    final ProjectAddress at => at,
-    _ => const ProjectAddress(null),
-  };
+  ProjectAddress get _address => widget.at ?? const ProjectAddress(null);
 
   String? get _project => _address.project;
 
@@ -179,26 +176,19 @@ class _AgentsSettingsState extends ConsumerState<AgentsSettings> {
 
   /// False where [name] is already in this project's directory and the user
   /// would rather keep it.
-  Future<bool> _mayReplace(String name, String doing) async =>
-      !_files.has(name) ||
-      await confirm(
-        context,
-        title: "Replace $name?",
-        message:
-            "An agent with that name is already installed. $doing "
-            "this one replaces it.",
-        confirmLabel: "Replace",
-      );
-
-  Future<void> _export(PromptDocument agent) => _guard(
-    () => exportAndSave(
-      ref.read(appConfigProvider),
-      ref.read(backupHandoffProvider),
-      CompletionKind.agent,
-      agent.name,
-      project: _project,
-    ),
-  );
+  Future<bool> _mayReplace(String name, String doing) async {
+    final replacing = PromptInstall(
+      ref.read,
+      target: _project,
+    ).replacingAgent(name, doing: doing);
+    return replacing == null ||
+        await confirm(
+          context,
+          title: replacing.title,
+          message: replacing.message,
+          confirmLabel: "Replace",
+        );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -327,26 +317,13 @@ class _AgentsSettingsState extends ConsumerState<AgentsSettings> {
                 promptOrigin(CompletionKind.agent, agent.name, _project),
               ),
             ),
-          if (_local) ...[
-            IconButton(
-              icon: const Icon(Icons.link),
-              tooltip: "Copy install link for ${agent.name}",
-              onPressed: () => _guard(
-                () => copyInstallLink(
-                  context,
-                  ref.read(appConfigProvider),
-                  CompletionKind.agent,
-                  agent.name,
-                  project: _project,
-                ),
-              ),
+          if (_local)
+            PromptRowActions(
+              kind: CompletionKind.agent,
+              name: agent.name,
+              project: _project,
+              guard: _guard,
             ),
-            IconButton(
-              icon: const Icon(Icons.download),
-              tooltip: "Export ${agent.name}",
-              onPressed: () => _export(agent),
-            ),
-          ],
         ],
       ),
     );

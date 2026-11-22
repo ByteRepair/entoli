@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/mirror_controller.dart";
+import "../../core/formatting.dart" show tokenCount;
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart" show nameOf;
 import "../../providers.dart";
@@ -79,17 +80,11 @@ class ContextPage extends ConsumerWidget {
   }
 }
 
-String _k(int tokens) => tokens < 1000
-    ? "$tokens"
-    : tokens < 10000
-    ? "${(tokens / 1000).toStringAsFixed(1)}k"
-    : "${(tokens / 1000).round()}k";
-
 /// [usage] as one bar over [window], each part's share of the provider's
 /// count end to end, and a mark where auto-compact steps in.
 SegmentedMeter _meter(ContextUsage usage, int window, {int? threshold}) {
   MeterSegment segment(String label, int tokens, Color color) =>
-      MeterSegment(label, _k(tokens), tokens / window, color);
+      MeterSegment(label, tokenCount(tokens), tokens / window, color);
   return SegmentedMeter(
     mark: threshold == null
         ? null
@@ -161,7 +156,7 @@ class _ParticipantCard extends StatelessWidget {
                   children: [
                     Text("$percent%", style: theme.textTheme.titleLarge),
                     Text(
-                      "${_k(used)} / ${_k(window)}",
+                      "${tokenCount(used)} / ${tokenCount(window)}",
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
