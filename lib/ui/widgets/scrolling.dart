@@ -88,6 +88,30 @@ class ScrollFollow {
       controller.hasClients && controller.position.nearBottom(0.0);
 }
 
+/// Drops focus on a touch tap or a downward swipe in [child]'s empty space:
+/// [KeyboardDismissOnScrollBack] for a screen with nothing to scroll, where a
+/// soft keyboard would otherwise have no way down — iOS's has no key to hide
+/// it. What [child] draws keeps its own taps. Touch only: what a mouse does
+/// outside a field is the field's own `onTapOutside`.
+class KeyboardDismissOnTouch extends StatelessWidget {
+  const KeyboardDismissOnTouch({super.key, required this.child});
+
+  final Widget child;
+
+  static void _drop() => FocusManager.instance.primaryFocus?.unfocus();
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    behavior: HitTestBehavior.translucent,
+    supportedDevices: const {PointerDeviceKind.touch},
+    onTap: _drop,
+    onVerticalDragEnd: (d) {
+      if ((d.primaryVelocity ?? 0) > 0) _drop();
+    },
+    child: child,
+  );
+}
+
 /// Drops focus on a touch drag toward the older messages, which takes a soft
 /// keyboard down with it, as a phone's own conversations do. A drag back
 /// down leaves it, and so do a wheel and a trackpad, so a desktop's composer

@@ -67,7 +67,7 @@ class _ChapterRailState extends State<ChapterRail> {
   @override
   Widget build(BuildContext context) {
     final chapters = widget.chapters;
-    if (!railShown(chapters)) return const SizedBox.shrink();
+    if (chapters.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       width: ChapterRail.width,
       child: LayoutBuilder(

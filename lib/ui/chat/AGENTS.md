@@ -1139,9 +1139,10 @@ press.
 of the column, the one being read picked out, the first line of each on hover.
 It is laid over the margin rather than beside the column, so the column stays
 centred whether it is there or not, and it is drawn only where the margin has
-room for it — `_ReadableColumn`'s `side` — and only with two chapters or
-more (`railShown`): one prompt has nowhere to jump to.
-A chapter is a prompt and the turn
+room for it — `_ReadableColumn`'s `side` — from the first prompt on: a lone
+tick still says where the conversation starts. A command the user ran is a
+chapter as well, its tooltip the `!` line as typed, since it is something they did
+there. A chapter is a prompt and the turn
 under it, so a branch anywhere in that turn — an edit at the prompt, a
 regenerate under it — puts a fork beside its tick (`chaptersOf`, off
 `Chat.branches`). A steer is a chapter too, with a tick of its own: it is
@@ -1212,4 +1213,6 @@ latest. The viewport shrinking — the keyboard coming up — keeps a following
 list at its end rather than leaving the end under the keys. And a touch drag
 toward the older messages drops focus, which takes a soft keyboard down
 (`KeyboardDismissOnScrollBack`); a wheel or a trackpad does not, so a
-desktop's composer keeps its caret.
+desktop's composer keeps its caret. The new-chat screen has no list to drag,
+and iOS's keyboard no key to hide it, so a touch tap or a swipe down in its
+empty space does the same (`KeyboardDismissOnTouch`).
