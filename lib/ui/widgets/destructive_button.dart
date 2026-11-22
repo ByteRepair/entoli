@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 
+import "../../core/log.dart";
 import "dialogs.dart";
 
 /// A danger-colored filled button that asks for confirmation before running
@@ -44,8 +45,13 @@ class DestructiveButton extends StatelessWidget {
         onPressed: !enabled
             ? null
             : () async {
-                final message =
-                    await confirmMessageOf?.call() ?? confirmMessage;
+                var message = confirmMessage;
+                try {
+                  message = await confirmMessageOf?.call() ?? message;
+                } catch (e) {
+                  // The plain wording still asks; only the count is lost.
+                  logFailure("ui", "could not word a confirmation", e);
+                }
                 if (!context.mounted) return;
                 final confirmed = await confirm(
                   context,

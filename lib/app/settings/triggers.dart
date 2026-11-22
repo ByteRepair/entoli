@@ -212,14 +212,18 @@ class TriggerDraft {
       ? null
       : triggerRefusal(source, prompt, isNew: isNew, now: now);
 
-  /// The trigger saved, at [at], into one of [projects] or the default.
-  Trigger build({required DateTime at, required List<String> projects}) =>
+  /// The trigger saved, at [at], into one of [projects] or the default; into
+  /// its own project where the list of them has not loaded, so a save then
+  /// does not move it.
+  Trigger build({required DateTime at, required List<String>? projects}) =>
       savedTrigger(
         trigger,
         name: name,
         prompt: prompt,
         source: source,
-        project: projectOrDefault(project, projects),
+        project: projects == null
+            ? project
+            : projectOrDefault(project, projects),
         member: member,
         tempChatTtl: tempChatTtl,
         now: at,

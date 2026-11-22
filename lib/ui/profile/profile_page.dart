@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/profile_draft.dart";
+import "../../core/log.dart";
 import "../../core/platform/form_factor.dart";
 import "../../domain/tone.dart";
 import "../../providers.dart";
@@ -35,6 +36,7 @@ class ProfilePage extends ConsumerStatefulWidget {
 
 class _ProfilePageState extends ConsumerState<ProfilePage> {
   ProfileDraft? _draft;
+  Object? _failed;
   final _busy = ValueNotifier(false);
   final _name = TextEditingController();
   final _dob = TextEditingController();
@@ -58,9 +60,16 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _load() async {
-    final draft = await ref
-        .read(profileEditorProvider)
-        .load(project: widget.project);
+    final ProfileDraft draft;
+    try {
+      draft = await ref
+          .read(profileEditorProvider)
+          .load(project: widget.project);
+    } catch (e) {
+      logFailure("profile", "could not read the profile", e);
+      if (mounted) setState(() => _failed = e);
+      return;
+    }
     if (!mounted) return;
     _name.text = draft.name;
     _dob.text = draft.dob;
@@ -89,11 +98,17 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
+    final first = DateTime(1900);
+    // A date typed by hand can be outside what the picker offers, which it
+    // asserts against.
+    final typed = DateTime.tryParse(_dob.text.trim());
+    final initial = typed == null || typed.isBefore(first) || typed.isAfter(now)
+        ? DateTime(now.year - 30)
+        : typed;
     final picked = await showDatePicker(
       context: context,
-      initialDate:
-          DateTime.tryParse(_dob.text.trim()) ?? DateTime(now.year - 30),
-      firstDate: DateTime(1900),
+      initialDate: initial,
+      firstDate: first,
       lastDate: now,
     );
     if (picked == null || !mounted) return;
@@ -134,7 +149,27 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             BusyBar(_busy),
             Expanded(
               child: draft == null
-                  ? const Center(child: CircularProgressIndicator())
+                  ? Center(
+                      child: _failed == null
+                          ? const CircularProgressIndicator()
+                          : Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text("Could not read the profile: $_failed"),
+                                  const SizedBox(height: 12),
+                                  TextButton(
+                                    onPressed: () {
+                                      setState(() => _failed = null);
+                                      _load();
+                                    },
+                                    child: const Text("Try again"),
+                                  ),
+                                ],
+                              ),
+                            ),
+                    )
                   : ListView(
                       padding: const EdgeInsets.only(bottom: 24),
                       children: [

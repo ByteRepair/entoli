@@ -159,7 +159,12 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final named = ref.watch(projectListProvider).value ?? const <String>[];
+    // Null until it loads, when the trigger's own project stands: resolved
+    // against no list, it would read as the default.
+    final named = ref.watch(projectListProvider).value;
+    final project = named == null
+        ? _draft.project
+        : projectOrDefault(_draft.project, named);
     final registered = _draft.registered;
     final editable = !registered;
     final refusal = _draft.refusal;
@@ -252,23 +257,24 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
               TempChatTtlField(
                 value: _draft.tempChatTtl,
                 onChanged: (ttl) => _edit((d) => d.tempChatTtl = ttl),
-                project: projectOrDefault(_draft.project, named),
+                project: project,
               ),
-              LabelledField(
-                label: "Project",
-                child: DropdownButtonFormField<String?>(
-                  initialValue: projectOrDefault(_draft.project, named),
-                  isExpanded: true,
-                  items: [
-                    for (final project in everyProject(named))
-                      DropdownMenuItem(
-                        value: project,
-                        child: Text(projectLabel(project)),
-                      ),
-                  ],
-                  onChanged: (project) => _edit((d) => d.project = project),
+              if (named != null)
+                LabelledField(
+                  label: "Project",
+                  child: DropdownButtonFormField<String?>(
+                    initialValue: project,
+                    isExpanded: true,
+                    items: [
+                      for (final project in everyProject(named))
+                        DropdownMenuItem(
+                          value: project,
+                          child: Text(projectLabel(project)),
+                        ),
+                    ],
+                    onChanged: (project) => _edit((d) => d.project = project),
+                  ),
                 ),
-              ),
             ],
           ],
         ),
@@ -416,11 +422,16 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
     final now = ref.read(clockProvider).now();
     final source = _draft.source as ScheduleSource;
     final at = source.at;
+    // A repeating schedule keeps the day it was first set for, which can be
+    // past the year back the picker otherwise offers; it asserts against an
+    // initial date outside its range.
+    final yearAgo = now.subtract(const Duration(days: 365));
+    final last = now.add(const Duration(days: 365 * 5));
     final picked = await showDatePicker(
       context: context,
       initialDate: at,
-      firstDate: now.subtract(const Duration(days: 365)),
-      lastDate: now.add(const Duration(days: 365 * 5)),
+      firstDate: at.isBefore(yearAgo) ? at : yearAgo,
+      lastDate: at.isAfter(last) ? at : last,
     );
     if (picked == null || !mounted) return;
     _edit(
@@ -448,10 +459,9 @@ class _TriggerEditorPageState extends ConsumerState<TriggerEditorPage> {
   }
 
   Future<void> _save() => whileBusy(context, _saving, () async {
-    final named = ref.read(projectListProvider).value ?? const <String>[];
     final made = _draft.build(
       at: ref.read(clockProvider).now(),
-      projects: named,
+      projects: ref.read(projectListProvider).value,
     );
     final notifier = ref.read(triggersProvider.notifier);
     await (_draft.isNew ? notifier.add(made) : notifier.replace(made));

@@ -87,18 +87,24 @@ class ChatSettingsEditor {
   Future<void> save(ChatSettingsDraft draft) async {
     final chatId = draft.chatId!;
     final repo = _ref.read(chatRepositoryProvider);
-    await repo.saveMeta(chatId, draft.meta);
-    // Anchored again at once, so the countdown shows without waiting for a
-    // turn; the write decides the anchor, so the bar is told what it wrote.
-    if (draft.state case final state?) {
-      final written = await repo.saveState(state, reanchor: true);
-      // A mirror's controller hears it from the home device.
-      if (!_ref.read(isMirroredChatProvider(chatId))) {
-        _ref.read(chatControllerProvider(chatId).notifier).applyState(written);
+    try {
+      await repo.saveMeta(chatId, draft.meta);
+      // Anchored again at once, so the countdown shows without waiting for a
+      // turn; the write decides the anchor, so the bar is told what it wrote.
+      if (draft.state case final state?) {
+        final written = await repo.saveState(state, reanchor: true);
+        // A mirror's controller hears it from the home device.
+        if (!_ref.read(isMirroredChatProvider(chatId))) {
+          _ref
+              .read(chatControllerProvider(chatId).notifier)
+              .applyState(written);
+        }
       }
+      draft.edited = false;
+    } finally {
+      // The sidebar shows whatever half of a failed save landed.
+      _ref.invalidate(chatListProvider);
     }
-    draft.edited = false;
-    _ref.invalidate(chatListProvider);
   }
 
   /// Works with no `state.json` to read, which is when a broken chat is

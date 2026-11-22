@@ -81,6 +81,9 @@ void main() {
     expect(d.build(at: now, projects: const ["kept"]).project, isNull);
     d.project = "kept";
     expect(d.build(at: now, projects: const ["kept"]).project, "kept");
+    // Before the project list has loaded, nothing is known to be deleted.
+    d.project = "deleted";
+    expect(d.build(at: now, projects: null).project, "deleted");
   });
 
   test("one the agent registered is never refused, being never saved", () {

@@ -80,10 +80,15 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
     _ResponsibilityPage(accepted: _accepted),
   ];
 
+  /// Raised while Done writes the welcome chat, so a second tap is not a
+  /// second chat.
+  final _finishing = ValueNotifier(false);
+
   @override
   void dispose() {
     _controller.dispose();
     _accepted.dispose();
+    _finishing.dispose();
     super.dispose();
   }
 
@@ -93,10 +98,13 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
     curve: Curves.easeInOutCubic,
   );
 
-  Future<void> _done() async {
+  Future<void> _done() {
     final navigator = Navigator.of(context);
-    await finishWelcomeTour(ProviderScope.containerOf(context, listen: false));
-    navigator.popUntil((route) => route.isFirst);
+    final app = ProviderScope.containerOf(context, listen: false);
+    return whileBusy(context, _finishing, () async {
+      await finishWelcomeTour(app);
+      navigator.popUntil((route) => route.isFirst);
+    });
   }
 
   @override
@@ -126,16 +134,16 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
             ),
           ),
         ),
-        ValueListenableBuilder(
-          valueListenable: _accepted,
-          builder: (context, accepted, _) => _TourBar(
+        ListenableBuilder(
+          listenable: Listenable.merge([_accepted, _finishing]),
+          builder: (context, _) => _TourBar(
             page: _page,
             pages: _pages.length,
             onPrevious: () => _go(_page - 1),
             onNext: () => _go(_page + 1),
             onDone: _done,
             nextEnabled: !gate,
-            doneEnabled: accepted,
+            doneEnabled: _accepted.value && !_finishing.value,
           ),
         ),
       ],

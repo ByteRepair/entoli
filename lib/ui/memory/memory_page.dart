@@ -128,60 +128,60 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
           ),
         ],
       ),
-      body: AbsorbPointer(
-        absorbing: frozen,
-        child: Column(
-          children: [
-            if (widget.project.device case final device?)
-              if (ref.watch(syncPeersProvider)[device]?.name ?? "The device"
-                  case final name)
-                frozen
-                    ? MirrorStrip.offline(deviceName: name)
-                    : MirrorStrip.remote(deviceName: name),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: TextField(
-                controller: _search,
-                onChanged: _list.search,
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  hintText: "Search memories",
-                ),
+      // Offline, the store is still there to search and read; only what
+      // writes it is off.
+      body: Column(
+        children: [
+          if (widget.project.device case final device?)
+            if (ref.watch(syncPeersProvider)[device]?.name ?? "The device"
+                case final name)
+              frozen
+                  ? MirrorStrip.offline(deviceName: name)
+                  : MirrorStrip.remote(deviceName: name),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: TextField(
+              controller: _search,
+              onChanged: _list.search,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: "Search memories",
               ),
             ),
-            Expanded(
-              child: entries == null
-                  ? const Center(child: CircularProgressIndicator())
-                  : entries.isEmpty
-                  ? EmptyPane(
-                      icon: Icons.psychology_outlined,
-                      title: query.isEmpty
-                          ? "No memories yet"
-                          : "No memories match",
-                      detail: query.isEmpty
-                          ? "Facts the agent keeps, and ones you add, land here."
-                          : "Nothing the store holds is about “$query”.",
-                      action: query.isEmpty
-                          ? FilledButton(
-                              onPressed: _add,
-                              child: const Text("Add a memory"),
-                            )
-                          : null,
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.only(bottom: 72),
-                      itemCount: entries.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (context, i) => _row(entries[i]),
-                    ),
-            ),
-          ],
-        ),
+          ),
+          Expanded(
+            child: entries == null
+                ? const Center(child: CircularProgressIndicator())
+                : entries.isEmpty
+                ? EmptyPane(
+                    icon: Icons.psychology_outlined,
+                    title: query.isEmpty
+                        ? "No memories yet"
+                        : "No memories match",
+                    detail: query.isEmpty
+                        ? "Facts the agent keeps, and ones you add, land here."
+                        : "Nothing the store holds is about “$query”.",
+                    action: query.isEmpty
+                        ? FilledButton(
+                            onPressed: frozen ? null : _add,
+                            child: const Text("Add a memory"),
+                          )
+                        : null,
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.only(bottom: 72),
+                    itemCount: entries.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, i) =>
+                        _row(entries[i], frozen: frozen),
+                  ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _row(MemoryEntry entry) => ListTile(
+  Widget _row(MemoryEntry entry, {required bool frozen}) => ListTile(
     title: Text(entry.text, maxLines: 2, overflow: TextOverflow.ellipsis),
     subtitle: Text("${memoryByline(entry)}${entry.pinned ? " · pinned" : ""}"),
     trailing: Row(
@@ -190,12 +190,14 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
         IconButton(
           icon: Icon(entry.pinned ? Icons.push_pin : Icons.push_pin_outlined),
           tooltip: entry.pinned ? "Unpin" : "Pin: in every turn",
-          onPressed: () async => _said(await _list.togglePin(entry)),
+          onPressed: frozen
+              ? null
+              : () async => _said(await _list.togglePin(entry)),
         ),
         IconButton(
           icon: const Icon(Icons.delete_outline),
           tooltip: "Delete memory",
-          onPressed: () => _delete(entry),
+          onPressed: frozen ? null : () => _delete(entry),
         ),
       ],
     ),

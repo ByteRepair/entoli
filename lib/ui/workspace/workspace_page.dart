@@ -113,9 +113,11 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
 
   bool get _atRoot => _dir == widget.root;
 
-  /// Back — the bar's arrow and the system gesture alike — goes up a folder
-  /// before it leaves the page, unwinding the way the taps wound it up.
+  /// Back — the bar's arrow and the system gesture alike — ends a selection,
+  /// then goes up a folder before it leaves the page, unwinding the way the
+  /// taps wound it up.
   void _back() {
+    if (_selecting) return setState(_clearSelection);
     if (_atRoot) return Navigator.of(context).pop();
     _goTo(p.dirname(_dir));
   }
@@ -185,7 +187,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   Widget build(BuildContext context) {
     final handoff = ref.watch(fileHandoffProvider);
     return PopScope(
-      canPop: _atRoot,
+      canPop: _atRoot && !_selecting,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _back();
       },
