@@ -7,7 +7,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../../domain/agent_face.dart";
 import "../../../domain/models.dart";
 import "../../../domain/quote.dart";
-import "../../../app/settings/spec.dart" show WidgetReader;
+import "../../../app/reader.dart" show WidgetReader;
 import "../../../app/transcript/activity.dart" show activityCatalogProvider;
 import "../../../app/transcript/message.dart";
 import "../../../app/transcript/transcript.dart"

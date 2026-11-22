@@ -9,7 +9,7 @@ import "../../../domain/shell_job.dart";
 import "../../../domain/tool_arg.dart";
 import "../../../providers.dart";
 import "../../mirror_controller.dart" show chatViewProvider;
-import "../../settings/spec.dart" show SettingReader;
+import "../../reader.dart" show SettingReader;
 import "../activity.dart";
 import "tool_run.dart";
 

@@ -1,42 +1,37 @@
 import "package:flutter/material.dart";
 
-import "../../app/settings/controller.dart";
-import "../widgets/prompt_field.dart";
+/// A part of a [SegmentedMeter]: what fills [fraction] of the bar.
+class MeterSegment {
+  const MeterSegment(this.label, this.amount, this.fraction, this.color);
 
-/// A [PromptController] as a [PromptField]: the text as it will be read, a
-/// tap opening [PromptPage], whose field wraps prose, where the controller
-/// takes the text back, else the core's editor page.
-class PromptPreview extends StatelessWidget {
-  const PromptPreview(this.c, {super.key});
+  final String label;
 
-  final PromptController c;
-
-  @override
-  Widget build(BuildContext context) => PromptField(
-    label: c.title,
-    value: c.text,
-    hint: c.placeholder,
-    editable: c.enabled,
-    completions: false,
-    onChanged: c.onSet,
-    onEdit: c.onSet == null ? c.run : null,
-  );
+  /// How much it is, said: "3.2k".
+  final String amount;
+  final double fraction;
+  final Color color;
 }
 
-Color _hue(MeterHue hue) => switch (hue) {
-  MeterHue.grey => Colors.grey.shade500,
-  MeterHue.orange => Colors.orange.shade400,
-  MeterHue.green => Colors.green.shade500,
-  MeterHue.purple => Colors.purple.shade300,
-  MeterHue.blue => Colors.blue.shade500,
-};
+/// A line across a meter at [fraction], [label] over it.
+class MeterMark {
+  const MeterMark(this.fraction, this.label);
+
+  final double fraction;
+  final String label;
+}
 
 /// A meter of segments laid end to end, its mark a line across it named
 /// over it, and a legend of what each segment is under it.
 class SegmentedMeter extends StatelessWidget {
-  const SegmentedMeter(this.meter, {super.key, this.unit});
+  const SegmentedMeter({
+    super.key,
+    required this.segments,
+    this.mark,
+    this.unit,
+  });
 
-  final ItemMeter meter;
+  final List<MeterSegment> segments;
+  final MeterMark? mark;
 
   /// What a segment's amount counts, said in its tooltip: "tokens".
   final String? unit;
@@ -47,11 +42,10 @@ class SegmentedMeter extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
-    final segments = meter.segments;
     final used = segments.fold(0.0, (sum, s) => sum + s.fraction);
     // Over the whole, the bar is full rather than overflowing.
     final scale = used > 1 ? used : 1.0;
-    final mark = meter.mark;
+    final mark = this.mark;
     // Flex wants integers; a thousandth is finer than a pixel here.
     int flex(double f) => (f * 1000).round();
     return Column(
@@ -90,7 +84,7 @@ class SegmentedMeter extends StatelessWidget {
                                 message:
                                     "${s.label}: ${s.amount}"
                                     "${unit == null ? "" : " $unit"}",
-                                child: Container(color: _hue(s.hue)),
+                                child: Container(color: s.color),
                               ),
                             ),
                         if (flex(scale - used) > 0)
@@ -132,7 +126,7 @@ class SegmentedMeter extends StatelessWidget {
                     width: 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: _hue(s.hue),
+                      color: s.color,
                       shape: BoxShape.circle,
                     ),
                   ),

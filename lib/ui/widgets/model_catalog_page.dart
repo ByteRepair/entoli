@@ -1,7 +1,6 @@
-import "../../app/settings/forms/model.dart"
-    show modelFormFor, pickerProviders, saveModel;
-import "../../app/settings/spec.dart" show WidgetReader;
-import "../settings/form_dialog.dart";
+import "../../app/custom_model.dart" show customModelDraft, pickerProviders;
+import "../../app/reader.dart" show WidgetReader;
+import "custom_model_page.dart";
 import "../../app/model_facts.dart" show providerHue;
 import "../../app/model_picker.dart";
 import "package:flutter/material.dart";
@@ -102,25 +101,20 @@ class _ModelCatalogPageState extends ConsumerState<ModelCatalogPage> {
 
   /// Adds a model, or edits [initial] on [provider].
   Future<void> _openModelPage({String? provider, ModelInfo? initial}) async {
-    final reader = WidgetReader(ref);
-    final form = modelFormFor(
-      reader,
+    final draft = customModelDraft(
+      WidgetReader(ref),
       widget.role,
       providerId: provider,
       model: initial?.id,
     );
-    if (form == null) return;
-    String? saved;
-    await showSettingForm(
+    if (draft == null) return;
+    final saved = await Navigator.of(
       context,
-      form,
-      save: (answers) async {
-        await saveModel(reader, form, answers);
-        saved = answers["id"]!.trim();
-      },
-    );
+    ).push<bool>(MaterialPageRoute(builder: (_) => CustomModelPage(draft)));
     // Found straight away, since it is what was just described.
-    if (saved case final id? when mounted) setState(() => _search.text = id);
+    if (saved == true && mounted) {
+      setState(() => _search.text = draft.id.trim());
+    }
   }
 
   Future<void> _addModel() => _openModelPage(provider: _provider);

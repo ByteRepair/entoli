@@ -5,7 +5,6 @@ import "package:re_editor/re_editor.dart";
 import "package:re_highlight/styles/github-dark.dart";
 import "package:re_highlight/styles/github.dart";
 
-import "../../app/settings/controller.dart";
 import "../../core/code_grammars.dart" show grammarOfFile;
 import "../../providers.dart";
 import "../chat/widgets/code_block.dart";
@@ -179,45 +178,4 @@ class DocumentEditor extends ConsumerWidget {
       ),
     );
   }
-}
-
-/// A [DocumentController]'s text as a [DocumentEditor], each edit said back
-/// to the controller.
-class DocumentView extends StatefulWidget {
-  const DocumentView(this.c, {super.key});
-
-  final DocumentController c;
-
-  @override
-  State<DocumentView> createState() => _DocumentViewState();
-}
-
-class _DocumentViewState extends State<DocumentView> {
-  late final _controller = documentController(widget.c.text)
-    ..addListener(_changed);
-  CodeLines? _lines;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _changed() {
-    // The controller notifies on every caret move too; a selection change
-    // keeps the same lines.
-    final lines = _controller.codeLines;
-    if (identical(lines, _lines)) return;
-    _lines = lines;
-    widget.c.edit(_controller.text);
-  }
-
-  @override
-  Widget build(BuildContext context) => DocumentEditor(
-    controller: _controller,
-    name: widget.c.name,
-    markdown: widget.c.markdown,
-    editing: widget.c.editing,
-    placeholder: widget.c.placeholder,
-  );
 }

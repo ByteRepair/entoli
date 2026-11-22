@@ -1,9 +1,8 @@
 # Settings, and backing it all up
 
-## Settings as data
+## How Settings is built
 
-Every settings page is built from data. The layers, each knowing only the
-one below it:
+Every settings page is a plain widget. The layers under them:
 
 - **The store** (`lib/domain/settings/`). `settings.json`, `project.json` and
   a chat's `meta.json` are each a `SettingsDocument`: the JSON as the source
@@ -14,7 +13,7 @@ one below it:
   does not know is kept through a save; a key that once had another name was
   moved by `migrations.dart`, so the reader knows only today's. `AppSettings`,
   `ProjectSettings` and `ChatMeta` are typed views over their documents, a
-  getter and a setter a key, so nothing that reads them changed.
+  getter and a setter a key.
 - **Scopes** (`lib/app/settings/scope.dart`). `AppScope`, `ProjectScope` and
   `ChatScope` are the objects that read and write a level: what this level
   holds (`own`), what it would take from above (`inherited`), and `write`. A
@@ -22,51 +21,34 @@ one below it:
   sandbox, the rules — a project other than the default inherits from the
   default project's, the tier every other project builds on. A chat's scope
   is a draft over the page's copy of its `meta.json`, saved whole by Save.
-- **Controllers** (`controller.dart`). One setting bound to one scope: its
-  state, and what may be done to it. A sealed set, **each a kind of
-  behaviour rather than a setting** — a toggle, a choice, a range, a typed
-  number, text, a model pick, a group, an action, a collection edited
-  through a form, a download catalog, pairing, tooling setup, notices and
-  read-only rows. A one-off quirk is a parameter of a kind, so the UI's
-  switch over the kinds stays short and a new kind is a compile error until
-  it is drawn. What a change sets off — a restart to
-  say, a re-anchor of every chat's TTL — is the controller's,
-  through the notifier setter that does it.
-- **The schema** (`pages/`, `catalog.dart`). A `SettingSpec` per setting: an
-  id, its path (page and section), its weight there, title and description,
-  the UI it would like (`UiHint`, a hint and not a kind), and how its controller is
-  built at a level. `SectionSpec`s say a section's words and whether it
-  shows. Composite settings declare the methods their state is changed
-  through — a catalog's download, cancel and delete; a collection's form,
-  submit and item actions; pairing's window, invite and codes — and the UI
-  calls those, so the logic is the core's. **A form is said once,
-  in the core**: its fields as data (`FormFieldSpec` — text, a prompt,
-  choices as menus, segments or cards, links, a fold, a consent, a program's
-  sign-in, entries), what stops it saving, the item it makes, and a
-  `FormRefusal` a submit throws to be said on a field with Save anyway. What the
-  UI opens as a page of its own for one — a program's sign-in, the avatar
-  editor, a device's page — is a `SettingsHandOff`, which the window's root
-  binds (`SettingsHandOffs`). The file work behind the Agents and Skills
-  pages is `lib/app/prompts/`.
-- **Builders.** `schema_view.dart` is Flutter's: `SchemaSections` draws a
-  page, `SettingRow` a controller, each hint with its Flutter widget. It
-  builds the controllers in place through the widget's ref (`buildPage` over
-  a `WidgetReader`), since a Riverpod chain between the settings and what is
-  drawn rebuilds mid-frame when a page paused under another route comes
-  back. Every form is `form_dialog.dart`'s, a dialog or, where the form
-  says it is long, a page under a discard guard; a collection draws every
-  item the way its `CollectionItem` says and saves through the controller's
-  `submit`, so a hint changes only how a list is laid out.
+  **Unset is offered where the level inherits — a project, a chat — or where
+  the key has no fallback even at the app's** (`SettingsScope.offersUnset`);
+  a control then shows the level's own value (`shown`) and stands where the
+  level above does, with a reset back to it once this level picks.
+- **Scoped widgets** (`scoped.dart`). One setting at one level, drawn as
+  the control its value wants: `ScopedSwitch`, `ScopedChoice`,
+  `ScopedLevels`, `ScopedCount`, `ScopedModel` and `ScopedEnvironment`. Each
+  reads its level through `scopeOf` — `scopeAt` over the widget's ref
+  (`WidgetReader`, `lib/app/reader.dart`), so it rebuilds as the documents
+  change — and writes back through it. What a change sets off beyond the key
+  — a restart to say, a re-anchor of every chat's TTL — is a `write` handed
+  to the widget, through the notifier setter that does it.
+- **Categories** (`settings_category.dart`, `settings_pages.dart`).
+  `SettingsCategory` is the list: its order, label, icon, the group a
+  `dividerAbove` starts, and `offered`, whether this platform can do
+  anything the category sets. `settingsCategoryBody` picks a category's
+  widget, one file each (`general_settings.dart`, `llm_settings.dart`, and
+  so on).
+- **The logic** is in `lib/app/`, so the widgets only draw: the provider
+  dialog's `ProviderEdit`, the trigger editor's `TriggerDraft`, the
+  permission rules, CLI sign-in, on-device downloads and pairing under
+  `lib/app/settings/`; the backup's two directions (`backup_actions.dart`),
+  the browser pick (`browser_settings.dart`), Byte Repair's setup
+  (`byte_repair.dart`), a model described by hand (`custom_model.dart`,
+  drawn by `CustomModelPage`), and the file work behind the Agents and
+  Skills pages (`lib/app/prompts/`).
 
-General, LLMs, Image Generation, Memory, Voice, Agent Browser, Byte Repair,
-Data, Shortcuts and About are plain widgets instead, one file each beside
-`settings_pages.dart`, which picks a category's widget: a setting is drawn
-at its level by `scoped.dart`'s widgets, and what has rules is in `lib/app/`
-— the backup's two directions (`backup_actions.dart`), the browser pick
-(`browser_settings.dart`) and Byte Repair's setup (`byte_repair.dart`). What
-other pages share of General and LLMs — the environment, Omada's order and
-depth, the approval mode, the step limit — stays as specs for them. The
-default and title model pickers are widgets (`newChatModelField`,
+The default and title model pickers are widgets (`newChatModelField`,
 `titleModelField` in `llm_settings.dart`), which the welcome tour draws too.
 
 The welcome tour is not settings: it is a widget page (`WelcomePage`,

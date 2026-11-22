@@ -3,7 +3,7 @@ import "dart:convert";
 import "../../../core/config.dart" show instructionBlockHeader;
 import "../../../domain/models.dart";
 import "../../../domain/tool_arg.dart";
-import "../../settings/spec.dart" show SettingReader;
+import "../../reader.dart" show SettingReader;
 import "../activity.dart";
 
 /// How one tool's calls are shown: an [Activity] like any other in a reply,

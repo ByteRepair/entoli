@@ -4,7 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/room/room_state.dart" show ChatViewState;
 import "../../../app/running.dart";
-import "../../../app/settings/spec.dart" show WidgetReader;
+import "../../../app/reader.dart" show WidgetReader;
 import "../activity/card.dart" show ContextHandOff;
 import "../../../core/formatting.dart" show plural;
 import "running_pill.dart";

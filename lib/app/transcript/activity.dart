@@ -5,7 +5,7 @@ import "../../domain/agent_browser.dart" show AgentBrowser, BrowserTab;
 import "../../domain/models.dart";
 import "../../domain/plan.dart" show PlanSection;
 import "../../domain/room/room_state.dart" show ChatViewState;
-import "../settings/spec.dart" show SettingReader;
+import "../reader.dart" show SettingReader;
 
 /// What an icon in the conversation stands for. Each frontend picks its own
 /// picture for each, in one exhaustive switch.

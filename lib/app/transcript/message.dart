@@ -3,7 +3,7 @@ import "../../domain/models.dart";
 import "../../domain/shell.dart" show shellBypassCommand;
 import "../../domain/system_notification.dart";
 import "../../domain/wired_skill.dart";
-import "../settings/spec.dart" show SettingReader;
+import "../reader.dart" show SettingReader;
 import "activity.dart";
 
 /// What a stretch of a message sits on: nothing — a reply, which is the page

@@ -9,7 +9,7 @@ import "../providers.dart";
 import "chat_controller.dart";
 import "composer.dart";
 import "mirror_controller.dart";
-import "settings/spec.dart" show SettingReader;
+import "reader.dart" show SettingReader;
 
 /// What a chat's session asks of the frontend it is drawn in: a field's text
 /// to hold the composer's words, a line said to the user, voice mode opened.

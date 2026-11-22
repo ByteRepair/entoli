@@ -6,7 +6,7 @@ import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "package:path/path.dart" as p;
 
-import "../../../app/settings/spec.dart" show WidgetReader;
+import "../../../app/reader.dart" show WidgetReader;
 import "../../../app/transcript/activity.dart";
 import "../../../domain/agent_browser.dart" show AgentBrowser, BrowserTab;
 import "../../../providers.dart";

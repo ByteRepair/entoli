@@ -2,7 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/settings/scope.dart";
-import "../../app/settings/spec.dart" show WidgetReader;
+import "../../app/reader.dart" show WidgetReader;
 import "../../domain/llm_provider.dart";
 import "../../domain/models.dart" show ModelChoice;
 import "../../domain/settings/setting.dart";
@@ -15,23 +15,12 @@ import "../widgets/thinking_slider.dart";
 /// One setting at one level, drawn as the control its value wants: a
 /// switch, a choice, a count, a model. Each reads its level through
 /// [scopeOf], so what it shows is what that level holds, and writes back
-/// through it.
-///
-/// Unset is offered where the level inherits — a project, a chat — or where
-/// the key has no fallback even at the app's: the control then stands where
-/// the level above does, with a reset back to it once this level picks.
+/// through it. Where unset is offered is the scope's to say
+/// (`SettingsScope.offersUnset`).
 
 /// The settings at [at], rebuilt as its documents change.
 SettingsScope scopeOf(WidgetRef ref, ScopeAddress at) =>
     scopeAt(WidgetReader(ref), at);
-
-bool _unsettable(SettingsScope scope, Setting setting) =>
-    scope.parent != null || setting is! DefaultedSetting;
-
-/// What this level holds where it may hold nothing, and what it answers
-/// where it may not.
-T? _value<T extends Object>(SettingsScope scope, Setting<T> setting) =>
-    _unsettable(scope, setting) ? scope.own(setting) : scope.resolve(setting);
 
 /// A switch over [setting] at [at], three-way where the level inherits.
 class ScopedSwitch extends ConsumerWidget {
@@ -64,7 +53,7 @@ class ScopedSwitch extends ConsumerWidget {
     );
     final effective = scope.resolve(setting) ?? false;
     final subtitle = this.subtitle;
-    if (_unsettable(scope, setting)) {
+    if (scope.offersUnset(setting)) {
       return InheritableSwitch(
         title: title,
         subtitle: subtitle,
@@ -120,7 +109,7 @@ class ScopedChoice<T extends Object> extends ConsumerWidget {
       context,
       () => write?.call(value) ?? scope.write(setting, value),
     );
-    final value = _value(scope, setting);
+    final value = scope.shown(setting);
     if (segmented) {
       return LabelledField(
         label: title,
@@ -139,7 +128,7 @@ class ScopedChoice<T extends Object> extends ConsumerWidget {
         ),
       );
     }
-    if (_unsettable(scope, setting)) {
+    if (scope.offersUnset(setting)) {
       final inherited = scope.inherited(setting) ?? unsetMeans;
       final dropdown = InheritableDropdown<T>(
         label: title,
@@ -212,7 +201,7 @@ class ScopedLevels<T extends Object> extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scope = scopeOf(ref, at);
-    final own = _value(scope, setting);
+    final own = scope.shown(setting);
     final inherited = scope.inherited(setting) ?? unsetMeans;
     final shown = own ?? inherited ?? stops.keys.first;
     void set(T? value) => guarded(context, () => scope.write(setting, value));
@@ -224,7 +213,7 @@ class ScopedLevels<T extends Object> extends ConsumerWidget {
     );
     return LabelledField(
       label: title,
-      child: _unsettable(scope, setting) && own != null
+      child: scope.offersUnset(setting) && own != null
           ? ResettableField(
               onReset: () => set(null),
               resetLabel: inherited == null
@@ -264,7 +253,7 @@ class ScopedCount extends ConsumerWidget {
     final scope = scopeOf(ref, at);
     void set(int? value) => guarded(context, () => scope.write(setting, value));
     final inherited = scope.inherited(setting) ?? unsetMeans;
-    if (stops == null && !_unsettable(scope, setting)) {
+    if (stops == null && !scope.offersUnset(setting)) {
       final value = (scope.resolve(setting) ?? inherited).clamp(min, max);
       return LabelledField(
         label: title,
@@ -280,7 +269,7 @@ class ScopedCount extends ConsumerWidget {
     }
     return InheritableSlider(
       label: title,
-      value: _value(scope, setting),
+      value: scope.shown(setting),
       stops: stops ?? [for (var i = min; i <= max; i++) i],
       inherited: inherited,
       onChanged: set,

@@ -2,16 +2,14 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/mirror_controller.dart";
-import "../../app/settings/controller.dart"
-    show ItemMeter, MeterHue, MeterMark, MeterSegment;
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart" show nameOf;
 import "../../providers.dart";
-import "../settings/rich_rows.dart" show SegmentedMeter;
 import "../widgets/agent_picture.dart";
 import "../widgets/empty_pane.dart";
 import "../widgets/page_bar.dart";
 import "../widgets/section_header.dart" show mutedParagraph;
+import "../widgets/segmented_meter.dart";
 
 /// Open what fills [chatId]'s context, its participants' faces looked up in
 /// [project].
@@ -88,22 +86,29 @@ String _k(int tokens) => tokens < 1000
     : "${(tokens / 1000).round()}k";
 
 /// [usage] as one bar over [window], each part's share of the provider's
-/// count end to end.
-ItemMeter _meter(ContextUsage usage, int window, {int? threshold}) {
-  MeterSegment segment(String label, int tokens, MeterHue hue) =>
-      MeterSegment(label, _k(tokens), tokens / window, hue);
-  return ItemMeter(
-    "",
-    fraction: (usage.total / window).clamp(0, 1),
+/// count end to end, and a mark where auto-compact steps in.
+SegmentedMeter _meter(ContextUsage usage, int window, {int? threshold}) {
+  MeterSegment segment(String label, int tokens, Color color) =>
+      MeterSegment(label, _k(tokens), tokens / window, color);
+  return SegmentedMeter(
     mark: threshold == null
         ? null
         : MeterMark(threshold / 100, "Auto-compact $threshold%"),
+    unit: "tokens",
     segments: [
-      segment("System prompt", usage.share(usage.system), MeterHue.grey),
-      segment("Tool definitions", usage.share(usage.tools), MeterHue.orange),
-      segment("Profile", usage.share(usage.profile), MeterHue.green),
-      segment("Instructions", usage.share(usage.instructions), MeterHue.purple),
-      segment("Chat", usage.share(usage.chat), MeterHue.blue),
+      segment("System prompt", usage.share(usage.system), Colors.grey.shade500),
+      segment(
+        "Tool definitions",
+        usage.share(usage.tools),
+        Colors.orange.shade400,
+      ),
+      segment("Profile", usage.share(usage.profile), Colors.green.shade500),
+      segment(
+        "Instructions",
+        usage.share(usage.instructions),
+        Colors.purple.shade300,
+      ),
+      segment("Chat", usage.share(usage.chat), Colors.blue.shade500),
     ],
   );
 }
@@ -166,10 +171,7 @@ class _ParticipantCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            SegmentedMeter(
-              _meter(usage, window, threshold: threshold),
-              unit: "tokens",
-            ),
+            _meter(usage, window, threshold: threshold),
           ],
         ),
       ),

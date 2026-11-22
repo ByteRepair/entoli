@@ -1,6 +1,6 @@
 import "../../../core/formatting.dart" show plural;
 import "../../../domain/models.dart";
-import "../../settings/spec.dart" show SettingReader;
+import "../../reader.dart" show SettingReader;
 import "../activity.dart";
 
 /// A thinking block, on a line of its own above the reply. While it is being

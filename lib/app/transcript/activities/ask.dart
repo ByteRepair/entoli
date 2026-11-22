@@ -1,5 +1,5 @@
 import "../../../domain/ask.dart";
-import "../../settings/spec.dart" show SettingReader;
+import "../../reader.dart" show SettingReader;
 import "../activity.dart";
 import "tool_run.dart";
 

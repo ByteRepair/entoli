@@ -94,7 +94,9 @@ repository serves is badged External** (`MarketplaceEntry.external`, a
 location record), as is a collection whose every member is. A remote entry's
 author is up to ten contributors, so the byline names the first and counts
 the rest; the preview lists them all. Collections are drawn as cards
-(`CollectionCards`, up to three across), their count as the byline, and a
+(`CollectionCards`, up to three across: a face, the title, the byline under
+it set apart from the words, a few lines of those, and the External pill),
+their count as the byline, and a
 collection's page opens on
 its own card; headings say how many sit under them, and a search that finds
 nothing names what was typed.

@@ -16,7 +16,7 @@ import "../providers.dart"
         refOf,
         sortedModelsProvider;
 import "model_role.dart";
-import "settings/spec.dart" show SettingReader;
+import "reader.dart" show SettingReader;
 
 /// One model a picker can offer, with the provider it is reached through.
 class CatalogEntry {

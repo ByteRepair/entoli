@@ -623,8 +623,8 @@ is. The layers, each knowing only the one below:
   a tool run, a thinking block, an instruction read, a permission answered,
   an artifact or skill card. It answers `important` (does it stand on its
   own row), `node` (what it is on screen) and `detail` (what is behind it),
-  as data, read through a `SettingReader` — a widget's ref or a provider's,
-  the reader the settings use — so what changes while a turn runs, a job's
+  as data, read through a `SettingReader` (`lib/app/reader.dart`) — the
+  drawing widget's ref — so what changes while a turn runs, a job's
   state or the plan, is watched by whoever draws it. `follow` is how an open
   detail re-reads its message as the turn runs: a tool run by its call, a
   thinking block by where it sits. **How a tool's calls look is its
@@ -642,8 +642,7 @@ is. The layers, each knowing only the one below:
   by what this device offers; a test checks every `ToolActivity` names a
   tool the registry has.
 - **The nodes** (`activity.dart`). A sealed set, each a kind of *drawing*
-  rather than a kind of activity, as the settings' controllers are kinds of
-  behaviour: `LabelNode` (the one muted line, a thought's tail streaming
+  rather than a kind of activity: `LabelNode` (the one muted line, a thought's tail streaming
   under it), `DiffNode` (a small write or edit as its lines), `PlanNode`,
   `OutputNode` (a card for what the turn made). A node knows its activity
   and run, and what pressing it opens: `node.open(handOff, source:)` goes

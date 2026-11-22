@@ -4,15 +4,34 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/app/chat_settings_draft.dart";
 import "package:agent_chat/app/settings/scope.dart";
-import "package:agent_chat/app/settings/spec.dart" show ContainerReader;
+import "package:agent_chat/app/reader.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/settings/keys.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:flutter_riverpod/misc.dart"
+    show ProviderListenable, ProviderOrFamily;
 
 import "../harness.dart";
+
+/// The container as a reader, outside any build: [watch] only reads.
+final class ContainerReader implements SettingReader {
+  const ContainerReader(this.container);
+
+  final ProviderContainer container;
+
+  @override
+  T watch<T>(ProviderListenable<T> provider) => container.read(provider);
+
+  @override
+  T read<T>(ProviderListenable<T> provider) => container.read(provider);
+
+  @override
+  void invalidate(ProviderOrFamily provider) => container.invalidate(provider);
+}
 
 void main() {
   late TestApp app;
