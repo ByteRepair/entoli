@@ -4,6 +4,7 @@ import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
+import "../../core/log.dart";
 import "../../data/local/local_engine.dart" show LocalEngine;
 import "../../data/local/local_instance.dart" show LocalUsage;
 import "../../domain/installable.dart";
@@ -60,13 +61,25 @@ class RunningUsageWatch extends Notifier<RunningUsage?> {
     _timer = null;
   }
 
+  /// The last tick failed: a run of failures is logged once.
+  bool _failing = false;
+
   Future<void> _measure() async {
     final engine = _engine;
     final ids = [for (final state in engine.running.value) state.modelId];
-    final (usages, footprint) = await (
-      Future.wait(ids.map(engine.usage)),
-      engine.footprint(),
-    ).wait;
+    final List<LocalUsage?> usages;
+    final int? footprint;
+    try {
+      (usages, footprint) = await (
+        Future.wait(ids.map(engine.usage)),
+        engine.footprint(),
+      ).wait;
+    } catch (e) {
+      if (!_failing) logFailure("local", "could not measure the models", e);
+      _failing = true;
+      return;
+    }
+    _failing = false;
     final each = {for (final (i, one) in usages.indexed) ids[i]: ?one};
     final sum = each.isEmpty
         ? null
