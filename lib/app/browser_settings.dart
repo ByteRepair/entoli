@@ -1,12 +1,8 @@
-import "package:file_selector/file_selector.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../domain/agent_browser.dart";
 import "../domain/settings/keys.dart";
 import "../providers.dart";
-
-/// The answer that opens the file picker rather than picking.
-const chooseBrowser = "\u0000choose";
 
 /// The browsers this machine has, asked once while settings shows them.
 final foundBrowsersProvider = FutureProvider.autoDispose<List<FoundBrowser>>(
@@ -35,18 +31,19 @@ class BrowserPicker extends Notifier<BrowserPick> {
   @override
   BrowserPick build() => (verifying: false, problem: null);
 
-  Future<void> pick(String? value) async {
-    final settings = ref.read(appSettingsProvider.notifier);
-    if (value != chooseBrowser) {
-      state = (verifying: false, problem: null);
-      return settings.setAgentBrowser(value);
-    }
-    final file = await openFile(confirmButtonText: "Use this browser");
-    if (file == null) return;
+  /// [browser], one detected or the embedded one, or null for none.
+  Future<void> pick(String? browser) {
+    state = (verifying: false, problem: null);
+    return ref.read(appSettingsProvider.notifier).setAgentBrowser(browser);
+  }
+
+  /// The executable at [path], picked from the disk, once it has been started
+  /// and driven; why not, in [BrowserPick.problem], where it could not be.
+  Future<void> pickFile(String path) async {
     state = (verifying: true, problem: null);
     try {
-      final exe = await ref.read(agentBrowserProvider).verify(file.path);
-      await settings.setAgentBrowser(exe);
+      final exe = await ref.read(agentBrowserProvider).verify(path);
+      await ref.read(appSettingsProvider.notifier).setAgentBrowser(exe);
       state = (verifying: false, problem: null);
     } catch (e) {
       state = (verifying: false, problem: "$e");

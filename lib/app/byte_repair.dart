@@ -53,13 +53,9 @@ class ByteRepairRun extends Notifier<SetupRun> {
   /// The environment and then every chat in the project. The environment
   /// first: it is the half that can fail, and failing before the chats are
   /// gone leaves something to retry with.
-  Future<void> delete() async {
+  Future<void> delete() => _run((_) async {
     final error = await ref.read(byteRepairStoreProvider).deleteEnvironment();
-    if (!ref.mounted) return;
-    if (error != null) {
-      state = (running: false, error: error, log: state.log);
-      return;
-    }
+    if (error != null) return error;
     final repo = ref.read(chatRepositoryProvider);
     final project = ByteRepairProject().dir;
     final chats = await repo.listChats();
@@ -69,7 +65,8 @@ class ByteRepairRun extends Notifier<SetupRun> {
           .map((chat) => repo.deleteChat(chat.id)),
     );
     if (ref.mounted) _refresh();
-  }
+    return null;
+  });
 
   /// What setup changes, re-asked once it has.
   void _refresh() {

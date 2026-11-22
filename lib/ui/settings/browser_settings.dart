@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:file_selector/file_selector.dart" show openFile;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -17,6 +18,9 @@ import "../widgets/section_header.dart";
 import "scoped.dart";
 
 const _app = AppAddress();
+
+/// The dropdown's answer that opens the file picker rather than picking.
+const _chooseBrowser = "\u0000choose";
 
 /// Settings > Agent Browser: which browser the `browser_*` tools drive, how
 /// far they may go unasked, and the embedded one to download. Drawn only
@@ -196,16 +200,20 @@ class _BrowserPicker extends ConsumerWidget {
               child: Text(picked, overflow: TextOverflow.ellipsis),
             ),
           const DropdownMenuItem(
-            value: chooseBrowser,
+            value: _chooseBrowser,
             child: Text("Choose a browser…"),
           ),
         ],
         onChanged: pick.verifying
             ? null
-            : (value) => guarded(
-                context,
-                () => ref.read(browserPickProvider.notifier).pick(value),
-              ),
+            : (value) => guarded(context, () async {
+                final picker = ref.read(browserPickProvider.notifier);
+                if (value != _chooseBrowser) return picker.pick(value);
+                final file = await openFile(
+                  confirmButtonText: "Use this browser",
+                );
+                if (file != null) await picker.pickFile(file.path);
+              }),
       ),
     );
   }
@@ -226,7 +234,7 @@ class _BrowserProcess extends ConsumerWidget {
       ),
       trailing: OutlinedButton(
         onPressed: running
-            ? () => unawaited(ref.read(agentBrowserProvider).close())
+            ? () => guarded(context, ref.read(agentBrowserProvider).close)
             : null,
         child: const Text("Quit"),
       ),
