@@ -151,7 +151,7 @@ not (`showCliSignIn`: a
 `CliSignInDialog` over a `CliAccount` of its own, the program's own sign-in
 run, the page it prints opened from a link on it, a code the page shows
 pasted back) — `connectCli` itself lives in `app/settings/cli_account.dart`
-and is handed the sign-in to run, so any frontend can call it — an API in the
+and is handed the sign-in to run, so it is tested with no dialog — an API in the
 provider dialog started on its preset (`editProvider`) — and
 adopted, answering new
 chats, titles and the classifier at its own defaults; connecting one already

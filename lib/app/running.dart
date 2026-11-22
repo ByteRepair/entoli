@@ -13,7 +13,7 @@ import "transcript/activity.dart"
     show Opens, OpensDetail, Run, TranscriptHandOff, liveMessageOf;
 
 /// What a chat has running beside the reply: the browser's tab, a
-/// background job, a sub-agent. Each frontend words and draws its own.
+/// background job, a sub-agent.
 enum RunningKind { browser, job, subAgent }
 
 /// The chat's browser tab, watched live.
@@ -36,7 +36,6 @@ final class OpensBrowser implements Opens {
 class RunningThing {
   const RunningThing({
     required this.kind,
-    required this.name,
     required this.label,
     required this.tooltip,
     required this.opens,
@@ -45,10 +44,7 @@ class RunningThing {
     this.mono = false,
   });
 
-  /// What it is, and its name — the page's host, the job's command, the
-  /// sub-agent — for a frontend that words it itself.
   final RunningKind kind;
-  final String name;
 
   /// The browser is hidden from the agent.
   final bool hidden;
@@ -127,7 +123,6 @@ List<RunningThing> browserRunning(
   return [
     RunningThing(
       kind: RunningKind.browser,
-      name: where,
       hidden: at.hold != null,
       label:
           "Browser · $where"
@@ -147,7 +142,6 @@ List<RunningThing> jobsRunning(
   for (final job in view.runningJobs.values)
     RunningThing(
       kind: RunningKind.job,
-      name: firstLine(job.command),
       group: "background task",
       label: firstLine(job.command),
       mono: true,
@@ -172,7 +166,6 @@ List<RunningThing> subAgentsRunning(
     for (final agent in agents)
       RunningThing(
         kind: RunningKind.subAgent,
-        name: agent.agent,
         group: "sub-agent",
         label: "@${agent.agent}",
         tooltip: "Sub-agent @${agent.agent}",

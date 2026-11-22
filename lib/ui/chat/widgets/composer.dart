@@ -19,14 +19,7 @@ import "composer_words.dart";
 
 export "../../../app/composer.dart" show SendCallback;
 
-/// What a page asks of its composer: a steer taken back put back, and a
-/// passage replied to.
-abstract interface class ComposerHandle {
-  void restore(Draft said);
-  void embed(ComposerEmbed embed);
-}
-
-/// Where the Flutter composer puts a [ComposerAction]: a button of its own,
+/// Where the composer puts a [ComposerAction]: a button of its own,
 /// laid out by hand, or an entry of the `+` menu, divided by [_Plus.group].
 sealed class _Place {
   const _Place();
@@ -117,20 +110,13 @@ class _PasteAction extends Action<PasteTextIntent> {
 /// Dropping it again when the keyboard goes is `FocusFollowsKeyboard`'s, at the
 /// root of the app.
 class Composer extends ConsumerStatefulWidget {
-  const Composer({
-    super.key,
-    required this.controller,
-    required this.binding,
-    this.model,
-  });
+  const Composer({super.key, required this.model, required this.binding});
 
-  /// The page's composer model, which every frontend's composer for the page
-  /// runs on; null makes one of this widget's own.
-  final ComposerModel? model;
-
-  /// The field, and the quotes and other embeds in it. What is sent is its
-  /// `message`, never its `text`.
-  final ComposerController controller;
+  /// The page's composer model. A chat's session owns it, and the page keeps
+  /// this state across a switch to another chat, so it is followed rather
+  /// than held. Its field is a [ComposerController]: the quotes and other
+  /// embeds are in it, and what is sent is its `message`, never its `text`.
+  final ComposerModel model;
 
   /// The turn this sends into and where it is. A null `workspace` draws no
   /// shell bar at all; otherwise the bar is live as a `cd` moves it, and
@@ -141,62 +127,44 @@ class Composer extends ConsumerStatefulWidget {
   ConsumerState<Composer> createState() => ComposerState();
 }
 
-class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
+class ComposerState extends ConsumerState<Composer> {
   final GlobalKey<CompletionFieldState> _field = GlobalKey();
 
   /// Held only so [embed] can put the caret in the field.
   final FocusNode _focus = FocusNode();
 
-  /// The core's model. This
-  /// build resolves the field's decoration and the buttons either side of
-  /// it, so it follows the model's shape and leaves Send's flips to the
+  /// This build resolves the field's decoration and the buttons either side
+  /// of it, so it follows the model's shape and leaves Send's flips to the
   /// buttons' own builders.
-  late ComposerModel _model;
+  ComposerModel get _model => widget.model;
+  ComposerController get _controller => _model.field.controller;
   late Listenable _sendState;
 
-  /// [Composer.model] where given — a chat's session owns it, and the page
-  /// keeps this state across a switch to another chat, so it is followed
-  /// rather than held — or one of this state's own.
   void _adopt() {
-    _model =
-        (widget.model ??
-              ComposerModel(
-                widget.controller,
-                pick: (kind) => ref.read(attachmentPickerProvider).pick(kind),
-              ))
-          ..addListener(_reshaped);
+    _model.addListener(_reshaped);
     _sendState = Listenable.merge([_model.canSend, _model.queues]);
-  }
-
-  void _release(Composer from) {
-    _model.removeListener(_reshaped);
-    if (from.model == null) _model.dispose();
   }
 
   @override
   void initState() {
     super.initState();
     _adopt();
-    _configure();
+    _model.bind(widget.binding);
   }
 
   @override
   void didUpdateWidget(Composer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.model != oldWidget.model) {
-      _release(oldWidget);
+      oldWidget.model.removeListener(_reshaped);
       _adopt();
-    } else if (widget.model == null) {
-      _model.field = widget.controller;
     }
-    _configure();
+    _model.bind(widget.binding);
   }
-
-  void _configure() => _model.bind(widget.binding);
 
   @override
   void dispose() {
-    _release(widget);
+    _model.removeListener(_reshaped);
     _focus.dispose();
     super.dispose();
   }
@@ -236,16 +204,10 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
   /// what is typed next answers it. Focused, unlike everything else here:
   /// choosing Reply is asking to write, and a caret left wherever the field
   /// last had one lands what is typed beside the card.
-  @override
   void embed(ComposerEmbed embed) {
-    widget.controller.append(embed);
+    _controller.append(embed);
     _focus.requestFocus();
   }
-
-  /// Put back a message that was sent and taken back, ahead of whatever has
-  /// been typed or attached since.
-  @override
-  void restore(Draft said) => _model.restore(said);
 
   void _submit({bool queue = false}) => _model.submit(queue: queue);
 
@@ -326,7 +288,7 @@ class ComposerState extends ConsumerState<Composer> implements ComposerHandle {
         child: CompletionField(
           key: _field,
           focusNode: _focus,
-          controller: widget.controller,
+          controller: _controller,
           project: widget.binding.project,
           device: widget.binding.device,
           minLines: 1,

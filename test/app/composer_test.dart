@@ -33,13 +33,15 @@ void main() {
         ];
       },
     );
-    logic.configure(
-      agentSpeaking: false,
-      onSend: (text, files) => sent.add((text, files)),
-      onQueue: (text, _) => queued.add(text),
-      steers: (_) => true,
-      onAbort: () => stopped++,
-      onVoice: () => voiced++,
+    logic.bind(
+      ComposerBinding(
+        agentSpeaking: false,
+        onSend: (text, files) => sent.add((text, files)),
+        onQueue: (text, _) => queued.add(text),
+        steers: (_) => true,
+        onAbort: () => stopped++,
+        onVoice: () => voiced++,
+      ),
     );
     sent.clear();
     queued.clear();
@@ -76,11 +78,14 @@ void main() {
   test("Queue is on offer only over a running turn that would be steered", () {
     controller.text = "wait";
     expect(logic.queues.value, isFalse);
-    logic.configure(
-      agentSpeaking: true,
-      onSend: (text, files) => sent.add((text, files)),
-      onQueue: (text, _) => queued.add(text),
-      steers: (_) => true,
+    logic.bind(
+      ComposerBinding(
+        agentSpeaking: true,
+        onSend: (text, files) => sent.add((text, files)),
+        onQueue: (text, _) => queued.add(text),
+        steers: (_) => true,
+        onAbort: () => stopped++,
+      ),
     );
     expect(logic.queues.value, isTrue);
     logic.submit(queue: true);
@@ -93,15 +98,6 @@ void main() {
     logic.submit(queue: true);
     expect(sent.single.$1, "now");
     expect(queued, isEmpty);
-  });
-
-  test("a new controller is followed", () {
-    final other = ComposerController()..text = "!pwd";
-    addTearDown(other.dispose);
-    logic.field = other;
-    expect(logic.mode, ComposerMode.shell);
-    controller.text = "plain";
-    expect(logic.mode, ComposerMode.shell, reason: "the old one is let go");
   });
 
   test("the send button names the callback typed, not every callback's", () {
@@ -136,7 +132,7 @@ void main() {
       expect((stopped, voiced), (1, 1));
     });
 
-    test("an attach runs the frontend's picker and attaches", () async {
+    test("an attach runs the page's picker and attaches", () async {
       await logic.run(ComposerAction.attachImage);
       await logic.run(ComposerAction.attachFile);
       expect(picked, [AttachmentKind.image, AttachmentKind.file]);

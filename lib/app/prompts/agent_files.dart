@@ -12,8 +12,7 @@ import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 
 /// A project's own agents on disk: which are there, and every write a page
-/// makes to them, each through the directory's read-only lock. One copy for
-/// every frontend's agents page.
+/// makes to them, each through the directory's read-only lock.
 class AgentFiles {
   const AgentFiles(this.config, {this.project});
 

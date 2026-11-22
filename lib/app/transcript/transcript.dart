@@ -15,7 +15,7 @@ import "activity.dart";
 import "message.dart" show MessageMoment;
 
 /// The conversation as rows, the core's account of what is on the page:
-/// each frontend draws these, and nothing it draws decides what a row is.
+/// the chat page draws these, and nothing it draws decides what a row is.
 class Transcript {
   const Transcript(this.chatId, this.rows);
 

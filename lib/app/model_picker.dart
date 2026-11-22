@@ -259,9 +259,9 @@ String? modelFieldError({
 /// What a field whose [modelFieldError] says its provider is gone reads as.
 const missingModelLabel = "Select New Model";
 
-/// A model pick as its field reads in every frontend: what it says, what is
-/// wrong with it, what its entry storing nothing is called, and the line
-/// naming what that entry stands for while it is picked.
+/// A model pick as its field reads: what it says, what is wrong with it,
+/// what its entry storing nothing is called, and the line naming what that
+/// entry stands for while it is picked.
 class ModelField {
   const ModelField._({
     required this.label,
@@ -322,7 +322,4 @@ class ModelField {
 
   /// What the null entry stands for, while it is the one picked.
   final String? using;
-
-  /// The field in one line, for a frontend with no line under it.
-  String get reads => using == null ? label : nullEntry;
 }

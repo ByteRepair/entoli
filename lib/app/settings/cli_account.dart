@@ -51,8 +51,8 @@ Future<void> connectCli(
 sealed class CliAccountStage {
   const CliAccountStage();
 
-  /// Whether a sign-in is under way or has failed, which is what a frontend
-  /// shows the steps of.
+  /// Whether a sign-in is under way or has failed: while it is, the dialog
+  /// shows its steps.
   bool get signingIn => false;
 }
 

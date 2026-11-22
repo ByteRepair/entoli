@@ -3,7 +3,7 @@ import "package:flutter/material.dart";
 import "../../app/voice_controller.dart";
 import "../theme.dart";
 
-/// How the Flutter frontend says and colours voice mode's state.
+/// How voice mode's state is said and coloured.
 
 /// What the screen says this is. The two words for a shut microphone are the
 /// state's rather than the status's, which is why it is not all on the enum —

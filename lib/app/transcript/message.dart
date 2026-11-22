@@ -25,7 +25,7 @@ class Speaker {
 const noticeSpeaker = "System";
 
 /// One stretch of a message, in the order it happened. A sealed set the
-/// frontends switch over.
+/// bubble switches over.
 sealed class MessageBlock {
   const MessageBlock();
 }
@@ -181,8 +181,8 @@ class MessageMoment {
 /// A message split the way it reads: everything the model did as activities
 /// of their own, everything it said in bubbles, in the order it happened.
 /// The rules of the conversation's layout — what breaks a run of
-/// activities, where the caret goes, when a spinner shows — are here, and a
-/// frontend draws what this returns.
+/// activities, where the caret goes, when a spinner shows — are here, and
+/// the bubble draws what this returns.
 class MessageLayout {
   MessageLayout(this.message, {required this.chatId, required this.catalog});
 

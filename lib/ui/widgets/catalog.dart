@@ -3,7 +3,6 @@ import "package:flutter/material.dart";
 import "../../domain/download.dart";
 import "../../domain/installable.dart" show ModelFacts;
 import "dialogs.dart";
-import "../../app/model_facts.dart";
 import "../../core/formatting.dart";
 import "resettable_field.dart";
 
@@ -233,18 +232,19 @@ class InstalledPicker extends StatelessWidget {
   }
 }
 
-/// A model's facts as tags, by [modelFactTags].
+/// A model's facts as tags, as many as are known, in one order for every
+/// catalog.
 List<Widget> modelTags(ModelFacts facts) => [
-  for (final (fact, text) in modelFactTags(facts))
-    InfoTag(switch (fact) {
-      ModelFact.parameters => Icons.memory,
-      ModelFact.languages => Icons.translate,
-      ModelFact.size => Icons.download_outlined,
-      ModelFact.quantisation => Icons.compress,
-      ModelFact.context => Icons.data_usage,
-      ModelFact.voices => Icons.record_voice_over_outlined,
-      ModelFact.licence => Icons.gavel_outlined,
-    }, text),
+  if (facts.parameters case final p?) InfoTag(Icons.memory, "$p params"),
+  if (facts.languages case final l?) InfoTag(Icons.translate, l),
+  if (facts.bytes case final b?)
+    InfoTag(Icons.download_outlined, formatSize(b)),
+  if (facts.quantisation case final q?) InfoTag(Icons.compress, q),
+  if (facts.context case final n?)
+    InfoTag(Icons.data_usage, "${tokenCount(n)} context"),
+  if (facts.voices case final v?)
+    InfoTag(Icons.record_voice_over_outlined, plural(v, "voice")),
+  if (facts.licence case final l?) InfoTag(Icons.gavel_outlined, l),
 ];
 
 /// Whether an [InfoTag]'s fact is good news, a warning, or neither.

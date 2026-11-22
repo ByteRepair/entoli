@@ -243,24 +243,21 @@ which is how a reply's selection would get dropped.
 
 Everything the app can be told to do by name — a new chat, Settings, pin the
 open chat, hide the sidebar — is an `AppItem` (`lib/app/app_items.dart`), and
-there are two kinds, sorted by one rule: what changes what happens is the
-core's, what changes what is on screen or where is the UI's. An
-`AppAction` (new chat, pin, rename, move, delete, stop) is run by the core,
-the UI asking first for what it needs — a name, a project, a yes. A
-`Destination` (Settings, Profile, a chat's settings, the sidebar, voice mode)
-is where the UI takes the app, through `flutterNavigate` in `commands.dart`,
-an exhaustive switch with no default, so a new destination does not compile
-until it is reached. Each
-item's title and keys are plain data (`AppKey`), and its availability and
-title (`availabilityOf`, `titleOf`) are pure functions of a few facts, so the
-core decides them with no widget in sight. The enum's name is the item's id,
+there are two kinds: an `AppAction` (new chat, pin, rename, move, delete,
+stop) changes what happens, asking first for what it needs — a name, a
+project, a yes — and a `Destination` (Settings, Profile, a chat's settings,
+the sidebar, voice mode) changes what is on screen. Each item's title and
+keys are plain data (`AppKey`), and its availability and title
+(`availabilityOf`, `titleOf`) are pure functions of a few facts, so they are
+decided and tested with no widget in sight. The enum's name is the item's id,
 which is why one is never renamed: a key, a menu item and Shortcuts all say
 which item by it. Settings > Shortcuts lists the ones with keys, so the page
 cannot disagree with what answers them; `app_command.dart` is how Flutter
 hears and prints those keys.
 
-What an item does is `Commands` (`commands.dart`): an action's switch, and
-`Navigate` for a destination.
+What an item does is `Commands` (`commands.dart`): one exhaustive switch for
+the actions and one for the destinations, with no default, so a new item
+does not compile until it does something.
 `Commands.watch` is a snapshot of what the app has open taken in a build — so a
 menu greys and labels its items afresh as the app changes. It watches only the
 facts a menu draws — the open chat's id, whether it is pinned and whether a
@@ -311,7 +308,7 @@ else. Before the app is up nothing is sent, so the welcome tour has no app
 items to reach past it by.
 
 `AppMenuSync` (`app_menu.dart`), mounted in `AppShell` below the Navigator,
-shows the layout as the app stands and runs a pick through `Navigate`. **The
+shows the layout as the app stands and runs a pick through `Commands`. **The
 menu holds the keys of every item in it**, as its own key equivalents, and
 `runKey` — the app's one key handler — stands down for those wherever there
 is a menu bar, so no key runs twice. Elsewhere Flutter's handler has every
@@ -338,8 +335,9 @@ until it does something. It reads the field through `ComposerText`, which
 hint, the send label, how far the field grows — is `composer_words.dart`'s,
 and where each action sits is the `Composer`'s `_place`, a switch over the
 same list with no default. The chat page owns one model per chat and one
-`ComposerBinding` (the turn it sends into, where it is). `ComposerHandle` is
-what the page asks of it: Reply, and a steer taken back put back.
+`ComposerBinding` (the turn it sends into, where it is). A steer taken back
+goes back into the model; Reply embeds into the composer on screen, or into
+the field while a question stands in its place.
 
 `PageBar` (`widgets/page_bar.dart`) is the bar of every pushed page, said as
 data — a `title` and a `subtitle`, how it is left, and its `PageAction`s — and

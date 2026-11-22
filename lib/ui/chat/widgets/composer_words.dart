@@ -2,7 +2,7 @@ import "../../../app/composer.dart";
 import "../../../domain/goal.dart";
 import "../../../domain/wired_skill.dart";
 
-/// What the Flutter composer says about its [ComposerMode].
+/// What the composer says about its [ComposerMode].
 extension ComposerModeWords on ComposerMode {
   /// The field's hint, where the mode has one of its own; a message's is the
   /// composer's. A callback has none: the field holding one is never empty.

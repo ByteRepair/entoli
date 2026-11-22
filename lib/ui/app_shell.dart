@@ -1,7 +1,5 @@
 import "settings/welcome_page.dart" show openFirstRun;
 import "package:flutter/material.dart";
-import "../app/chat_session.dart" show chatSessionHostProvider;
-import "chat_session_host.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -34,26 +32,16 @@ class _AppShellState extends ConsumerState<AppShell> {
     super.initState();
     HardwareKeyboard.instance.addHandler(_key);
     _scope.attach(_commands);
-    _host?.attach(context, ref);
     // A first launch's setup and tour, over the shell once it is up.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) openFirstRun(context, ref);
     });
   }
 
-  /// The chat sessions say and open things over this page.
-  late final RootChatSessionHost? _host = switch (ref.read(
-    chatSessionHostProvider,
-  )) {
-    final RootChatSessionHost host => host,
-    _ => null,
-  };
-
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_key);
     _scope.detach(_commands);
-    _host?.detach(context);
     super.dispose();
   }
 

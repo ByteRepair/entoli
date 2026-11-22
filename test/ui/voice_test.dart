@@ -12,7 +12,8 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart" show localProject;
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/app/chat_controller.dart";
-import "package:agent_chat/app/composer.dart" show ComposerBinding;
+import "package:agent_chat/app/composer.dart"
+    show ComposerBinding, ComposerModel;
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/composer_controller.dart";
 import "package:agent_chat/ui/selection.dart";
@@ -982,12 +983,12 @@ void main() {
   });
 
   group("the composer's voice button", () {
-    Future<void> pumpComposer(WidgetTester tester, ComposerController text) =>
+    Future<void> pumpComposer(WidgetTester tester, ComposerModel model) =>
         app.pump(
           tester,
           Scaffold(
             body: Composer(
-              controller: text,
+              model: model,
               binding: ComposerBinding(
                 agentSpeaking: false,
                 onSend: (_, _) {},
@@ -1001,7 +1002,9 @@ void main() {
     testWidgets("goes when there is a message to send instead", (tester) async {
       final text = ComposerController();
       addTearDown(text.dispose);
-      await pumpComposer(tester, text);
+      final model = ComposerModel(text, pick: (_) async => []);
+      addTearDown(model.dispose);
+      await pumpComposer(tester, model);
       expect(find.byTooltip("Voice mode"), findsOneWidget);
 
       await tester.enterText(find.byType(TextField), "hello");

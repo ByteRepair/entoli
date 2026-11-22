@@ -15,7 +15,7 @@ bool get appleKeyboard => isApple;
 /// and is not there at all without a pointer.
 bool get menuBarAlwaysShown => defaultTargetPlatform == TargetPlatform.macOS;
 
-/// An [AppKey] as the Flutter frontend hears and prints it.
+/// An [AppKey] as Flutter hears and prints it.
 extension AppKeyCaps on AppKey {
   LogicalKeyboardKey? get logicalKey => switch (char) {
     "," => LogicalKeyboardKey.comma,

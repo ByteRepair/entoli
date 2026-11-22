@@ -1,4 +1,5 @@
 import "package:flutter/foundation.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../domain/file_tools.dart" show guestWorkspacePath;
 import "../domain/models.dart";
@@ -24,8 +25,8 @@ enum ComposerMode {
   callback,
 }
 
-/// What a user can do in the composer. Each frontend places every one of
-/// these, or leaves it out, in an exhaustive switch of its own.
+/// What a user can do in the composer. The composer places every one of
+/// these, or leaves it out, in an exhaustive switch.
 enum ComposerAction {
   send,
 
@@ -42,8 +43,10 @@ enum ComposerAction {
   newGoal,
 }
 
-/// What the composer needs of the field that holds its text. [message] is what is sent, [text] what the field holds:
-/// the two differ by the embeds, each one character of [text].
+/// What the composer needs of the field that holds its text: the field is a
+/// widget's controller, which the core cannot name. [message] is what is
+/// sent, [text] what the field holds: the two differ by the embeds, each one
+/// character of [text].
 abstract interface class ComposerText implements Listenable {
   String get text;
   String get message;
@@ -59,6 +62,11 @@ abstract interface class ComposerText implements Listenable {
   void prepend(String said);
   void clear();
 }
+
+/// Makes a field for a session's composer, bound where the app is assembled.
+final composerTextProvider = Provider<ComposerText Function()>(
+  (ref) => throw UnimplementedError("bound where the app is assembled"),
+);
 
 /// What stands where a chat's composer goes: the composer itself, or what
 /// is drawn in its place.
@@ -100,7 +108,7 @@ class ComposerBinding {
   const ComposerBinding({
     required this.agentSpeaking,
     required this.onSend,
-    required this.onAbort,
+    this.onAbort = _none,
     this.onQueue,
     this.steers,
     this.onVoice,
@@ -113,7 +121,10 @@ class ComposerBinding {
   /// A participant is speaking: Send becomes Stop.
   final bool agentSpeaking;
   final SendCallback onSend;
+
+  /// Stop; nothing where there is no turn to stop.
   final VoidCallback onAbort;
+  static void _none() {}
 
   /// Send for after the running turn rather than into it; null where there
   /// is no turn to wait on.
@@ -145,70 +156,35 @@ class ComposerBinding {
 /// change. [canSend] and [queues] are notifiers of their own, since they flip
 /// on keystrokes and only the buttons draw them.
 class ComposerModel extends ChangeNotifier {
-  ComposerModel(ComposerText field, {required this.pick}) : _field = field {
+  ComposerModel(this.field, {required this.pick}) {
     field.addListener(_sync);
     _sync();
   }
 
-  /// Runs the frontend's picker: the files the user chose.
+  /// Runs the platform's picker: the files the user chose.
   final Future<List<Attachment>> Function(AttachmentKind kind) pick;
 
-  ComposerText _field;
-  ComposerText get field => _field;
-  set field(ComposerText value) {
-    if (value == _field) return;
-    _field.removeListener(_sync);
-    _field = value..addListener(_sync);
-    _sync();
-  }
+  final ComposerText field;
 
-  var _turn = (
+  ComposerBinding _turn = const ComposerBinding(
     agentSpeaking: false,
     onSend: _nothing,
-    onQueue: null as SendCallback?,
-    steers: null as bool Function(String text)?,
-    onAbort: null as VoidCallback?,
-    onVoice: null as VoidCallback?,
   );
 
   static void _nothing(String text, List<Attachment> attachments) {}
 
-  /// What the composer sends to: [agentSpeaking] makes an empty field's
-  /// button Stop, and over it [steers] — the room's rule, asked rather than
-  /// copied, since only it knows who is speaking — says whether what is typed
-  /// would steer, putting [onQueue] on offer beside Send. No [onVoice] is no
-  /// voice mode from here.
-  void configure({
-    required bool agentSpeaking,
-    required SendCallback onSend,
-    SendCallback? onQueue,
-    bool Function(String text)? steers,
-    VoidCallback? onAbort,
-    VoidCallback? onVoice,
-  }) {
+  /// What the composer sends to: the binding's `agentSpeaking` makes an
+  /// empty field's button Stop, and over it `steers` — the room's rule,
+  /// asked rather than copied, since only it knows who is speaking — says
+  /// whether what is typed would steer, putting `onQueue` on offer beside
+  /// Send. No `onVoice` is no voice mode from here.
+  void bind(ComposerBinding binding) {
     final changed =
-        agentSpeaking != _turn.agentSpeaking ||
-        (onVoice == null) != (_turn.onVoice == null);
-    _turn = (
-      agentSpeaking: agentSpeaking,
-      onSend: onSend,
-      onQueue: onQueue,
-      steers: steers,
-      onAbort: onAbort,
-      onVoice: onVoice,
-    );
+        binding.agentSpeaking != _turn.agentSpeaking ||
+        (binding.onVoice == null) != (_turn.onVoice == null);
+    _turn = binding;
     if (changed) _changed();
   }
-
-  /// [binding]'s turn, as [configure] takes it.
-  void bind(ComposerBinding binding) => configure(
-    agentSpeaking: binding.agentSpeaking,
-    onSend: binding.onSend,
-    onQueue: binding.onQueue,
-    steers: binding.steers,
-    onAbort: binding.onAbort,
-    onVoice: binding.onVoice,
-  );
 
   /// A participant is speaking: an empty field's button is Stop.
   bool get speaking => _turn.agentSpeaking;
@@ -222,7 +198,7 @@ class ComposerModel extends ChangeNotifier {
   ComposerMode _mode = ComposerMode.message;
   ComposerMode get mode => _mode;
 
-  /// The callback typed, which a frontend names; null where there is none.
+  /// The callback typed, which Send is named after; null where there is none.
   WiredCall? _callback;
   WiredCall? get callback => _callback;
 
@@ -238,7 +214,7 @@ class ComposerModel extends ChangeNotifier {
 
   @override
   void dispose() {
-    _field.removeListener(_sync);
+    field.removeListener(_sync);
     canSend.dispose();
     queues.dispose();
     super.dispose();
@@ -253,7 +229,7 @@ class ComposerModel extends ChangeNotifier {
       case ComposerAction.queue:
         submit(queue: true);
       case ComposerAction.stop:
-        _turn.onAbort?.call();
+        _turn.onAbort();
       case ComposerAction.voice:
         _turn.onVoice?.call();
       case ComposerAction.attachImage:
@@ -265,21 +241,21 @@ class ComposerModel extends ChangeNotifier {
       case ComposerAction.insertAgent:
         _openTrigger(CompletionKind.agent);
       case ComposerAction.newGoal:
-        final goal = goalStarted(_field.text);
-        _field.edit(goal, goal.length);
+        final goal = goalStarted(field.text);
+        field.edit(goal, goal.length);
     }
   }
 
   void _openTrigger(CompletionKind kind) {
-    final (:text, :caret) = triggerOpened(_field.text, _field.caret, kind);
-    _field.edit(text, caret);
+    final (:text, :caret) = triggerOpened(field.text, field.caret, kind);
+    field.edit(text, caret);
   }
 
   void _sync() {
     _refresh();
     // The field's text rather than the message: an embed is never `!` or a
     // `/skill`, so the answer is the same without writing the message out.
-    final text = _field.text;
+    final text = field.text;
     final shell = shellBypassCommand(text) != null;
     final wired = shell ? null : wiredSkillFromText(text);
     final mode = shell
@@ -287,7 +263,7 @@ class ComposerModel extends ChangeNotifier {
         : wired != null
         ? ComposerMode.callback
         : ComposerMode.message;
-    final embeds = _field.embedCount;
+    final embeds = field.embedCount;
     final reshaped = mode != _mode || embeds != _embeds || wired != _callback;
     _mode = mode;
     _callback = wired;
@@ -304,13 +280,13 @@ class ComposerModel extends ChangeNotifier {
         worth &&
         _turn.agentSpeaking &&
         _turn.onQueue != null &&
-        (_turn.steers?.call(_field.message) ?? false);
+        (_turn.steers?.call(field.message) ?? false);
   }
 
   /// A file on its own is worth sending, and whitespace on its own is not. An
   /// embed's character is not whitespace, so a quote alone is worth sending.
   bool get worthSending =>
-      _field.text.trim().isNotEmpty || _attachments.isNotEmpty;
+      field.text.trim().isNotEmpty || _attachments.isNotEmpty;
 
   void attach(List<Attachment> files) {
     if (files.isEmpty) return;
@@ -328,7 +304,7 @@ class ComposerModel extends ChangeNotifier {
   /// been typed or attached since.
   void restore(Draft said) {
     final (:text, :attachments) = said;
-    _field.prepend(text);
+    field.prepend(text);
     _attachments.insertAll(0, attachments);
     _changed();
   }
@@ -340,8 +316,8 @@ class ComposerModel extends ChangeNotifier {
   void submit({bool queue = false}) {
     if (!worthSending) return;
     final send = queue && queues.value ? _turn.onQueue! : _turn.onSend;
-    send(_field.message.trim(), List.of(_attachments));
-    _field.clear();
+    send(field.message.trim(), List.of(_attachments));
+    field.clear();
     _attachments.clear();
     _changed();
   }

@@ -7,8 +7,8 @@ import "../../domain/plan.dart" show PlanSection;
 import "../../domain/room/room_state.dart" show ChatViewState;
 import "../reader.dart" show SettingReader;
 
-/// What an icon in the conversation stands for. Each frontend picks its own
-/// picture for each, in one exhaustive switch.
+/// What an icon in the conversation stands for. The UI picks the picture
+/// for each, in one exhaustive switch.
 enum TranscriptGlyph {
   terminal,
   thinking,
@@ -69,7 +69,7 @@ LiveMessage liveMessageOf(ChatViewState view, String id) => (
 /// an instruction file read, a permission answered, an artifact. One class
 /// per kind, holding no state; what one is drawn from is a [Run]. A kind
 /// says what it is on screen ([node]) and what is behind it ([detail]), as
-/// data, and every frontend draws those.
+/// data, which the UI draws.
 abstract class Activity {
   const Activity();
 
@@ -196,12 +196,12 @@ abstract interface class TranscriptHandOff {
 
   Future<void> openBrowser(AgentBrowser browser, BrowserTab tab);
 
-  /// Runs [action], saying what it threw the frontend's way.
+  /// Runs [action], telling the user what it threw.
   Future<void> attempt(Future<void> Function() action);
 }
 
 /// Something on screen that opens a page when pressed: a node, a running
-/// pill. It knows what it opens; a frontend only hands it the way.
+/// pill. It knows what it opens; the UI only hands it the way.
 abstract interface class Opens {
   Future<void> open(TranscriptHandOff handOff);
 }
@@ -223,10 +223,10 @@ final class OpensDetail implements Opens {
 }
 
 /// What an activity is on screen. A sealed set, each a kind of drawing
-/// rather than a kind of activity, so a frontend's switch over them stays
-/// short and a new one is a compile error in every frontend until it draws
-/// it. Each knows the activity and run it came from, and what pressing it
-/// opens: its detail, following [source], unless the kind says otherwise.
+/// rather than a kind of activity, so the UI's switch over them stays short
+/// and a new one is a compile error until it is drawn. Each knows the
+/// activity and run it came from, and what pressing it opens: its detail,
+/// following [source], unless the kind says otherwise.
 sealed class ActivityNode {
   const ActivityNode(this.activity, this.run);
 

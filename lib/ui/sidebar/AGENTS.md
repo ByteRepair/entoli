@@ -6,11 +6,10 @@ title over its own timestamp, which is a date the reader has to compare against
 eleven others to place; the heading places all of them at once, and the row is
 the title and nothing else.
 
-`groupChatsByDate` is the whole of it, in the core's `lib/app/chat_groups.dart` — a
-period per group, worded in `chat_headings.dart` — and away from the
-widget so the boundaries can be tested at a date of the test's choosing —
-`now` is a parameter for that reason. It takes the headings in the order the
-chats come in rather than ranking them, which is sound because the list is
+`groupChatsByDate` is the whole of it, in the core's `lib/app/chat_groups.dart`,
+away from the widget so the boundaries can be tested at a date of the test's
+choosing — `now` is a parameter for that reason. It takes the headings in the
+order the chats come in rather than ranking them, which is sound because the list is
 sorted newest first: from there a chat can only ever land in the group it is
 already in or one further down. Days are counted on a UTC calendar, since a
 local day either side of a clock change is 23 or 25 hours and yesterday would

@@ -2,7 +2,6 @@ import "package:flutter/foundation.dart" show ChangeNotifier;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
-import "../domain/chat_meta.dart";
 import "../domain/models.dart";
 import "../domain/room/room_state.dart";
 import "../providers.dart";
@@ -11,31 +10,13 @@ import "composer.dart";
 import "mirror_controller.dart";
 import "reader.dart" show SettingReader;
 
-/// What a chat's session asks of the frontend it is drawn in: a field's text
-/// to hold the composer's words, a line said to the user, voice mode opened.
-/// `main` binds it.
-abstract interface class ChatSessionHost {
-  ComposerText newText();
-
-  void say(String message);
-
-  void openVoice(String chatId);
-
-  /// Voice mode with no chat yet, the first word making one under [meta].
-  void startVoiceChat(ChatMeta meta);
-}
-
-final chatSessionHostProvider = Provider<ChatSessionHost>(
-  (ref) => throw UnimplementedError("bound where the app is assembled"),
-);
-
-/// One chat as a frontend works with it, apart from how it is drawn: where
-/// its turns are read from and driven through — this device's controller,
-/// or a paired device's mirror — and its composer, the words and what they
-/// are sent with. Kept while something reads it.
+/// One chat apart from how it is drawn: where its turns are read from and
+/// driven through — this device's controller, or a paired device's mirror —
+/// and its composer, the words and what they are sent with. Kept while
+/// something reads it.
 class ChatSession {
   ChatSession(this._ref, this.chatId) {
-    text = _ref.read(chatSessionHostProvider).newText();
+    text = _ref.read(composerTextProvider)();
     composer = ComposerModel(
       text,
       pick: (kind) => _ref.read(attachmentPickerProvider).pick(kind),
@@ -66,15 +47,16 @@ class ChatSession {
         : null;
   }
 
-  /// [text] sent into [view]'s turn, or queued after it. Something said
+  /// [text] sent into [driver]'s turn, or queued after it. Something said
   /// over a browser upload waiting on the user is their answer to it: the
   /// chooser is cancelled, as dismissing its dialog would, and the agent is
-  /// told. A message a paired device did not take is said.
+  /// told. A message a paired device did not take is told to [say].
   Future<void> send(
     TurnDriver driver,
     String text,
     List<Attachment> attachments, {
     bool queue = false,
+    required void Function(String message) say,
   }) async {
     final browser = _ref.read(agentBrowserProvider);
     if (browser.available && browser.configured) {
@@ -87,16 +69,22 @@ class ChatSession {
     try {
       await driver.send(text, attachments: attachments, queue: queue);
     } on Undelivered catch (e) {
-      _ref.read(chatSessionHostProvider).say(e.message);
+      say(e.message);
     }
   }
 
   /// What stands where the composer goes for [view], driven through
-  /// [driver], what it depends on watched through [reader].
+  /// [driver], what it depends on watched through [reader]. Bound to the
+  /// turn: Send and Queue, Stop, the steer rule, voice mode, and the
+  /// project the menus offer. [say] is told what did not get through,
+  /// [openVoice] opens voice mode on this chat, and [sent] runs before each
+  /// send, for a page that follows the reply.
   ComposerSlot slot(
     SettingReader reader,
     ChatViewState view,
     TurnDriver? driver, {
+    required void Function(String message) say,
+    required void Function() openVoice,
     String? device,
     void Function()? sent,
   }) {
@@ -108,42 +96,31 @@ class ChatSession {
     if (view.roomPhase == RoomPhase.waitingOnYou) {
       return const ComposerAnswering();
     }
-    return ComposerReady(binding(view, driver, device: device, sent: sent));
-  }
-
-  /// The composer bound to [view]'s turn through [driver]: Send and Queue,
-  /// Stop, the steer rule, voice mode, and the project the menus offer.
-  /// [sent] runs before each send, for a page that follows the reply.
-  ComposerBinding binding(
-    ChatViewState view,
-    TurnDriver driver, {
-    String? device,
-    void Function()? sent,
-  }) {
-    final project = view.chat?.state.project;
+    final project = chat.state.project;
     final config = _ref.read(appConfigProvider);
     Future<void> go(String text, List<Attachment> files, {bool queue = false}) {
       sent?.call();
-      return send(driver, text, files, queue: queue);
+      return send(driver, text, files, queue: queue, say: say);
     }
 
-    return ComposerBinding(
-      agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
-      onSend: go,
-      onQueue: (text, files) => go(text, files, queue: true),
-      steers: driver.steers,
-      onAbort: driver.abort,
-      project: project,
-      device: device,
-      onVoice: mirrored
-          ? null
-          : () => _ref.read(chatSessionHostProvider).openVoice(chatId),
-      workspace: mirrored
-          ? null
-          : config.workspaceDir(chatId, project: project),
-      workspaceHome: mirrored
-          ? null
-          : config.projectWorkspaceDir(project: project),
+    return ComposerReady(
+      ComposerBinding(
+        agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
+        onSend: go,
+        onQueue: (text, files) => go(text, files, queue: true),
+        steers: driver.steers,
+        onAbort: driver.abort,
+        project: project,
+        device: device,
+        // A mirror's voice, and its files, are its home device's.
+        onVoice: mirrored ? null : openVoice,
+        workspace: mirrored
+            ? null
+            : config.workspaceDir(chatId, project: project),
+        workspaceHome: mirrored
+            ? null
+            : config.projectWorkspaceDir(project: project),
+      ),
     );
   }
 

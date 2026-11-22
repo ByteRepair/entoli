@@ -14,7 +14,7 @@ import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
-import "package:agent_chat/ui/sidebar/chat_headings.dart";
+import "package:agent_chat/app/chat_groups.dart" show pinnedHeading;
 import "package:agent_chat/ui/sidebar/project_palette.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";

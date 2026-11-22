@@ -151,7 +151,7 @@ BrowserKey browserKeyUp(BrowserKey down, {required int modifiers}) =>
     );
 
 /// The editing a page's menu offers, against the user's clipboard rather
-/// than the page's: what the Flutter card and the native sheet both send.
+/// than the page's.
 extension BrowserEditing on BrowserTab {
   /// The page's selection onto the user's clipboard. Asked before anything
   /// else is sent, so a cut sent after still finds it selected.
@@ -180,12 +180,12 @@ extension BrowserEditing on BrowserTab {
 /// The editing a page's menu offers.
 enum PageEdit { cut, copy, paste, selectAll }
 
-/// The user's keys and edits at a page, routed the same in every frontend:
-/// paste is the user's clipboard, copy and cut fill it and still reach the
-/// page, whose own handlers (an editor drawn on a canvas) may be all there
-/// is, and every other key is the page's. A press is held under the id its
-/// frontend names the key by, so its release names the key the press did:
-/// a key's character is not reported on its way up.
+/// The user's keys and edits at a page: paste is the user's clipboard, copy
+/// and cut fill it and still reach the page, whose own handlers (an editor
+/// drawn on a canvas) may be all there is, and every other key is the
+/// page's. A press is held under the id its caller names the key by, so its
+/// release names the key the press did: a key's character is not reported
+/// on its way up.
 class BrowserKeyboard {
   BrowserKeyboard(this._tab);
 

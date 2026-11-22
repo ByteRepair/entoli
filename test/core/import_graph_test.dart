@@ -90,7 +90,7 @@ void main() {
 
   // Between the layers, `domain/` is the app's own terms and knows nothing of
   // how it is stored or drawn, `data/` stores and runs without knowing how it
-  // is drawn, and `app/` is the core every frontend renders, so it knows
+  // is drawn, and `app/` is the core `ui/` renders, so it knows
   // none of them. `core/` and `main.dart` assemble the app and may reach
   // anything.
   test(

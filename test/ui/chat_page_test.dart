@@ -149,6 +149,33 @@ void main() {
       expect(find.text("hello"), findsOneWidget);
     });
 
+    testWidgets("a chat that cannot be made gives the message back", (
+      tester,
+    ) async {
+      // A file where the project's chats go: the create throws.
+      await io(
+        tester,
+        () => File(
+          p.join(app.config.projectDir(project: "blocked"), "chats"),
+        ).create(recursive: true),
+      );
+      app.container
+          .read(selectedProjectProvider.notifier)
+          .select(localProject("blocked"));
+      await openEmpty(tester);
+
+      await tester.enterText(find.byType(TextField).last, "hello");
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.send));
+      await pumpUntil(tester, find.text("Could not start a chat."));
+
+      expect(app.container.read(selectedChatIdProvider), isNull);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+        "hello",
+      );
+    });
+
     // The row is discovery, and discovery is a choice: Settings > General >
     // Appearance > "Show command chips in start page". Off is the default, so
     // the screen a fresh install opens says nothing about the library — the

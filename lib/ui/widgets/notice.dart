@@ -16,9 +16,24 @@ void notify(BuildContext context, String message) => _show(context, message);
 void say(BuildContext context, Object error) =>
     _show(context, "$error", error: true);
 
+/// A [say] that still lands once [context] is gone, through the root overlay
+/// it is under now: for a failure that can arrive after its page has closed,
+/// like a mirror refusing a message.
+void Function(Object error) sayLater(BuildContext context) {
+  final overlay = Overlay.maybeOf(context, rootOverlay: true);
+  return (error) {
+    if (overlay != null && overlay.mounted) {
+      _showIn(overlay, "$error", error: true);
+    }
+  };
+}
+
 void _show(BuildContext context, String message, {bool error = false}) {
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
-  if (overlay == null) return;
+  if (overlay != null) _showIn(overlay, message, error: error);
+}
+
+void _showIn(OverlayState overlay, String message, {required bool error}) {
   _shown[overlay]?.remove();
   late final OverlayEntry entry;
   entry = OverlayEntry(

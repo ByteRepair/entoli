@@ -1,5 +1,5 @@
 /// What the app has open — which project, which chat in it — and the
-/// actions that change either: the core's state, which every frontend reads.
+/// actions that change either: the core's state, which every page reads.
 library;
 
 import "dart:async";

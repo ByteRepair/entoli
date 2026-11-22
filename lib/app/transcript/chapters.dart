@@ -21,7 +21,7 @@ typedef Chapter = ({
 });
 
 /// Whether [chapters] are drawn as a rail: one prompt has nowhere to jump
-/// to. The native rail asks the same, `chapters.count > 1`.
+/// to.
 bool railShown(List<Chapter> chapters) => chapters.length > 1;
 
 /// The chapters of the thread being read: every prompt, and every steer said
