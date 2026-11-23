@@ -46,6 +46,12 @@ abstract class ChatStore {
   /// [project] — null for the default one.
   Future<void> moveChat(String chatId, String? project);
 
+  /// Take in chat [chatId] of the data directory at [dataDir] — a shared
+  /// chat unpacked there, in its default project — as a new chat in
+  /// [project]: under a new id, its workspace with it, marked imported.
+  /// Moves rather than copies where it can. Answers the new id.
+  Future<String> importChat(String dataDir, String chatId, {String? project});
+
   /// Add to the chat's log. The only way a conversation is written: records are
   /// appended and never rewritten, so a turn killed halfway keeps everything
   /// that had already happened. There is deliberately no whole-log write to go

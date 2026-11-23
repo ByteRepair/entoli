@@ -1,7 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../app/chat_shares.dart";
+import "../../../app/chat_edits.dart";
 import "package:entoli_chat/domain/models.dart";
 
 /// Why an imported chat has no composer, and the two ways to enable it.
@@ -22,7 +22,7 @@ class _ImportedBarState extends ConsumerState<ImportedBar> {
     setState(() => _busy = true);
     try {
       await ref
-          .read(chatSharesProvider)
+          .read(chatEditsProvider)
           .enable(widget.chat, keepWorkspace: keepWorkspace);
     } finally {
       if (mounted) setState(() => _busy = false);

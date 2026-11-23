@@ -58,6 +58,17 @@ class ChatEdits implements ChatEditor {
     _ref.invalidate(chatListProvider);
   }
 
+  /// Lets an imported [chat] run; see `ChatRepository.enableChat`.
+  Future<void> enable(ChatState chat, {required bool keepWorkspace}) async {
+    final written = await _ref
+        .read(chatRepositoryProvider)
+        .enableChat(chat.id, chat, keepWorkspace: keepWorkspace);
+    if (_openHere(chat)) {
+      _ref.read(chatControllerProvider(chat.id).notifier).applyState(written);
+    }
+    _ref.invalidate(chatListProvider);
+  }
+
   @override
   Future<void> delete(String id) async {
     if (_ref.read(selectedChatIdProvider) == id) {

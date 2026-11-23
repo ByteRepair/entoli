@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:io";
 import "dart:typed_data";
 
 import "package:uuid/uuid.dart";
@@ -779,6 +780,22 @@ class ChatRepository {
   /// `Off` selected, and the user can re-enable temporary from there.
   Future<ChatState> unpinChat(String chatId, ChatState state) =>
       saveState(state.copyWith(pinned: false));
+
+  /// Let an imported chat run. Without [keepWorkspace] the files that came
+  /// with it go first, so only the conversation is trusted.
+  Future<ChatState> enableChat(
+    String chatId,
+    ChatState state, {
+    required bool keepWorkspace,
+  }) async {
+    if (!keepWorkspace) {
+      final dir = Directory(
+        _config.workspaceDir(chatId, project: await projectOf(chatId)),
+      );
+      if (dir.existsSync()) await dir.delete(recursive: true);
+    }
+    return saveState(state.copyWith(imported: false));
+  }
 
   /// Answer an approval banner. An "always" answer derives the standing rule
   /// from the approval — the command's leading words, the file's directory, or

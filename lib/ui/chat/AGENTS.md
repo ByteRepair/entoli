@@ -921,29 +921,36 @@ artifacts, and its workspace files.
 is, search over every row, arrow keys and Ctrl+Space. **Chat Attachments** is
 its first line, one box for every attachment, its list collapsed under an
 arrow; a divider, then Artifacts by their card's title and the workspace by
-path. A file `isShareIgnored` names — a credentials or build folder, a
-secret by its name — starts unticked and says why.
+path. A file `isShareIgnored` names — a secret by its name — starts
+unticked and says why; a credentials or build folder is one unticked line,
+not walked, and ticking it sends everything under it.
 
 **Nothing is left out unseen.** The link is capped at `appLinkMaxLength`
 (`domain/link_bytes.dart`), the cap every link Entoli makes shares, and what
 does not fit is shown before Share, not reported
 after: the sections that would go are drawn in red, and
 every tick moves it. A zip compresses each member alone, so the link's length
-is the conversation's cost plus each ticked piece's, exactly — each piece is
-compressed once when first ticked (`ChatShareSource.cost`, through `compute`)
-and `shareFit` (`packages/entoli_chat/lib/domain/chat_share.dart`) sums them.
+is the conversation's cost plus each ticked piece's, exactly — what is ticked
+together is compressed together, once (`ChatShareSource.measure`, one
+`compute`), and `shareFit` (`packages/entoli_chat/lib/domain/chat_share.dart`)
+sums them. Share joins those compressed members as they are rather than
+compressing again. A piece whose size alone is past what deflate could bring
+under the cap is answered a bound past it, never read.
 Whole sections go, the workspace first, then the artifacts, then the
 attachments, since those are what the conversation shows; a conversation too
 long alone disables Share. Share packs exactly what is ticked and not red. The
 share sheet takes the link; Linux's would be a `mailto:`, so there it is copied.
 
 **Taking one in** is `ChatShares.import`: a new chat under a new id, in the
-project on screen, its workspace and attachments with it, opened. Two imports
+project on screen, its workspace and attachments with it, opened. The zip is
+unpacked to a temp directory and `ChatStore.importChat` takes it in —
+renamed into place where the filesystem allows, its state saved through the
+store and its `resources/` locked. Two imports
 of one link are two chats. An imported chat runs nothing: `ImportedBar` stands
 in for the composer, saying anything in it could be malicious, and
 `ChatRepository._turnSettings` refuses a turn for it, since a resume, a
 paired device or a trigger reaches a turn without the composer. **Enable
-Chat** deletes the workspace files that came with it first, so no command
+Chat** (`ChatEdits.enable`) deletes the workspace files that came with it first, so no command
 runs over them; **Enable and Import** keeps them. An attachment that was not
 shared is drawn as its box with a stop sign, and a turn reads past it.
 

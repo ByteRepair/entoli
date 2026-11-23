@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:io";
 
 import "package:flutter/material.dart";
@@ -104,10 +105,10 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
   };
 
   /// What the zip costs bare, and what each ticked piece adds: measured
-  /// once each, in the order they were ticked.
+  /// once each, everything ticked meanwhile together.
   int? _base;
   final Map<(ShareSection, String), int> _costs = {};
-  final List<(ShareSection, String)> _toMeasure = [];
+  final Set<(ShareSection, String)> _toMeasure = {};
   bool _measuring = false;
 
   bool _attachmentsOpen = false;
@@ -137,19 +138,19 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
       final candidates = await source.candidates();
       final titles = await shares.artifactTitles(widget.chat);
       rows = [
-        for (final file in candidates.attachments)
+        for (final file in candidates[ShareSection.attachments]!)
           _Row(
             file,
             section: ShareSection.attachments,
             label: attachmentFilename(file.path),
           ),
-        for (final file in candidates.artifacts)
+        for (final file in candidates[ShareSection.artifacts]!)
           _Row(
             file,
             section: ShareSection.artifacts,
             label: titles[file.path] ?? file.path,
           ),
-        for (final file in candidates.workspace)
+        for (final file in candidates[ShareSection.workspace]!)
           _Row(file, section: ShareSection.workspace, label: file.path),
       ];
     } catch (e) {
@@ -176,31 +177,43 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
 
   bool _isPicked(_Row row) => _picked[row.section]!.contains(row.file.path);
 
-  /// Ticks [row], measuring it the first time it is ticked.
+  /// Ticks [row], measuring it the first time it is ticked. The measure
+  /// waits a microtask, so whatever else is ticked meanwhile goes with it.
   void _pick(_Row row) {
     _picked[row.section]!.add(row.file.path);
     final key = (row.section, row.file.path);
-    if (!_costs.containsKey(key) && !_toMeasure.contains(key)) {
-      _toMeasure.add(key);
-      _measureNext();
+    if (!_costs.containsKey(key) && _toMeasure.add(key)) {
+      scheduleMicrotask(_measureNext);
     }
   }
 
+  /// Measures everything ticked since the last measure, in one go.
   Future<void> _measureNext() async {
     final source = _source;
     if (_measuring || _toMeasure.isEmpty || source == null) return;
     _measuring = true;
-    final (section, id) = _toMeasure.first;
+    final batch = [..._toMeasure];
     try {
-      final cost = await source.cost(section, id);
+      final costs = await source.measure(batch);
       if (!mounted) return;
-      setState(() => _costs[(section, id)] = cost);
+      setState(() {
+        _costs.addAll(costs);
+        // Unmeasurable is unpackable: untick it rather than wait on it.
+        for (final (section, id) in batch) {
+          if (!costs.containsKey((section, id))) _picked[section]!.remove(id);
+        }
+      });
     } catch (e) {
-      logFailure("share", "measuring a shared file failed", e);
-      // Unmeasurable is unpackable: untick it rather than wait on it.
-      if (mounted) setState(() => _picked[section]!.remove(id));
+      logFailure("share", "measuring shared files failed", e);
+      if (mounted) {
+        setState(() {
+          for (final (section, id) in batch) {
+            _picked[section]!.remove(id);
+          }
+        });
+      }
     } finally {
-      _toMeasure.remove((section, id));
+      _toMeasure.removeAll(batch);
       _measuring = false;
     }
     _measureNext();
@@ -338,7 +351,11 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
           style: leftOut(r.section, ticked, null),
         ),
         secondary: Text(
-          r.file.suggested ? formatSize(r.file.size) : "Secret or build file",
+          r.file.suggested
+              ? formatSize(r.file.size)
+              : r.file.folder
+              ? "Secret or build folder"
+              : "Secret or build file",
           style: leftOut(r.section, ticked, theme.textTheme.bodySmall),
         ),
       );

@@ -2,7 +2,6 @@ import "dart:io";
 
 import "package:entoli_chat/app/handoff.dart";
 import "package:entoli_chat/app/transcript/host.dart";
-import "package:entoli_chat/core/config.dart";
 import "package:entoli_chat/core/transcript_bindings.dart";
 import "package:entoli_chat/data/chat_share.dart";
 import "package:entoli_chat/data/local/file_chat_store.dart";
@@ -29,11 +28,10 @@ Future<void> main() async {
   useMemoryFileSystem();
   final payload = Uri.base.fragment;
   final zip = payload.isEmpty ? null : shareZipOf(payload);
-  final chatId = zip == null ? null : await unpackShare(zip, _dataDir);
+  final unpacked = zip == null ? null : await unpackShare(zip, _dataDir);
   Widget home = const _NotAShare();
   var overrides = transcriptOverrides;
-  if (chatId != null) {
-    final config = await AppConfig.load(_dataDir);
+  if (unpacked case (:final config, :final chatId)) {
     final store = FileChatStore(config);
     final chat = await store.load(chatId);
     // A chat shared without its workspace has none to unpack; an empty one

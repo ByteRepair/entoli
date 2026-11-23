@@ -99,8 +99,8 @@ void main() {
 
   group("in memory", () {
     test("a shared chat unpacks and reads with nothing on the disk", () async {
-      final id = await unpackShare(await _shared(), _viewer);
-      final chat = await FileChatStore(await AppConfig.load(_viewer)).load(id!);
+      final (:config, :chatId) = (await unpackShare(await _shared(), _viewer))!;
+      final chat = await FileChatStore(config).load(chatId);
 
       expect(chat.state.title, "A shared chat");
       expect(chat.state.imported, isTrue);
@@ -121,9 +121,12 @@ void main() {
         );
       }
 
-      final id = await unpackShare(ZipEncoder().encodeBytes(older), _viewer);
+      final unpacked = await unpackShare(
+        ZipEncoder().encodeBytes(older),
+        _viewer,
+      );
 
-      expect(id, "c1");
+      expect(unpacked?.chatId, "c1");
       expect(
         File(migrationStamp(_viewer)).readAsStringSync(),
         migrations.last.version,
@@ -136,8 +139,7 @@ void main() {
     late SharedChatHost host;
 
     setUp(() async {
-      await unpackShare(await _shared(), _viewer);
-      final config = await AppConfig.load(_viewer);
+      final config = (await unpackShare(await _shared(), _viewer))!.config;
       final store = FileChatStore(config);
       host = SharedChatHost(
         await store.load("c1"),

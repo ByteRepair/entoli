@@ -1002,6 +1002,10 @@ class FakeChatStore implements ChatStore {
   Future<void> saveState(ChatState state) async => _states[state.id] = state;
 
   @override
+  Future<String> importChat(String dataDir, String chatId, {String? project}) =>
+      throw UnimplementedError();
+
+  @override
   Future<void> retitle(String chatId, String title) async {
     final state = _states[chatId];
     if (state != null) _states[chatId] = state.copyWith(title: title);

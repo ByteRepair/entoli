@@ -131,6 +131,9 @@ const _ignoredDirs = {
   "target",
 };
 
+/// Whether a folder called [name] is one the share dialog leaves unticked.
+bool isShareIgnoredDir(String name) => _ignoredDirs.contains(name);
+
 /// Files that hold secrets, by name, as [globMatch] globs.
 const _ignoredFiles = {
   ".env",
@@ -161,8 +164,6 @@ const _ignoredFiles = {
 /// workspace — unticked until the user ticks it.
 bool isShareIgnored(String path) {
   final segments = path.split("/");
-  if (segments.take(segments.length - 1).any(_ignoredDirs.contains)) {
-    return true;
-  }
+  if (segments.take(segments.length - 1).any(isShareIgnoredDir)) return true;
   return _ignoredFiles.any((glob) => globMatch(glob, segments.last));
 }

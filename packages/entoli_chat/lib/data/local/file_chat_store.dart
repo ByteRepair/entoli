@@ -149,6 +149,49 @@ class FileChatStore implements ChatStore {
   }
 
   @override
+  Future<String> importChat(
+    String dataDir,
+    String chatId, {
+    String? project,
+  }) async {
+    final from = AppConfig.forDirectory(dataDir);
+    final state = ChatState.fromJson(
+      jsonDecode(await File(from.stateFile(chatId)).readAsString())
+          as Map<String, dynamic>,
+    );
+    final id = const Uuid().v4();
+    await config.ensureProjectDirs(project: project);
+    await _place(from.chatDir(chatId), config.chatDir(id, project: project));
+    final workspace = from.workspaceDir(chatId);
+    if (Directory(workspace).existsSync()) {
+      await _place(workspace, config.workspaceDir(id, project: project));
+    }
+    _projects[id] = project;
+    await saveState(
+      state.copyWith(
+        id: id,
+        project: project,
+        imported: true,
+        updatedAt: DateTime.now(),
+      ),
+    );
+    await lockResources(id);
+    return id;
+  }
+
+  /// [from] moved to [to], or copied where a rename cannot reach — another
+  /// filesystem, as the system's temp directory often is.
+  Future<void> _place(String from, String to) async {
+    await Directory(p.dirname(to)).create(recursive: true);
+    try {
+      await Directory(from).rename(to);
+    } on FileSystemException {
+      await Directory(to).create(recursive: true);
+      await _copyDir(from, to);
+    }
+  }
+
+  @override
   Future<Chat> load(String id) async {
     final state = await _readState(id, await projectOf(id));
     if (state == null) throw StateError("no chat $id");

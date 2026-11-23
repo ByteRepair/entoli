@@ -75,8 +75,9 @@ void main() {
 
   Future<AppConfig> unpacked(String? link) async {
     final dir = tempDir("share_unpacked_");
-    expect(await unpackShare(zipOf(link), dir.path), "c1");
-    return AppConfig.forDirectory(dir.path);
+    final unpacked = await unpackShare(zipOf(link), dir.path);
+    expect(unpacked?.chatId, "c1");
+    return unpacked!.config;
   }
 
   group("packing and unpacking", () {
@@ -174,7 +175,7 @@ void main() {
       var bytes = await share.base();
       for (final MapEntry(key: section, value: ids) in picked.entries) {
         for (final id in ids) {
-          bytes += await share.cost(section, id);
+          bytes += (await share.measure([(section, id)]))[(section, id)]!;
         }
       }
 
@@ -187,10 +188,10 @@ void main() {
       put(p.join(config.artifactDir("c1", "a1"), "index.html"), [1]);
       final picked = picks(workspace: {"big.bin"}, artifacts: {"a1"});
       final share = source();
-      final costs = {
+      final costs = await share.measure([
         for (final MapEntry(key: section, value: ids) in picked.entries)
-          for (final id in ids) (section, id): await share.cost(section, id),
-      };
+          for (final id in ids) (section, id),
+      ]);
 
       final fit = shareFit(
         base: await share.base(),
@@ -207,6 +208,24 @@ void main() {
         File(p.join(shared.workspaceDir("c1"), "big.bin")).existsSync(),
         isFalse,
       );
+    });
+
+    test("a piece too big for any link is not compressed to say so", () async {
+      await chat("c1");
+      // Zeros deflate as far as anything does, and still cannot fit.
+      put(p.join(config.workspaceDir("c1"), "zeros.bin"), Uint8List(64 << 20));
+      final share = source();
+
+      final costs = await share.measure([
+        (ShareSection.workspace, "zeros.bin"),
+      ]);
+      final fit = shareFit(
+        base: await share.base(),
+        picks: picks(workspace: {"zeros.bin"}),
+        cost: (section, id) => costs[(section, id)]!,
+      );
+
+      expect(fit.dropped, {ShareSection.workspace});
     });
 
     test("a pack past the cap is no link", () async {
@@ -227,11 +246,39 @@ void main() {
       final candidates = await source().candidates();
 
       expect(
-        {for (final f in candidates.workspace) f.path: f.suggested},
+        {
+          for (final f in candidates[ShareSection.workspace]!)
+            f.path: f.suggested,
+        },
         {"src/main.dart": true, ".env": false},
       );
-      expect(candidates.artifacts.single.path, "a1");
-      expect(candidates.artifacts.single.size, 3);
+      expect(candidates[ShareSection.artifacts]!.single.path, "a1");
+      expect(candidates[ShareSection.artifacts]!.single.size, 3);
+    });
+
+    test("list an ignored folder as one unticked line", () async {
+      await chat("c1");
+      put(p.join(config.workspaceDir("c1"), "app/node_modules/x/a.js"), [1]);
+      put(p.join(config.workspaceDir("c1"), "app/main.js"), [1]);
+
+      final workspace = (await source().candidates())[ShareSection.workspace]!;
+
+      expect(
+        {for (final f in workspace) f.path: (f.suggested, f.folder)},
+        {"app/node_modules": (false, true), "app/main.js": (true, false)},
+      );
+    });
+
+    test("a ticked folder carries everything under it", () async {
+      await chat("c1");
+      put(p.join(config.workspaceDir("c1"), ".git/HEAD"), utf8.encode("ref"));
+
+      final shared = await unpacked(await pack(picks(workspace: {".git"})));
+
+      expect(
+        File(p.join(shared.workspaceDir("c1"), ".git/HEAD")).readAsStringSync(),
+        "ref",
+      );
     });
 
     test("are the chat's attachments, each ticked", () async {
@@ -240,9 +287,9 @@ void main() {
 
       final candidates = await source().candidates();
 
-      expect(candidates.attachments.single.path, "photo.png");
-      expect(candidates.attachments.single.size, 2);
-      expect(candidates.attachments.single.suggested, isTrue);
+      expect(candidates[ShareSection.attachments]!.single.path, "photo.png");
+      expect(candidates[ShareSection.attachments]!.single.size, 2);
+      expect(candidates[ShareSection.attachments]!.single.suggested, isTrue);
     });
   });
 
@@ -292,7 +339,7 @@ void main() {
         "projects/default/chats/c2/conv.jsonl": [],
       });
 
-      expect(await unpackShare(shared, dir.path), "c1");
+      expect((await unpackShare(shared, dir.path))?.chatId, "c1");
       expect(File(p.join(dir.path, "settings.json")).existsSync(), isFalse);
       expect(
         Directory(p.join(dir.path, "projects/default/chats/c2")).existsSync(),
@@ -310,7 +357,11 @@ void main() {
         final link = await pack(picks(workspace: {"notes.md"}));
         final into = tempConfig();
 
-        final id = await importShare(zipOf(link), into, project: "work");
+        final id = await importShare(
+          zipOf(link),
+          FileChatStore(into),
+          project: "work",
+        );
 
         expect(id, isNot("c1"));
         final imported = await FileChatStore(into).load(id!);
@@ -331,8 +382,8 @@ void main() {
       await chat("c1");
       final zip = zipOf(await pack(picks()));
 
-      final first = await importShare(zip, config);
-      final second = await importShare(zip, config);
+      final first = await importShare(zip, store);
+      final second = await importShare(zip, store);
 
       expect({first, second, "c1"}, hasLength(3));
     });
