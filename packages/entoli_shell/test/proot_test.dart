@@ -2,7 +2,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:entoli_shell/proot.dart";
 import "package:entoli_core/model/file_tools.dart";
 import "package:entoli_core/model/rootfs.dart";
-import "package:entoli_core/model/shell.dart";
+import "package:entoli_shell/shell_driver.dart";
 
 /// What proot is asked to do is the whole of what this feature does, and it is
 /// the one part of it that can be pinned on a machine with no Android on it.

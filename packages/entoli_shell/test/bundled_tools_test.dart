@@ -3,7 +3,7 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 import "package:entoli_shell/bundled_tools.dart";
-import "package:entoli_core/model/shell.dart";
+import "package:entoli_shell/shell_driver.dart";
 
 void main() {
   // Laying proot out asks Android for the network's resolvers, and a method

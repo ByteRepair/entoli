@@ -12,6 +12,7 @@ import "package:entoli_core/model/sandbox_denials.dart";
 import "package:entoli_core/model/shell.dart";
 
 import "sandbox_grants.dart" show MachineSandboxFolders;
+import "shell_driver.dart";
 
 const _appImageVars = {"APPIMAGE", "APPDIR", "ARGV0", "OWD"};
 

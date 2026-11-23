@@ -2,7 +2,7 @@ import "dart:io";
 
 import "package:flutter/services.dart";
 import "package:path/path.dart" as p;
-import "package:entoli_core/model/shell.dart";
+import "shell_driver.dart";
 
 /// The tools Entoli ships for Android, where the system has a shell but almost
 /// nothing to run in it. Today that is proot, and so a whole Linux rather than

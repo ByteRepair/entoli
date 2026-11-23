@@ -3,8 +3,10 @@
 `entoli_shell` is where commands run: this machine's shell under Landlock or
 Seatbelt, the downloaded Linux under proot, the iSH emulator on iOS, the tools
 the APK ships, and the read-only modes and tree deletes they need. It implements
-the core's `Shell`, `ShellDriver`, `SandboxHelper`, `SandboxFolders` and
-`RootfsStore`, and the CLI providers' `CliGuest`, the place their program runs.
+the core's `Shell`, `SandboxHelper`, `SandboxFolders` and `RootfsStore`, and
+the CLI providers' `CliGuest`, the place their program runs. What a command
+runs under — `ShellDriver`, `Toolset` and `Proot`, in `shell_driver.dart` — is
+its own, since nothing in the core asks for one.
 `entoli_shell.dart` is the one entry point: `platformShell`, `platformDriver`,
 `cliGuestOf`, `openRootfsStore` and the rest, each a function of what the app
 holds (settings, the data and cache directories, the download). The app binds

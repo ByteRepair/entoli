@@ -8,6 +8,7 @@ import "package:entoli_shell/sandbox_grants.dart" show systemTemps;
 import "package:entoli_shell/landlock.dart";
 import "package:entoli_shell/seatbelt.dart";
 import "package:entoli_core/model/shell.dart";
+import "package:entoli_shell/shell_driver.dart";
 
 List<String> _hostCommand(
   String _,

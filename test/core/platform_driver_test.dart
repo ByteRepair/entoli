@@ -9,7 +9,7 @@ import "package:agent_chat/core/platform/host.dart"
     show byteRepairBinDir, platformDriver, setupComplete;
 import "package:entoli_core/model/builtin_project.dart";
 import "package:entoli_core/model/models.dart" show CompletionKind;
-import "package:entoli_core/model/shell.dart";
+import "package:entoli_shell/entoli_shell.dart" show Proot, ShellDriver;
 
 import "../fakes.dart";
 import "../harness.dart";

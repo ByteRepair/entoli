@@ -24,6 +24,7 @@ import "landlock.dart";
 import "local_shell.dart";
 import "proot.dart";
 import "seatbelt.dart";
+import "shell_driver.dart";
 import "tree_ops.dart";
 
 export "bundled_tools.dart" show BundledTools;
@@ -31,6 +32,7 @@ export "cli_guest.dart";
 export "file_modes.dart" show makeExecutable;
 export "local_shell.dart" show LocalShell, environmentWithoutAppImage;
 export "sandbox_grants.dart" show MachineSandboxFolders;
+export "shell_driver.dart";
 export "tree_ops.dart" show removeTree;
 
 /// The shell commands run in: the emulator on iOS, this machine or the

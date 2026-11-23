@@ -12,7 +12,6 @@ import "package:entoli_core/model/prompt_library.dart";
 import "package:entoli_core/model/trigger_manager.dart"
     show TriggerRegistryFactory;
 import "package:entoli_core/model/rootfs_store.dart";
-import "package:entoli_core/model/shell.dart";
 import "package:entoli_core/model/config.dart";
 import "package:entoli_core/agent/builtin_agent.dart";
 import "package:entoli_core/agent/builtin_backend.dart";
@@ -23,6 +22,7 @@ import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:entoli_core/agent/llm/llm_registry.dart";
 import "package:entoli_core/store/prompts/prompt_sources.dart";
 import "package:entoli_core/agent/builtin_options.dart";
+import "package:entoli_shell/entoli_shell.dart" show Toolset;
 
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../data/local/local_engine.dart";
