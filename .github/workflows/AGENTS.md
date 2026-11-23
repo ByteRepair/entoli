@@ -383,9 +383,9 @@ so the id uploaded under cannot drift from the id built with.
 `share-viewer.yml` builds `packages/entoli_share_viewer` and deploys it to
 GitHub Pages at `share.entoli.byterepair.io`, on every published release and
 by hand. Per release because the viewer is what migrates a link: the newest
-build reads every older one. The site is the build plus `CNAME`, `.nojekyll`
-(Jekyll would drop `.well-known/`) and the two association files the phones
-verify their claim on the host against:
+build reads every older one. An Actions deploy serves the files as they are,
+with no Jekyll, so `.well-known/` arrives whole; the site is the build plus the
+two association files the phones verify their claim on the host against:
 
 - `.well-known/apple-app-site-association`, from the viewer's `web/`: the
   root with a fragment, for team `F9K3SJ2FD4`.
@@ -395,12 +395,17 @@ verify their claim on the host against:
   the build signs with, since Play re-signs what it ships. Unset, the job
   warns and Android opens links in the browser.
 
-Setup, once: a `CNAME` record from `share.entoli.byterepair.io` to
-`byterepair.github.io`, Pages on with GitHub Actions as its source
-(`gh api -X POST repos/ByteRepair/entoli/pages -f build_type=workflow`),
-Enforce HTTPS once the certificate is issued, and the variable
-(`gh variable set ANDROID_SIGNING_SHA256`). Pages serves the extensionless
-association file as `application/octet-stream` rather than the
+Setup, once: a `CNAME` record at the DNS host (Epik) from
+`share.entoli.byterepair.io` to `byterepair.github.io.`; Pages on with GitHub
+Actions as its source (`gh api -X POST repos/ByteRepair/entoli/pages -f
+build_type=workflow`); the custom domain set on Pages, since an Actions deploy
+ignores a `CNAME` file (`gh api -X PUT repos/ByteRepair/entoli/pages -f
+cname=share.entoli.byterepair.io`); `byterepair.io` verified for the
+organization, its `_github-pages-challenge-ByteRepair` TXT record at Epik, so no
+other account can serve Pages under it; Enforce HTTPS once the certificate is
+issued; and the variable (`gh variable set ANDROID_SIGNING_SHA256`). Pages
+serves the extensionless association file as `application/octet-stream`
+rather than the
 `application/json` Apple asks for; where iOS will not take it, the host needs
 a proxy in front that sets the type.
 
