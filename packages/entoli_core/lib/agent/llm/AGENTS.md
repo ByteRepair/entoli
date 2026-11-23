@@ -62,7 +62,7 @@ know, so the field comes from something explicit and never from a model's name:
 
 Its compat surface has no audio endpoints, so speech and transcription are
 native `generateContent` calls in `GeminiClient` too — see "A provider's
-models" in `lib/data/voice/AGENTS.md`.
+models" in `packages/entoli_voice/lib/AGENTS.md`.
 
 Google retires a model for new accounts while its own list and models.dev
 still name it, so nothing says in advance which are gone: a Gemini 404 reads

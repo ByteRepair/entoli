@@ -76,8 +76,8 @@ named in a cross-reference is findable from this list.
 - `packages/entoli_share_viewer/AGENTS.md` — The shared-chat viewer: the web
   page a share link opens where the app is not installed, the app's code over
   an in-memory disk
-- `lib/data/voice/AGENTS.md` — Voice mode, What listens and what speaks, The
-  Android system engines, Which language it is asked in, Ending the utterance,
+- `packages/entoli_voice/lib/AGENTS.md` — Voice mode, What listens and what
+  speaks, The Android system engines, Which language it is asked in, Ending the utterance,
   What counts as being spoken to, One listener, two engines, Mute is the user,
   not the conversation, Per side, not per session, The Kotlin, Where the models
   live, Hearing and speaking
