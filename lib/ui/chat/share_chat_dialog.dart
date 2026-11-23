@@ -10,6 +10,7 @@ import "../../core/formatting.dart" show formatSize;
 import "../../core/log.dart";
 import "../../data/chat_share.dart" show ShareCandidates, ShareFile;
 import "../../domain/chat_share.dart";
+import "../../domain/chat_store.dart" show attachmentFilename;
 import "../../domain/models.dart";
 import "../widgets/dialogs.dart" show copyToClipboard, notify, say;
 import "../widgets/nav_drawer.dart" show compactWidth;
@@ -43,6 +44,7 @@ Future<void> showShareChat(
   final dropped = [
     if (pack!.droppedWorkspace) "the workspace files",
     if (pack.droppedArtifacts) "the artifacts",
+    if (pack.droppedAttachments) "the attachments",
   ];
   if (dropped.isNotEmpty) {
     notify(context, "The link left out ${dropped.join(" and ")} to fit.");
@@ -76,19 +78,21 @@ class ShareChatDialog extends ConsumerStatefulWidget {
   ConsumerState<ShareChatDialog> createState() => _ShareChatDialogState();
 }
 
+/// The dialog's sections, in the order they are listed.
+enum _Section { attachments, artifacts, workspace }
+
 class _Row {
-  const _Row(this.file, {required this.artifact, required this.label});
+  const _Row(this.file, {required this.section, required this.label});
 
   final ShareFile file;
-  final bool artifact;
+  final _Section section;
   final String label;
 }
 
 class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
   final _search = TextEditingController();
   List<_Row>? _rows;
-  final Set<String> _workspace = {};
-  final Set<String> _artifacts = {};
+  final _picked = {for (final section in _Section.values) section: <String>{}};
   int _active = 0;
   bool _packing = false;
   String? _error;
@@ -115,16 +119,23 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
     if (!mounted) return;
     setState(() {
       _rows = [
+        for (final file in candidates.attachments)
+          _Row(
+            file,
+            section: _Section.attachments,
+            label: attachmentFilename(file.path),
+          ),
         for (final file in candidates.artifacts)
-          _Row(file, artifact: true, label: titles[file.path] ?? file.path),
+          _Row(
+            file,
+            section: _Section.artifacts,
+            label: titles[file.path] ?? file.path,
+          ),
         for (final file in candidates.workspace)
-          _Row(file, artifact: false, label: file.path),
+          _Row(file, section: _Section.workspace, label: file.path),
       ];
-      for (final file in candidates.artifacts) {
-        if (file.suggested) _artifacts.add(file.path);
-      }
-      for (final file in candidates.workspace) {
-        if (file.suggested) _workspace.add(file.path);
+      for (final row in _rows!) {
+        if (row.file.suggested) _setOf(row).add(row.file.path);
       }
     });
   }
@@ -135,7 +146,7 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
     super.dispose();
   }
 
-  Set<String> _setOf(_Row row) => row.artifact ? _artifacts : _workspace;
+  Set<String> _setOf(_Row row) => _picked[row.section]!;
 
   void _toggle(_Row row) => setState(() {
     final set = _setOf(row);
@@ -161,7 +172,12 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
     try {
       pack = await ref
           .read(chatSharesProvider)
-          .pack(widget.chat, workspace: _workspace, artifacts: _artifacts);
+          .pack(
+            widget.chat,
+            attachments: _picked[_Section.attachments]!,
+            workspace: _picked[_Section.workspace]!,
+            artifacts: _picked[_Section.artifacts]!,
+          );
     } catch (e) {
       logFailure("share", "packing a chat failed", e);
       if (mounted) {
@@ -196,8 +212,11 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
     final active = shown.isEmpty ? 0 : _active.clamp(0, shown.length - 1);
     final theme = Theme.of(context);
     final rows = _rows;
-    final artifacts = shown.where((r) => r.artifact).toList();
-    final workspace = shown.where((r) => !r.artifact).toList();
+    List<_Row> rowsIn(_Section section) =>
+        shown.where((r) => r.section == section).toList();
+    final attachments = rowsIn(_Section.attachments);
+    final artifacts = rowsIn(_Section.artifacts);
+    final workspace = rowsIn(_Section.workspace);
     final picked = [
       for (final row in rows ?? const <_Row>[])
         if (_setOf(row).contains(row.file.path)) row.file.size,
@@ -268,12 +287,17 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                         child: Text(
-                          "The conversation, its attachments and its "
-                          "sub-agents always go. Anyone with the link can "
-                          "read all of it.",
+                          "The conversation and its sub-agents always go. "
+                          "Anyone with the link can read all of it.",
                           style: theme.textTheme.bodySmall,
                         ),
                       ),
+                      if (attachments.isNotEmpty) ...[
+                        heading("Chat Attachments"),
+                        ...attachments.map(row),
+                        if (artifacts.isNotEmpty || workspace.isNotEmpty)
+                          const Divider(height: 24),
+                      ],
                       if (artifacts.isNotEmpty) ...[
                         heading("Artifacts"),
                         ...artifacts.map(row),
@@ -300,7 +324,8 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
                     _error ??
                         "${formatSize(picked)} of files picked. Past "
                             "${formatSize(shareLinkMaxLength)} of link, the "
-                            "workspace goes, then the artifacts.",
+                            "workspace goes, then the artifacts, then the "
+                            "attachments.",
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: _error == null ? null : theme.colorScheme.error,
                     ),

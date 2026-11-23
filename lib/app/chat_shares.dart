@@ -37,12 +37,14 @@ class ChatShares {
 
   Future<SharePack> pack(
     ChatState chat, {
+    required Set<String> attachments,
     required Set<String> workspace,
     required Set<String> artifacts,
   }) async => packShare(
     _ref.read(appConfigProvider),
     chat.id,
     project: await _ref.read(chatRepositoryProvider).projectOf(chat.id),
+    attachments: attachments,
     workspace: workspace,
     artifacts: artifacts,
   );

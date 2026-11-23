@@ -25,8 +25,11 @@ void main() {
     file.writeAsBytesSync(bytes);
   }
 
-  /// A chat with [text] said in it, `src/main.dart` and `.env` in its
-  /// workspace and one artifact titled "Report".
+  /// The resource `cat.jpeg` was saved as.
+  const cat = "96fa4649-c736-47b5-ac9f-d2f09cf2a4a4-cat.jpeg";
+
+  /// A chat with [text] said in it, `cat.jpeg` attached, `src/main.dart` and
+  /// `.env` in its workspace and one artifact titled "Report".
   Future<ChatState> written(WidgetTester tester, {String text = "hello"}) =>
       io(tester, () async {
         final chat = await app.seedChat(title: "shared");
@@ -56,6 +59,7 @@ void main() {
             ],
           ),
         );
+        put(p.join(app.config.resourcesDir(id), cat), [1, 2, 3]);
         put(p.join(app.config.workspaceDir(id), "src/main.dart"), [1, 2]);
         put(p.join(app.config.workspaceDir(id), ".env"), [1]);
         put(p.join(app.config.artifactDir(id, "a1"), "index.html"), [1]);
@@ -126,6 +130,18 @@ void main() {
     expect(ticked(tester, "src/main.dart"), isTrue);
   });
 
+  testWidgets("offers the attachments first, by the name they were sent as", (
+    tester,
+  ) async {
+    await open(tester, await written(tester));
+
+    expect(find.text("Chat Attachments"), findsOneWidget);
+    expect(ticked(tester, "cat.jpeg"), isTrue);
+    final top = tester.getTopLeft(find.text("cat.jpeg")).dy;
+    expect(top, lessThan(tester.getTopLeft(find.text("Artifacts")).dy));
+    expect(top, lessThan(tester.getTopLeft(find.text("Workspace")).dy));
+  });
+
   testWidgets("leaves a secret unticked and says why", (tester) async {
     await open(tester, await written(tester));
 
@@ -162,9 +178,23 @@ void main() {
     final workspace = "projects/default/workspace/chats/${chat.id}";
     expect(
       members(pack),
-      containsAll(["$workspace/src/main.dart", "$workspace/.env"]),
+      containsAll([
+        "$workspace/src/main.dart",
+        "$workspace/.env",
+        "projects/default/chats/${chat.id}/resources/$cat",
+      ]),
     );
     expect(members(pack).where((m) => m.contains("/artifacts/")), isEmpty);
+  });
+
+  testWidgets("an attachment unticked stays behind", (tester) async {
+    final closed = await open(tester, await written(tester));
+
+    await tester.tap(find.text("cat.jpeg"));
+    await tester.pump();
+    await share(tester);
+
+    expect(members(closed()!).where((m) => m.contains("/resources/")), isEmpty);
   });
 
   testWidgets("too long even bare says so and stays open", (tester) async {

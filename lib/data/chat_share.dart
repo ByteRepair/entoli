@@ -20,7 +20,14 @@ const _manifest = "share.json";
 
 /// What the share dialog offers to send besides the conversation.
 class ShareCandidates {
-  const ShareCandidates({required this.workspace, required this.artifacts});
+  const ShareCandidates({
+    required this.attachments,
+    required this.workspace,
+    required this.artifacts,
+  });
+
+  /// Every file attached to or made in the chat's messages, by resource name.
+  final List<ShareFile> attachments;
 
   /// Every file in the chat's workspace folder, by its path under it.
   final List<ShareFile> workspace;
@@ -47,6 +54,12 @@ Future<ShareCandidates> shareCandidates(
   final workspace = config.workspaceDir(chatId, project: project);
   final artifacts = config.artifactsDir(chatId, project: project);
   return ShareCandidates(
+    attachments: [
+      for (final (path, size) in _files(
+        config.resourcesDir(chatId, project: project),
+      ))
+        ShareFile(path, size, suggested: true),
+    ],
     workspace: [
       for (final (path, size) in _files(workspace))
         ShareFile(path, size, suggested: !isShareIgnored(path)),
@@ -65,40 +78,49 @@ Future<ShareCandidates> shareCandidates(
   );
 }
 
-/// The link carrying [chatId] with the [workspace] files and [artifacts]
-/// picked. Past [shareLinkMaxLength] the workspace goes, then the artifacts;
-/// what is left out is said on the result.
+/// The link carrying [chatId] with the [attachments], [workspace] files and
+/// [artifacts] picked. Past [shareLinkMaxLength] the workspace goes, then
+/// the artifacts, then the attachments; what is left out is said on the
+/// result.
 Future<SharePack> packShare(
   AppConfig config,
   String chatId, {
   String? project,
+  Set<String> attachments = const {},
   Set<String> workspace = const {},
   Set<String> artifacts = const {},
 }) async {
   final conversation = await _conversation(config, chatId, project);
+  final attached = _attachments(config, chatId, project, attachments);
   final files = _workspace(config, chatId, project, workspace);
   final published = _artifacts(config, chatId, project, artifacts);
   final tiers = [
-    (workspace: true, artifacts: true),
-    (workspace: false, artifacts: true),
-    (workspace: false, artifacts: false),
+    (workspace: true, artifacts: true, attachments: true),
+    (workspace: false, artifacts: true, attachments: true),
+    (workspace: false, artifacts: false, attachments: true),
+    (workspace: false, artifacts: false, attachments: false),
   ];
   var link = "";
+  int? tried;
   for (final tier in tiers) {
-    if (!tier.workspace && files.isEmpty) continue;
-    if (!tier.artifacts && published.isEmpty) continue;
-    final archive = Archive();
-    [
+    final members = [
       ...conversation,
+      if (tier.attachments) ...attached,
       if (tier.workspace) ...files,
       if (tier.artifacts) ...published,
-    ].forEach(archive.add);
+    ];
+    // A tier that leaves out nothing more than the last is the same zip.
+    if (members.length == tried) continue;
+    tried = members.length;
+    final archive = Archive();
+    members.forEach(archive.add);
     link = shareLinkOf(ZipEncoder().encodeBytes(archive, level: 9));
     if (link.length <= shareLinkMaxLength) {
       return SharePack(
         link,
         droppedWorkspace: !tier.workspace,
         droppedArtifacts: !tier.artifacts,
+        droppedAttachments: !tier.attachments,
       );
     }
   }
@@ -106,6 +128,7 @@ Future<SharePack> packShare(
     null,
     droppedWorkspace: files.isNotEmpty,
     droppedArtifacts: published.isNotEmpty,
+    droppedAttachments: attached.isNotEmpty,
     length: link.length,
   );
 }
@@ -144,11 +167,28 @@ Future<List<ArchiveFile>> _conversation(
       _member(shared.convFile(chatId)),
       File(config.convFile(chatId, project: project)).readAsBytesSync(),
     ),
-    for (final dir in ["resources", "subagents"])
-      for (final (path, _) in _files(p.join(from, dir)))
+    for (final (path, _) in _files(p.join(from, "subagents")))
+      ArchiveFile.bytes(
+        _member(p.join(into, "subagents", path)),
+        File(p.join(from, "subagents", path)).readAsBytesSync(),
+      ),
+  ];
+}
+
+List<ArchiveFile> _attachments(
+  AppConfig config,
+  String chatId,
+  String? project,
+  Set<String> picked,
+) {
+  final from = config.resourcesDir(chatId, project: project);
+  final into = AppConfig.forDirectory("").resourcesDir(chatId);
+  return [
+    for (final (path, _) in _files(from))
+      if (picked.contains(path))
         ArchiveFile.bytes(
-          _member(p.join(into, dir, path)),
-          File(p.join(from, dir, path)).readAsBytesSync(),
+          _member(p.join(into, path)),
+          File(p.join(from, path)).readAsBytesSync(),
         ),
   ];
 }

@@ -77,6 +77,7 @@ Future<Uint8List> _shared() async {
   final pack = await packShare(
     config,
     "c1",
+    attachments: {"photo.png"},
     workspace: {planFileName, "notes.md"},
   );
   return shareZipOf(Uri.parse(pack.link!).fragment)!;

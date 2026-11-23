@@ -47,20 +47,19 @@ class AttachmentChip extends ConsumerWidget {
     final source = this.source;
     // Only an image shows its bytes, so only an image is worth reading back.
     final isImage = mimeType.startsWith("image/");
-    final data =
-        bytes ??
-        (source == null || !isImage
-            ? null
-            : ref
-                  .watch(
-                    ref
-                        .read(transcriptHostProvider)
-                        .resource(source.chatId, source.resource),
-                  )
-                  .value);
+    final read = source == null || !isImage
+        ? null
+        : ref.watch(
+            ref
+                .read(transcriptHostProvider)
+                .resource(source.chatId, source.resource),
+          );
+    final data = bytes ?? read?.value;
+    // Read and not there: a chat shared without it, or a file since deleted.
+    final missing = read != null && !read.isLoading && read.value == null;
 
     return Tooltip(
-      message: filename,
+      message: missing ? "$filename is not here" : filename,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -88,6 +87,14 @@ class AttachmentChip extends ConsumerWidget {
                       fit: BoxFit.cover,
                     ),
                   )
+                : missing
+                ? Icon(
+                    Icons.block,
+                    size: size / 3,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  )
+                : isImage && read != null
+                ? null
                 : _name(theme),
           ),
           if (onRemove != null)

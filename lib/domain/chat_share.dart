@@ -18,12 +18,14 @@ class SharePack {
     this.link, {
     required this.droppedWorkspace,
     required this.droppedArtifacts,
+    required this.droppedAttachments,
     this.length,
   });
 
   final String? link;
   final bool droppedWorkspace;
   final bool droppedArtifacts;
+  final bool droppedAttachments;
 
   /// How long the shortest attempt came out, where none fitted.
   final int? length;

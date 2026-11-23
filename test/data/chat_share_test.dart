@@ -65,49 +65,48 @@ void main() {
   }
 
   group("packing and unpacking", () {
-    test(
-      "carries the conversation, what was attached and what was picked",
-      () async {
-        await chat("c1");
-        put(p.join(config.resourcesDir("c1"), "photo.png"), [1, 2, 3]);
-        put(
-          p.join(config.workspaceDir("c1"), "src/main.dart"),
-          utf8.encode("x"),
-        );
-        put(p.join(config.workspaceDir("c1"), "notes.md"), utf8.encode("y"));
-        put(p.join(config.artifactDir("c1", "a1"), "index.html"), [4]);
-        put(p.join(config.artifactDir("c1", "a2"), "index.html"), [5]);
+    test("carries the conversation and what was picked of each", () async {
+      await chat("c1");
+      put(p.join(config.resourcesDir("c1"), "photo.png"), [1, 2, 3]);
+      put(p.join(config.resourcesDir("c1"), "big.jpeg"), [9]);
+      put(p.join(config.workspaceDir("c1"), "src/main.dart"), utf8.encode("x"));
+      put(p.join(config.workspaceDir("c1"), "notes.md"), utf8.encode("y"));
+      put(p.join(config.artifactDir("c1", "a1"), "index.html"), [4]);
+      put(p.join(config.artifactDir("c1", "a2"), "index.html"), [5]);
 
-        final pack = await packShare(
-          config,
-          "c1",
-          workspace: {"src/main.dart"},
-          artifacts: {"a1"},
-        );
-        final shared = await unpacked(pack);
+      final pack = await packShare(
+        config,
+        "c1",
+        attachments: {"photo.png"},
+        workspace: {"src/main.dart"},
+        artifacts: {"a1"},
+      );
+      final shared = await unpacked(pack);
 
-        expect(pack.droppedWorkspace, isFalse);
-        expect(pack.droppedArtifacts, isFalse);
-        final loaded = await FileChatStore(shared).load("c1");
-        expect(loaded.messages.single.parts.single, isA<TextPart>());
-        expect(
-          File(
-            p.join(shared.resourcesDir("c1"), "photo.png"),
-          ).readAsBytesSync(),
-          [1, 2, 3],
-        );
-        expect(
-          File(p.join(shared.workspaceDir("c1"), "src/main.dart")).existsSync(),
-          isTrue,
-        );
-        expect(
-          File(p.join(shared.workspaceDir("c1"), "notes.md")).existsSync(),
-          isFalse,
-        );
-        expect(Directory(shared.artifactDir("c1", "a1")).existsSync(), isTrue);
-        expect(Directory(shared.artifactDir("c1", "a2")).existsSync(), isFalse);
-      },
-    );
+      expect(pack.droppedWorkspace, isFalse);
+      expect(pack.droppedArtifacts, isFalse);
+      expect(pack.droppedAttachments, isFalse);
+      final loaded = await FileChatStore(shared).load("c1");
+      expect(loaded.messages.single.parts.single, isA<TextPart>());
+      expect(
+        File(p.join(shared.resourcesDir("c1"), "photo.png")).readAsBytesSync(),
+        [1, 2, 3],
+      );
+      expect(
+        File(p.join(shared.resourcesDir("c1"), "big.jpeg")).existsSync(),
+        isFalse,
+      );
+      expect(
+        File(p.join(shared.workspaceDir("c1"), "src/main.dart")).existsSync(),
+        isTrue,
+      );
+      expect(
+        File(p.join(shared.workspaceDir("c1"), "notes.md")).existsSync(),
+        isFalse,
+      );
+      expect(Directory(shared.artifactDir("c1", "a1")).existsSync(), isTrue);
+      expect(Directory(shared.artifactDir("c1", "a2")).existsSync(), isFalse);
+    });
 
     test("carries the chat bare and marked imported", () async {
       await chat("c1");
@@ -177,7 +176,30 @@ void main() {
 
       expect(pack.droppedWorkspace, isTrue);
       expect(pack.droppedArtifacts, isTrue);
+      expect(pack.droppedAttachments, isFalse);
       expect(pack.link, isNotNull);
+    });
+
+    test("then the attachments", () async {
+      await chat("c1");
+      put(p.join(config.resourcesDir("c1"), "big.jpeg"), noise(200 * 1024));
+      put(p.join(config.artifactDir("c1", "a1"), "index.html"), [1]);
+
+      final pack = await packShare(
+        config,
+        "c1",
+        attachments: {"big.jpeg"},
+        artifacts: {"a1"},
+      );
+      final shared = await unpacked(pack);
+
+      expect(pack.droppedArtifacts, isTrue);
+      expect(pack.droppedAttachments, isTrue);
+      expect(File(shared.convFile("c1")).existsSync(), isTrue);
+      expect(
+        File(p.join(shared.resourcesDir("c1"), "big.jpeg")).existsSync(),
+        isFalse,
+      );
     });
 
     test("whose conversation alone is too long is no link", () async {
@@ -205,6 +227,17 @@ void main() {
       );
       expect(candidates.artifacts.single.path, "a1");
       expect(candidates.artifacts.single.size, 3);
+    });
+
+    test("are the chat's attachments, each ticked", () async {
+      await chat("c1");
+      put(p.join(config.resourcesDir("c1"), "photo.png"), [1, 2]);
+
+      final candidates = await shareCandidates(config, "c1");
+
+      expect(candidates.attachments.single.path, "photo.png");
+      expect(candidates.attachments.single.size, 2);
+      expect(candidates.attachments.single.suggested, isTrue);
     });
   });
 
