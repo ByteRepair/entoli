@@ -74,13 +74,11 @@ Future<Uint8List> _shared() async {
     utf8.encode("- [x] read the code\n- [ ] add parser\n"),
   );
   _put(p.join(config.workspaceDir("c1"), "notes.md"), utf8.encode("notes"));
-  final pack = await packShare(
-    config,
-    "c1",
-    attachments: {"photo.png"},
-    workspace: {planFileName, "notes.md"},
-  );
-  return shareZipOf(Uri.parse(pack.link!).fragment)!;
+  final link = await ChatShareSource(config, "c1").pack({
+    ShareSection.attachments: {"photo.png"},
+    ShareSection.workspace: {planFileName, "notes.md"},
+  });
+  return shareZipOf(Uri.parse(link!).fragment)!;
 }
 
 /// [listenable] once it has a value.

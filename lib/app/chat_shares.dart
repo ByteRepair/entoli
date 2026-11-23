@@ -4,7 +4,6 @@ import "dart:typed_data";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../data/chat_share.dart";
-import "../domain/chat_share.dart";
 import "../domain/models.dart";
 import "../domain/project.dart" show localProject;
 import "../providers.dart";
@@ -18,7 +17,8 @@ class ChatShares {
 
   final Ref _ref;
 
-  Future<ShareCandidates> candidates(ChatState chat) async => shareCandidates(
+  /// [chat] as something to share, wherever it is.
+  Future<ChatShareSource> source(ChatState chat) async => ChatShareSource(
     _ref.read(appConfigProvider),
     chat.id,
     project: await _ref.read(chatRepositoryProvider).projectOf(chat.id),
@@ -34,20 +34,6 @@ class ChatShares {
             artifactId: title,
     };
   }
-
-  Future<SharePack> pack(
-    ChatState chat, {
-    required Set<String> attachments,
-    required Set<String> workspace,
-    required Set<String> artifacts,
-  }) async => packShare(
-    _ref.read(appConfigProvider),
-    chat.id,
-    project: await _ref.read(chatRepositoryProvider).projectOf(chat.id),
-    attachments: attachments,
-    workspace: workspace,
-    artifacts: artifacts,
-  );
 
   /// [zip] as a new chat in the project on screen, or the default one where
   /// that is a paired device's, opened. Null where it is not a shared chat.

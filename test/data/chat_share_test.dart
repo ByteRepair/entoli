@@ -55,12 +55,27 @@ void main() {
     ]);
   }
 
-  Uint8List zipOf(SharePack pack) =>
-      shareZipOf(Uri.parse(pack.link!).fragment)!;
+  SharePicks picks({
+    Set<String> attachments = const {},
+    Set<String> workspace = const {},
+    Set<String> artifacts = const {},
+  }) => {
+    ShareSection.attachments: attachments,
+    ShareSection.workspace: workspace,
+    ShareSection.artifacts: artifacts,
+  };
 
-  Future<AppConfig> unpacked(SharePack pack) async {
+  ChatShareSource source({String? project}) =>
+      ChatShareSource(config, "c1", project: project);
+
+  Future<String?> pack(SharePicks picked, {String? project}) =>
+      source(project: project).pack(picked);
+
+  Uint8List zipOf(String? link) => shareZipOf(Uri.parse(link!).fragment)!;
+
+  Future<AppConfig> unpacked(String? link) async {
     final dir = tempDir("share_unpacked_");
-    expect(await unpackShare(zipOf(pack), dir.path), "c1");
+    expect(await unpackShare(zipOf(link), dir.path), "c1");
     return AppConfig.forDirectory(dir.path);
   }
 
@@ -74,18 +89,16 @@ void main() {
       put(p.join(config.artifactDir("c1", "a1"), "index.html"), [4]);
       put(p.join(config.artifactDir("c1", "a2"), "index.html"), [5]);
 
-      final pack = await packShare(
-        config,
-        "c1",
-        attachments: {"photo.png"},
-        workspace: {"src/main.dart"},
-        artifacts: {"a1"},
+      final shared = await unpacked(
+        await pack(
+          picks(
+            attachments: {"photo.png"},
+            workspace: {"src/main.dart"},
+            artifacts: {"a1"},
+          ),
+        ),
       );
-      final shared = await unpacked(pack);
 
-      expect(pack.droppedWorkspace, isFalse);
-      expect(pack.droppedArtifacts, isFalse);
-      expect(pack.droppedAttachments, isFalse);
       final loaded = await FileChatStore(shared).load("c1");
       expect(loaded.messages.single.parts.single, isA<TextPart>());
       expect(
@@ -111,7 +124,7 @@ void main() {
     test("carries the chat bare and marked imported", () async {
       await chat("c1");
 
-      final shared = await unpacked(await packShare(config, "c1"));
+      final shared = await unpacked(await pack(picks()));
       final state = (await FileChatStore(shared).loadState("c1"))!;
 
       expect(state.title, "Test chat c1");
@@ -123,9 +136,7 @@ void main() {
     test("reads a chat out of another project into the default one", () async {
       await chat("c1", project: "work");
 
-      final shared = await unpacked(
-        await packShare(config, "c1", project: "work"),
-      );
+      final shared = await unpacked(await pack(picks(), project: "work"));
 
       expect(File(shared.convFile("c1")).existsSync(), isTrue);
     });
@@ -133,7 +144,7 @@ void main() {
     test("stamps the unpacked directory at the end of the chain", () async {
       await chat("c1");
 
-      final shared = await unpacked(await packShare(config, "c1"));
+      final shared = await unpacked(await pack(picks()));
 
       expect(
         File(migrationStamp(shared.dataDir)).readAsStringSync(),
@@ -142,73 +153,67 @@ void main() {
     });
   });
 
-  group("a long link", () {
-    test("leaves the workspace out first", () async {
+  group("measuring", () {
+    test("the bare cost and each piece's add up to the zip exactly", () async {
+      await chat("c1", text: "hello " * 500);
+      put(p.join(config.resourcesDir("c1"), "photo.png"), noise(3000));
+      put(p.join(config.workspaceDir("c1"), "src/main.dart"), utf8.encode("x"));
+      put(
+        p.join(config.workspaceDir("c1"), "notes.md"),
+        utf8.encode("y" * 900),
+      );
+      put(p.join(config.artifactDir("c1", "a1"), "index.html"), [4, 5]);
+      put(p.join(config.artifactDir("c1", "a1"), "style.css"), [6]);
+      final picked = picks(
+        attachments: {"photo.png"},
+        workspace: {"src/main.dart", "notes.md"},
+        artifacts: {"a1"},
+      );
+      final share = source();
+
+      var bytes = await share.base();
+      for (final MapEntry(key: section, value: ids) in picked.entries) {
+        for (final id in ids) {
+          bytes += await share.cost(section, id);
+        }
+      }
+
+      expect(bytes, zipOf(await share.pack(picked)).length);
+    });
+
+    test("is what the fit leaves out by", () async {
       await chat("c1");
       put(p.join(config.workspaceDir("c1"), "big.bin"), noise(200 * 1024));
       put(p.join(config.artifactDir("c1", "a1"), "index.html"), [1]);
+      final picked = picks(workspace: {"big.bin"}, artifacts: {"a1"});
+      final share = source();
+      final costs = {
+        for (final MapEntry(key: section, value: ids) in picked.entries)
+          for (final id in ids) (section, id): await share.cost(section, id),
+      };
 
-      final pack = await packShare(
-        config,
-        "c1",
-        workspace: {"big.bin"},
-        artifacts: {"a1"},
+      final fit = shareFit(
+        base: await share.base(),
+        picks: picked,
+        cost: (section, id) => costs[(section, id)]!,
       );
-      final shared = await unpacked(pack);
+      final link = await share.pack(fit.kept(picked));
 
-      expect(pack.link!.length, lessThanOrEqualTo(shareLinkMaxLength));
-      expect(pack.droppedWorkspace, isTrue);
-      expect(pack.droppedArtifacts, isFalse);
+      expect(fit.dropped, {ShareSection.workspace});
+      expect(link!.length, fit.length);
+      final shared = await unpacked(link);
       expect(Directory(shared.artifactDir("c1", "a1")).existsSync(), isTrue);
-    });
-
-    test("then the artifacts", () async {
-      await chat("c1");
-      put(p.join(config.workspaceDir("c1"), "a.txt"), [1]);
-      put(p.join(config.artifactDir("c1", "a1"), "big.bin"), noise(200 * 1024));
-
-      final pack = await packShare(
-        config,
-        "c1",
-        workspace: {"a.txt"},
-        artifacts: {"a1"},
-      );
-
-      expect(pack.droppedWorkspace, isTrue);
-      expect(pack.droppedArtifacts, isTrue);
-      expect(pack.droppedAttachments, isFalse);
-      expect(pack.link, isNotNull);
-    });
-
-    test("then the attachments", () async {
-      await chat("c1");
-      put(p.join(config.resourcesDir("c1"), "big.jpeg"), noise(200 * 1024));
-      put(p.join(config.artifactDir("c1", "a1"), "index.html"), [1]);
-
-      final pack = await packShare(
-        config,
-        "c1",
-        attachments: {"big.jpeg"},
-        artifacts: {"a1"},
-      );
-      final shared = await unpacked(pack);
-
-      expect(pack.droppedArtifacts, isTrue);
-      expect(pack.droppedAttachments, isTrue);
-      expect(File(shared.convFile("c1")).existsSync(), isTrue);
       expect(
-        File(p.join(shared.resourcesDir("c1"), "big.jpeg")).existsSync(),
+        File(p.join(shared.workspaceDir("c1"), "big.bin")).existsSync(),
         isFalse,
       );
     });
 
-    test("whose conversation alone is too long is no link", () async {
-      await chat("c1", text: base64.encode(noise(200 * 1024)));
+    test("a pack past the cap is no link", () async {
+      await chat("c1");
+      put(p.join(config.resourcesDir("c1"), "big.jpeg"), noise(200 * 1024));
 
-      final pack = await packShare(config, "c1");
-
-      expect(pack.link, isNull);
-      expect(pack.length, greaterThan(shareLinkMaxLength));
+      expect(await pack(picks(attachments: {"big.jpeg"})), isNull);
     });
   });
 
@@ -219,7 +224,7 @@ void main() {
       put(p.join(config.workspaceDir("c1"), ".env"), [1]);
       put(p.join(config.artifactDir("c1", "a1"), "index.html"), [1, 2, 3]);
 
-      final candidates = await shareCandidates(config, "c1");
+      final candidates = await source().candidates();
 
       expect(
         {for (final f in candidates.workspace) f.path: f.suggested},
@@ -233,7 +238,7 @@ void main() {
       await chat("c1");
       put(p.join(config.resourcesDir("c1"), "photo.png"), [1, 2]);
 
-      final candidates = await shareCandidates(config, "c1");
+      final candidates = await source().candidates();
 
       expect(candidates.attachments.single.path, "photo.png");
       expect(candidates.attachments.single.size, 2);
@@ -302,10 +307,10 @@ void main() {
       () async {
         await chat("c1");
         put(p.join(config.workspaceDir("c1"), "notes.md"), utf8.encode("y"));
-        final pack = await packShare(config, "c1", workspace: {"notes.md"});
+        final link = await pack(picks(workspace: {"notes.md"}));
         final into = tempConfig();
 
-        final id = await importShare(zipOf(pack), into, project: "work");
+        final id = await importShare(zipOf(link), into, project: "work");
 
         expect(id, isNot("c1"));
         final imported = await FileChatStore(into).load(id!);
@@ -324,7 +329,7 @@ void main() {
 
     test("twice is two chats", () async {
       await chat("c1");
-      final zip = zipOf(await packShare(config, "c1"));
+      final zip = zipOf(await pack(picks()));
 
       final first = await importShare(zip, config);
       final second = await importShare(zip, config);

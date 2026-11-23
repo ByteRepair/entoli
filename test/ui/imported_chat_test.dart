@@ -8,6 +8,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/chat_share.dart";
+import "package:agent_chat/domain/chat_share.dart" show ShareSection;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
@@ -119,10 +120,12 @@ void main() {
     bool says(String text) => find.text(text).evaluate().isNotEmpty;
 
     Future<String> linkTo(WidgetTester tester, ChatState chat) async =>
-        (await io(
+        (await io<String?>(
           tester,
-          () => packShare(app.config, chat.id, workspace: {"a.txt"}),
-        )).link!;
+          () => ChatShareSource(app.config, chat.id).pack({
+            ShareSection.workspace: {"a.txt"},
+          }),
+        ))!;
 
     testWidgets("is a new imported chat, opened", (tester) async {
       final source = await written(tester);

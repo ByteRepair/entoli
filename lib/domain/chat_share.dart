@@ -11,30 +11,76 @@ const shareHost = "share.entoli.byterepair.io";
 /// megabyte shared by everything in flight, a character two bytes there.
 const shareLinkMaxLength = 128 * 1024;
 
-/// What Share made: the link, or null where even the conversation alone is
-/// past [shareLinkMaxLength], and which of the user's picks it left out.
-class SharePack {
-  const SharePack(
-    this.link, {
-    required this.droppedWorkspace,
-    required this.droppedArtifacts,
-    required this.droppedAttachments,
-    this.length,
-  });
+/// What a share can carry besides the conversation, in the order the share
+/// dialog lists them.
+enum ShareSection {
+  attachments,
+  artifacts,
+  workspace;
 
-  final String? link;
-  final bool droppedWorkspace;
-  final bool droppedArtifacts;
-  final bool droppedAttachments;
-
-  /// How long the shortest attempt came out, where none fitted.
-  final int? length;
+  /// The order sections are left out in when the link is too long: the
+  /// workspace first, the attachments — what the conversation shows — last.
+  static const dropOrder = [workspace, artifacts, attachments];
 }
+
+/// What the user ticked, by section: resource names, artifact ids, and paths
+/// under the workspace.
+typedef SharePicks = Map<ShareSection, Set<String>>;
+
+/// How a share with some picks comes out: how long its link is, and which
+/// sections are left out to bring it under [shareLinkMaxLength]. [fits] is
+/// false where even the conversation alone is too long.
+class ShareFit {
+  const ShareFit({required this.length, required this.dropped});
+
+  final int length;
+  final Set<ShareSection> dropped;
+
+  bool get fits => length <= shareLinkMaxLength;
+
+  /// [picks] without what this fit leaves out: what Share packs.
+  SharePicks kept(SharePicks picks) => {
+    for (final MapEntry(:key, :value) in picks.entries)
+      key: dropped.contains(key) ? const {} : value,
+  };
+}
+
+/// How [picks] fit, given what each costs in the zip. A zip compresses each
+/// member on its own, so the zip is [base] — the conversation, and the
+/// directory's end — plus each kept item's [cost], exactly. Whole sections
+/// go, in [ShareSection.dropOrder], until the link fits.
+ShareFit shareFit({
+  required int base,
+  required SharePicks picks,
+  required int Function(ShareSection section, String id) cost,
+}) {
+  int bytes(Set<ShareSection> dropped) =>
+      base +
+      [
+        for (final MapEntry(key: section, value: ids) in picks.entries)
+          if (!dropped.contains(section))
+            for (final id in ids) cost(section, id),
+      ].fold(0, (a, b) => a + b);
+  final dropped = <ShareSection>{};
+  var length = shareLinkLength(bytes(dropped));
+  for (final section in ShareSection.dropOrder) {
+    if (length <= shareLinkMaxLength) break;
+    if (picks[section]?.isEmpty ?? true) continue;
+    dropped.add(section);
+    length = shareLinkLength(bytes(dropped));
+  }
+  return ShareFit(length: length, dropped: dropped);
+}
+
+const _linkPrefix = "https://$shareHost/#";
 
 /// The link carrying [zip]: in the fragment, which a browser never sends to
 /// the server.
 String shareLinkOf(Uint8List zip) =>
-    "https://$shareHost/#${base64Url.encode(zip).replaceAll("=", "")}";
+    "$_linkPrefix${base64Url.encode(zip).replaceAll("=", "")}";
+
+/// How long [shareLinkOf] comes out for a zip of [bytes]: unpadded base64.
+int shareLinkLength(int bytes) => _linkPrefix.length + (bytes * 4 + 2) ~/ 3;
 
 /// The zip a share link carries, or null where it is cut short or not one:
 /// a chat app that truncates a long link hands over something that still

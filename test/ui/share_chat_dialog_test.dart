@@ -66,18 +66,35 @@ void main() {
         return chat.state;
       });
 
-  /// The dialog open over a page, and what it closed with once it has.
-  Future<SharePack? Function()> open(
-    WidgetTester tester,
-    ChatState chat,
-  ) async {
-    SharePack? closed;
+  /// Real rounds until [done]: listing and measuring are file I/O and an
+  /// isolate, which the fake clock does not advance.
+  Future<void> until(WidgetTester tester, bool Function() done) async {
+    for (var i = 0; i < 400 && !done(); i++) {
+      await io(
+        tester,
+        () => Future<void>.delayed(const Duration(milliseconds: 5)),
+      );
+      await tester.pump();
+    }
+    expect(done(), isTrue, reason: "never came to rest");
+  }
+
+  bool shows(Finder finder) => finder.evaluate().isNotEmpty;
+
+  bool measured() =>
+      shows(find.text("Workspace")) &&
+      !shows(find.textContaining("Measuring the link"));
+
+  /// The dialog open over a page and measured, and what it closed with once
+  /// it has.
+  Future<String? Function()> open(WidgetTester tester, ChatState chat) async {
+    String? closed;
     await app.pump(
       tester,
       Scaffold(
         body: Builder(
           builder: (context) => TextButton(
-            onPressed: () async => closed = await showDialog<SharePack>(
+            onPressed: () async => closed = await showDialog<String>(
               context: context,
               builder: (_) => Dialog(child: ShareChatDialog(chat: chat)),
             ),
@@ -87,33 +104,41 @@ void main() {
       ),
     );
     await tester.tap(find.text("open"));
-    await pumpUntil(tester, find.text("Workspace"));
-    await settleIo(tester);
+    await until(tester, measured);
     return () => closed;
   }
 
-  bool ticked(WidgetTester tester, String label) => tester
-      .widget<CheckboxListTile>(
+  CheckboxListTile tile(WidgetTester tester, String label) =>
+      tester.widget<CheckboxListTile>(
         find.ancestor(
           of: find.text(label),
           matching: find.byType(CheckboxListTile),
         ),
-      )
-      .value!;
+      );
+
+  bool? ticked(WidgetTester tester, String label) => tile(tester, label).value;
+
+  /// Whether [label] is drawn in the error colour: left out of the link.
+  bool red(WidgetTester tester, String label) {
+    final context = tester.element(find.text(label));
+    return tester.widget<Text>(find.text(label)).style?.color ==
+        Theme.of(context).colorScheme.error;
+  }
+
+  Future<void> tap(WidgetTester tester, String label) async {
+    await tester.tap(find.text(label));
+    await tester.pump();
+    await until(tester, measured);
+  }
 
   Future<void> share(WidgetTester tester) async {
     await tester.tap(find.text("Share"));
-    for (var i = 0; i < 200 && find.text("Share").evaluate().isNotEmpty; i++) {
-      await io(tester, () => Future<void>.delayed(Duration.zero));
-      await tester.pump();
-      if (find.textContaining("Too long").evaluate().isNotEmpty) break;
-    }
-    await settleIo(tester);
+    await until(tester, () => !shows(find.byType(ShareChatDialog)));
   }
 
-  Set<String> members(SharePack pack) => {
+  Set<String> members(String link) => {
     for (final file in ZipDecoder().decodeBytes(
-      shareZipOf(Uri.parse(pack.link!).fragment)!,
+      shareZipOf(Uri.parse(link).fragment)!,
     ))
       if (file.isFile) file.name,
   };
@@ -130,16 +155,40 @@ void main() {
     expect(ticked(tester, "src/main.dart"), isTrue);
   });
 
-  testWidgets("offers the attachments first, by the name they were sent as", (
+  testWidgets("offers every attachment at once, first, its list closed", (
     tester,
   ) async {
     await open(tester, await written(tester));
 
-    expect(find.text("Chat Attachments"), findsOneWidget);
-    expect(ticked(tester, "cat.jpeg"), isTrue);
-    final top = tester.getTopLeft(find.text("cat.jpeg")).dy;
+    expect(ticked(tester, "Chat Attachments"), isTrue);
+    expect(find.text("1 file, 3 B"), findsOneWidget);
+    expect(find.text("cat.jpeg"), findsNothing);
+    final top = tester.getTopLeft(find.text("Chat Attachments")).dy;
     expect(top, lessThan(tester.getTopLeft(find.text("Artifacts")).dy));
-    expect(top, lessThan(tester.getTopLeft(find.text("Workspace")).dy));
+
+    await tester.tap(find.byTooltip("Show attachments"));
+    await tester.pump();
+
+    expect(ticked(tester, "cat.jpeg"), isTrue);
+    expect(
+      tester.getTopLeft(find.text("cat.jpeg")).dy,
+      lessThan(tester.getTopLeft(find.text("Artifacts")).dy),
+    );
+  });
+
+  testWidgets("ticks and unticks every attachment from the one line", (
+    tester,
+  ) async {
+    await open(tester, await written(tester));
+    await tester.tap(find.byTooltip("Show attachments"));
+    await tester.pump();
+
+    await tap(tester, "Chat Attachments");
+    expect(ticked(tester, "cat.jpeg"), isFalse);
+    expect(ticked(tester, "Chat Attachments"), isFalse);
+
+    await tap(tester, "cat.jpeg");
+    expect(ticked(tester, "Chat Attachments"), isTrue);
   });
 
   testWidgets("leaves a secret unticked and says why", (tester) async {
@@ -149,7 +198,9 @@ void main() {
     expect(find.text("Secret or build file"), findsOneWidget);
   });
 
-  testWidgets("narrows to what the search matches", (tester) async {
+  testWidgets("narrows to what the search matches, attachments too", (
+    tester,
+  ) async {
     await open(tester, await written(tester));
 
     await tester.enterText(find.byType(TextField), "main");
@@ -158,6 +209,12 @@ void main() {
     expect(find.text("src/main.dart"), findsOneWidget);
     expect(find.text("Report"), findsNothing);
     expect(find.text(".env"), findsNothing);
+    expect(find.text("Chat Attachments"), findsNothing);
+
+    await tester.enterText(find.byType(TextField), "cat");
+    await tester.pump();
+
+    expect(find.text("cat.jpeg"), findsOneWidget);
 
     await tester.enterText(find.byType(TextField), "nothing like it");
     await tester.pump();
@@ -169,45 +226,96 @@ void main() {
     final chat = await written(tester);
     final closed = await open(tester, chat);
 
-    await tester.tap(find.text("Report"));
-    await tester.tap(find.text(".env"));
-    await tester.pump();
+    await tap(tester, "Report");
+    await tap(tester, ".env");
     await share(tester);
 
-    final pack = closed()!;
     final workspace = "projects/default/workspace/chats/${chat.id}";
+    final link = closed()!;
     expect(
-      members(pack),
+      members(link),
       containsAll([
         "$workspace/src/main.dart",
         "$workspace/.env",
         "projects/default/chats/${chat.id}/resources/$cat",
       ]),
     );
-    expect(members(pack).where((m) => m.contains("/artifacts/")), isEmpty);
+    expect(members(link).where((m) => m.contains("/artifacts/")), isEmpty);
   });
 
-  testWidgets("an attachment unticked stays behind", (tester) async {
+  testWidgets("unticked attachments stay behind", (tester) async {
     final closed = await open(tester, await written(tester));
 
-    await tester.tap(find.text("cat.jpeg"));
-    await tester.pump();
+    await tap(tester, "Chat Attachments");
     await share(tester);
 
     expect(members(closed()!).where((m) => m.contains("/resources/")), isEmpty);
   });
 
-  testWidgets("too long even bare says so and stays open", (tester) async {
+  group("past the cap", () {
+    /// [written] with a workspace file no zip makes smaller, too big for a
+    /// link.
+    Future<ChatState> heavy(WidgetTester tester) async {
+      final chat = await written(tester);
+      final random = Random(1);
+      put(p.join(app.config.workspaceDir(chat.id), "big.bin"), [
+        for (var i = 0; i < 200 * 1024; i++) random.nextInt(256),
+      ]);
+      return chat;
+    }
+
+    testWidgets("says in red what would be left out, before sharing", (
+      tester,
+    ) async {
+      await open(tester, await heavy(tester));
+
+      expect(red(tester, "big.bin"), isTrue);
+      expect(red(tester, "src/main.dart"), isTrue);
+      expect(red(tester, "Report"), isFalse);
+      expect(red(tester, "Chat Attachments"), isFalse);
+      expect(find.textContaining("what is in red is left out"), findsOneWidget);
+    });
+
+    testWidgets("updates as things are unticked", (tester) async {
+      await open(tester, await heavy(tester));
+
+      await tap(tester, "big.bin");
+
+      expect(red(tester, "src/main.dart"), isFalse);
+      expect(find.textContaining("what is in red"), findsNothing);
+      expect(find.textContaining("of link."), findsOneWidget);
+    });
+
+    testWidgets("shares without what is in red", (tester) async {
+      final chat = await heavy(tester);
+      final closed = await open(tester, chat);
+
+      await share(tester);
+
+      final link = closed()!;
+      expect(link.length, lessThanOrEqualTo(shareLinkMaxLength));
+      expect(members(link).where((m) => m.contains("/workspace/")), isEmpty);
+      expect(
+        members(link),
+        contains("projects/default/chats/${chat.id}/artifacts/a1/index.html"),
+      );
+    });
+  });
+
+  testWidgets("too long even bare says so and will not share", (tester) async {
     final random = Random(1);
     final noise = base64.encode([
       for (var i = 0; i < 200 * 1024; i++) random.nextInt(256),
     ]);
-    final closed = await open(tester, await written(tester, text: noise));
-
-    await share(tester);
+    await open(tester, await written(tester, text: noise));
 
     expect(find.textContaining("Too long to share as a link"), findsOneWidget);
-    expect(find.byType(ShareChatDialog), findsOneWidget);
-    expect(closed(), isNull);
+    final button = tester.widget<ButtonStyleButton>(
+      find.ancestor(
+        of: find.text("Share"),
+        matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+      ),
+    );
+    expect(button.onPressed, isNull);
   });
 }

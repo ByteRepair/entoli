@@ -3,6 +3,7 @@ import "dart:io";
 import "dart:typed_data";
 
 import "package:archive/archive.dart";
+import "package:flutter/foundation.dart" show compute;
 import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
 
@@ -46,191 +47,152 @@ class ShareFile {
   final bool suggested;
 }
 
-Future<ShareCandidates> shareCandidates(
-  AppConfig config,
-  String chatId, {
-  String? project,
-}) async {
-  final workspace = config.workspaceDir(chatId, project: project);
-  final artifacts = config.artifactsDir(chatId, project: project);
-  return ShareCandidates(
-    attachments: [
-      for (final (path, size) in _files(
-        config.resourcesDir(chatId, project: project),
-      ))
-        ShareFile(path, size, suggested: true),
-    ],
-    workspace: [
-      for (final (path, size) in _files(workspace))
-        ShareFile(path, size, suggested: !isShareIgnored(path)),
-    ],
-    artifacts: [
-      if (Directory(artifacts).existsSync())
-        for (final dir in Directory(
-          artifacts,
-        ).listSync().whereType<Directory>())
-          ShareFile(
-            p.basename(dir.path),
-            _files(dir.path).fold(0, (sum, f) => sum + f.$2),
-            suggested: true,
-          ),
-    ],
-  );
-}
+/// One chat as something to share: what it could carry, what each piece
+/// costs in the link, and the link itself for the pieces picked.
+class ChatShareSource {
+  ChatShareSource(this.config, this.chatId, {this.project});
 
-/// The link carrying [chatId] with the [attachments], [workspace] files and
-/// [artifacts] picked. Past [shareLinkMaxLength] the workspace goes, then
-/// the artifacts, then the attachments; what is left out is said on the
-/// result.
-Future<SharePack> packShare(
-  AppConfig config,
-  String chatId, {
-  String? project,
-  Set<String> attachments = const {},
-  Set<String> workspace = const {},
-  Set<String> artifacts = const {},
-}) async {
-  final conversation = await _conversation(config, chatId, project);
-  final attached = _attachments(config, chatId, project, attachments);
-  final files = _workspace(config, chatId, project, workspace);
-  final published = _artifacts(config, chatId, project, artifacts);
-  final tiers = [
-    (workspace: true, artifacts: true, attachments: true),
-    (workspace: false, artifacts: true, attachments: true),
-    (workspace: false, artifacts: false, attachments: true),
-    (workspace: false, artifacts: false, attachments: false),
-  ];
-  var link = "";
-  int? tried;
-  for (final tier in tiers) {
-    final members = [
-      ...conversation,
-      if (tier.attachments) ...attached,
-      if (tier.workspace) ...files,
-      if (tier.artifacts) ...published,
-    ];
-    // A tier that leaves out nothing more than the last is the same zip.
-    if (members.length == tried) continue;
-    tried = members.length;
-    final archive = Archive();
-    members.forEach(archive.add);
-    link = shareLinkOf(ZipEncoder().encodeBytes(archive, level: 9));
-    if (link.length <= shareLinkMaxLength) {
-      return SharePack(
-        link,
-        droppedWorkspace: !tier.workspace,
-        droppedArtifacts: !tier.artifacts,
-        droppedAttachments: !tier.attachments,
-      );
-    }
+  final AppConfig config;
+  final String chatId;
+  final String? project;
+
+  /// Where every member goes in the zip: a data directory of this chat
+  /// alone, in the default project.
+  static final _shared = AppConfig.forDirectory("");
+
+  Future<ShareCandidates> candidates() async {
+    final artifacts = config.artifactsDir(chatId, project: project);
+    return ShareCandidates(
+      attachments: [
+        for (final (path, size) in _files(_from(ShareSection.attachments)))
+          ShareFile(path, size, suggested: true),
+      ],
+      workspace: [
+        for (final (path, size) in _files(_from(ShareSection.workspace)))
+          ShareFile(path, size, suggested: !isShareIgnored(path)),
+      ],
+      artifacts: [
+        if (Directory(artifacts).existsSync())
+          for (final dir in Directory(
+            artifacts,
+          ).listSync().whereType<Directory>())
+            ShareFile(
+              p.basename(dir.path),
+              _files(dir.path).fold(0, (sum, f) => sum + f.$2),
+              suggested: true,
+            ),
+      ],
+    );
   }
-  return SharePack(
-    null,
-    droppedWorkspace: files.isNotEmpty,
-    droppedArtifacts: published.isNotEmpty,
-    droppedAttachments: attached.isNotEmpty,
-    length: link.length,
-  );
-}
 
-Future<List<ArchiveFile>> _conversation(
-  AppConfig config,
-  String chatId,
-  String? project,
-) async {
-  final shared = AppConfig.forDirectory("");
-  final from = config.chatDir(chatId, project: project);
-  final into = shared.chatDir(chatId);
-  final state = ChatState.fromJson(
-    jsonDecode(
-          File(config.stateFile(chatId, project: project)).readAsStringSync(),
-        )
-        as Map<String, dynamic>,
-  );
-  // Only what says what the chat is: its project, pin, TTL and settings are
-  // the sharer's, and `meta.json` names paths on their machine.
-  final bare = ChatState(
-    id: state.id,
-    title: state.title,
-    createdAt: state.createdAt,
-    updatedAt: state.updatedAt,
-    imported: true,
-  );
-  return [
-    ArchiveFile.string("version", migrations.last.version),
-    ArchiveFile.string(_manifest, jsonEncode({"chat": chatId})),
-    ArchiveFile.string(
-      _member(shared.stateFile(chatId)),
-      jsonEncode(bare.toJson()),
-    ),
-    ArchiveFile.bytes(
-      _member(shared.convFile(chatId)),
-      File(config.convFile(chatId, project: project)).readAsBytesSync(),
-    ),
-    for (final (path, _) in _files(p.join(from, "subagents")))
-      ArchiveFile.bytes(
-        _member(p.join(into, "subagents", path)),
-        File(p.join(from, "subagents", path)).readAsBytesSync(),
+  /// What the zip costs with nothing picked: the conversation, and the
+  /// directory's end record. See [shareFit].
+  Future<int> base() async =>
+      await compute(_cost, _conversation()) + _endRecord;
+
+  /// What [id] in [section] adds to the zip, in bytes.
+  Future<int> cost(ShareSection section, String id) =>
+      compute(_cost, _members(section, id));
+
+  /// The link carrying the conversation and [picks], or null where it is
+  /// past [shareLinkMaxLength]: the dialog decides what is left out, from
+  /// [shareFit], before anything is packed.
+  Future<String?> pack(SharePicks picks) async {
+    final entries = [
+      ..._conversation(),
+      for (final MapEntry(key: section, value: ids) in picks.entries)
+        for (final id in ids) ..._members(section, id),
+    ];
+    final link = shareLinkOf(await compute(_zip, entries));
+    return link.length <= shareLinkMaxLength ? link : null;
+  }
+
+  String _from(ShareSection section) => switch (section) {
+    ShareSection.attachments => config.resourcesDir(chatId, project: project),
+    ShareSection.workspace => config.workspaceDir(chatId, project: project),
+    ShareSection.artifacts => config.artifactsDir(chatId, project: project),
+  };
+
+  String _into(ShareSection section) => switch (section) {
+    ShareSection.attachments => _shared.resourcesDir(chatId),
+    ShareSection.workspace => _shared.workspaceDir(chatId),
+    ShareSection.artifacts => _shared.artifactsDir(chatId),
+  };
+
+  /// An attachment and a workspace file are one file; an artifact is its
+  /// directory.
+  List<_Entry> _members(ShareSection section, String id) {
+    final from = p.join(_from(section), id);
+    final into = p.join(_into(section), id);
+    if (section != ShareSection.artifacts) {
+      return File(from).existsSync() ? [_read(_member(into), from)] : const [];
+    }
+    return [
+      for (final (path, _) in _files(from))
+        _read(_member(p.join(into, path)), p.join(from, path)),
+    ];
+  }
+
+  List<_Entry> _conversation() {
+    final from = config.chatDir(chatId, project: project);
+    final into = _shared.chatDir(chatId);
+    final state = ChatState.fromJson(
+      jsonDecode(
+            File(config.stateFile(chatId, project: project)).readAsStringSync(),
+          )
+          as Map<String, dynamic>,
+    );
+    // Only what says what the chat is: its project, pin, TTL and settings
+    // are the sharer's, and `meta.json` names paths on their machine.
+    final bare = ChatState(
+      id: state.id,
+      title: state.title,
+      createdAt: state.createdAt,
+      updatedAt: state.updatedAt,
+      imported: true,
+    );
+    _Entry text(String name, String text) =>
+        (name: name, bytes: utf8.encode(text));
+    return [
+      text("version", migrations.last.version),
+      text(_manifest, jsonEncode({"chat": chatId})),
+      text(_member(_shared.stateFile(chatId)), jsonEncode(bare.toJson())),
+      _read(
+        _member(_shared.convFile(chatId)),
+        config.convFile(chatId, project: project),
       ),
-  ];
+      for (final (path, _) in _files(p.join(from, "subagents")))
+        _read(
+          _member(p.join(into, "subagents", path)),
+          p.join(from, "subagents", path),
+        ),
+    ];
+  }
 }
 
-List<ArchiveFile> _attachments(
-  AppConfig config,
-  String chatId,
-  String? project,
-  Set<String> picked,
-) {
-  final from = config.resourcesDir(chatId, project: project);
-  final into = AppConfig.forDirectory("").resourcesDir(chatId);
-  return [
-    for (final (path, _) in _files(from))
-      if (picked.contains(path))
-        ArchiveFile.bytes(
-          _member(p.join(into, path)),
-          File(p.join(from, path)).readAsBytesSync(),
-        ),
-  ];
+/// A zip member, read. The files are read here and only the compressing is
+/// handed to [compute]'s isolate, which has none of this one's `IOOverrides`
+/// — the viewer's in-memory disk among them.
+typedef _Entry = ({String name, Uint8List bytes});
+
+_Entry _read(String name, String path) =>
+    (name: name, bytes: File(path).readAsBytesSync());
+
+/// The end-of-central-directory record every zip closes with, no comment.
+const _endRecord = 22;
+
+Uint8List _zip(List<_Entry> entries) {
+  final archive = Archive();
+  for (final entry in entries) {
+    archive.add(ArchiveFile.bytes(entry.name, entry.bytes));
+  }
+  return ZipEncoder().encodeBytes(archive, level: 9);
 }
 
-List<ArchiveFile> _workspace(
-  AppConfig config,
-  String chatId,
-  String? project,
-  Set<String> picked,
-) {
-  final from = config.workspaceDir(chatId, project: project);
-  final into = AppConfig.forDirectory("").workspaceDir(chatId);
-  return [
-    for (final (path, _) in _files(from))
-      if (picked.contains(path))
-        ArchiveFile.bytes(
-          _member(p.join(into, path)),
-          File(p.join(from, path)).readAsBytesSync(),
-        ),
-  ];
-}
-
-List<ArchiveFile> _artifacts(
-  AppConfig config,
-  String chatId,
-  String? project,
-  Set<String> picked,
-) {
-  final into = AppConfig.forDirectory("").artifactsDir(chatId);
-  return [
-    for (final id in picked)
-      for (final (path, _) in _files(
-        config.artifactDir(chatId, id, project: project),
-      ))
-        ArchiveFile.bytes(
-          _member(p.join(into, id, path)),
-          File(
-            p.join(config.artifactDir(chatId, id, project: project), path),
-          ).readAsBytesSync(),
-        ),
-  ];
-}
+/// What [entries] add to a zip: each zipped alone, less the end record
+/// they would otherwise share.
+int _cost(List<_Entry> entries) =>
+    entries.fold(0, (sum, entry) => sum + _zip([entry]).length - _endRecord);
 
 /// Every file under [dir], by its `/`-separated path under it, with its size.
 List<(String, int)> _files(String dir) {

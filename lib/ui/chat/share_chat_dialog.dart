@@ -8,11 +8,11 @@ import "package:share_plus/share_plus.dart";
 import "../../app/chat_shares.dart";
 import "../../core/formatting.dart" show formatSize;
 import "../../core/log.dart";
-import "../../data/chat_share.dart" show ShareCandidates, ShareFile;
+import "../../data/chat_share.dart" show ChatShareSource, ShareFile;
 import "../../domain/chat_share.dart";
 import "../../domain/chat_store.dart" show attachmentFilename;
 import "../../domain/models.dart";
-import "../widgets/dialogs.dart" show copyToClipboard, notify, say;
+import "../widgets/dialogs.dart" show copyToClipboard, say;
 import "../widgets/nav_drawer.dart" show compactWidth;
 import "../widgets/search_field.dart";
 
@@ -25,7 +25,7 @@ Future<void> showShareChat(
   Rect? origin,
 }) async {
   final compact = MediaQuery.sizeOf(context).width < compactWidth;
-  final pack = await showDialog<SharePack>(
+  final link = await showDialog<String>(
     context: context,
     builder: (_) => compact
         ? Dialog.fullscreen(child: ShareChatDialog(chat: chat, compact: true))
@@ -37,18 +37,8 @@ Future<void> showShareChat(
             ),
           ),
   );
-  final link = pack?.link;
   if (link == null || !context.mounted) return;
   await _shareLink(context, link, origin: origin);
-  if (!context.mounted) return;
-  final dropped = [
-    if (pack!.droppedWorkspace) "the workspace files",
-    if (pack.droppedArtifacts) "the artifacts",
-    if (pack.droppedAttachments) "the attachments",
-  ];
-  if (dropped.isNotEmpty) {
-    notify(context, "The link left out ${dropped.join(" and ")} to fit.");
-  }
 }
 
 /// The share sheet where the platform has one. Linux's share_plus opens a
@@ -68,6 +58,7 @@ Future<void> _shareLink(BuildContext context, String link, {Rect? origin}) {
       });
 }
 
+/// The dialog's choices, and what it pops with: the link to share.
 class ShareChatDialog extends ConsumerStatefulWidget {
   const ShareChatDialog({super.key, required this.chat, this.compact = false});
 
@@ -78,21 +69,46 @@ class ShareChatDialog extends ConsumerStatefulWidget {
   ConsumerState<ShareChatDialog> createState() => _ShareChatDialogState();
 }
 
-/// The dialog's sections, in the order they are listed.
-enum _Section { attachments, artifacts, workspace }
-
 class _Row {
   const _Row(this.file, {required this.section, required this.label});
 
   final ShareFile file;
-  final _Section section;
+  final ShareSection section;
   final String label;
+}
+
+/// One line of the list, the one the arrow keys move between: a file, or
+/// the line ticking every chat attachment at once.
+sealed class _Line {
+  const _Line();
+}
+
+final class _FileLine extends _Line {
+  const _FileLine(this.row);
+
+  final _Row row;
+}
+
+final class _AllAttachmentsLine extends _Line {
+  const _AllAttachmentsLine();
 }
 
 class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
   final _search = TextEditingController();
+  ChatShareSource? _source;
   List<_Row>? _rows;
-  final _picked = {for (final section in _Section.values) section: <String>{}};
+  final SharePicks _picked = {
+    for (final section in ShareSection.values) section: <String>{},
+  };
+
+  /// What the zip costs bare, and what each ticked piece adds: measured
+  /// once each, in the order they were ticked.
+  int? _base;
+  final Map<(ShareSection, String), int> _costs = {};
+  final List<(ShareSection, String)> _toMeasure = [];
+  bool _measuring = false;
+
+  bool _attachmentsOpen = false;
   int _active = 0;
   bool _packing = false;
   String? _error;
@@ -104,13 +120,36 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     final shares = ref.read(chatSharesProvider);
-    final ShareCandidates candidates;
-    final Map<String, String> titles;
+    final ChatShareSource source;
+    final List<_Row> rows;
     try {
-      candidates = await shares.candidates(widget.chat);
-      titles = await shares.artifactTitles(widget.chat);
+      source = await shares.source(widget.chat);
+      final candidates = await source.candidates();
+      final titles = await shares.artifactTitles(widget.chat);
+      rows = [
+        for (final file in candidates.attachments)
+          _Row(
+            file,
+            section: ShareSection.attachments,
+            label: attachmentFilename(file.path),
+          ),
+        for (final file in candidates.artifacts)
+          _Row(
+            file,
+            section: ShareSection.artifacts,
+            label: titles[file.path] ?? file.path,
+          ),
+        for (final file in candidates.workspace)
+          _Row(file, section: ShareSection.workspace, label: file.path),
+      ];
     } catch (e) {
       logFailure("share", "listing a chat's files failed", e);
       if (mounted) setState(() => _rows = const []);
@@ -118,66 +157,125 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
     }
     if (!mounted) return;
     setState(() {
-      _rows = [
-        for (final file in candidates.attachments)
-          _Row(
-            file,
-            section: _Section.attachments,
-            label: attachmentFilename(file.path),
-          ),
-        for (final file in candidates.artifacts)
-          _Row(
-            file,
-            section: _Section.artifacts,
-            label: titles[file.path] ?? file.path,
-          ),
-        for (final file in candidates.workspace)
-          _Row(file, section: _Section.workspace, label: file.path),
-      ];
-      for (final row in _rows!) {
-        if (row.file.suggested) _setOf(row).add(row.file.path);
+      _source = source;
+      _rows = rows;
+      for (final row in rows) {
+        if (row.file.suggested) _pick(row);
       }
     });
+    try {
+      final base = await source.base();
+      if (mounted) setState(() => _base = base);
+    } catch (e) {
+      logFailure("share", "measuring a chat failed", e);
+      if (mounted) setState(() => _error = "Could not read this chat: $e");
+    }
   }
 
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
+  bool _isPicked(_Row row) => _picked[row.section]!.contains(row.file.path);
+
+  /// Ticks [row], measuring it the first time it is ticked.
+  void _pick(_Row row) {
+    _picked[row.section]!.add(row.file.path);
+    final key = (row.section, row.file.path);
+    if (!_costs.containsKey(key) && !_toMeasure.contains(key)) {
+      _toMeasure.add(key);
+      _measureNext();
+    }
   }
 
-  Set<String> _setOf(_Row row) => _picked[row.section]!;
+  Future<void> _measureNext() async {
+    final source = _source;
+    if (_measuring || _toMeasure.isEmpty || source == null) return;
+    _measuring = true;
+    final (section, id) = _toMeasure.first;
+    try {
+      final cost = await source.cost(section, id);
+      if (!mounted) return;
+      setState(() => _costs[(section, id)] = cost);
+    } catch (e) {
+      logFailure("share", "measuring a shared file failed", e);
+      // Unmeasurable is unpackable: untick it rather than wait on it.
+      if (mounted) setState(() => _picked[section]!.remove(id));
+    } finally {
+      _toMeasure.remove((section, id));
+      _measuring = false;
+    }
+    _measureNext();
+  }
 
   void _toggle(_Row row) => setState(() {
-    final set = _setOf(row);
-    set.contains(row.file.path)
-        ? set.remove(row.file.path)
-        : set.add(row.file.path);
+    _isPicked(row) ? _picked[row.section]!.remove(row.file.path) : _pick(row);
   });
 
-  List<_Row> get _shown {
-    final query = _search.text.trim().toLowerCase();
-    final rows = _rows ?? const [];
-    return query.isEmpty
-        ? rows
-        : rows.where((r) => r.label.toLowerCase().contains(query)).toList();
+  List<_Row> _rowsIn(ShareSection section) =>
+      (_rows ?? const []).where((r) => r.section == section).toList();
+
+  /// Every attachment ticked, none, or some: the all-attachments line's box.
+  bool? get _attachmentsTicked {
+    final all = _rowsIn(ShareSection.attachments);
+    final ticked = all.where(_isPicked).length;
+    return ticked == 0 ? false : (ticked == all.length ? true : null);
   }
 
+  void _toggleAttachments() => setState(() {
+    final all = _rowsIn(ShareSection.attachments);
+    if (_attachmentsTicked ?? false) {
+      _picked[ShareSection.attachments]!.clear();
+    } else {
+      all.forEach(_pick);
+    }
+  });
+
+  /// How the ticks fit, or null while something ticked is still measured.
+  ShareFit? get _fit {
+    final base = _base;
+    if (base == null) return null;
+    for (final MapEntry(key: section, value: ids) in _picked.entries) {
+      if (ids.any((id) => !_costs.containsKey((section, id)))) return null;
+    }
+    return shareFit(
+      base: base,
+      picks: _picked,
+      cost: (section, id) => _costs[(section, id)]!,
+    );
+  }
+
+  String get _query => _search.text.trim().toLowerCase();
+
+  List<_Row> _matching(ShareSection section) => _rowsIn(section)
+      .where((r) => _query.isEmpty || r.label.toLowerCase().contains(_query))
+      .toList();
+
+  /// The lines on screen, in order. A search opens the attachments to show
+  /// which of them match.
+  List<_Line> get _lines {
+    final attachments = _matching(ShareSection.attachments);
+    return [
+      if (attachments.isNotEmpty) const _AllAttachmentsLine(),
+      if (_attachmentsOpen || _query.isNotEmpty)
+        for (final row in attachments) _FileLine(row),
+      for (final row in _matching(ShareSection.artifacts)) _FileLine(row),
+      for (final row in _matching(ShareSection.workspace)) _FileLine(row),
+    ];
+  }
+
+  void _toggleLine(_Line line) => switch (line) {
+    _FileLine(:final row) => _toggle(row),
+    _AllAttachmentsLine() => _toggleAttachments(),
+  };
+
   Future<void> _share() async {
+    final fit = _fit;
+    final source = _source;
+    if (fit == null || !fit.fits || source == null) return;
     setState(() {
       _packing = true;
       _error = null;
     });
-    final SharePack pack;
+    final String? link;
     try {
-      pack = await ref
-          .read(chatSharesProvider)
-          .pack(
-            widget.chat,
-            attachments: _picked[_Section.attachments]!,
-            workspace: _picked[_Section.workspace]!,
-            artifacts: _picked[_Section.artifacts]!,
-          );
+      link = await source.pack(fit.kept(_picked));
     } catch (e) {
       logFailure("share", "packing a chat failed", e);
       if (mounted) {
@@ -187,52 +285,95 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
       return;
     }
     if (!mounted) return;
-    if (pack.link == null) {
+    if (link == null) {
+      // The measure said it fits; a file that grew since says otherwise.
       setState(() {
         _packing = false;
-        _error =
-            "Too long to share as a link, even with no files: "
-            "${formatSize(pack.length ?? 0)} of "
-            "${formatSize(shareLinkMaxLength)}.";
+        _error = "The files changed while picking them. Try again.";
       });
       return;
     }
-    Navigator.of(context).pop(pack);
+    Navigator.of(context).pop(link);
   }
 
   void _move(int by) {
-    final count = _shown.length;
+    final count = _lines.length;
     if (count == 0) return;
     setState(() => _active = (_active + by).clamp(0, count - 1));
   }
 
   @override
   Widget build(BuildContext context) {
-    final shown = _shown;
-    final active = shown.isEmpty ? 0 : _active.clamp(0, shown.length - 1);
     final theme = Theme.of(context);
     final rows = _rows;
-    List<_Row> rowsIn(_Section section) =>
-        shown.where((r) => r.section == section).toList();
-    final attachments = rowsIn(_Section.attachments);
-    final artifacts = rowsIn(_Section.artifacts);
-    final workspace = rowsIn(_Section.workspace);
-    final picked = [
-      for (final row in rows ?? const <_Row>[])
-        if (_setOf(row).contains(row.file.path)) row.file.size,
-    ].fold(0, (a, b) => a + b);
-    Widget row(_Row r) {
-      final index = shown.indexOf(r);
+    final lines = _lines;
+    final active = lines.isEmpty ? 0 : _active.clamp(0, lines.length - 1);
+    final fit = _fit;
+    final dropped = fit?.dropped ?? const <ShareSection>{};
+    final ready = fit != null && fit.fits && !_packing;
+    final error = theme.colorScheme.error;
+
+    /// What a line looks like left out: everything in it red.
+    TextStyle? leftOut(ShareSection section, bool ticked, TextStyle? style) =>
+        ticked && dropped.contains(section)
+        ? (style ?? const TextStyle()).copyWith(color: error)
+        : style;
+
+    Widget fileLine(_Row r, {required bool selected}) {
+      final ticked = _isPicked(r);
       return CheckboxListTile(
         dense: true,
-        value: _setOf(r).contains(r.file.path),
+        value: ticked,
         onChanged: _packing ? null : (_) => _toggle(r),
-        selected: index == active,
+        selected: selected,
         controlAffinity: ListTileControlAffinity.leading,
-        title: Text(r.label, overflow: TextOverflow.ellipsis),
+        contentPadding: r.section == ShareSection.attachments
+            ? const EdgeInsets.only(left: 40, right: 16)
+            : null,
+        title: Text(
+          r.label,
+          overflow: TextOverflow.ellipsis,
+          style: leftOut(r.section, ticked, null),
+        ),
         secondary: Text(
           r.file.suggested ? formatSize(r.file.size) : "Secret or build file",
-          style: theme.textTheme.bodySmall,
+          style: leftOut(r.section, ticked, theme.textTheme.bodySmall),
+        ),
+      );
+    }
+
+    Widget allAttachmentsLine({required bool selected}) {
+      final all = _rowsIn(ShareSection.attachments);
+      final ticked = _attachmentsTicked;
+      final size = all.fold(0, (sum, r) => sum + r.file.size);
+      return CheckboxListTile(
+        dense: true,
+        tristate: true,
+        value: ticked,
+        onChanged: _packing ? null : (_) => _toggleAttachments(),
+        selected: selected,
+        controlAffinity: ListTileControlAffinity.leading,
+        title: Text(
+          "Chat Attachments",
+          style: leftOut(
+            ShareSection.attachments,
+            ticked ?? true,
+            theme.textTheme.titleSmall,
+          ),
+        ),
+        subtitle: Text(
+          "${all.length} ${all.length == 1 ? "file" : "files"}, "
+          "${formatSize(size)}",
+          style: leftOut(
+            ShareSection.attachments,
+            ticked ?? true,
+            theme.textTheme.bodySmall,
+          ),
+        ),
+        secondary: IconButton(
+          tooltip: _attachmentsOpen ? "Hide attachments" : "Show attachments",
+          icon: Icon(_attachmentsOpen ? Icons.expand_less : Icons.expand_more),
+          onPressed: () => setState(() => _attachmentsOpen = !_attachmentsOpen),
         ),
       );
     }
@@ -242,12 +383,51 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
       child: Text(text, style: theme.textTheme.labelLarge),
     );
 
+    Widget line(int index) {
+      final selected = index == active;
+      return switch (lines[index]) {
+        _FileLine(:final row) => fileLine(row, selected: selected),
+        _AllAttachmentsLine() => allAttachmentsLine(selected: selected),
+      };
+    }
+
+    final firstArtifact = lines.indexWhere(
+      (l) => l is _FileLine && l.row.section == ShareSection.artifacts,
+    );
+    final firstWorkspace = lines.indexWhere(
+      (l) => l is _FileLine && l.row.section == ShareSection.workspace,
+    );
+    final hasAttachments = lines.firstOrNull is _AllAttachmentsLine;
+    final firstFile = [firstArtifact, firstWorkspace]
+        .where((i) => i >= 0)
+        .fold<int?>(null, (a, b) => a == null || b < a ? b : a);
+
+    final (String status, bool alarming) = switch (fit) {
+      _ when _error != null => (_error!, true),
+      null => ("Measuring the link…", false),
+      ShareFit(fits: false) => (
+        "Too long to share as a link, even with no files: "
+            "${formatSize(fit.length)} of ${formatSize(shareLinkMaxLength)}.",
+        true,
+      ),
+      ShareFit(:final dropped) when dropped.isNotEmpty => (
+        "Too long for a link: what is in red is left out. Untick something "
+            "to keep the rest.",
+        true,
+      ),
+      _ => (
+        "${formatSize(fit.length)} of ${formatSize(shareLinkMaxLength)} "
+            "of link.",
+        false,
+      ),
+    };
+
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.arrowDown): () => _move(1),
         const SingleActivator(LogicalKeyboardKey.arrowUp): () => _move(-1),
         const SingleActivator(LogicalKeyboardKey.space, control: true): () {
-          if (shown.isNotEmpty) _toggle(shown[active]);
+          if (lines.isNotEmpty) _toggleLine(lines[active]);
         },
       },
       child: Column(
@@ -271,7 +451,7 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
                     autofocus: true,
                     textInputAction: TextInputAction.go,
                     onSubmitted: (_) {
-                      if (!_packing) _share();
+                      if (ready) _share();
                     },
                   ),
                 ),
@@ -292,21 +472,14 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
                           style: theme.textTheme.bodySmall,
                         ),
                       ),
-                      if (attachments.isNotEmpty) ...[
-                        heading("Chat Attachments"),
-                        ...attachments.map(row),
-                        if (artifacts.isNotEmpty || workspace.isNotEmpty)
+                      for (var i = 0; i < lines.length; i++) ...[
+                        if (hasAttachments && i == firstFile)
                           const Divider(height: 24),
+                        if (i == firstArtifact) heading("Artifacts"),
+                        if (i == firstWorkspace) heading("Workspace"),
+                        line(i),
                       ],
-                      if (artifacts.isNotEmpty) ...[
-                        heading("Artifacts"),
-                        ...artifacts.map(row),
-                      ],
-                      if (workspace.isNotEmpty) ...[
-                        heading("Workspace"),
-                        ...workspace.map(row),
-                      ],
-                      if (rows.isNotEmpty && shown.isEmpty)
+                      if (rows.isNotEmpty && lines.isEmpty)
                         const Padding(
                           padding: EdgeInsets.all(24),
                           child: Center(child: Text("No file matches")),
@@ -321,19 +494,15 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
               children: [
                 Expanded(
                   child: Text(
-                    _error ??
-                        "${formatSize(picked)} of files picked. Past "
-                            "${formatSize(shareLinkMaxLength)} of link, the "
-                            "workspace goes, then the artifacts, then the "
-                            "attachments.",
+                    status,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: _error == null ? null : theme.colorScheme.error,
+                      color: alarming ? error : null,
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 FilledButton.icon(
-                  onPressed: _packing || rows == null ? null : _share,
+                  onPressed: ready ? _share : null,
                   icon: _packing
                       ? const SizedBox.square(
                           dimension: 16,
