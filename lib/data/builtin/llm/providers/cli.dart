@@ -16,7 +16,7 @@ import "package:entoli_core/agent/llm/hosted_models.dart";
 import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:entoli_core/agent/llm/providers/provider.dart";
 
-import "../../../../core/tls.dart";
+import "../../../tls.dart";
 import "../../../download.dart";
 import "package:entoli_shell/entoli_shell.dart"
     show CliGuest, CliProcess, HostCliGuest, makeExecutable;

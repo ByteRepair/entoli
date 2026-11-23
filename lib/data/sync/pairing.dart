@@ -11,7 +11,7 @@ import "package:entoli_core/model/sync/peer_link.dart";
 import "package:entoli_core/model/sync/protocol.dart";
 import "package:entoli_core/model/sync/relay_signaling.dart";
 
-import "../../core/tls.dart";
+import "../tls.dart";
 import "package:entoli_core/model/sync/channel.dart";
 import "framing.dart";
 import "handshake.dart";

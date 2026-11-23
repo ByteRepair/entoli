@@ -78,7 +78,7 @@ trigger handling: `activeCompletionToken` has to keep agreeing with
 `ThinkingSlider` is a choice of how hard something thinks: a bar of points, the
 least thought on the left and the most on the right, the labels under them the
 caller's (`stops`, in order). The bar is a halftone of contour lines through a
-noise field warped by itself — `ValueNoise` in `core/noise.dart` — with more
+noise field warped by itself — `ValueNoise` in `noise.dart` — with more
 layers of noise and more lines the further right a dot is, so the left is a few
 slow curves and the right a dense web; it is lit up to the point picked. It
 moves for as long as it is on screen — it was once only while hovered and for a

@@ -167,7 +167,7 @@ flutter:
     # every handshake dies with "unable to get local issuer certificate" — a
     # fresh VM, an LTSC image, a box between updates. Where the system's trust
     # refuses on a certificate verify alone, the request verifies once against
-    # this; see lib/core/tls.dart. Copied from https://curl.se/ca/cacert.pem
+    # this; see lib/data/tls.dart. Copied from https://curl.se/ca/cacert.pem
     # (its header names its provenance and licence); refresh by re-copying and
     # committing.
     - path: assets/certs/cacert.pem

@@ -8,7 +8,7 @@ import "package:path/path.dart" as p;
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/app_update.dart";
 
-import "../tls.dart";
+import "../../data/tls.dart";
 import "../../data/download.dart" show latestReleaseTag;
 
 const _tag = "update";

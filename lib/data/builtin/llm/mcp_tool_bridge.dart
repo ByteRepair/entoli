@@ -5,7 +5,7 @@ import "dart:io";
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/agent/llm/llm_client.dart";
 
-import "../../../core/random_token.dart";
+import "../../random_token.dart";
 
 /// A tool call a harness made over [McpToolBridge], held open until Entoli's
 /// own loop has run the tool and [answer] hands back what it said.

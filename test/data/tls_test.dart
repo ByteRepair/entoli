@@ -8,7 +8,7 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 import "package:http/http.dart" as http;
-import "package:agent_chat/core/tls.dart";
+import "package:agent_chat/data/tls.dart";
 
 http.StreamedResponse _answered(String body) =>
     http.StreamedResponse(http.ByteStream.fromBytes([body.codeUnitAt(0)]), 200);

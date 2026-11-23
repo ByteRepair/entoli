@@ -69,7 +69,7 @@ import "../../data/local/linux_reminder_alarms.dart";
 import "../../data/local/macos_reminder_alarms.dart";
 import "../../data/browser/cdp_browser.dart";
 import "../../data/browser/helium.dart";
-import "../tls.dart" show tlsClient;
+import "../../data/tls.dart" show tlsClient;
 import "form_factor.dart" show isPhone;
 import "keyring_secret_store.dart";
 import "signaling_server.dart";

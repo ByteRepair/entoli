@@ -1,5 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/core/noise.dart";
+import "package:agent_chat/ui/widgets/noise.dart";
 
 void main() {
   test("the same seed is the same field, within 0 to 1 and smooth", () {

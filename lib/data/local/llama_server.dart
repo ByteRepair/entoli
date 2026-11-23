@@ -11,7 +11,7 @@ import "package:entoli_core/model/log.dart";
 import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:entoli_core/agent/llm/openai_client.dart";
 
-import "../../core/random_token.dart";
+import "../random_token.dart";
 import "local_instance.dart";
 
 /// What is bundled to run a model with: llama.cpp's server, and the directory

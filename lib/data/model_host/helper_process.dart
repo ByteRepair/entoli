@@ -3,7 +3,7 @@ import "dart:io";
 import "package:flutter/services.dart";
 import "package:path/path.dart" as p;
 
-import "../../core/random_token.dart";
+import "../random_token.dart";
 import "host_connection.dart";
 import "host_frame.dart";
 import "model_host_server.dart";

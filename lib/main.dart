@@ -41,7 +41,7 @@ import "core/platform/form_factor.dart" show isApple, isPhone;
 import "core/platform/clipboard_files.dart";
 import "core/platform/platform.dart" as platform;
 import "core/platform/system_palette.dart";
-import "core/tls.dart";
+import "data/tls.dart";
 import "data/backup.dart" show recoverRestore;
 import "data/builtin/llm/providers/cli.dart" show CliProvider;
 import "data/local/mlx_engine.dart" show mlxChannel;

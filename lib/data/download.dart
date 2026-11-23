@@ -7,7 +7,7 @@ import "package:entoli_core/model/app_update.dart"
     show latestReleaseUrl, latestTagOf;
 import "package:entoli_core/model/download.dart";
 
-import "../core/tls.dart";
+import "tls.dart";
 
 /// Fetching something big onto the disk, reported as it goes and abandoned
 /// whole if the listener leaves: a cancelled listener takes the half-written

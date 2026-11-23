@@ -7,7 +7,7 @@ import "package:flutter/scheduler.dart";
 import "package:flutter/services.dart";
 import "package:entoli_core/view/widgets/decorative_motion.dart";
 
-import "../../core/noise.dart";
+import "noise.dart";
 
 /// A choice of how hard something thinks, as a bar of points: the left is the
 /// least thought and the right the most. The bar is a field of dots drawn from
