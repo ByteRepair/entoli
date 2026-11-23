@@ -1,0 +1,66 @@
+name: Share viewer
+
+# Builds packages/entoli_share_viewer and deploys it to GitHub Pages at
+# share.entoli.byterepair.io. Per release, so the viewer migrates every link a
+# released build can make. Setup is under "Releasing" in AGENTS.md.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: share-viewer
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: ./.github/actions/flutter-setup
+
+      - run: flutter build web --release
+        working-directory: packages/entoli_share_viewer
+
+      # assetlinks.json names Play's app-signing certificate, which only the
+      # Play Console shows: the repository variable holds its SHA-256, and
+      # several are comma separated.
+      - name: Site files
+        working-directory: packages/entoli_share_viewer/build/web
+        env:
+          SHA256: ${{ vars.ANDROID_SIGNING_SHA256 }}
+        run: |
+          echo share.entoli.byterepair.io > CNAME
+          touch .nojekyll
+          if [ -z "$SHA256" ]; then
+            echo "::warning::ANDROID_SIGNING_SHA256 is not set; Android will not verify the link"
+            exit 0
+          fi
+          jq -n --arg sha "$SHA256" '[{
+            relation: ["delegate_permission/common.handle_all_urls"],
+            target: {
+              namespace: "android_app",
+              package_name: "io.byterepair.entoli",
+              sha256_cert_fingerprints: ($sha | split(",") | map(gsub("\\s"; "")))
+            }
+          }]' > .well-known/assetlinks.json
+
+      - uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: packages/entoli_share_viewer/build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5.0.1

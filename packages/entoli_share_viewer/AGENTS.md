@@ -8,8 +8,9 @@ bound to this page's few — not a second drawing of the conversation. It does
 not depend on the app, so none of the app's plugins or assets are in it.
 
 Build it in the `flutter-dev` toolbox from this directory with
-`flutter build web --release`; `build/web/` is static files. Nothing deploys
-it yet. Open it with a share link's fragment on the URL. The renderer loads
+`flutter build web --release`; `build/web/` is static files, which
+`share-viewer.yml` deploys (see "The share viewer" in
+`.github/workflows/AGENTS.md`). Open it with a share link's fragment on the URL. The renderer loads
 from Flutter's CDN, so `build/web/canvaskit/` is never fetched.
 
 ## How a link becomes a page

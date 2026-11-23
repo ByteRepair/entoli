@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["F9K3SJ2FD4.io.byterepair.entoli"],
+        "components": [
+          {
+            "/": "/",
+            "#": "?*",
+            "comment": "A shared chat: the root with the chat in its fragment."
+          }
+        ]
+      }
+    ]
+  }
+}

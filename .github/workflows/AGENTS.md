@@ -377,6 +377,33 @@ to a step output inside a job where the secret is not in scope, so the id
 survives the artifact and the publisher, which references none of the
 `ANDROID_*` secrets. Parsing stays in the job that checks out and builds,
 so the id uploaded under cannot drift from the id built with.
+
+## The share viewer
+
+`share-viewer.yml` builds `packages/entoli_share_viewer` and deploys it to
+GitHub Pages at `share.entoli.byterepair.io`, on every published release and
+by hand. Per release because the viewer is what migrates a link: the newest
+build reads every older one. The site is the build plus `CNAME`, `.nojekyll`
+(Jekyll would drop `.well-known/`) and the two association files the phones
+verify their claim on the host against:
+
+- `.well-known/apple-app-site-association`, from the viewer's `web/`: the
+  root with a fragment, for team `F9K3SJ2FD4`.
+- `.well-known/assetlinks.json`, written by the job from the
+  `ANDROID_SIGNING_SHA256` repository variable: the SHA-256 of Play's
+  app-signing certificate (Play Console > App integrity), not the upload key
+  the build signs with, since Play re-signs what it ships. Unset, the job
+  warns and Android opens links in the browser.
+
+Setup, once: a `CNAME` record from `share.entoli.byterepair.io` to
+`byterepair.github.io`, Pages on with GitHub Actions as its source
+(`gh api -X POST repos/ByteRepair/entoli/pages -f build_type=workflow`),
+Enforce HTTPS once the certificate is issued, and the variable
+(`gh variable set ANDROID_SIGNING_SHA256`). Pages serves the extensionless
+association file as `application/octet-stream` rather than the
+`application/json` Apple asks for; where iOS will not take it, the host needs
+a proxy in front that sets the type.
+
 ## Caches
 
 **Nothing is saved from a tag run.** A cache is scoped to the ref that wrote
