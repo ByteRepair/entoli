@@ -7,9 +7,9 @@ import "package:entoli_core/model/config.dart";
 import "package:entoli_core/model/agent_face.dart";
 import "package:entoli_core/model/bot_avatar/spec.dart";
 import "package:entoli_core/model/models.dart";
-
-import "bundled_skill_data.dart" show bundledAgentFaces;
-import "prompt_sources.dart";
+import "package:entoli_core/model/bundled_skill_data.dart"
+    show bundledAgentFaces;
+import "package:entoli_core/store/prompts/prompt_sources.dart";
 
 /// Where an agent called [name] keeps its picture: a `.png` beside its `.md`
 /// in [project]'s agents directory — the default project's where it is null.

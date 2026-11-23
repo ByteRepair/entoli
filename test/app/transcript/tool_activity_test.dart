@@ -1,6 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/data/builtin/tools/agent_tool.dart";
-import "package:agent_chat/data/builtin/tools/registry.dart";
+import "package:entoli_core/agent/tools/agent_tool.dart";
+import "package:entoli_core/agent/tools/registry.dart";
 import "package:entoli_core/transcript/activities/catalog.dart";
 import "package:entoli_core/transcript/activity.dart" show Run;
 

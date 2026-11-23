@@ -1,8 +1,8 @@
 import "dart:typed_data";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/builtin/llm/readable_client.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/readable_client.dart";
 
 void main() {
   LlmAttachment file(String name, String mime, [int size = 1]) =>

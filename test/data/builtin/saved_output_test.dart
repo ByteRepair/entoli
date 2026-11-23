@@ -1,8 +1,9 @@
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-import "package:agent_chat/data/builtin/saved_output.dart";
+import "package:entoli_core/agent/saved_output.dart";
 
 void main() {
   late String project;
@@ -19,12 +20,14 @@ void main() {
   test("a call id that comes round again does not write over the file an "
       "earlier result names", () async {
     final first = await saveOutput(
+      const LocalFileSystem(),
       "first",
       callId: "call_0",
       workspace: workspace,
       projectWorkspace: project,
     );
     final second = await saveOutput(
+      const LocalFileSystem(),
       "second",
       callId: "call_0",
       workspace: workspace,
@@ -40,6 +43,7 @@ void main() {
   test("inside a guest the path is the guest's, which `tail` and `read` both "
       "take", () async {
     final shown = await saveOutput(
+      const LocalFileSystem(),
       "out",
       callId: "toolu/01:x",
       workspace: workspace,
@@ -62,6 +66,7 @@ void main() {
 
     expect(
       await saveOutput(
+        const LocalFileSystem(),
         "out",
         callId: "c",
         workspace: workspace,

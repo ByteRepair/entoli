@@ -4,6 +4,7 @@ import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 import "package:agent_chat/data/builtin/sandbox_grants.dart";
+import "package:entoli_core/model/shell.dart" show commandDirs;
 
 void main() {
   late Directory tmp;
@@ -23,7 +24,7 @@ void main() {
       Directory(p.join(home, ".pub-cache")).createSync(recursive: true);
       Directory(p.join(home, ".gradle")).createSync(recursive: true);
 
-      final dirs = toolchainCaches(home: home, path: "");
+      final dirs = findToolchainCaches(home: home, path: "");
 
       expect(dirs, [p.join(home, ".pub-cache"), p.join(home, ".gradle")]);
     });
@@ -31,7 +32,7 @@ void main() {
     test("a cache moved by its variable is the one named", () {
       final pub = Directory(p.join(tmp.path, "pub"))..createSync();
 
-      final dirs = toolchainCaches(
+      final dirs = findToolchainCaches(
         home: null,
         path: "",
         environment: {"PUB_CACHE": pub.path},
@@ -53,7 +54,7 @@ void main() {
         p.join(onPath.path, "flutter"),
       ).createSync(p.join(sdk.path, "flutter"));
 
-      final dirs = toolchainCaches(home: null, path: onPath.path);
+      final dirs = findToolchainCaches(home: null, path: onPath.path);
 
       expect(dirs, [p.join(sdk.path, "cache")]);
     }, skip: Platform.isWindows ? "a link on PATH is the POSIX shape" : null);
@@ -67,7 +68,7 @@ void main() {
       ).createSync(recursive: true);
       Directory(p.join(home, ".rustup")).createSync(recursive: true);
 
-      expect(toolchainHomes(home: home), [
+      expect(findToolchainHomes(home: home), [
         p.join(home, ".local", "share", "uv"),
         p.join(home, ".rustup"),
       ]);

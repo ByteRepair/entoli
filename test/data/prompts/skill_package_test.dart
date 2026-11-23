@@ -3,8 +3,8 @@ import "dart:typed_data";
 
 import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/data/prompts/skill_import.dart";
-import "package:agent_chat/data/prompts/skill_package.dart";
+import "package:entoli_core/store/prompts/skill_import.dart";
+import "package:entoli_core/store/prompts/skill_package.dart";
 
 void main() {
   late Directory dir;

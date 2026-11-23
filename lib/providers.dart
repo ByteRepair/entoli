@@ -64,26 +64,27 @@ import "package:entoli_core/model/turn_keep_alive.dart";
 import "package:entoli_core/model/voice.dart";
 import "package:entoli_core/model/voice_model_store.dart";
 export "package:entoli_core/transcript/handoff.dart";
+import "package:entoli_core/agent/llm/hosted_models.dart" show ModelHost;
+import "package:entoli_core/agent/llm/providers/provider.dart"
+    show LlmProvider, resolveIn;
+import "package:entoli_core/agent/builtin_backend.dart";
+import "package:entoli_core/store/linked_instructions_store.dart";
+import "package:entoli_core/store/prompts/prompt_sources.dart" show promptTiers;
+import "package:entoli_core/agent/memory/store.dart" show Memories, MemoryStore;
 
 import "app/app_menus.dart";
 import "../core/platform/platform.dart"
     show createFileWatches, createPromptSources, processEnv, setupComplete;
-import "data/builtin/llm/hosted_models.dart" show ModelHost;
 import "data/builtin/llm/on_device_provider.dart" show OnDeviceProvider;
 import "data/builtin/llm/providers/presets.dart"
     show CliProvider, cliProviderPresets, providerOf;
-import "data/builtin/llm/providers/provider.dart" show LlmProvider, resolveIn;
 import "data/local/apple_fm.dart" show AppleFm;
 import "data/local/local_engine.dart";
-import "data/builtin/builtin_backend.dart";
 import "data/local/file_trigger_store.dart";
-import "data/local/linked_instructions_store.dart";
 import "data/bot_avatar_library.dart";
 import "data/prompts/agent_pictures.dart";
 import "data/local/local_prefill.dart";
 import "data/local/byte_repair_store.dart";
-import "data/prompts/prompt_sources.dart" show promptTiers;
-import "data/builtin/memory/store.dart" show Memories, MemoryStore;
 import "data/sync/sync_hub.dart";
 import "data/sync/sync_keep_alive.dart";
 

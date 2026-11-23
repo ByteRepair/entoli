@@ -12,6 +12,7 @@ import "package:entoli_core/model/loudness.dart";
 import "package:entoli_core/model/voice.dart";
 import "package:entoli_core/model/voice_model.dart";
 import "package:entoli_core/model/voice_model_store.dart";
+import "package:entoli_core/model/wav.dart";
 
 import "../model_host/model_process.dart";
 import "../model_host/worker.dart";
@@ -19,7 +20,6 @@ import "pcm.dart";
 import "played_speaker.dart";
 import "remote_speaker.dart";
 import "voice_strategies.dart";
-import "wav.dart";
 
 /// Listening and speaking through sherpa-onnx: the desktops' answer, and the
 /// fallback on an Android whose system recognizer cannot be used — see

@@ -1,5 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/data/prompts/bundled_skill_data.dart"
+import "package:entoli_core/model/bundled_skill_data.dart"
     show bundledSkillFiles;
 import "package:entoli_core/model/models.dart" show CompletionKind;
 import "package:entoli_core/model/prompt_library.dart"

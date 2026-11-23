@@ -8,8 +8,8 @@ import "package:entoli_core/view/fonts.dart";
 import "package:entoli_core/view/widgets/attachment_chip.dart";
 import "package:entoli_core/view/widgets/dialogs.dart";
 import "package:entoli_core/view/chat/widgets/code_block.dart";
+import "package:entoli_core/model/mime.dart" show pastedAttachment;
 
-import "../../../data/mime.dart" show pastedAttachment;
 import "../../../providers.dart";
 import "../../widgets/completion_field.dart";
 import "../../../app/composer.dart";

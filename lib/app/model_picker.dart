@@ -6,10 +6,10 @@ import "package:entoli_core/model/model_capability.dart";
 import "package:entoli_core/model/model_registry.dart";
 import "package:entoli_core/model/models.dart";
 import "package:entoli_core/transcript/reader.dart" show SettingReader;
-
-import "../data/builtin/llm/hosted_models.dart";
-import "../data/builtin/llm/providers/provider.dart"
+import "package:entoli_core/agent/llm/hosted_models.dart";
+import "package:entoli_core/agent/llm/providers/provider.dart"
     show LlmProvider, resolveIn;
+
 import "../providers.dart"
     show
         appSettingsProvider,

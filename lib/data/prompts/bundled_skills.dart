@@ -16,8 +16,7 @@ import "package:flutter/foundation.dart";
 import "package:entoli_core/model/config.dart";
 import "package:entoli_core/model/read_only_dirs.dart";
 import "package:entoli_core/model/log.dart";
-
-import "bundled_skill_data.dart";
+import "package:entoli_core/model/bundled_skill_data.dart";
 
 /// Writes every bundled skill file from [bundledSkillFiles] into the project
 /// directories it belongs to, keeping the tree. **Self-healing**: a file that

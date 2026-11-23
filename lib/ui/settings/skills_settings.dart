@@ -5,12 +5,12 @@ import "package:entoli_core/model/models.dart";
 import "package:entoli_core/model/project.dart" show promptsDirUserWritable;
 import "package:entoli_core/view/widgets/busy.dart";
 import "package:entoli_core/view/widgets/dialogs.dart";
+import "package:entoli_core/store/prompts/skill_import.dart";
 
 import "../../app/marketplace/install.dart" show PromptInstall;
 import "../../app/prompts/own_prompts.dart";
 import "../../app/prompts/skill_files.dart";
 import "../../app/settings/scope.dart";
-import "../../data/prompts/skill_import.dart";
 import "../../providers.dart";
 import "../skills/skill_view.dart";
 import "../widgets/add_button_row.dart";

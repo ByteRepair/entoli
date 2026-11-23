@@ -6,8 +6,8 @@ import "package:archive/archive.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/widgets.dart";
 import "package:path/path.dart" as p;
-import "package:agent_chat/data/builtin/llm/hosted_models.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/hosted_models.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
     show
         CliProvider,
@@ -18,7 +18,7 @@ import "package:agent_chat/data/builtin/llm/providers/presets.dart"
         CliSessionSpec,
         ClaudeCliProvider,
         CodexCliProvider;
-import "package:agent_chat/data/builtin/llm/providers/provider.dart";
+import "package:entoli_core/agent/llm/providers/provider.dart";
 import "package:http/http.dart" as http;
 import "package:agent_chat/data/local/local_instance.dart";
 import "package:agent_chat/data/local/local_prefill.dart";

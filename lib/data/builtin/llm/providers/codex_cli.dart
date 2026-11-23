@@ -8,11 +8,11 @@ import "package:path/path.dart" as p;
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/llm_provider.dart";
 import "package:entoli_core/model/model_info.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/openai_client.dart" show inlineText;
+import "package:entoli_core/agent/llm/providers/provider.dart";
 
-import "../llm_client.dart";
-import "../openai_client.dart" show inlineText;
 import "cli.dart";
-import "provider.dart";
 
 /// Codex CLI (`codex`) as a provider: the user's own ChatGPT sign-in
 /// answering Entoli's turns.

@@ -4,8 +4,7 @@ import "package:flutter/foundation.dart" show protected;
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/local_llm.dart";
 import "package:entoli_core/model/local_model.dart";
-
-import "../builtin/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
 
 /// How a model is to be loaded, as a turn asks for it. Read from the settings
 /// fresh for every call, the way `LocalShell` re-reads its environment, so a

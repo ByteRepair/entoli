@@ -5,7 +5,7 @@ import "dart:typed_data";
 
 import "package:file/local.dart";
 import "package:entoli_core/model/config.dart";
-import "package:agent_chat/data/builtin/memory/store.dart";
+import "package:entoli_core/agent/memory/store.dart";
 import "package:entoli_core/store/file_chat_store.dart";
 import "package:agent_chat/data/sync/channel.dart";
 import "package:agent_chat/data/sync/handshake.dart" show HandshakeException;

@@ -6,18 +6,18 @@ import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 import "package:entoli_core/model/config.dart";
-import "package:agent_chat/data/builtin/builtin_backend.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/builtin/llm/llm_registry.dart";
+import "package:entoli_core/agent/builtin_backend.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/llm_registry.dart";
 import "package:agent_chat/data/builtin/llm/providers/claude_cli.dart";
 import "package:agent_chat/data/builtin/llm/providers/codex_cli.dart";
-import "package:agent_chat/data/builtin/llm/providers/provider.dart";
-import "package:agent_chat/data/builtin/memory/instructions.dart"
+import "package:entoli_core/agent/llm/providers/provider.dart";
+import "package:entoli_core/agent/memory/instructions.dart"
     show InstructionFile, instructionBudgetChars, renderInstructions;
-import "package:agent_chat/data/builtin/memory/store.dart";
-import "package:agent_chat/data/builtin/tools/participants_tool.dart";
+import "package:entoli_core/agent/memory/store.dart";
+import "package:entoli_core/agent/tools/participants_tool.dart";
 import "package:entoli_core/store/file_chat_store.dart";
-import "package:agent_chat/data/local/file_sub_agent_log.dart";
+import "package:entoli_core/store/file_sub_agent_log.dart";
 import "package:entoli_core/model/agent_backend.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/builtin_project.dart";
@@ -29,7 +29,7 @@ import "package:entoli_core/model/models.dart";
 import "package:entoli_core/model/permission.dart";
 import "package:entoli_core/model/prompt_library.dart";
 import "package:entoli_core/model/shell.dart";
-import "package:agent_chat/data/builtin/builtin_options.dart";
+import "package:entoli_core/agent/builtin_options.dart";
 
 import "../../fakes.dart";
 import "../../harness.dart";

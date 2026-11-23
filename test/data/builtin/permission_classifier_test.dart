@@ -1,8 +1,8 @@
 import "dart:convert";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/builtin/permission_classifier.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/permission_classifier.dart";
 import "package:entoli_core/model/permission.dart";
 
 import "builtin_fakes.dart";

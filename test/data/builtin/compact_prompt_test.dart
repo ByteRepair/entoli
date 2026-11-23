@@ -1,8 +1,8 @@
 import "dart:convert";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/data/builtin/compact_prompt.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:entoli_core/agent/compact_prompt.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
 
 void main() {
   test("a call too big to read keeps its other arguments whole", () {

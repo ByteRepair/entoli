@@ -25,6 +25,10 @@ dependencies:
   flutter_math_fork: ^0.7.4
   flutter_riverpod: ^3.4.2
   freezed_annotation: ^3.1.0
+  # The model calls and web search: HTTP, which a browser has too.
+  html: ^0.15.6
+  http: ^1.6.0
+  mime: ^2.0.0
   json_annotation: ^4.12.0
   markdown: ^7.3.1
   path: ^1.9.1

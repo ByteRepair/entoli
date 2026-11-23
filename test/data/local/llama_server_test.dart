@@ -1,7 +1,7 @@
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/data/builtin/llm/hosted_models.dart";
+import "package:entoli_core/agent/llm/hosted_models.dart";
 import "package:agent_chat/data/builtin/llm/on_device_provider.dart";
 import "package:agent_chat/data/local/llama_engine.dart";
 import "package:agent_chat/data/local/llama_server.dart";

@@ -14,14 +14,14 @@ import "package:entoli_core/model/model_capability.dart";
 import "package:entoli_core/model/model_registry.dart";
 import "package:entoli_core/model/shell.dart"
     show guestHome, guestPath, shellQuoted;
+import "package:entoli_core/agent/llm/hosted_models.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/providers/provider.dart";
 
 import "../../../../core/tls.dart";
 import "../../../download.dart";
 import "../../../local/file_modes.dart";
-import "../hosted_models.dart";
-import "../llm_client.dart";
 import "cli_release.dart";
-import "provider.dart";
 export "cli_release.dart";
 
 /// Another harness's command-line program — Claude CLI, Codex — answering in

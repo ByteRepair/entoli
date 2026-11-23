@@ -5,8 +5,8 @@ import "package:entoli_core/model/local_model.dart";
 import "package:entoli_core/model/llm_provider.dart";
 import "package:entoli_core/model/model_budget.dart";
 import "package:entoli_core/model/models.dart" show ModelChoice;
-import "../builtin/llm/llm_client.dart";
-import "../builtin/llm/providers/provider.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/providers/provider.dart";
 import "channel_generation.dart";
 import "../model_host/model_process.dart";
 

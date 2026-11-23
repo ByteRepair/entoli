@@ -3,7 +3,7 @@ import "dart:io";
 import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-import "package:agent_chat/data/builtin/memory/instructions.dart";
+import "package:entoli_core/agent/memory/instructions.dart";
 import "package:entoli_core/model/models.dart";
 
 void main() {
@@ -42,6 +42,7 @@ void main() {
     bool imports = false,
     List<String> excludes = const [],
   }) => loadInstructions(
+    const LocalFileSystem(),
     projectWorkspace: projectWorkspace,
     global: [global],
     imports: imports,
@@ -79,6 +80,7 @@ void main() {
         ..writeAsStringSync("repo rules");
 
       final files = await loadInstructions(
+        const LocalFileSystem(),
         projectWorkspace: projectWorkspace,
         global: [
           global,

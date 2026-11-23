@@ -3,7 +3,7 @@ import "dart:convert";
 import "dart:ffi" show Abi;
 import "dart:io";
 
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/mcp_tool_bridge.dart";
 import "package:agent_chat/data/builtin/llm/providers/cli_sign_in.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";

@@ -1,0 +1,52 @@
+import "../../../model/llm_provider.dart";
+import "../http_stream.dart";
+import "provider.dart";
+
+/// A model server the user runs on this machine. Nothing there checks a key,
+/// so any key is a yes, and models.dev does not know what it serves, so its
+/// own list is asked unless another is named.
+abstract class LocalServerProvider extends OpenAiCompatibleProvider
+    with KeyFree {
+  const LocalServerProvider(super.config, [super.terms]);
+
+  @override
+  Uri? get modelsUrl => super.modelsUrl ?? under(baseUrl, "models");
+}
+
+class OllamaProvider extends LocalServerProvider with OllamaCompat {
+  const OllamaProvider([LlmProviderConfig config = preset])
+    : super(config, _terms);
+
+  static const preset = LlmProviderConfig(
+    catalogId: "ollama",
+    name: "Ollama (local)",
+    api: LlmApi.openai,
+    baseUrl: "http://localhost:11434/v1",
+    defaultModelId: "glm-5.3-flash",
+    defaultLightModelId: "nemotron-3-nano:30b",
+  );
+
+  static const _terms = PresetTerms(
+    blurb: "Models you run yourself with Ollama.",
+    prompts: PromptUse.local,
+  );
+}
+
+class LmStudioProvider extends LocalServerProvider {
+  const LmStudioProvider([LlmProviderConfig config = preset])
+    : super(config, _terms);
+
+  static const preset = LlmProviderConfig(
+    catalogId: "lmstudio",
+    name: "LM Studio (local)",
+    api: LlmApi.openai,
+    baseUrl: "http://localhost:1234/v1",
+    defaultModelId: "glm-5.3-flash",
+    defaultLightModelId: "nemotron-3-nano:30b",
+  );
+
+  static const _terms = PresetTerms(
+    blurb: "Models you run yourself with LM Studio.",
+    prompts: PromptUse.local,
+  );
+}

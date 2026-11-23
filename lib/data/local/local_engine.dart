@@ -4,8 +4,8 @@ import "package:entoli_core/model/local_llm.dart";
 import "package:entoli_core/model/local_model.dart";
 import "package:entoli_core/model/model_budget.dart";
 import "package:entoli_core/model/local_model_store.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
 
-import "../builtin/llm/llm_client.dart";
 import "local_client.dart";
 import "local_instance.dart";
 import "prompt_cache.dart";

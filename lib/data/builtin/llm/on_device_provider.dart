@@ -6,11 +6,11 @@ import "package:entoli_core/model/model_capability.dart";
 import "package:entoli_core/model/model_registry.dart";
 import "package:entoli_core/model/voice.dart";
 import "package:entoli_core/model/voice_model.dart";
+import "package:entoli_core/agent/llm/hosted_models.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/providers/provider.dart";
 
 import "../../local/local_engine.dart";
-import "hosted_models.dart";
-import "llm_client.dart";
-import "providers/provider.dart";
 
 /// Every model on this device as one provider, an entry the user never
 /// configures: the downloaded text models, run by the platform's

@@ -5,6 +5,7 @@ import "package:file/local.dart";
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:http/http.dart" as http;
 import "package:entoli_core/transcript/storage.dart";
 import "package:entoli_core/model/config.dart";
 import "package:entoli_core/model/app_restart.dart";
@@ -19,6 +20,9 @@ import "package:entoli_core/model/prompt_library.dart";
 import "package:entoli_core/model/sync/identity.dart";
 import "package:entoli_core/view/fonts.dart";
 import "package:entoli_core/view/theme.dart";
+import "package:entoli_core/agent/llm/providers/provider.dart" show LlmProvider;
+import "package:entoli_core/store/prompts/prompt_sources.dart"
+    show promptDirsOf;
 
 import "app/app_menus.dart";
 import "core/platform/app_menus.dart";
@@ -30,7 +34,6 @@ import "core/platform/system_palette.dart";
 import "core/tls.dart";
 import "data/backup.dart" show recoverRestore;
 import "data/builtin/llm/providers/cli.dart" show CliProvider;
-import "data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "data/local/mlx_engine.dart" show mlxChannel;
 import "data/local/file_trigger_store.dart";
 import "data/model_host/model_host_server.dart";
@@ -38,7 +41,6 @@ import "data/voice/sherpa_voice.dart" show sherpaWorkers;
 import "data/model_catalog.dart";
 import "data/local/file_selector_picker.dart";
 import "data/prompts/bundled_skills.dart";
-import "data/prompts/prompt_sources.dart" show promptDirsOf;
 import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
 import "providers.dart";
@@ -74,7 +76,11 @@ void modelHostMain(List<String> arguments) => ModelHostServer.run(
   workers: sherpaWorkers,
 );
 
-void main() async {
+/// Run under [tlsClient], so every `http.Client()` in the core is the one
+/// with the bundled trust behind the system's.
+void main() => http.runWithClient(_main, tlsClient);
+
+Future<void> _main() async {
   WidgetsFlutterBinding.ensureInitialized();
   registerBundledFontLicences();
   registerBotAvatarLicence();

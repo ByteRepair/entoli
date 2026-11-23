@@ -9,8 +9,8 @@ import "package:entoli_core/model/project.dart" show localProject;
 import "package:entoli_core/model/project_settings.dart";
 import "package:entoli_core/model/prompt_library.dart";
 import "package:entoli_core/model/sync/protocol.dart";
+import "package:entoli_core/agent/memory/store.dart";
 
-import "../data/builtin/memory/store.dart";
 import "../data/sync/sync_hub.dart";
 import "../providers.dart";
 import "selection.dart";

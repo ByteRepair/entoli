@@ -1,9 +1,11 @@
 import "dart:async";
 import "dart:convert";
 
-import "package:agent_chat/data/builtin/goal_reviewer.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/builtin/llm/providers/provider.dart";
+import "package:entoli_core/agent/goal_reviewer.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/providers/provider.dart";
+import "package:agent_chat/data/builtin/sandbox_grants.dart"
+    show MachineSandboxFolders;
 import "package:entoli_core/model/artifact.dart";
 import "package:entoli_core/model/ask.dart";
 import "package:entoli_core/model/goal.dart";
@@ -155,6 +157,10 @@ class FakeShell extends Shell {
 
   @override
   String? get machineHome => home;
+
+  /// This machine's, so the gate's grants are the ones a real run gets.
+  @override
+  late final SandboxFolders sandboxFolders = MachineSandboxFolders(home);
 
   final List<String> ran = [];
 

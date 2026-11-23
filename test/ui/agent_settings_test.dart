@@ -1,6 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart" show LlmException;
+import "package:entoli_core/agent/llm/llm_client.dart" show LlmException;
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/llm_provider.dart";
 import "package:entoli_core/model/permission.dart";

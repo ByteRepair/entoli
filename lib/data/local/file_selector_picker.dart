@@ -2,8 +2,7 @@ import "package:file_selector/file_selector.dart";
 import "package:entoli_core/model/attachment_picker.dart";
 import "package:entoli_core/model/folder_picker.dart";
 import "package:entoli_core/model/models.dart";
-
-import "../mime.dart";
+import "package:entoli_core/model/mime.dart";
 
 /// The platform's own file chooser, through `file_selector` — one plugin
 /// covering every platform the app runs on.

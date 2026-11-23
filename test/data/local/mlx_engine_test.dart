@@ -3,7 +3,7 @@ import "dart:io";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:agent_chat/data/local/mlx_engine.dart";
 import "package:agent_chat/data/local/prompt_cache.dart";
 import "package:agent_chat/data/model_host/model_process.dart";

@@ -1,4 +1,4 @@
-// Generates lib/data/prompts/bundled_skill_data.dart from the source tree
+// Generates packages/entoli_core/lib/model/bundled_skill_data.dart from the source tree
 // under assets/prompts/. Run by tool/prepare.sh before build_runner.
 //
 // The bundled skills and agents are embedded in code rather than shipped as
@@ -22,7 +22,7 @@
 import "dart:convert";
 import "dart:io";
 
-import "package:agent_chat/data/prompts/skill_validate.dart";
+import "package:entoli_core/store/prompts/skill_validate.dart";
 import "package:entoli_core/model/bot_avatar/spec.dart";
 import "package:entoli_core/model/bundled_prompt_file.dart";
 import "package:entoli_core/model/frontmatter.dart";
@@ -67,7 +67,7 @@ void main() {
   emitPromptFileList(buf, "bundledAgentFiles", agents);
   emitPromptFileList(buf, "bundledAgentFaces", faces);
 
-  writeGenerated("lib/data/prompts/bundled_skill_data.dart", buf);
+  writeGenerated("packages/entoli_core/lib/model/bundled_skill_data.dart", buf);
   stdout.writeln(
     "(${skills.length} skill files, ${agents.length} agent files, "
     "${faces.length} agent faces).",

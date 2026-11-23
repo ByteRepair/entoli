@@ -2,8 +2,7 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-import "package:agent_chat/data/builtin/background_jobs.dart"
-    show backgroundScript;
+import "package:entoli_core/agent/background_jobs.dart" show backgroundScript;
 import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/builtin/sandbox_grants.dart" show systemTemps;
 import "package:agent_chat/data/local/landlock.dart";

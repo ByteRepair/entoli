@@ -1,21 +1,21 @@
 import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-
-import "../../app/marketplace/install.dart" show PromptInstall;
-import "../../app/prompts/agent_files.dart";
-import "../../app/prompts/agent_tools.dart";
-import "../../app/prompts/own_prompts.dart";
-import "../../app/settings/scope.dart";
-import "../../data/builtin/tools/agent_tool.dart";
-import "../../data/prompts/agent_pictures.dart" show readOwnAgentFace;
-import "../../data/prompts/skill_import.dart" show isFolderName;
 import "package:entoli_core/model/agent_definition.dart";
 import "package:entoli_core/model/agent_face.dart";
 import "package:entoli_core/model/bot_avatar/spec.dart";
 import "package:entoli_core/model/models.dart";
 import "package:entoli_core/model/project.dart" show promptsDirUserWritable;
 import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/agent/tools/agent_tool.dart";
+import "package:entoli_core/store/prompts/skill_import.dart" show isFolderName;
+
+import "../../app/marketplace/install.dart" show PromptInstall;
+import "../../app/prompts/agent_files.dart";
+import "../../app/prompts/agent_tools.dart";
+import "../../app/prompts/own_prompts.dart";
+import "../../app/settings/scope.dart";
+import "../../data/prompts/agent_pictures.dart" show readOwnAgentFace;
 import "../../providers.dart";
 import "../bot_avatar/bot_avatar_editor.dart";
 import "../widgets/add_button_row.dart";

@@ -5,8 +5,8 @@ import "package:entoli_core/model/file_tools.dart";
 import "package:entoli_core/model/rootfs.dart";
 import "package:entoli_core/model/rootfs_store.dart";
 import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/agent/llm/llm_client.dart" show LlmException;
 
-import "../builtin/llm/llm_client.dart" show LlmException;
 import "../builtin/llm/providers/cli.dart"
     show CliProcess, LinuxCliGuest, launchProcess;
 

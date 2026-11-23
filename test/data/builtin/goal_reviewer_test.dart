@@ -1,6 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/data/builtin/goal_reviewer.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:entoli_core/agent/goal_reviewer.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
 
 void main() {
   test("a verdict is read out of whatever the reviewer wrapped it in", () {

@@ -8,8 +8,7 @@ import "package:path/path.dart" as p;
 import "package:entoli_core/model/clipboard_files.dart";
 import "package:entoli_core/model/models.dart";
 import "package:entoli_core/model/log.dart";
-
-import "../../data/mime.dart";
+import "package:entoli_core/model/mime.dart";
 
 const _channel = MethodChannel("agent_chat/clipboard");
 

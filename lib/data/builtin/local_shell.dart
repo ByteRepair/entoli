@@ -11,6 +11,8 @@ import "package:entoli_core/model/file_tools.dart";
 import "package:entoli_core/model/sandbox_denials.dart";
 import "package:entoli_core/model/shell.dart";
 
+import "sandbox_grants.dart" show MachineSandboxFolders;
+
 const _appImageVars = {"APPIMAGE", "APPDIR", "ARGV0", "OWD"};
 
 /// This process's environment without the AppImage runtime's variables, which
@@ -236,6 +238,9 @@ class LocalShell extends Shell {
 
   @override
   SandboxHelper? get driverSandboxHelper => _driver()?.sandboxHelper;
+
+  @override
+  late final SandboxFolders sandboxFolders = MachineSandboxFolders(machineHome);
 
   /// Per chat, inside the sandbox's grant, so two chats' scratch never meet.
   @override

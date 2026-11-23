@@ -9,12 +9,12 @@ import "package:entoli_core/model/formatting.dart";
 import "package:entoli_core/view/fonts.dart";
 import "package:entoli_core/view/widgets/dialogs.dart" show confirm;
 import "package:entoli_core/view/widgets/page_bar.dart";
+import "package:entoli_core/agent/llm/hosted_models.dart";
+import "package:entoli_core/agent/llm/providers/provider.dart" show LlmProvider;
 
 import "../../app/custom_model.dart" show customModelDraft, pickerProviders;
 import "custom_model_page.dart";
 import "../../app/model_picker.dart";
-import "../../data/builtin/llm/hosted_models.dart";
-import "../../data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../app/model_role.dart";
 import "../../providers.dart";

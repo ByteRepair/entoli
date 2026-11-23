@@ -3,15 +3,15 @@ import "dart:io";
 
 import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/builtin/tools/skill_create_tool.dart";
-import "package:agent_chat/data/prompts/skill_import.dart"
+import "package:entoli_core/agent/builtin_agent.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/tools/skill_create_tool.dart";
+import "package:entoli_core/store/prompts/skill_import.dart"
     show SkillImportException;
 import "package:entoli_core/model/agent_backend.dart";
 import "package:entoli_core/model/models.dart";
 import "package:entoli_core/model/permission.dart";
-import "package:agent_chat/data/builtin/builtin_options.dart";
+import "package:entoli_core/agent/builtin_options.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";

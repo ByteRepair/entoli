@@ -2,9 +2,9 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:entoli_core/view/chat/widgets/markdown_text.dart";
 import "package:entoli_core/view/widgets/page_bar.dart";
+import "package:entoli_core/store/prompts/skill_import.dart";
 
 import "../../app/marketplace/install.dart";
-import "../../data/prompts/skill_import.dart";
 import "../widgets/install_bar.dart";
 import "../widgets/install_destination.dart";
 import "../widgets/nothing.dart";

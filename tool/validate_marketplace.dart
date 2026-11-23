@@ -10,7 +10,7 @@
 // checks); without it, every directory under <data-root>/{skills,agents}.
 import "dart:io";
 
-import "package:agent_chat/data/prompts/skill_validate.dart";
+import "package:entoli_core/store/prompts/skill_validate.dart";
 import "package:entoli_core/model/frontmatter.dart";
 import "package:path/path.dart" as p;
 

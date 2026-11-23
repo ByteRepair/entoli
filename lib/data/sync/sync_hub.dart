@@ -6,7 +6,7 @@ import "package:flutter/foundation.dart";
 import "package:http/http.dart" as http;
 
 import "package:entoli_core/model/log.dart";
-import "../builtin/memory/store.dart" show Memories, MemoryEntry;
+import "package:entoli_core/agent/memory/store.dart" show Memories, MemoryEntry;
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/project.dart"
     show ProjectRef, everyProject, isProjectName;

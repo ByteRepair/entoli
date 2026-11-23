@@ -1,7 +1,7 @@
 import "package:file/local.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/data/builtin/memory/store.dart";
+import "package:entoli_core/agent/memory/store.dart";
 import "package:entoli_core/model/project.dart" show localProject;
 import "package:agent_chat/ui/memory/memory_page.dart";
 

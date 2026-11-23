@@ -3,12 +3,12 @@ import "dart:io";
 import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:entoli_core/agent/builtin_agent.dart";
 import "package:agent_chat/data/builtin/sandbox_grants.dart" show systemTemps;
-import "package:agent_chat/data/builtin/tools/agent_tool.dart"
+import "package:entoli_core/agent/tools/agent_tool.dart"
     show AgentCapabilities, ToolOffer;
-import "package:agent_chat/data/builtin/tools/bash_tool.dart" show BashTool;
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:entoli_core/agent/tools/bash_tool.dart" show BashTool;
+import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:entoli_core/model/agent_backend.dart";
 import "package:entoli_core/model/models.dart";
 import "package:entoli_core/model/permission.dart";

@@ -2,7 +2,7 @@ import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/data/prompts/skill_import.dart";
+import "package:entoli_core/store/prompts/skill_import.dart";
 import "package:entoli_core/model/models.dart";
 import "package:agent_chat/ui/settings/agents_settings.dart";
 import "package:agent_chat/ui/widgets/install_destination.dart";

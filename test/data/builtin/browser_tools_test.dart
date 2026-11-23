@@ -10,17 +10,17 @@ import "package:path/path.dart" as p;
 import "package:agent_chat/data/browser/cdp_browser.dart"
     show CdpBrowser, looksLikeChallenge, pageAddress, reapLostBrowser;
 import "package:agent_chat/data/browser/helium.dart";
-import "package:agent_chat/data/builtin/tools/browser_tools.dart";
-import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:entoli_core/agent/tools/browser_tools.dart";
+import "package:entoli_core/agent/builtin_agent.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:entoli_core/model/agent_backend.dart";
 import "package:entoli_core/model/agent_browser.dart";
 import "package:entoli_core/model/builtin_project.dart" show AgentCapability;
 import "package:entoli_core/model/models.dart";
 import "package:entoli_core/model/permission.dart";
 import "package:entoli_core/model/shell.dart";
-import "package:agent_chat/data/builtin/tools/agent_tool.dart";
-import "package:agent_chat/data/builtin/system_prompt.dart";
+import "package:entoli_core/agent/tools/agent_tool.dart";
+import "package:entoli_core/agent/system_prompt.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";

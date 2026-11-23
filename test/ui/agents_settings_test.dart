@@ -5,7 +5,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/prompts/agent_pictures.dart"
     show readAgentPicture;
-import "package:agent_chat/data/prompts/prompt_sources.dart" show promptTiers;
+import "package:entoli_core/store/prompts/prompt_sources.dart" show promptTiers;
 import "package:entoli_core/model/agent_definition.dart";
 import "package:entoli_core/model/agent_face.dart";
 import "package:entoli_core/model/bot_avatar/spec.dart";

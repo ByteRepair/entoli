@@ -35,7 +35,7 @@ const _mozillaAsset = "assets/certs/cacert.pem";
 
 /// The client a provider, a download, a search or the marketplace reaches a
 /// host with. See [TlsFallbackClient].
-http.Client tlsClient() => TlsFallbackClient(http.Client());
+http.Client tlsClient() => TlsFallbackClient(IOClient());
 
 /// The relay's WebSocket, under the same trust and the same fallback: the
 /// first connect waits on the store's verdict, and where it is the

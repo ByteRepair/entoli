@@ -14,19 +14,19 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 import "package:entoli_core/model/config.dart";
-import "package:agent_chat/data/builtin/builtin_backend.dart";
-import "package:agent_chat/data/builtin/duckduckgo_search.dart";
-import "package:agent_chat/data/builtin/llm/llm_registry.dart";
+import "package:entoli_core/agent/builtin_backend.dart";
+import "package:entoli_core/agent/duckduckgo_search.dart";
+import "package:entoli_core/agent/llm/llm_registry.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:entoli_core/store/file_chat_store.dart";
-import "package:agent_chat/data/prompts/prompt_sources.dart";
+import "package:entoli_core/store/prompts/prompt_sources.dart";
 import "package:entoli_core/model/agent_backend.dart";
 import "package:entoli_core/model/llm_provider.dart";
 import "package:entoli_core/model/models.dart";
 import "package:entoli_core/model/permission.dart";
 import "package:entoli_core/model/prompt_library.dart";
-import "package:agent_chat/data/builtin/builtin_options.dart";
+import "package:entoli_core/agent/builtin_options.dart";
 
 import "../harness.dart";
 

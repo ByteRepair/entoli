@@ -10,12 +10,12 @@ import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/llm_provider.dart";
 import "package:entoli_core/model/model_info.dart";
 import "package:entoli_core/model/tool_arg.dart";
+import "package:entoli_core/agent/llm/anthropic_client.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/providers/provider.dart";
 
-import "../anthropic_client.dart";
-import "../llm_client.dart";
 import "../mcp_tool_bridge.dart";
 import "cli.dart";
-import "provider.dart";
 
 /// Claude CLI (`claude`, Claude Code) as a provider: the user's own sign-in,
 /// whatever plan it is on, answering Entoli's turns.

@@ -1,4 +1,4 @@
-import "package:agent_chat/data/builtin/templates.dart";
+import "package:entoli_core/agent/templates.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {

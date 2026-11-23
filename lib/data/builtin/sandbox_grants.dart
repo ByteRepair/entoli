@@ -1,14 +1,11 @@
 import "dart:io";
 
 import "package:file/file.dart" show FileSystem;
+import "package:file/local.dart";
 import "package:path/path.dart" as p;
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/shell.dart"
-    show cdTarget, commandPath, repositoryRootOf;
-import "package:entoli_core/model/shell_command_analysis.dart"
-    show plainCommand;
-
-import "local_shell.dart" show LocalShell;
+    show SandboxFolders, repositoryRootOf;
 
 /// The caches developer tools write to as a matter of course, under the
 /// machine user's [home]: a package fetch, a build's derived data, a
@@ -22,7 +19,7 @@ import "local_shell.dart" show LocalShell;
 /// [path] is `PATH`, read for the SDKs that keep a cache inside their own
 /// install (Flutter's `bin/cache`), and [environment] for the variables a
 /// user moves a cache with.
-List<String> toolchainCaches({
+List<String> findToolchainCaches({
   required String? home,
   required String path,
   Map<String, String> environment = const {},
@@ -68,7 +65,7 @@ List<String> toolchainCaches({
 /// Flutter writes its engine stamp there on every run, `flutter test`
 /// included.
 String? _flutterCache(String path) {
-  for (final dir in path.split(LocalShell.listSeparator())) {
+  for (final dir in path.split(Platform.isWindows ? ";" : ":")) {
     if (dir.isEmpty) continue;
     final link = File(
       p.join(dir, Platform.isWindows ? "flutter.bat" : "flutter"),
@@ -135,37 +132,13 @@ String? _gitDirOf(String dotGit) {
   }
 }
 
-/// Where a command works: [standing], each `cd` it makes, and each
-/// `git -C` it names, read off [segments]' plain words and resolved against
-/// the directory the command stands in at that point. [resolve] reads `~`.
-List<String> commandDirs(
-  List<String>? segments,
-  String standing,
-  String Function(String path) resolve,
-) {
-  var at = standing;
-  final dirs = {standing};
-  for (final segment in segments ?? const <String>[]) {
-    final words = plainCommand(segment)?.words;
-    if (words == null || words.isEmpty) continue;
-    if (cdTarget(words, at, resolve) case final target?) {
-      dirs.add(at = target);
-    } else if (words[0] == "git") {
-      for (var i = 1; i < words.length - 1; i++) {
-        if (words[i] == "-C") dirs.add(commandPath(words[i + 1], at, resolve));
-      }
-    }
-  }
-  return dirs.toList();
-}
-
 /// Where toolchains keep what they download under the machine user's
 /// [home], those that exist: uv's interpreters and tool environments, and
 /// rustup's toolchains. A `uv run --python 3.12` fetches its interpreter
 /// here, and denied it, the run left the sandbox for a download. Nothing on
 /// `PATH` is here — `~/.cargo/bin`, nvm's or pyenv's shims — since a
 /// program swapped there would be run later, unsandboxed, by the user.
-List<String> toolchainHomes({required String? home}) {
+List<String> findToolchainHomes({required String? home}) {
   if (home == null) return const [];
   return [
     for (final dir in [
@@ -189,7 +162,9 @@ List<String> toolchainHomes({required String? home}) {
 /// Found once per process — the folders are the user's and do not move —
 /// and held as a future, so the first commands of parallel sub-agents share
 /// one `getconf` rather than racing to spawn their own.
-Future<List<String>> systemTemps() => _systemTemps ??= _findSystemTemps();
+Future<List<String>> systemTemps() => _systemTempsOnce();
+
+Future<List<String>> _systemTempsOnce() => _systemTemps ??= _findSystemTemps();
 
 Future<List<String>>? _systemTemps;
 
@@ -220,4 +195,32 @@ Future<String?> _darwinUserTemp() async {
   }
   logFailure("sandbox", "the per-user temp folder is not known", reason);
   return null;
+}
+
+/// This machine's answer to [SandboxFolders], for a shell whose home is [home].
+class MachineSandboxFolders implements SandboxFolders {
+  MachineSandboxFolders(this.home);
+
+  final String? home;
+
+  // Looked up once: home, `PATH` and the environment do not move under a run.
+  late final _caches = findToolchainCaches(
+    home: home,
+    path: Platform.environment["PATH"] ?? "",
+    environment: Platform.environment,
+  );
+  late final _homes = findToolchainHomes(home: home);
+
+  @override
+  List<String> toolchainCaches() => _caches;
+
+  @override
+  List<String> toolchainHomes() => _homes;
+
+  @override
+  Future<List<String>> systemTemps() => _systemTempsOnce();
+
+  @override
+  List<String> gitDirs(Iterable<String> dirs, List<String> granted) =>
+      repositoryGitDirs(const LocalFileSystem(), dirs, granted);
 }

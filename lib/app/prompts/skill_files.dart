@@ -6,11 +6,11 @@ import "package:path/path.dart" as p;
 import "package:entoli_core/model/config.dart";
 import "package:entoli_core/model/frontmatter.dart";
 import "package:entoli_core/model/models.dart";
+import "package:entoli_core/store/prompts/skill_import.dart";
+import "package:entoli_core/store/prompts/skill_validate.dart";
 
 import "../../core/platform/platform.dart" as platform;
 import "../../data/prompts/prompt_export.dart" show skillSourceEntries;
-import "../../data/prompts/skill_import.dart";
-import "../../data/prompts/skill_validate.dart";
 
 /// A project's own skills on disk: what each folder is wrong about, and
 /// every write a page makes to them, each through the directory's lock.

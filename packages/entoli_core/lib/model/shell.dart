@@ -10,6 +10,8 @@ import "package:file/file.dart";
 import "package:flutter/foundation.dart" show ValueListenable;
 import "package:path/path.dart" as p;
 
+import "shell_command_analysis.dart" show plainCommand;
+
 /// The command tool's name: the log records it, the chat draws it, and the
 /// permission rules are typed by it.
 const bashToolName = "bash";
@@ -202,6 +204,30 @@ bool pathInside(String path, String root) {
   return p == r || p.startsWith("$r/");
 }
 
+/// Where a command works: [standing], each `cd` it makes, and each
+/// `git -C` it names, read off [segments]' plain words and resolved against
+/// the directory the command stands in at that point. [resolve] reads `~`.
+List<String> commandDirs(
+  List<String>? segments,
+  String standing,
+  String Function(String path) resolve,
+) {
+  var at = standing;
+  final dirs = {standing};
+  for (final segment in segments ?? const <String>[]) {
+    final words = plainCommand(segment)?.words;
+    if (words == null || words.isEmpty) continue;
+    if (cdTarget(words, at, resolve) case final target?) {
+      dirs.add(at = target);
+    } else if (words[0] == "git") {
+      for (var i = 1; i < words.length - 1; i++) {
+        if (words[i] == "-C") dirs.add(commandPath(words[i + 1], at, resolve));
+      }
+    }
+  }
+  return dirs.toList();
+}
+
 /// Whether [a] and [b] overlap — one is the other or holds it — by the names
 /// given, then by where their links lead, so a symlink aliasing a directory is
 /// that directory. What keeps a grant or a restore off the app's own data.
@@ -277,6 +303,22 @@ abstract class SandboxHelper {
   /// the session's `cd` and exports live *inside* the confined shell, which
   /// is the shape that keeps the state a session exists to keep.
   Future<List<String>?> prefixFor(CommandSandbox sandbox);
+}
+
+/// The machine's folders a `SandboxGrant` opens beside the workspace, which
+/// only the machine can answer for.
+abstract class SandboxFolders {
+  /// The toolchains' download caches that exist here.
+  List<String> toolchainCaches();
+
+  /// The toolchains' own stores that exist here.
+  List<String> toolchainHomes();
+
+  /// The OS's shared temp folders.
+  Future<List<String>> systemTemps();
+
+  /// The git directories of the repositories [dirs] are in, outside [granted].
+  List<String> gitDirs(Iterable<String> dirs, List<String> granted);
 }
 
 /// Everything needed to run a command inside a downloaded Linux, bar the Linux.
@@ -521,6 +563,10 @@ abstract class Shell {
   /// run it, or null where this shell's platforms offer none — a guest (its
   /// rootfs is the boundary), Android (the per-app sandbox is the OS's).
   SandboxHelper? get driverSandboxHelper => null;
+
+  /// The folders a sandbox's grants open, where [driverSandboxHelper] has a
+  /// sandbox to open them in.
+  SandboxFolders? get sandboxFolders => null;
 
   /// The scratch directory a sandboxed command may write beside [workspace],
   /// or null where this shell lays none out. The workspace itself is granted

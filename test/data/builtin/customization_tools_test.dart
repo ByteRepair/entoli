@@ -2,17 +2,17 @@ import "dart:convert";
 
 import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/data/builtin/tools/customization_tools.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/builtin/tools/skill_tool.dart";
+import "package:entoli_core/agent/builtin_agent.dart";
+import "package:entoli_core/agent/tools/customization_tools.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/tools/skill_tool.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/models.dart";
 import "package:entoli_core/model/permission.dart";
 import "package:entoli_core/model/profile.dart";
 import "package:entoli_core/model/prompt_library.dart";
 import "package:entoli_core/model/tone.dart";
-import "package:agent_chat/data/builtin/builtin_options.dart";
+import "package:entoli_core/agent/builtin_options.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";

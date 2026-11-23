@@ -14,20 +14,20 @@ import "package:entoli_core/model/trigger_manager.dart"
 import "package:entoli_core/model/rootfs_store.dart";
 import "package:entoli_core/model/shell.dart";
 import "package:entoli_core/model/config.dart";
+import "package:entoli_core/agent/builtin_agent.dart";
+import "package:entoli_core/agent/builtin_backend.dart";
+import "package:entoli_core/agent/duckduckgo_search.dart";
+import "package:entoli_core/agent/tools/agent_tool.dart";
+import "package:entoli_core/agent/tools/registry.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/llm_registry.dart";
+import "package:entoli_core/store/prompts/prompt_sources.dart";
+import "package:entoli_core/agent/builtin_options.dart";
 
-import "../../data/builtin/builtin_agent.dart";
-import "../../data/builtin/builtin_backend.dart";
-import "../../data/builtin/duckduckgo_search.dart";
-import "../../data/builtin/tools/agent_tool.dart";
-import "../../data/builtin/tools/registry.dart";
-import "../../data/builtin/llm/llm_client.dart";
-import "../../data/builtin/llm/llm_registry.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../data/local/local_engine.dart";
 import "../../data/local/local_prefill.dart";
-import "../../data/prompts/prompt_sources.dart";
 import "host.dart";
-import "../../data/builtin/builtin_options.dart";
 export "host.dart"
     show
         processEnv,

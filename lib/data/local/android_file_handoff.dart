@@ -8,8 +8,8 @@ import "package:path_provider/path_provider.dart";
 import "package:entoli_core/model/file_handoff.dart";
 import "package:entoli_core/store/zip.dart" show zipNameFor;
 import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/mime.dart";
 
-import "../mime.dart";
 import "../zip.dart";
 
 /// Android, where every route runs through an intent and `FilesChannel.kt` is

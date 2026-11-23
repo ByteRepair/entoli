@@ -5,9 +5,9 @@ import "package:entoli_core/model/project.dart" show ProjectRef;
 import "package:entoli_core/view/widgets/dialogs.dart";
 import "package:entoli_core/view/widgets/empty_pane.dart";
 import "package:entoli_core/view/widgets/page_bar.dart";
+import "package:entoli_core/agent/memory/store.dart";
 
 import "../../app/memories.dart";
-import "../../data/builtin/memory/store.dart";
 import "../../providers.dart";
 import "../chat/widgets/view_only_bar.dart" show MirrorStrip;
 

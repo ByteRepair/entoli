@@ -7,8 +7,8 @@ import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/app_link.dart" show SharedEntryLink;
 import "package:entoli_core/model/models.dart";
 import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/store/prompts/skill_import.dart";
 
-import "../../data/prompts/skill_import.dart";
 import "../../providers.dart";
 import "marketplace.dart";
 

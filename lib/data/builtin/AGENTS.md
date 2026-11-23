@@ -167,7 +167,7 @@ rather than on state any other call could read. What a rule is matched against i
 Adding a tool is a class beside its kin and a line in the registry; where the
 chat should show it differently, a `ToolUI` too (see "Activities, on screen" in
 `packages/entoli_core/lib/transcript/AGENTS.md`). A name the chat draws lives
-in `packages/entoli_core/lib/domain`, beside what it is about, since the log
+in `packages/entoli_core/lib/model`, beside what it is about, since the log
 records it and the UI reads it.
 
 One thing the prompt has to say explicitly, learned from watching a real model
@@ -703,7 +703,7 @@ of the Flutter SDK on `PATH`, resolved through Homebrew's link, where every
 ran a test and the only way on was leaving the sandbox entirely, which grants
 everything a cache does not need. The cost is that a confined command can
 write a cache a later build reads; that is the bargain every build tool's
-sandbox makes. **The toolchains' stores** (`toolchainHomes`): uv's
+sandbox makes. **The toolchains' stores** (`findToolchainHomes`): uv's
 interpreters and tool environments and rustup's toolchains, which a
 `uv run --python 3.12` or a new target downloads into. Nothing on `PATH` is
 granted — `~/.cargo/bin`, nvm's, pyenv's or Bun's homes — since a program a

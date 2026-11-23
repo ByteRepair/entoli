@@ -108,8 +108,8 @@ void main() {
     ], isEmpty);
   });
 
-  // In the core, `model/` is the terms, `store/` the disk under them and
-  // `transcript/` what `view/` draws. In the app, `data/` runs without knowing
+  // In the core, `model/` is the terms, `store/` the disk under them, `agent/`
+  // the turns run over both, and `transcript/` what `view/` draws. In the app, `data/` runs without knowing
   // how it is drawn and `app/` is what `ui/` renders; `core/` and `main.dart`
   // assemble it and may reach anything.
   const above = {
@@ -118,8 +118,9 @@ void main() {
       "app": {"ui"},
     },
     "entoli_core": {
-      "model": {"store", "transcript", "view"},
-      "store": {"transcript", "view"},
+      "model": {"store", "agent", "transcript", "view"},
+      "store": {"agent", "transcript", "view"},
+      "agent": {"transcript", "view"},
       "transcript": {"view"},
     },
   };
