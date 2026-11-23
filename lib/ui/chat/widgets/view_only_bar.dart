@@ -1,39 +1,18 @@
 import "package:flutter/material.dart";
 
+import "stand_in_bar.dart";
+
 /// What sits where the composer does while a paired device is away: why
 /// there is nothing to type into, over a snapshot that has stopped moving.
 class ViewOnlyBar extends StatelessWidget {
   const ViewOnlyBar({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = theme.colorScheme.error;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        border: Border(top: BorderSide(color: theme.dividerColor)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.cloud_off_outlined, size: 16, color: color),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                "Offline — showing what this device last had",
-                style: TextStyle(color: color, fontSize: 13),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const StandInBar(
+    icon: Icons.cloud_off_outlined,
+    text: "Offline — showing what this device last had",
+    alarming: true,
+  );
 }
 
 /// The strip under the title bar of a page whose data is a paired device's —

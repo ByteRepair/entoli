@@ -3,9 +3,9 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../app/chat_edits.dart";
 import "package:entoli_chat/domain/models.dart";
+import "stand_in_bar.dart";
 
 /// Why an imported chat has no composer, and the two ways to enable it.
-/// Follows `NeedsSetupBar`'s shape.
 class ImportedBar extends ConsumerStatefulWidget {
   const ImportedBar({super.key, required this.chat});
 
@@ -30,7 +30,8 @@ class _ImportedBarState extends ConsumerState<ImportedBar> {
   }
 
   @override
-  Widget build(BuildContext context) => SharedChatBar(
+  Widget build(BuildContext context) => StandInBar(
+    icon: Icons.shield_outlined,
     text:
         "This conversation is imported, make sure you trust it before "
         "running it. Any previous message, thinking fragment, or file could "
@@ -46,53 +47,4 @@ class _ImportedBarState extends ConsumerState<ImportedBar> {
       ),
     ],
   );
-}
-
-/// The frame both imported bars are drawn in: a warning and its buttons.
-class SharedChatBar extends StatelessWidget {
-  const SharedChatBar({super.key, required this.text, required this.actions});
-
-  final String text;
-  final List<Widget> actions;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = theme.colorScheme.onSurfaceVariant;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        border: Border(top: BorderSide(color: theme.dividerColor)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.shield_outlined, size: 16, color: color),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    text,
-                    style: TextStyle(color: color, fontSize: 13),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 8,
-              runSpacing: 4,
-              children: actions,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

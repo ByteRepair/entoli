@@ -948,7 +948,8 @@ unpacked to a temp directory and `ChatStore.importChat` takes it in —
 renamed into place where the filesystem allows, its state saved through the
 store and its `resources/` locked. Two imports
 of one link are two chats. An imported chat runs nothing: `ImportedBar` stands
-in for the composer, saying anything in it could be malicious, and
+in for the composer, saying anything in it could be malicious — drawn, like
+the setup and offline bars, as a `StandInBar` — and
 `ChatRepository._turnSettings` refuses a turn for it, since a resume, a
 paired device or a trigger reaches a turn without the composer. **Enable
 Chat** (`ChatEdits.enable`) deletes the workspace files that came with it first, so no command
