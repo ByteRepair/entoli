@@ -48,6 +48,7 @@ void main() {
   ) async {
     await waitingAfter(tester, const [StatusEvent("Reading the prompt · 43%")]);
 
+    await pumpUntil(tester, find.text("Reading the prompt · 43%"));
     expect(find.text("Reading the prompt · 43%"), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsWidgets);
   });
@@ -60,6 +61,7 @@ void main() {
       StatusEvent("Reading the prompt · 80%"),
     ]);
 
+    await pumpUntil(tester, find.text("Reading the prompt · 80%"));
     expect(find.text("Reading the prompt · 80%"), findsOneWidget);
     expect(find.text("Thinking"), findsNothing);
   });
@@ -72,6 +74,7 @@ void main() {
 
     // "Thinking" beside a retry would be the turn claiming to be fine while it
     // is not, and what the reader needs is the half that is news.
+    await pumpUntil(tester, find.textContaining("rate limited"));
     expect(find.textContaining("rate limited"), findsOneWidget);
     expect(find.text("Thinking"), findsNothing);
   });
