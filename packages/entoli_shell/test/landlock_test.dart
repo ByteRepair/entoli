@@ -7,6 +7,8 @@ import "package:entoli_core/model/sandbox_denials.dart";
 import "package:entoli_shell/landlock.dart";
 import "package:entoli_core/model/shell.dart";
 
+import "temp_dir.dart";
+
 void main() {
   // The helper is compiled and run for real: Landlock is a kernel API, and
   // the whole of what it denies is decided there. A kernel older than 5.13
@@ -23,7 +25,7 @@ void main() {
   run0;
 
   setUpAll(() async {
-    cache = Directory.systemTemp.createTempSync("agent_chat_landlock_");
+    cache = tempDir("agent_chat_landlock_");
     tmp = Directory(p.join(cache.path, "tmp"))..createSync();
     final helper0 = LandlockSandboxHelper(cacheDir: cache.path);
     final sandbox = CommandSandbox(
@@ -72,10 +74,6 @@ void main() {
     }
 
     run0 = confinedRun;
-  });
-
-  tearDownAll(() {
-    if (cache.existsSync()) cache.deleteSync(recursive: true);
   });
 
   test("the helper compiles once and is reused", () async {

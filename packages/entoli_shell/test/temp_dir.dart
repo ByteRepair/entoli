@@ -5,6 +5,8 @@ import "package:flutter_test/flutter_test.dart";
 /// A directory of its own for one test, deleted after it.
 Directory tempDir([String prefix = "entoli_shell_test_"]) {
   final dir = Directory.systemTemp.createTempSync(prefix);
-  addTearDown(() => dir.deleteSync(recursive: true));
+  addTearDown(() {
+    if (dir.existsSync()) dir.deleteSync(recursive: true);
+  });
   return dir;
 }

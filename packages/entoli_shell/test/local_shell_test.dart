@@ -10,6 +10,8 @@ import "package:entoli_shell/seatbelt.dart";
 import "package:entoli_core/model/shell.dart";
 import "package:entoli_shell/shell_driver.dart";
 
+import "temp_dir.dart";
+
 List<String> _hostCommand(
   String _,
   String _, {
@@ -64,7 +66,7 @@ void main() {
   late Directory workspace;
 
   setUp(() {
-    home = Directory.systemTemp.createTempSync("agent_chat_shell_");
+    home = tempDir("agent_chat_shell_");
     workspace = Directory(p.join(home.path, "chats", "c1"))
       ..createSync(recursive: true);
     // The shell's cwd answers come back through getcwd, which resolves
@@ -72,9 +74,6 @@ void main() {
     // reports, and physical is what these expectations must be built from.
     home = Directory(home.resolveSymbolicLinksSync());
     workspace = Directory(workspace.resolveSymbolicLinksSync());
-  });
-  tearDown(() {
-    if (home.existsSync()) home.deleteSync(recursive: true);
   });
 
   Future<dynamic> run(
@@ -792,11 +791,7 @@ void main() {
     setUp(() {
       helper = Platform.isMacOS
           ? SeatbeltSandboxHelper()
-          : LandlockSandboxHelper(
-              cacheDir: Directory.systemTemp
-                  .createTempSync("agent_chat_ll_")
-                  .path,
-            );
+          : LandlockSandboxHelper(cacheDir: tempDir("agent_chat_ll_").path);
       sandbox = CommandSandbox(workspace: workspace.path);
       final driver = LocalShell.hostDriver(sandboxHelper: helper);
       shell = LocalShell(driver: ({String? project}) => driver);
@@ -833,9 +828,7 @@ void main() {
     // fail-closed one, which is the contract everywhere.
     late LandlockSandboxHelper helper;
     setUp(() {
-      helper = LandlockSandboxHelper(
-        cacheDir: Directory.systemTemp.createTempSync("agent_chat_ll_").path,
-      );
+      helper = LandlockSandboxHelper(cacheDir: tempDir("agent_chat_ll_").path);
     });
 
     test("runs confined, and a write outside the grant fails", () async {
@@ -913,17 +906,12 @@ void main() {
     // else the working directory — so standing outside the workspace both
     // failed. The gate grants [systemTemps]; this is that grant, under the
     // helper this machine's sandbox is, run for real.
-    final SandboxHelper? helper = Platform.isMacOS
-        ? SeatbeltSandboxHelper()
-        : Platform.isLinux
-        ? LandlockSandboxHelper(
-            cacheDir: Directory.systemTemp
-                .createTempSync("agent_chat_ll_tmp_")
-                .path,
-          )
-        : null;
-
     test("a here document and mktemp work away from the workspace", () async {
+      final SandboxHelper? helper = Platform.isMacOS
+          ? SeatbeltSandboxHelper()
+          : Platform.isLinux
+          ? LandlockSandboxHelper(cacheDir: tempDir("agent_chat_ll_tmp_").path)
+          : null;
       final sandbox = CommandSandbox(
         workspace: workspace.path,
         tmp: p.join(workspace.path, ".entoli-tmp"),

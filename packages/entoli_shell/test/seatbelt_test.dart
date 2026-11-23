@@ -7,6 +7,8 @@ import "package:entoli_core/model/sandbox_denials.dart";
 import "package:entoli_shell/seatbelt.dart";
 import "package:entoli_core/model/shell.dart";
 
+import "temp_dir.dart";
+
 void main() {
   // `sandbox-exec` is run for real: what Seatbelt denies is decided in the
   // kernel, and nothing short of it says whether the profile does what it
@@ -18,13 +20,12 @@ void main() {
   late String outside;
 
   setUp(() {
-    root = Directory.systemTemp.createTempSync("entoli_seatbelt_");
+    root = tempDir("entoli_seatbelt_");
     workspace = p.join(root.path, "a workspace with 'quotes' (and parens)");
     outside = p.join(root.path, "outside");
     Directory(workspace).createSync();
     Directory(outside).createSync();
   });
-  tearDown(() => root.deleteSync(recursive: true));
 
   Future<ProcessResult> run(CommandSandbox sandbox, String script) async {
     final prefix = await SeatbeltSandboxHelper().prefixFor(sandbox);

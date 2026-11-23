@@ -6,17 +6,14 @@ import "package:path/path.dart" as p;
 import "package:entoli_shell/sandbox_grants.dart";
 import "package:entoli_core/model/shell.dart" show commandDirs;
 
+import "temp_dir.dart";
+
 void main() {
   late Directory tmp;
 
   setUp(() {
-    tmp = Directory(
-      Directory.systemTemp
-          .createTempSync("agent_chat_grants_")
-          .resolveSymbolicLinksSync(),
-    );
+    tmp = Directory(tempDir("agent_chat_grants_").resolveSymbolicLinksSync());
   });
-  tearDown(() => tmp.deleteSync(recursive: true));
 
   group("toolchain caches", () {
     test("names the caches under home that exist, and only those", () {

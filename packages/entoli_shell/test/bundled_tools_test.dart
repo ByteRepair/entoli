@@ -5,6 +5,8 @@ import "package:path/path.dart" as p;
 import "package:entoli_shell/bundled_tools.dart";
 import "package:entoli_shell/shell_driver.dart";
 
+import "temp_dir.dart";
+
 void main() {
   // Laying proot out asks Android for the network's resolvers, and a method
   // channel needs a binding even to answer that nothing is listening.
@@ -14,13 +16,8 @@ void main() {
   late Directory libDir;
 
   setUp(() {
-    root = Directory.systemTemp.createTempSync("agent_chat_tools_root_");
-    libDir = Directory.systemTemp.createTempSync("agent_chat_tools_lib_");
-  });
-  tearDown(() {
-    for (final dir in [root, libDir]) {
-      if (dir.existsSync()) dir.deleteSync(recursive: true);
-    }
+    root = tempDir("agent_chat_tools_root_");
+    libDir = tempDir("agent_chat_tools_lib_");
   });
 
   void ship(String name) =>
