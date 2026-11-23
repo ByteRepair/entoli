@@ -89,4 +89,27 @@ void main() {
     ];
     expect(unfollowed, ["tree"]);
   });
+
+  test(
+    "a link back up its own tree ends, and a second way in does not",
+    () async {
+      final shared = tempDir().path;
+      File("$shared/s.txt").writeAsStringSync("s");
+      Directory("$dir/tree/sub").createSync(recursive: true);
+      File("$dir/tree/sub/a.txt").writeAsStringSync("a");
+      Link("$dir/tree/sub/up").createSync("$dir/tree");
+      Link("$dir/tree/one").createSync(shared);
+      Link("$dir/tree/two").createSync(shared);
+
+      final archive = await unzip(["$dir/tree"]);
+
+      expect(
+        archive.files
+            .map((f) => f.name)
+            .where((n) => n.endsWith(".txt"))
+            .toSet(),
+        {"tree/sub/a.txt", "tree/one/s.txt", "tree/two/s.txt"},
+      );
+    },
+  );
 }

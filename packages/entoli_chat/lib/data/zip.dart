@@ -99,7 +99,9 @@ typedef TreeEntry = ({String path, String name, bool isDirectory});
 /// it, named relative to [base] or the path's own parent. A link is followed,
 /// so a member is what the link points at; with [followLinks] false it is no
 /// member at all, for a tree handed to someone else, where what it points at
-/// outside itself is not the tree's to give. A broken link is never a member.
+/// outside itself is not the tree's to give. A broken link is never a member,
+/// and nor is a link to a folder the walk is already inside, which would
+/// never end.
 /// [skip] and [skipDir] are as [zipTo]'s.
 Stream<TreeEntry> walkTree(
   List<String> paths, {
@@ -108,7 +110,12 @@ Stream<TreeEntry> walkTree(
   bool Function(String path)? skipDir,
   bool followLinks = true,
 }) async* {
-  Stream<TreeEntry> walk(String from, String path, bool isDirectory) async* {
+  Stream<TreeEntry> walk(
+    String from,
+    String path,
+    bool isDirectory, [
+    Set<String> inside = const {},
+  ]) async* {
     if (!isDirectory) {
       if (skip == null || !skip(path)) {
         yield (path: path, name: _member(path, from), isDirectory: false);
@@ -116,6 +123,13 @@ Stream<TreeEntry> walkTree(
       return;
     }
     if (skipDir != null && skipDir(path)) return;
+    // Only the folders above it, not every folder seen: two links to one
+    // folder elsewhere are two copies of it, not a loop.
+    final real = followLinks
+        ? Directory(path).resolveSymbolicLinksSync()
+        : path;
+    if (inside.contains(real)) return;
+    final within = {...inside, real};
     // Its own entry as well as its contents': an empty folder is otherwise
     // nothing at all, and a zip of one alone would come out empty. The base
     // itself is not one of its own entries — `.` names nothing to unzip.
@@ -125,7 +139,7 @@ Stream<TreeEntry> walkTree(
     // each one is, and asking again is a stat per file.
     await for (final entity in Directory(path).list(followLinks: followLinks)) {
       if (entity is Link) continue;
-      yield* walk(from, entity.path, entity is Directory);
+      yield* walk(from, entity.path, entity is Directory, within);
     }
   }
 
