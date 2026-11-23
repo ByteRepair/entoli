@@ -147,7 +147,10 @@ how it is kept, how a turn runs, and how it is drawn, for any front end to
 run. The app is one front end and the share viewer another; the core reaches
 neither, no adapter, and no plugin. What a front end alone can do — a disk, a microphone, a shell — the
 core asks for through an interface an adapter implements and the front end
-binds at its root (the filesystem, for one, is handed to `AppConfig`). It is
+binds at its root (the filesystem, for one, is handed to `AppConfig`). The
+interface of every adapter lives here too, the ones only the app binds (file
+picking, the share sheet, the menu bar) among them, since an adapter depends
+on the core and on nothing else of Entoli's. It is
 a package because Flutter bundles the assets of every package a build depends
 on, so a front end has only what it chose.
 
