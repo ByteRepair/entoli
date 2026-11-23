@@ -27,6 +27,7 @@ import "package:entoli_files/entoli_files.dart"
     show platformAttachmentPicker, platformFilePicker;
 import "package:entoli_links/entoli_links.dart"
     show InAppSignInPages, PluginLinkLauncher, incomingLinks;
+import "package:entoli_menu/entoli_menu.dart" show nativeMenuBar;
 import "package:entoli_scanner/entoli_scanner.dart" show PluginCodeScanner;
 import "package:entoli_share/entoli_share.dart" show PluginShareSheet;
 import "package:entoli_sync_transport/entoli_sync_transport.dart" show RtcLink;
@@ -35,7 +36,6 @@ import "package:entoli_voice/entoli_voice.dart"
 import "package:entoli_webview/entoli_webview.dart" show PluginWebView;
 
 import "app/app_menus.dart";
-import "core/platform/app_menus.dart";
 import "core/platform/background_work.dart";
 import "core/platform/form_factor.dart" show isApple, isPhone;
 import "core/platform/clipboard_files.dart";
@@ -111,7 +111,7 @@ Future<void> _main() async {
 var _updateChecked = false;
 
 /// The menu bar's, once per process: it answers the platform's channel.
-NativeAppMenus? _menus;
+HostAppMenus? _menus;
 
 /// Everything the app reads out of the data directory, and the container it is
 /// all reached through. One per run of the app — and a second one when a backup
@@ -388,7 +388,9 @@ class AppSession {
         if (isPhone)
           signInPagesProvider.overrideWithValue(const InAppSignInPages()),
         appMenusProvider.overrideWithValue(
-          isApple ? _menus ??= NativeAppMenus() : const NoAppMenus(),
+          isApple
+              ? _menus ??= HostAppMenus(nativeMenuBar())
+              : const NoAppMenus(),
         ),
         agentBrowserProvider.overrideWithValue(browser),
         localEngineProvider.overrideWithValue(engine),

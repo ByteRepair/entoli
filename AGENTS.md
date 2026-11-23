@@ -94,6 +94,8 @@ named in a cross-reference is findable from this list.
   sync runs over
 - `packages/entoli_shell/lib/AGENTS.md` — Running the commands (the local
   shell), Bundled tools, A whole Linux under proot
+- `packages/entoli_menu/lib/AGENTS.md` — The menu bar on macOS and iPadOS:
+  the core's port, the Pigeon contract, the SwiftUI commands and their traps
 - `packages/entoli_paths/lib/AGENTS.md` — Where the app's data lives: the
   data and cache directories on each platform, iOS's App Group
 - `lib/ui/voice/AGENTS.md` — Reading one message out, The screen, Touch to

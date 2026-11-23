@@ -313,13 +313,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.15"
-  entoli_menu:
-    dependency: "direct main"
-    description:
-      path: "packages/entoli_menu"
-      relative: true
-    source: path
-    version: "0.1.0"
   fake_async:
     dependency: "direct dev"
     description:
@@ -832,7 +825,7 @@ packages:
     source: hosted
     version: "7.1.0"
   pigeon:
-    dependency: "direct dev"
+    dependency: transitive
     description:
       name: pigeon
       sha256: f90254ef7b22db026fd8d5fd44718fd60697d50968a144a8bc251e5e95d79e10

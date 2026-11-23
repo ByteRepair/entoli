@@ -7,11 +7,20 @@ environment:
   sdk: ^3.12.2
   flutter: ">=3.35.0"
 
+resolution: workspace
+
 dependencies:
   flutter:
     sdk: flutter
+  entoli_core:
+    path: ../entoli_core
   # The generated contract's annotations.
   meta: any
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  # The protocol's generator, run by tool/prepare.sh.
+  pigeon: ^27.3.0
 
 flutter:
   plugin:

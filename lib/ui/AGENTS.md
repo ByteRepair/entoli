@@ -316,17 +316,13 @@ held by that screen until there is a chat, for the same reason.
 **The menu bar is a module of its own.** On Apple's platforms it belongs to
 the app rather than to a window. `appMenus` (`lib/app/app_items.dart`) is its layout as data: menus of
 groups of items, and the platform's own after them (Hide, Quit, Full Screen —
-macOS's alone). `packages/entoli_menu` draws it, one Swift source for macOS and
-iPadOS over its own Pigeon contract (`pigeons/menu.dart`): Dart sends the
-whole bar, titled and greyed, whenever that changed, and Swift sends back the
-id of the item picked. The bar is SwiftUI's — `AppCommands`, in each Runner's
-`.commands` — so the platform puts in what it always does (Hide, Quit, Full
-Screen, the Window menu) and the layout says only each menu's role: the app
-menu, File, View and Help take the app's items into the platform's own, and
-an `own` menu is one of the app's. It is a port, `AppMenus`
-(`lib/app/app_menus.dart`), bound in `main` as `NativeAppMenus`
-(`core/platform/app_menus.dart`) on the two Apples and absent everywhere
-else. Before the app is up nothing is sent, so the welcome tour has no app
+macOS's alone), and the layout says only each menu's role: the app menu,
+File, View and Help take the app's items into the platform's own, and an
+`own` menu is one of the app's. It is a port, `AppMenus`
+(`lib/app/app_menus.dart`), bound in `main` as `HostAppMenus` on the two
+Apples — the items titled, greyed and handed to the core's `MenuBarHost`,
+which `entoli_menu` draws (see `packages/entoli_menu/lib/AGENTS.md`) — and
+absent everywhere else. Before the app is up nothing is sent, so the welcome tour has no app
 items to reach past it by.
 
 `AppMenuSync` (`app_menu.dart`), mounted in `AppShell` below the Navigator,
