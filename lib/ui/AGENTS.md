@@ -73,6 +73,9 @@ else reads one:
   shared chat, imported as a new chat and opened. The first is the link Share
   makes, which the web viewer reads where the app is not installed; the second
   is the viewer's Open in Entoli. A cut-short one says so and imports nothing.
+  The phones claim the host, so the first opens here where Entoli is
+  installed: Android's verified `VIEW` filter, iOS's `applinks:` associated
+  domain, both checked against the files the viewer's site serves.
   See "A shared chat" in `lib/ui/chat/AGENTS.md`.
 
 The desktops are single-instance for it: Linux's runner lets GLib emit
