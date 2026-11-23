@@ -23,10 +23,13 @@ void main() {
 
   /// A turn parked mid-flight after [events], the way `heldTurn` does it — but
   /// over a list, since what this file is about is one event replacing another.
+  /// Pumps until [until], the last event's row: the spinner is up as soon as
+  /// the turn starts, before the events reach the screen.
   Future<void> waitingAfter(
     WidgetTester tester,
-    List<AgentEvent> events,
-  ) async {
+    List<AgentEvent> events, {
+    required Finder until,
+  }) async {
     app.backend.scriptedEvents = events;
     app.backend.hold = Completer<void>();
     addTearDown(() => app.backend.hold?.complete());
@@ -40,42 +43,44 @@ void main() {
       tester,
       () => app.container.read(chatControllerProvider(id).notifier).send("go"),
     );
-    await pumpUntil(tester, find.byType(CircularProgressIndicator));
+    await pumpUntil(tester, until);
   }
 
   testWidgets("what the turn is doing is drawn beside the spinner", (
     tester,
   ) async {
-    await waitingAfter(tester, const [StatusEvent("Reading the prompt · 43%")]);
+    final status = find.text("Reading the prompt · 43%");
+    await waitingAfter(tester, const [
+      StatusEvent("Reading the prompt · 43%"),
+    ], until: status);
 
-    await pumpUntil(tester, find.text("Reading the prompt · 43%"));
-    expect(find.text("Reading the prompt · 43%"), findsOneWidget);
+    expect(status, findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsWidgets);
   });
 
   testWidgets("the latest replaces the last, since it is one row", (
     tester,
   ) async {
+    final latest = find.text("Reading the prompt · 80%");
     await waitingAfter(tester, const [
       StatusEvent("Thinking"),
       StatusEvent("Reading the prompt · 80%"),
-    ]);
+    ], until: latest);
 
-    await pumpUntil(tester, find.text("Reading the prompt · 80%"));
-    expect(find.text("Reading the prompt · 80%"), findsOneWidget);
+    expect(latest, findsOneWidget);
     expect(find.text("Thinking"), findsNothing);
   });
 
   testWidgets("trouble takes the row over from the status", (tester) async {
+    final trouble = find.textContaining("rate limited");
     await waitingAfter(tester, const [
       StatusEvent("Thinking"),
       RetryEvent(attempt: 2, message: "you have been rate limited"),
-    ]);
+    ], until: trouble);
 
     // "Thinking" beside a retry would be the turn claiming to be fine while it
     // is not, and what the reader needs is the half that is news.
-    await pumpUntil(tester, find.textContaining("rate limited"));
-    expect(find.textContaining("rate limited"), findsOneWidget);
+    expect(trouble, findsOneWidget);
     expect(find.text("Thinking"), findsNothing);
   });
 }
