@@ -18,6 +18,7 @@ import "package:agent_chat/app/chat_groups.dart" show pinnedHeading;
 import "package:agent_chat/ui/sidebar/project_palette.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/chat/share_chat_dialog.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/widgets/search_field.dart";
 import "package:agent_chat/ui/workspace/workspace_page.dart";
@@ -824,6 +825,19 @@ void main() {
           )
           .first;
       expect(tester.widget<Text>(label).style?.fontStyle, FontStyle.italic);
+    });
+
+    testWidgets("a chat's menu shares it", (tester) async {
+      await io(tester, () => app.seedChat(title: "at home"));
+      await pumpBeside(tester);
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await settleIo(tester);
+      await tester.tap(find.text("Share…"));
+      await pumpUntil(tester, find.byType(ShareChatDialog));
+      await settleIo(tester);
+
+      expect(find.text("Search files to share"), findsOneWidget);
     });
 
     testWidgets("moving a chat follows it into the project it went to", (

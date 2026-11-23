@@ -34,6 +34,7 @@ void main() {
 
   test("a chat's items wait for a chat, and Stop for a turn", () {
     expect(availabilityOf(AppAction.pinChat, facts), isA<Unavailable>());
+    expect(availabilityOf(AppAction.shareChat, facts), isA<Unavailable>());
     expect(availabilityOf(AppAction.stopTurn, facts), isA<Unavailable>());
     expect(availabilityOf(AppAction.newChat, facts), isA<Available>());
   });
