@@ -4,8 +4,6 @@
 /// `core/platform/update.dart`; this file is what every side agrees on.
 library;
 
-import "dart:io" show HttpException;
-
 import "package:http/http.dart" as http;
 
 /// The repository the check looks at. `releases/latest` answers with a
@@ -90,8 +88,9 @@ Future<String> latestReleaseTag(
   final response = await client.send(request).timeout(timeout);
   try {
     if (response.statusCode >= 400) {
-      throw HttpException(
+      throw http.ClientException(
         "${response.statusCode} for the latest release of $repo",
+        request.url,
       );
     }
     final location = response.headers["location"];
