@@ -31,7 +31,9 @@ import "package:entoli_paths/entoli_paths.dart" show appDirectories;
 import "package:entoli_voice/entoli_voice.dart"
     show openVoiceModelStore, platformVoice;
 import "package:entoli_shell/entoli_shell.dart"
-    show BundledTools, LocalShell, openRootfsStore;
+    show BundledTools, LocalShell, environmentWithoutAppImage, openRootfsStore;
+import "package:entoli_browser/entoli_browser.dart"
+    show CdpBrowser, HeliumDownload;
 export "package:entoli_shell/entoli_shell.dart"
     show
         captureLoginPath,
@@ -67,8 +69,6 @@ import "../../data/local/intent_channel.dart";
 import "../../data/local/io_file_watches.dart";
 import "../../data/local/linux_reminder_alarms.dart";
 import "../../data/local/macos_reminder_alarms.dart";
-import "../../data/browser/cdp_browser.dart";
-import "../../data/browser/helium.dart";
 import "../../data/tls.dart" show tlsClient;
 import "form_factor.dart" show isPhone;
 import "keyring_secret_store.dart";
@@ -95,14 +95,15 @@ AppUpdateHost createAppUpdateHost(String cacheDir) {
 }
 
 /// The browser the agent drives: on the three desktops whatever Settings >
-/// Agent Browser picked, under `<cache>/browser/`; on Android the app's own
-/// WebViews. iOS's WKWebView speaks no DevTools Protocol.
+/// Agent Browser picked, under `<cache>/browser/`; on the phones the app's
+/// own web views.
 AgentBrowser createAgentBrowser(AppConfig config, String cacheDir) {
   final dir = p.join(cacheDir, "browser");
   return CdpBrowser(
     browserDir: dir,
     picked: () => AppSettings.load(config).agentBrowser,
     visible: () => AppSettings.load(config).agentBrowserVisible,
+    environment: environmentWithoutAppImage,
     embedded: HeliumDownload(dir, client: tlsClient),
     webViews: Platform.isAndroid || Platform.isIOS
         ? const MethodChannel("agent_chat/browser")

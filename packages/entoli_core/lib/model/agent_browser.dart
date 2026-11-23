@@ -7,7 +7,8 @@ import "download.dart";
 /// The browser the agent drives: a real one, with a window the user can see
 /// and a profile that keeps its logins, reached over the Chrome DevTools
 /// Protocol on the desktops. See "The browser" in
-/// `packages/entoli_core/lib/agent/AGENTS.md`.
+/// `packages/entoli_core/lib/agent/AGENTS.md`, and
+/// `packages/entoli_browser/lib/AGENTS.md` for the implementation.
 ///
 /// One instance per app, shared by the backend that drives it and the
 /// settings page that picks it — the page has to close the running browser

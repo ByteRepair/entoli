@@ -1,8 +1,7 @@
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-import "package:agent_chat/data/browser/cdp_browser.dart";
-import "package:agent_chat/data/browser/helium.dart";
+import "package:entoli_browser/entoli_browser.dart";
 import "package:entoli_core/model/agent_browser.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:agent_chat/providers.dart";
@@ -24,6 +23,7 @@ void main() {
         browserDir: p.join(config.dataDir, "browser"),
         picked: () => AppSettings.load(config).agentBrowser,
         visible: () => AppSettings.load(config).agentBrowserVisible,
+        environment: () => const {},
         embedded: HeliumDownload(p.join(config.dataDir, "browser")),
         webViews: const MethodChannel("agent_chat/browser"),
       ),

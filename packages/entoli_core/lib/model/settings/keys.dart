@@ -673,7 +673,7 @@ abstract final class SettingKeys {
   /// The browser the agent drives: null off, `embedded` for the downloaded
   /// Helium, or a Chromium-family executable's path. On the phones the
   /// WebView is on by default: null and `webview` are on, `off` is off. See
-  /// "The browser" in `packages/entoli_core/lib/agent/AGENTS.md`.
+  /// "On Android" in `packages/entoli_browser/lib/AGENTS.md`.
   static const agentBrowser = Setting<String>("agentBrowser", StringCodec());
 
   /// Whether that browser runs with a window. Hidden by default, with its

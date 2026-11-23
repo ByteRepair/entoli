@@ -6,7 +6,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 import "package:agent_chat/app/first_run.dart";
-import "package:agent_chat/data/browser/cdp_browser.dart";
+import "package:entoli_browser/entoli_browser.dart" show CdpBrowser;
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
     show CliProvider, HostCliGuest;
 import "package:entoli_core/model/agent_browser.dart"
@@ -510,6 +510,7 @@ void main() {
           browserDir: p.join(config.dataDir, "browser"),
           picked: () => AppSettings.load(config).agentBrowser,
           visible: () => false,
+          environment: () => const {},
           embedded: helium,
         ),
       );

@@ -8,7 +8,7 @@ import "package:path/path.dart" as p;
 import "package:entoli_core/model/agent_browser.dart";
 import "package:entoli_core/model/download.dart";
 
-import "../download.dart" show latestReleaseTag;
+import "package:entoli_core/model/app_update.dart" show latestReleaseTag;
 
 /// Which desktop a Helium release is fetched for. Each has a repository of its
 /// own, and its asset names carry the version.

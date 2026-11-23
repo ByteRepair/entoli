@@ -9,7 +9,6 @@ import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/app_update.dart";
 
 import "../../data/tls.dart";
-import "../../data/download.dart" show latestReleaseTag;
 
 const _tag = "update";
 

@@ -9,7 +9,6 @@ import "package:path/path.dart" as p;
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/agent_browser.dart";
 
-import "package:entoli_shell/entoli_shell.dart" show environmentWithoutAppImage;
 import "cdp.dart";
 import "helium.dart";
 import "page_script.dart";
@@ -27,6 +26,7 @@ class CdpBrowser extends AgentBrowser {
     required this.picked,
     required this.embedded,
     required this.visible,
+    required this.environment,
     this.idle = const Duration(minutes: 10),
     this.webViews,
   });
@@ -50,6 +50,11 @@ class CdpBrowser extends AgentBrowser {
 
   /// The setting: whether the browser runs with a window.
   final bool Function() visible;
+
+  /// The whole environment a launched browser gets. The app binds its own
+  /// less the AppImage variables, which Helium's AppImage would read as its
+  /// own.
+  final Map<String, String> Function() environment;
 
   final Duration idle;
 
@@ -185,12 +190,18 @@ class CdpBrowser extends AgentBrowser {
       return _Running(exe, null, WebKitConnection(webViews!), windowed: true);
     }
     if (webViews != null) return _connectWebViews(exe);
-    if (windowed) return _launch(exe, _profile);
+    if (windowed) return _launch(exe, _profile, environment());
     final known = _userAgents[exe];
     if (known != null) {
-      return _launch(exe, _profile, headless: true, userAgent: known);
+      return _launch(
+        exe,
+        _profile,
+        environment(),
+        headless: true,
+        userAgent: known,
+      );
     }
-    final probe = await _launch(exe, _profile, headless: true);
+    final probe = await _launch(exe, _profile, environment(), headless: true);
     final agent =
         (await probe.cdp.send("Browser.getVersion"))["userAgent"] as String? ??
         "";
@@ -201,7 +212,13 @@ class CdpBrowser extends AgentBrowser {
     await _stop(probe);
     final fixed = agent.replaceAll("HeadlessChrome", "Chrome");
     _userAgents[exe] = fixed;
-    return _launch(exe, _profile, headless: true, userAgent: fixed);
+    return _launch(
+      exe,
+      _profile,
+      environment(),
+      headless: true,
+      userAgent: fixed,
+    );
   }
 
   /// Debugging on, the WebViews serve the protocol on an abstract socket
@@ -458,7 +475,7 @@ class CdpBrowser extends AgentBrowser {
     }
     final probe = p.join(browserDir, "probe-$pid");
     try {
-      final started = await _launch(exe, probe, headless: true);
+      final started = await _launch(exe, probe, environment(), headless: true);
       await started.cdp.send("Browser.getVersion");
       await _stop(started);
       return exe;
@@ -554,7 +571,8 @@ Future<String> _commandLine(int pid) async {
 /// the profile once it listens: no port is guessed, so none can be taken.
 Future<_Running> _launch(
   String exe,
-  String profile, {
+  String profile,
+  Map<String, String> environment, {
   bool headless = false,
   String? userAgent,
 }) async {
@@ -577,7 +595,7 @@ Future<_Running> _launch(
       if (userAgent != null) "--user-agent=$userAgent",
       "about:blank",
     ],
-    environment: environmentWithoutAppImage(),
+    environment: environment,
     includeParentEnvironment: false,
   );
   // Drained, or a chatty browser fills the pipe and stalls; the tail is kept

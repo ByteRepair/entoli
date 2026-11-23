@@ -34,8 +34,8 @@ named in a cross-reference is findable from this list.
 - `packages/entoli_core/lib/agent/AGENTS.md` — The agent loop, Tools,
   Background jobs, Running a command yourself, Approvals, Questions,
   Sub-agents, Their own transcripts, Following one while it runs, Carrying one
-  on, Web search, The browser, Images, Attachments, Skills, The room's roster,
-  Compaction, The plan, The task list, Memory
+  on, Web search, The browser (the tools), Images, Attachments, Skills, The
+  room's roster, Compaction, The plan, The task list, Memory
 - `packages/entoli_core/lib/agent/llm/AGENTS.md` — Reaching a provider, How
   long a reply may be, How much of an allowance is spent, Errors, and how long
   the UI waits
@@ -94,6 +94,9 @@ named in a cross-reference is findable from this list.
   sync runs over
 - `packages/entoli_shell/lib/AGENTS.md` — Running the commands (the local
   shell), Bundled tools, A whole Linux under proot
+- `packages/entoli_browser/lib/AGENTS.md` — The agent's browser: launching
+  it, Helium, hidden, the view and input, On Android, On iOS, the file
+  chooser, Downloads
 - `packages/entoli_menu/lib/AGENTS.md` — The menu bar on macOS and iPadOS:
   the core's port, the Pigeon contract, the SwiftUI commands and their traps
 - `packages/entoli_paths/lib/AGENTS.md` — Where the app's data lives: the
@@ -178,9 +181,9 @@ app, the core, the adapters and the viewer are one pub workspace with one
 `packages/entoli_<capability>/` is one platform capability: the core's
 interfaces for it implemented with the Flutter plugins it takes, and nothing
 else — voice, files, links, share, scanner, webview, sync_transport, shell,
-paths, menu. An adapter depends on the core and its plugins, never on a front
-end, and on another adapter only where it builds on one. Its notes are in its
-`lib/AGENTS.md`, listed above.
+paths, menu, browser. An adapter depends on the core and its plugins, never
+on a front end, and on another adapter only where it builds on one. Its notes
+are in its `lib/AGENTS.md`, listed above.
 
 ### The two front ends
 
@@ -191,8 +194,8 @@ chose, and binds every interface at its root, in one place.
   `providers.dart` declaring the app's own ports and `core/platform/` building
   each platform's implementations. Beside the binding it is the pages and
   widgets (`ui/`), their controllers (`app/`), and what only the app runs
-  (`data/`): sync, the secrets, the triggers, the models on the device, the
-  agent's browser and the CLI providers. It takes every adapter.
+  (`data/`): sync, the secrets, the triggers, the models on the device and
+  the CLI providers. It takes every adapter.
 - **The viewer** (`packages/entoli_share_viewer/`) is the core in a browser,
   read-only. It takes the one adapter that builds for the web and is worth
   taking, `entoli_links`, and implements the rest of what it needs itself;

@@ -25,9 +25,8 @@ a texture Flutter composites, which lags scrolling by a frame; hybrid
 composition puts the native view on screen to scroll by itself.
 
 The agent's browser is not this: it is the app's own native channel
-(`BrowserChannel.kt` and `.swift`), driven over the DevTools Protocol. See
-"The browser (the `browser_*` tools)" in
-`packages/entoli_core/lib/agent/AGENTS.md`.
+(`BrowserChannel.kt` and `.swift`), driven over the DevTools Protocol by
+`entoli_browser`. See `packages/entoli_browser/lib/AGENTS.md`.
 
 The test fakes `webview_flutter` at its platform interface
 (`webview_flutter_platform_interface`, a dev dependency): the plugin has no

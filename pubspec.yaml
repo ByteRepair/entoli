@@ -24,6 +24,7 @@ workspace:
   - packages/entoli_shell
   - packages/entoli_paths
   - packages/entoli_menu
+  - packages/entoli_browser
 
 dependencies:
   flutter:
@@ -62,6 +63,9 @@ dependencies:
   # The menu bar on macOS and iPadOS.
   entoli_menu:
     path: packages/entoli_menu
+  # The browser the agent drives: Chromium over CDP, or the phones' web views.
+  entoli_browser:
+    path: packages/entoli_browser
 
   # State management
   flutter_riverpod: ^3.4.2
