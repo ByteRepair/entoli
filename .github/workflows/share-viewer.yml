@@ -47,9 +47,11 @@ jobs:
             }
           }]' > .well-known/assetlinks.json
 
+      # .well-known/ is a dot directory, which the upload leaves out by default.
       - uses: actions/upload-pages-artifact@v5.0.0
         with:
           path: packages/entoli_share_viewer/build/web
+          include-hidden-files: true
 
   deploy:
     needs: build
