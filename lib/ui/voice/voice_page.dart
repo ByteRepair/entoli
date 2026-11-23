@@ -5,6 +5,7 @@ import "package:entoli_chat/domain/chat_meta.dart";
 import "package:entoli_chat/domain/models.dart";
 import "../../providers.dart";
 import "../../app/chat_controller.dart";
+import "../../app/mirror_controller.dart" show chatViewProvider;
 import "../chat/widgets/turn_surface.dart";
 import "../settings/settings_category.dart";
 import "package:entoli_chat/ui/widgets/dialogs.dart";
@@ -25,6 +26,10 @@ Future<void> openVoice(
   WidgetRef ref,
   String chatId,
 ) async {
+  if (ref.read(chatViewProvider(chatId)).chat?.state.imported ?? false) {
+    say(context, "An imported chat runs nothing until it is enabled.");
+    return;
+  }
   if (!await _haveModels(context, ref) || !context.mounted) return;
   await _push(context, chatId);
 }

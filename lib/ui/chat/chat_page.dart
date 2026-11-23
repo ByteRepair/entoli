@@ -593,7 +593,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       context,
       chat: chat,
       view: view,
-      editing: notifier,
+      // An edit, a regenerate or a reaction is a turn, which an imported
+      // chat refuses until it is enabled.
+      editing: chat.state.imported ? null : notifier,
       details: const [],
       whenEmpty: _EmptyChat(
         project: chat.state.project,
@@ -623,7 +625,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       view: view,
       // The device is the strip's to say.
       details: const [],
-      editing: online ? driver : null,
+      editing: online && !chat.state.imported ? driver : null,
       whenEmpty: const Center(child: Text("No messages yet")),
       banner: online
           ? MirrorStrip.remote(deviceName: deviceName)

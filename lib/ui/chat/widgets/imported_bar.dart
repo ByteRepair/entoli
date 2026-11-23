@@ -2,7 +2,10 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../app/chat_edits.dart";
+import "package:entoli_chat/core/log.dart";
 import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/ui/widgets/dialogs.dart" show say;
+import "../../../providers.dart" show isMirroredChatProvider;
 import "stand_in_bar.dart";
 
 /// Why an imported chat has no composer, and the two ways to enable it.
@@ -24,13 +27,29 @@ class _ImportedBarState extends ConsumerState<ImportedBar> {
       await ref
           .read(chatEditsProvider)
           .enable(widget.chat, keepWorkspace: keepWorkspace);
+    } catch (e) {
+      logFailure("chat", "enabling imported chat ${widget.chat.id} failed", e);
+      if (mounted) say(context, "Could not enable this chat: $e");
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) => StandInBar(
+  Widget build(BuildContext context) {
+    // A mirror's is its home device's to enable.
+    if (ref.watch(isMirroredChatProvider(widget.chat.id))) {
+      return const StandInBar(
+        icon: Icons.shield_outlined,
+        text:
+            "This conversation is imported, and is enabled on the device it "
+            "is on.",
+      );
+    }
+    return _bar();
+  }
+
+  Widget _bar() => StandInBar(
     icon: Icons.shield_outlined,
     text:
         "This conversation is imported, make sure you trust it before "

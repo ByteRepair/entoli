@@ -69,6 +69,13 @@ void main() {
       expect(find.textContaining("make sure you trust it"), findsOneWidget);
     });
 
+    testWidgets("offers no edit or regenerate, each a turn", (tester) async {
+      await openImported(tester);
+
+      expect(find.byTooltip("Edit"), findsNothing);
+      expect(find.byTooltip("Regenerate"), findsNothing);
+    });
+
     testWidgets("Enable Chat lets it run without the files it came with", (
       tester,
     ) async {
