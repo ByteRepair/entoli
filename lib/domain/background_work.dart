@@ -1,9 +1,9 @@
 /// Asks the platform not to kill the app while there is work it must not lose.
-/// Android's foreground services; on iOS, a continued-processing task and a
-/// Live Activity (see "Running off screen" in ios/AGENTS.md); on macOS, a
-/// running turn keeps closing the window from quitting the app (see "Closing
-/// the window during a turn" in macos/AGENTS.md); a no-op everywhere else,
-/// where a process nobody is looking at is left alone.
+/// Android's foreground services; on iOS, a continued-processing task (see
+/// "Running off screen" in ios/AGENTS.md); on macOS, a running turn keeps
+/// closing the window from quitting the app (see "Closing the window during a
+/// turn" in macos/AGENTS.md); a no-op everywhere else, where a process nobody
+/// is looking at is left alone.
 ///
 /// Nothing about the work moves. It runs in the isolate it always ran in; this
 /// only buys that isolate the right to keep running off screen, and offers the

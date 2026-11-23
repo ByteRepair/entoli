@@ -51,8 +51,6 @@
 	<string>Entoli listens only during a voice conversation. Your speech is turned into text on this device, and that text is sent to the model you've chosen, like a typed message.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Entoli turns your speech into text on this device during a voice conversation. The audio never leaves the device; the text goes to the model you've chosen, like a typed message.</string>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -391,7 +391,6 @@ jobs:
           codesign --force --sign - \
             --entitlements ios/WorkspaceProvider/WorkspaceProvider.entitlements \
             "$app/PlugIns/WorkspaceProvider.appex"
-          codesign --force --sign - "$app/PlugIns/WorkActivity.appex"
           codesign --force --sign - --entitlements ios/Runner/Runner.entitlements "$app"
           key="$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
           printf '%s' "$API_KEY_P8" | base64 -D -o "$key"
