@@ -118,6 +118,42 @@ void main() {
     expect(Directory(config.workspaceDir("abc")).existsSync(), isTrue);
   });
 
+  test(
+    "a link into a workspace is followed; one out comes back a link",
+    () async {
+      final outside = tempDir().path;
+      File("$outside/id_ed25519").writeAsStringSync("secret");
+      final ws = config.projectWorkspaceDir();
+      write("projects/default/workspace/notes/a.txt", "a");
+      Link("$ws/keys").createSync(outside);
+      Link("$ws/gone").createSync("$outside/missing");
+      Link("$ws/also").createSync("$ws/notes");
+      Link("${config.dataDir}/to-sync").createSync("${config.dataDir}/sync");
+
+      final zip = await archive();
+      expect(zip.findFile("projects/default/workspace/also/a.txt"), isNotNull);
+      expect(
+        zip.files.where(
+          (f) => f.name.startsWith("projects/default/workspace/keys/"),
+        ),
+        isEmpty,
+      );
+
+      final backup = await roundTrip();
+      Directory(config.dataDir).deleteSync(recursive: true);
+      Directory(config.dataDir).createSync(recursive: true);
+      await restoreBackup(config, backup);
+
+      expect(Link("$ws/keys").targetSync(), outside);
+      expect(Link("$ws/gone").targetSync(), "$outside/missing");
+      expect(
+        Link("${config.dataDir}/to-sync").targetSync(),
+        "${config.dataDir}/sync",
+      );
+      expect(File("$ws/also/a.txt").readAsStringSync(), "a");
+    },
+  );
+
   test("the manifest is not restored as a file of its own", () async {
     await restoreBackup(config, await roundTrip());
 

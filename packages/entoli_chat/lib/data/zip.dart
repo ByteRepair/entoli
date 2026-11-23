@@ -1,3 +1,4 @@
+import "dart:convert";
 import "dart:io";
 import "dart:typed_data";
 
@@ -15,7 +16,7 @@ import "../domain/workspace.dart" show safeRelativePath;
 /// [skip] drops a file by its path, and is never asked about a directory;
 /// [skipDir] drops a directory by its path, and is asked before recursing into
 /// it. [extra] goes in last, for a member of the caller's own. [followLinks]
-/// is [walkTree]'s.
+/// and [followInto] are [walkTree]'s.
 Future<void> zipTo(
   String to,
   List<String> paths, {
@@ -24,6 +25,7 @@ Future<void> zipTo(
   bool Function(String path)? skipDir,
   List<ArchiveFile> extra = const [],
   bool followLinks = true,
+  bool Function(String real)? followInto,
 }) async {
   final encoder = ZipFileEncoder()..create(to);
   try {
@@ -33,10 +35,15 @@ Future<void> zipTo(
       skip: skip,
       skipDir: skipDir,
       followLinks: followLinks,
+      followInto: followInto,
     )) {
-      entry.isDirectory
-          ? encoder.addArchiveFile(ArchiveFile.directory(entry.name))
-          : await _addStreamed(encoder, entry.path, entry.name);
+      if (entry.link case final link?) {
+        encoder.addArchiveFile(linkMember(entry.name, link));
+      } else if (entry.isDirectory) {
+        encoder.addArchiveFile(ArchiveFile.directory(entry.name));
+      } else {
+        await _addStreamed(encoder, entry.path, entry.name);
+      }
     }
     extra.forEach(encoder.addArchiveFile);
   } finally {
@@ -62,7 +69,9 @@ Future<Archive> archiveOf(
     followLinks: followLinks,
   )) {
     archive.add(
-      entry.isDirectory
+      entry.link != null
+          ? linkMember(entry.name, entry.link!)
+          : entry.isDirectory
           ? ArchiveFile.directory(entry.name)
           : ArchiveFile.bytes(entry.name, await File(entry.path).readAsBytes()),
     );
@@ -98,17 +107,36 @@ String zipNameFor(List<String> paths) {
   return "${p.basename(named)}.zip";
 }
 
+/// A link as a zip member, as a Unix `zip` writes one: its target as the
+/// content, and a mode whose type bits say link. The encoder here marks every
+/// zip as made on MS-DOS, which its decoder then reads no link from, so
+/// [linkTargetOf] reads the mode itself.
+ArchiveFile linkMember(String name, String target) =>
+    ArchiveFile.bytes(name, utf8.encode(target))..mode = 0xa1ff;
+
+/// What [member] links to, where it is a link [linkMember] made.
+String? linkTargetOf(ArchiveFile member) => member.mode & 0xf000 == 0xa000
+    ? utf8.decode(member.readBytes() ?? Uint8List(0))
+    : null;
+
 /// One member [walkTree] makes: its [path] on disk, and its [name] in a zip.
-typedef TreeEntry = ({String path, String name, bool isDirectory});
+/// [link] is set where the member is a link kept as one, to what it names.
+typedef TreeEntry = ({
+  String path,
+  String name,
+  bool isDirectory,
+  String? link,
+});
 
 /// Every member [paths] make, in walk order: each folder before what is in
 /// it, named relative to [base] or the path's own parent. A link is followed,
 /// so a member is what the link points at; with [followLinks] false it is no
 /// member at all, even as one of [paths], for a tree handed to someone else,
-/// where what it points at
-/// outside itself is not the tree's to give. A broken link is never a member,
-/// and nor is a link to a folder the walk is already inside, which would
-/// never end.
+/// where what it points at outside itself is not the tree's to give. A link
+/// to a folder the walk is already inside is never a member, which would
+/// never end. [followInto] is asked where a link lands, by its real path:
+/// refused, or broken, the link is a member as the link, with nothing it
+/// leads to; without it a broken link is no member.
 /// [skip] and [skipDir] are as [zipTo]'s.
 Stream<TreeEntry> walkTree(
   List<String> paths, {
@@ -116,6 +144,7 @@ Stream<TreeEntry> walkTree(
   bool Function(String path)? skip,
   bool Function(String path)? skipDir,
   bool followLinks = true,
+  bool Function(String real)? followInto,
 }) async* {
   // The real paths of the folders the walk is inside, where it follows links:
   // only those, not every folder seen, since two links to one folder
@@ -130,7 +159,12 @@ Stream<TreeEntry> walkTree(
   ) async* {
     if (!isDirectory) {
       if (skip == null || !skip(path)) {
-        yield (path: path, name: _member(path, from), isDirectory: false);
+        yield (
+          path: path,
+          name: _member(path, from),
+          isDirectory: false,
+          link: null,
+        );
       }
       return;
     }
@@ -140,7 +174,9 @@ Stream<TreeEntry> walkTree(
     // nothing at all, and a zip of one alone would come out empty. The base
     // itself is not one of its own entries — `.` names nothing to unzip.
     final name = _member(path, from);
-    if (name != ".") yield (path: path, name: name, isDirectory: true);
+    if (name != ".") {
+      yield (path: path, name: name, isDirectory: true, link: null);
+    }
     // Listed without following, so only a link costs a lookup of where it
     // lands: a folder that is not one is its parent's real path and its name.
     await for (final entity in Directory(path).list(followLinks: false)) {
@@ -153,7 +189,23 @@ Stream<TreeEntry> walkTree(
           isDir && real != null ? p.join(real, p.basename(entity.path)) : null,
         );
       } else if (followLinks) {
-        switch (FileSystemEntity.typeSync(entity.path)) {
+        final type = FileSystemEntity.typeSync(entity.path);
+        if (followInto != null) {
+          // A broken link leads nowhere in scope either: kept, like one out.
+          final real = type == FileSystemEntityType.notFound
+              ? null
+              : _realOf(entity.path);
+          if (real == null || !followInto(real)) {
+            yield (
+              path: entity.path,
+              name: _member(entity.path, from),
+              isDirectory: false,
+              link: entity.targetSync(),
+            );
+            continue;
+          }
+        }
+        switch (type) {
           case FileSystemEntityType.file:
             yield* walk(from, entity.path, false, null);
           case FileSystemEntityType.directory:

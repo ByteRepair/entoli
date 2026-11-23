@@ -607,6 +607,16 @@ recursive delete, so the stubs a skipped `rootfs/` leaves behind go with it —
 the same `removeTree` the rootfs stores use, so the one function that knows how
 to delete a stub-bearing tree is the one the restore reuses.
 
+**A link is followed only into a project's workspace.** One that lands
+anywhere else — out of the data directory, into `sync/`, or nowhere — goes in
+as the link and nothing it leads to, and the restore puts the link back
+(Windows lets a user make one only with a privilege they often lack, so there
+it is a line and no link). Where it lands is its real path against the data
+directory's, resolved once, since the data directory may itself sit under a
+link. The zip writes a link as a Unix `zip` does, target as content and
+link type in the mode; `linkTargetOf` reads it back, since the encoder marks
+every zip MS-DOS and its own decoder then finds no link in one.
+
 **A restore is unpacked beside the data directory and swapped in.** The members
 go into `<dataDir>.restoring`, the `machineLocalFiles` are copied across from
 the live directory, and the migrations run there; then two renames put the live

@@ -92,8 +92,9 @@ Future<void> writeBackup(AppConfig config, String to) {
   // isolate.
   final dataDir = config.dataDir;
   final machineLocal = config.machineLocalFiles;
-  return Isolate.run(
-    () => zipTo(
+  return Isolate.run(() {
+    final realDataDir = Directory(dataDir).resolveSymbolicLinksSync();
+    return zipTo(
       to,
       [dataDir],
       base: dataDir,
@@ -114,6 +115,15 @@ Future<void> writeBackup(AppConfig config, String to) {
                 parts[0] == "projects" &&
                 parts[2] == "rootfs");
       },
+      // What a backup holds is the data directory's: a link that leads out of
+      // every project's workspace goes in as the link, not what it reaches.
+      // Against the real path, since the data directory may sit under a link.
+      followInto: (real) {
+        final parts = p.split(p.relative(real, from: realDataDir));
+        return parts.length >= 3 &&
+            parts[0] == "projects" &&
+            parts[2] == "workspace";
+      },
       extra: [
         ArchiveFile.string(
           manifestName,
@@ -124,8 +134,8 @@ Future<void> writeBackup(AppConfig config, String to) {
           }),
         ),
       ],
-    ),
-  );
+    );
+  });
 }
 
 /// Open the backup at [path] and check the manifest, on an isolate of its own:
@@ -243,8 +253,14 @@ Future<void> _restore(
       // onto a directory.
       await writeIncoming(staged, [
         for (final member in members)
-          if (!member.isDirectory) _RestoredFile(member),
+          if (!member.isDirectory && linkTargetOf(member) == null)
+            _RestoredFile(member),
       ]);
+      for (final member in members) {
+        if (linkTargetOf(member) case final target?) {
+          await _restoreLink(staged, member.name, target);
+        }
+      }
       for (final member in members) {
         if (member.isDirectory) await createFolder(staged, member.name);
       }
@@ -274,6 +290,19 @@ Future<void> _restore(
   } catch (_) {
     await _putBack(dataDir);
     rethrow;
+  }
+}
+
+/// A link the backup kept as one, put back at [name] under [staged]. Windows
+/// makes one only with a privilege a user often lacks: a line, and the rest
+/// of the restore goes on.
+Future<void> _restoreLink(String staged, String name, String target) async {
+  final at = p.join(staged, safeRelativePath(name));
+  try {
+    await Directory(p.dirname(at)).create(recursive: true);
+    await Link(at).create(target);
+  } on FileSystemException catch (e) {
+    logFailure("backup", "a link could not be restored", e.osError);
   }
 }
 
