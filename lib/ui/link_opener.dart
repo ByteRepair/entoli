@@ -2,11 +2,10 @@ import "dart:async";
 import "dart:io";
 
 import "package:flutter/material.dart";
-import "package:url_launcher/url_launcher.dart";
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/chat_store.dart";
+import "package:entoli_core/model/link_launcher.dart";
 import "package:entoli_core/model/link_opener.dart";
-import "package:entoli_core/model/sign_in_page.dart";
 import "package:entoli_core/view/widgets/dialogs.dart";
 import "package:entoli_core/view/widgets/page_bar.dart";
 
@@ -25,9 +24,9 @@ bool isOpenableLink(Uri url) =>
 /// Opens links from rendered markdown, and artifacts the model rendered.
 ///
 /// On Android, `http`/`https` open in an in-app webview so the user stays in
-/// the app; other schemes (`mailto:`, `tel:`) fall back to [url_launcher], which
-/// a webview cannot load. Everywhere else every URL goes to the external
-/// browser via [url_launcher].
+/// the app; other schemes (`mailto:`, `tel:`), which a webview cannot load,
+/// go to the [LinkLauncher]. Everywhere else every URL goes to the external
+/// browser through it.
 ///
 /// Artifacts open the same way on Android (in-app webview) and desktop (external
 /// browser). Android serves the artifact over a local HTTP server because the
@@ -40,10 +39,11 @@ bool isOpenableLink(Uri url) =>
 /// artifact takes. The hub is null in tests, which is also the shape of "no
 /// sync running": the local paths answer.
 class PlatformLinkOpener implements LinkOpener {
-  PlatformLinkOpener(this._store, [this._hub])
+  PlatformLinkOpener(this._store, this._launcher, [this._hub])
     : _remote = _hub == null ? null : RemoteArtifacts(_hub);
 
   final ChatStore _store;
+  final LinkLauncher _launcher;
 
   /// Set in `main`, where the hub is built before the container is. Null
   /// leaves every artifact on the local paths.
@@ -68,13 +68,15 @@ class PlatformLinkOpener implements LinkOpener {
     }
     if (isAndroid && (url.scheme == "http" || url.scheme == "https")) {
       unawaited(
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute<void>(builder: (_) => _WebViewPage(url: url))),
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => _WebViewPage(url: url, launcher: _launcher),
+          ),
+        ),
       );
       return;
     }
-    await launchUrl(url, mode: LaunchMode.externalApplication);
+    await _launcher.openExternal(url);
   }
 
   /// The system's own in-app browser on the phones — SFSafariViewController,
@@ -86,12 +88,9 @@ class PlatformLinkOpener implements LinkOpener {
       logFailure("link", "refused a sign-in page with scheme ${url.scheme}");
       return;
     }
-    await launchUrl(
-      url,
-      mode: isPhone
-          ? LaunchMode.inAppBrowserView
-          : LaunchMode.externalApplication,
-    );
+    await (isPhone
+        ? _launcher.openInAppBrowser(url)
+        : _launcher.openExternal(url));
   }
 
   @override
@@ -160,10 +159,7 @@ class PlatformLinkOpener implements LinkOpener {
       return true;
     }
     if (!_inAppArtifacts) {
-      await launchUrl(
-        Uri.file("$dir/$entryFile"),
-        mode: LaunchMode.externalApplication,
-      );
+      await _launcher.openExternal(Uri.file("$dir/$entryFile"));
       return true;
     }
     if (!context.mounted) return true;
@@ -189,24 +185,7 @@ class PlatformLinkOpener implements LinkOpener {
       logFailure("open", "Artifact entry file missing: $dir/$entryFile");
       return;
     }
-    await launchUrl(
-      Uri.file("$dir/$entryFile"),
-      mode: LaunchMode.externalApplication,
-    );
-  }
-}
-
-/// The page [PlatformLinkOpener.openSignIn] opened inside the app: an
-/// SFSafariViewController closes, and a Custom Tab, which nothing outside
-/// it may close, stays.
-class InAppSignInPages implements SignInPages {
-  const InAppSignInPages();
-
-  @override
-  Future<void> close() async {
-    if (await supportsCloseForLaunchMode(LaunchMode.inAppBrowserView)) {
-      await closeInAppWebView();
-    }
+    await _launcher.openExternal(Uri.file("$dir/$entryFile"));
   }
 }
 
@@ -214,9 +193,10 @@ class InAppSignInPages implements SignInPages {
 /// Copy link and Open in browser act on the page navigated to rather than
 /// the link that opened it.
 class _WebViewPage extends StatefulWidget {
-  const _WebViewPage({required this.url});
+  const _WebViewPage({required this.url, required this.launcher});
 
   final Uri url;
+  final LinkLauncher launcher;
 
   @override
   State<_WebViewPage> createState() => _WebViewPageState();
@@ -240,10 +220,8 @@ class _WebViewPageState extends State<_WebViewPage> {
         PageAction.icon(
           icon: Icons.open_in_browser,
           label: "Open in browser",
-          onPressed: () => catchAndSay(
-            context,
-            () => launchUrl(_at, mode: LaunchMode.externalApplication),
-          ),
+          onPressed: () =>
+              catchAndSay(context, () => widget.launcher.openExternal(_at)),
         ),
       ],
     ),

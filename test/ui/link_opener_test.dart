@@ -46,6 +46,7 @@ void main() {
           builder: (context) => TextButton(
             onPressed: () => PlatformLinkOpener(
               FakeChatStore(),
+              FakeLinkLauncher(),
             ).open(context, Uri.parse(url)),
             child: const Text("open"),
           ),

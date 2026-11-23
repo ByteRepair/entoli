@@ -1,7 +1,6 @@
 import "dart:async";
 import "dart:math" show min;
 
-import "package:app_links/app_links.dart";
 import "package:clock/clock.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart" show rootBundle;
@@ -20,6 +19,7 @@ import "package:entoli_core/model/bot_avatar/spec.dart";
 import "package:entoli_core/model/agent_backend.dart";
 import "package:entoli_core/model/app_restart.dart";
 import "package:entoli_core/model/sign_in_page.dart";
+import "package:entoli_core/model/link_launcher.dart";
 import "package:entoli_core/model/app_secrets.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/confinement.dart";
@@ -149,9 +149,15 @@ final assistantLaunchProvider = Provider<AssistantLaunch>(
 );
 
 /// Every `entoli://` link: the one that launched the app, then each after.
-/// A test overrides it with a stream of its own.
+/// Bound in `main` to `entoli_links`; a test binds a stream of its own.
 final appLinksProvider = Provider<Stream<Uri>>(
-  (ref) => AppLinks().uriLinkStream,
+  (ref) => throw UnimplementedError(),
+);
+
+/// Where a URL leaves the app, for a page that sends the user elsewhere by
+/// one rather than through the `LinkOpener`.
+final linkLauncherProvider = Provider<LinkLauncher>(
+  (ref) => throw UnimplementedError(),
 );
 final voiceModelStoreProvider = Provider<VoiceModelStore>(
   (ref) => throw UnimplementedError(),

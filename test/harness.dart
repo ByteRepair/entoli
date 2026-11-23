@@ -301,6 +301,7 @@ class TestApp {
           backupHandoffProvider.overrideWithValue(backups),
           appRestartProvider.overrideWithValue(restart),
           linkOpenerProvider.overrideWithValue(linkOpener),
+          linkLauncherProvider.overrideWithValue(FakeLinkLauncher()),
           // Nothing here reaches a provider: a key is accepted unless the test
           // says otherwise, and no variable is set.
           keyCheckProvider.overrideWithValue(

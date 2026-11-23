@@ -5,13 +5,14 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:mobile_scanner/mobile_scanner.dart";
 import "package:qr_flutter/qr_flutter.dart";
-import "package:url_launcher/url_launcher.dart";
+import "package:entoli_core/model/link_launcher.dart";
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/view/widgets/dialogs.dart";
 import "package:entoli_core/view/widgets/page_bar.dart";
 
 import "../../core/platform/form_factor.dart";
 import "../../app/settings/pairing.dart";
+import "../../providers.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 
@@ -646,8 +647,8 @@ Widget _pairingFailed(BuildContext context, String? error) => Padding(
 /// iOS asks once and never again, so the only way back is the app's page in
 /// Settings, which the page opens there. Android asks again on the next open
 /// until a second refusal, after which it is as silent as iOS; the page names
-/// the path to its permission screen instead, since url_launcher has no URL
-/// that opens one.
+/// the path to its permission screen instead, since there is no URL that opens
+/// one.
 class ScanQrPage extends StatefulWidget {
   const ScanQrPage({super.key});
 
@@ -745,13 +746,13 @@ class _SasConfirm extends StatelessWidget {
   }
 }
 
-class _CameraRefused extends StatelessWidget {
+class _CameraRefused extends ConsumerWidget {
   const _CameraRefused();
 
   static bool get _iOS => defaultTargetPlatform == TargetPlatform.iOS;
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context, WidgetRef ref) => Padding(
     padding: const EdgeInsets.all(24),
     child: Column(
       mainAxisSize: MainAxisSize.min,
@@ -772,7 +773,8 @@ class _CameraRefused extends StatelessWidget {
         if (_iOS) ...[
           const SizedBox(height: 16),
           FilledButton(
-            onPressed: () => unawaited(_openSettings()),
+            onPressed: () =>
+                unawaited(_openSettings(ref.read(linkLauncherProvider))),
             child: const Text("Open Settings"),
           ),
         ],
@@ -780,11 +782,11 @@ class _CameraRefused extends StatelessWidget {
     ),
   );
 
-  // UIApplication.openSettingsURLString, which url_launcher opens like any
-  // other URL; it lands on this app's own page.
-  static Future<void> _openSettings() async {
+  // UIApplication.openSettingsURLString, which opens like any other URL; it
+  // lands on this app's own page.
+  static Future<void> _openSettings(LinkLauncher launcher) async {
     try {
-      if (!await launchUrl(Uri.parse("app-settings:"))) {
+      if (!await launcher.openExternal(Uri.parse("app-settings:"))) {
         logFailure("sync", "the Settings app did not open");
       }
     } catch (e) {

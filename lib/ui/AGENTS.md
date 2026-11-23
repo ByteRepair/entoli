@@ -18,8 +18,15 @@ Desktop needs no server at all: the base stylesheet is injected into the artifac
 over `file://` and nothing about the page needs building at open time. That is
 also why the injection had to move: opening a temp copy of the entry file, as
 this used to, would break every relative reference to the files sitting beside
-it. The `LinkOpener` interface stays in `domain/`,
+it. The `LinkOpener` interface is the core's (`model/link_opener.dart`),
 which is what lets `main` inject it and the tests fake it.
+
+Every route out of the app goes through the `LinkLauncher` it is handed —
+the external app a scheme belongs to, or the system's in-app browser for a
+sign-in page on the phones — which `main` binds to `entoli_links`' plugin
+(see `packages/entoli_links/lib/AGENTS.md`). The opener decides which route
+and refuses what is not a web, mail or phone link; the launcher only hands
+the URL over.
 
 The one thing the opener asks beyond the store is the `SyncHub`, handed in
 `main` beside it and null in tests: a chat being mirrored has no artifact
@@ -35,9 +42,10 @@ what keeps every sync-unaware caller on the local paths unchanged.
 Entoli registers the `entoli://` scheme on every platform — Android's
 `VIEW` filter on `MainActivity`, `CFBundleURLTypes` in both Apple `Info.plist`s,
 `x-scheme-handler/entoli` in the Linux desktop entry, and
-`HKLM\Software\Classes\entoli` in the MSI. `app_links` delivers them, the
-launching one and every one after, on one stream that `IncomingLinks` (wrapped
-in `main` beside `IncomingShares`) reads. What a link means is
+`HKLM\Software\Classes\entoli` in the MSI. `entoli_links` delivers them
+(`incomingLinks`, over `app_links`), the launching one and every one after, on
+one stream, `appLinksProvider`, that `IncomingLinks` (wrapped in `main` beside
+`IncomingShares`) reads. What a link means is
 `AppLink.parse` (`packages/entoli_core/lib/model/app_link.dart`), and nothing
 else reads one:
 

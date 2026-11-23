@@ -83,6 +83,8 @@ named in a cross-reference is findable from this list.
   live, Hearing and speaking
 - `packages/entoli_files/lib/AGENTS.md` — The choosers, The hand-offs, A
   backup's way out
+- `packages/entoli_links/lib/AGENTS.md` — Opening links and receiving
+  incoming ones: the launcher, the in-app sign-in browser, the incoming stream
 - `lib/ui/voice/AGENTS.md` — Reading one message out, The screen, Touch to
   speak, Taking turns
 - `packages/entoli_core/lib/view/workspace/AGENTS.md` — The workspace explorer

@@ -25,6 +25,8 @@ import "package:entoli_core/store/prompts/prompt_sources.dart"
     show promptDirsOf;
 import "package:entoli_files/entoli_files.dart"
     show platformAttachmentPicker, platformFilePicker;
+import "package:entoli_links/entoli_links.dart"
+    show InAppSignInPages, PluginLinkLauncher, incomingLinks;
 import "package:entoli_voice/entoli_voice.dart"
     show registerVoice, sherpaWorkers;
 
@@ -331,9 +333,11 @@ class AppSession {
           (project) => PromptLibraryNotifier(project, libraries[project]),
         ),
         systemAccentProvider.overrideWithValue(await accent),
+        linkLauncherProvider.overrideWithValue(const PluginLinkLauncher()),
         linkOpenerProvider.overrideWithValue(
-          PlatformLinkOpener(store, syncHub),
+          PlatformLinkOpener(store, const PluginLinkLauncher(), syncHub),
         ),
+        appLinksProvider.overrideWithValue(incomingLinks()),
         marketplaceClientProvider.overrideWithValue(tlsClient()),
         backgroundWorkProvider.overrideWithValue(foreground),
         fileHandoffProvider.overrideWithValue(handoff),

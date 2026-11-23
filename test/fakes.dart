@@ -41,6 +41,7 @@ import "package:entoli_core/model/chat_meta.dart";
 import "package:entoli_core/model/chat_store.dart";
 import "package:entoli_core/model/assistant_launch.dart";
 import "package:entoli_core/model/file_handoff.dart";
+import "package:entoli_core/model/link_launcher.dart";
 import "package:entoli_core/model/link_opener.dart";
 import "package:entoli_core/model/llm_provider.dart";
 import "package:entoli_core/model/local_model.dart";
@@ -72,6 +73,24 @@ import "package:agent_chat/app/app_items.dart";
 import "package:agent_chat/app/app_menus.dart";
 import "package:agent_chat/app/mirror_controller.dart";
 import "package:uuid/uuid.dart";
+
+/// A [LinkLauncher] that records what it was handed and opens nothing.
+class FakeLinkLauncher implements LinkLauncher {
+  final List<Uri> external = [];
+  final List<Uri> inAppBrowser = [];
+
+  @override
+  Future<bool> openExternal(Uri url) async {
+    external.add(url);
+    return true;
+  }
+
+  @override
+  Future<bool> openInAppBrowser(Uri url) async {
+    inAppBrowser.add(url);
+    return true;
+  }
+}
 
 /// A [LinkOpener] that records what it was asked to open, for UI tests that
 /// assert on the call rather than on a browser opening.
