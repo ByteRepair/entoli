@@ -192,6 +192,21 @@ void main() {
     ], isEmpty);
   });
 
+  // The viewer runs the core in a browser: the disk comes in as a FileSystem.
+  test("the core imports neither dart:io nor dart:ffi", () {
+    final core = Directory(_roots["entoli_core"]!);
+    final native = RegExp(
+      r'''^import\s+["']dart:(io|ffi)["']''',
+      multiLine: true,
+    );
+    expect([
+      for (final file in core.listSync(recursive: true).whereType<File>())
+        if (file.path.endsWith(".dart") &&
+            native.hasMatch(file.readAsStringSync()))
+          _relative(file.path),
+    ], isEmpty);
+  });
+
   // An adapter implements the core's ports with plugins and the app binds it,
   // so it reaches the core and nothing of the app, by path or by package.
   test("no adapter imports anything of the app", () {
