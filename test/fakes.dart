@@ -43,6 +43,7 @@ import "package:entoli_core/model/assistant_launch.dart";
 import "package:entoli_core/model/file_handoff.dart";
 import "package:entoli_core/model/link_launcher.dart";
 import "package:entoli_core/model/link_opener.dart";
+import "package:entoli_core/model/share_sheet.dart";
 import "package:entoli_core/model/llm_provider.dart";
 import "package:entoli_core/model/local_model.dart";
 import "package:entoli_core/model/local_model_store.dart";
@@ -88,6 +89,17 @@ class FakeLinkLauncher implements LinkLauncher {
   @override
   Future<bool> openInAppBrowser(Uri url) async {
     inAppBrowser.add(url);
+    return true;
+  }
+}
+
+/// A [ShareSheet] that records what it was handed and says it took it.
+class FakeShareSheet implements ShareSheet {
+  final List<Uri> shared = [];
+
+  @override
+  Future<bool> shareLink(Uri link, {Rect? origin}) async {
+    shared.add(link);
     return true;
   }
 }

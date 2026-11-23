@@ -17,6 +17,7 @@ workspace:
   - packages/entoli_voice
   - packages/entoli_files
   - packages/entoli_links
+  - packages/entoli_share
 
 dependencies:
   flutter:
@@ -36,6 +37,9 @@ dependencies:
   # Opening links, and the entoli:// links that open the app.
   entoli_links:
     path: packages/entoli_links
+  # The share sheet a chat's share link leaves through.
+  entoli_share:
+    path: packages/entoli_share
 
   # State management
   flutter_riverpod: ^3.4.2
@@ -86,9 +90,6 @@ dependencies:
   webview_flutter: ^4.14.1
   # Hybrid composition, which the platform-neutral API cannot ask for.
   webview_flutter_android: ^4.14.1
-
-  # The system share sheet for a chat's share link. Linux has none, and copies.
-  share_plus: ^13.3.1
 
   # Misc
   uuid: ^4.6.0

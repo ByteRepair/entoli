@@ -1,12 +1,8 @@
 import "dart:async";
-import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:share_plus/share_plus.dart";
-
-import "../../app/chat_shares.dart";
 import "package:entoli_core/model/formatting.dart" show formatSize;
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/store/chat_share.dart"
@@ -17,6 +13,9 @@ import "package:entoli_core/model/chat_store.dart" show attachmentFilename;
 import "package:entoli_core/model/models.dart";
 import "package:entoli_core/view/widgets/dialogs.dart"
     show copyToClipboard, say;
+
+import "../../app/chat_shares.dart";
+import "../../providers.dart" show shareSheetProvider;
 import "../widgets/palette_dialog.dart";
 import "../widgets/search_field.dart";
 
@@ -35,21 +34,25 @@ Future<void> showShareChat(
   await _shareLink(context, link, origin: origin);
 }
 
-/// The share sheet where the platform has one. Linux's share_plus opens a
-/// `mailto:`, which a 100K link does not survive, so it copies.
-Future<void> _shareLink(BuildContext context, String link, {Rect? origin}) {
-  if (Platform.isLinux) {
-    return copyToClipboard(context, link, said: "Share link copied");
+/// The share sheet where the platform has one, and the clipboard where it
+/// has none or the sheet did not open.
+Future<void> _shareLink(
+  BuildContext context,
+  String link, {
+  Rect? origin,
+}) async {
+  final sheet = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(shareSheetProvider);
+  try {
+    if (await sheet.shareLink(Uri.parse(link), origin: origin)) return;
+  } catch (e) {
+    logFailure("share", "the share sheet did not open", e);
   }
-  return SharePlus.instance
-      .share(ShareParams(uri: Uri.parse(link), sharePositionOrigin: origin))
-      .then<void>((_) {})
-      .catchError((Object e) {
-        logFailure("share", "the share sheet did not open", e);
-        if (context.mounted) {
-          return copyToClipboard(context, link, said: "Share link copied");
-        }
-      });
+  if (context.mounted) {
+    await copyToClipboard(context, link, said: "Share link copied");
+  }
 }
 
 /// The dialog's choices, and what it pops with: the link to share.

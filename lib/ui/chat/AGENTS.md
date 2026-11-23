@@ -295,7 +295,9 @@ under the cap is answered a bound past it, never read.
 Whole sections go, the workspace first, then the artifacts, then the
 attachments, since those are what the conversation shows; a conversation too
 long alone disables Share. Share packs exactly what is ticked and not red. The
-share sheet takes the link; Linux's would be a `mailto:`, so there it is copied.
+share sheet takes the link, through `shareSheetProvider`, which `main` binds
+to `packages/entoli_share` (see its `lib/AGENTS.md`). Where it declines —
+Linux's would be a `mailto:` — or does not open, the link is copied.
 
 **Taking one in** is `ChatShares.import`: a new chat under a new id, in the
 project on screen, its workspace and attachments with it, opened. The zip is

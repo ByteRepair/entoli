@@ -20,6 +20,7 @@ import "package:entoli_core/model/agent_backend.dart";
 import "package:entoli_core/model/app_restart.dart";
 import "package:entoli_core/model/sign_in_page.dart";
 import "package:entoli_core/model/link_launcher.dart";
+import "package:entoli_core/model/share_sheet.dart";
 import "package:entoli_core/model/app_secrets.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/confinement.dart";
@@ -157,6 +158,11 @@ final appLinksProvider = Provider<Stream<Uri>>(
 /// Where a URL leaves the app, for a page that sends the user elsewhere by
 /// one rather than through the `LinkOpener`.
 final linkLauncherProvider = Provider<LinkLauncher>(
+  (ref) => throw UnimplementedError(),
+);
+
+/// Where a share link goes to be sent on. Bound in `main` to `entoli_share`.
+final shareSheetProvider = Provider<ShareSheet>(
   (ref) => throw UnimplementedError(),
 );
 final voiceModelStoreProvider = Provider<VoiceModelStore>(
