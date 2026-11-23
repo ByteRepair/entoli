@@ -74,7 +74,7 @@ packages:
     source: hosted
     version: "2.13.1"
   audioplayers:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: audioplayers
       sha256: "2ba4bb2944baacbdd5372ff8254a8e7feb8c10d7739545e392f5605a8f618745"
@@ -928,7 +928,7 @@ packages:
     source: hosted
     version: "0.0.3"
   record:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: record
       sha256: "7c4467dec63435c9206db183f8a4672cf8a62f5e5579e45803ceada8330756e7"
@@ -952,7 +952,7 @@ packages:
     source: hosted
     version: "2.1.1"
   record_linux:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: record_linux
       sha256: "00c847ba25684572674dacfbd4bcabee6c5d9a1fa948778ff34091c71c19250f"
@@ -968,7 +968,7 @@ packages:
     source: hosted
     version: "2.1.1"
   record_platform_interface:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: record_platform_interface
       sha256: d94b37cadb8fe203e64b0e9893271c0b71b34f2550ee7fb0c6105d650e00c1f5
@@ -1040,7 +1040,7 @@ packages:
     source: hosted
     version: "3.0.0"
   sherpa_onnx:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: sherpa_onnx
       sha256: b7e65d5956f8c9213fd339c68ea058cdec7ad24bd35f9bfc5c18178d3d73b2f9

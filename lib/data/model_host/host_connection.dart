@@ -3,6 +3,7 @@ import "dart:io";
 
 import "package:flutter/services.dart";
 import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/model_process.dart";
 
 import "host_frame.dart";
 
@@ -76,13 +77,4 @@ class HostConnection {
   }
 
   void close() => _lost(null);
-}
-
-/// The model host went while something was still waiting on it: a crash, a
-/// kill, or the app quitting under it.
-class ModelProcessGone implements Exception {
-  const ModelProcessGone();
-
-  @override
-  String toString() => "The on-device model process stopped.";
 }

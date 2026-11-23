@@ -1,8 +1,8 @@
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/model_host/model_process.dart";
-import "package:agent_chat/data/voice/android_voice.dart";
-import "package:agent_chat/data/voice/voice_strategies.dart"
+import "package:entoli_voice/android_voice.dart";
+import "package:entoli_voice/voice_strategies.dart"
     show SpeechFailed, SpeechSignal, SpeechSilent;
 import "package:entoli_core/model/voice.dart";
 import "package:entoli_core/model/voice_model.dart"

@@ -23,6 +23,8 @@ import "package:entoli_core/view/theme.dart";
 import "package:entoli_core/agent/llm/providers/provider.dart" show LlmProvider;
 import "package:entoli_core/store/prompts/prompt_sources.dart"
     show promptDirsOf;
+import "package:entoli_voice/entoli_voice.dart"
+    show registerVoice, sherpaWorkers;
 
 import "app/app_menus.dart";
 import "core/platform/app_menus.dart";
@@ -37,7 +39,6 @@ import "data/builtin/llm/providers/cli.dart" show CliProvider;
 import "data/local/mlx_engine.dart" show mlxChannel;
 import "data/local/file_trigger_store.dart";
 import "data/model_host/model_host_server.dart";
-import "data/voice/sherpa_voice.dart" show sherpaWorkers;
 import "data/model_catalog.dart";
 import "data/local/file_selector_picker.dart";
 import "data/prompts/bundled_skills.dart";
@@ -87,8 +88,7 @@ Future<void> _main() async {
   registerBundledSkillLicences();
   registerAppLicence();
   registerBlinkLicence();
-  platform.registerVoiceLicences();
-  platform.registerRecorder();
+  registerVoice();
   // Built here rather than by the root, so the platform's splash covers the
   // first read of the data directory instead of a blank frame.
   final relaunch = AppRelaunch();

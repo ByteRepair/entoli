@@ -3,11 +3,24 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-/// The app's `lib/` and the chat package's, each under its package name. The
-/// two are one layout split in two, so a layer is a layer in either.
+/// The adapters' `lib/`s by package name: every `packages/entoli_*` but the
+/// core and the share viewer, each a platform capability the app binds.
+final _adapters = {
+  for (final dir in Directory("packages").listSync().whereType<Directory>())
+    if (p.basename(dir.path) case final name
+        when name.startsWith("entoli_") &&
+            name != "entoli_core" &&
+            name != "entoli_share_viewer")
+      name: p.normalize(p.absolute(dir.path, "lib")),
+};
+
+/// The app's `lib/`, the chat package's and the adapters', each under its
+/// package name. The app and the core are one layout split in two, so a layer
+/// is a layer in either.
 final _roots = {
   "agent_chat": p.normalize(p.absolute("lib")),
   "entoli_core": p.normalize(p.absolute("packages", "entoli_core", "lib")),
+  ..._adapters,
 };
 
 /// [file] from the `lib/` it is in, so `model/models.dart` in either.
@@ -16,7 +29,7 @@ String _relative(String file) => p.relative(
   from: _roots.values.firstWhere((root) => p.isWithin(root, file)),
 );
 
-/// Both `lib/`s' files and what each imports or exports of the others, every
+/// Every root's files and what each imports or exports of the others, every
 /// branch of a conditional one included.
 Map<String, Set<String>> _graph() {
   final directive = RegExp(r"^(?:import|export)\s[^;]*;", multiLine: true);
@@ -166,15 +179,30 @@ void main() {
 
   // The share viewer runs the core without the app, which is what
   // keeps voice and the native plugins out of it.
-  test("the core imports nothing of the app", () {
+  test("the core imports nothing of the app or an adapter", () {
     final graph = _graph();
-    final app = _roots["agent_chat"]!;
     final chat = _roots["entoli_core"]!;
+    final outside = [_roots["agent_chat"]!, ..._adapters.values];
     expect([
       for (final MapEntry(key: file, value: imports) in graph.entries)
         if (p.isWithin(chat, file))
           for (final target in imports)
-            if (p.isWithin(app, target)) "${_relative(file)} -> $target",
+            if (outside.any((root) => p.isWithin(root, target)))
+              "${_relative(file)} -> $target",
+    ], isEmpty);
+  });
+
+  // An adapter implements the core's ports with plugins and the app binds it,
+  // so it reaches the core and nothing of the app, by path or by package.
+  test("no adapter imports anything of the app", () {
+    expect(_adapters, isNotEmpty);
+    final graph = _graph();
+    final app = _roots["agent_chat"]!;
+    expect([
+      for (final MapEntry(key: file, value: imports) in graph.entries)
+        if (_adapters.values.any((root) => p.isWithin(root, file)))
+          for (final target in imports)
+            if (p.isWithin(app, target)) "$file -> $target",
     ], isEmpty);
   });
 

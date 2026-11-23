@@ -3,7 +3,7 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 import "package:record/record.dart"
     show AudioEncoder, InputDevice, RecordConfig;
-import "package:agent_chat/core/platform/linux_recorder.dart";
+import "package:entoli_voice/linux_recorder.dart";
 
 /// The config the voice session sends: raw mono 16 kHz PCM with the two
 /// noise properties on. The argv for it is pinned, and the device variant

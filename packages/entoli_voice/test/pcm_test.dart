@@ -1,6 +1,6 @@
 import "dart:typed_data";
 
-import "package:agent_chat/data/voice/pcm.dart";
+import "package:entoli_voice/pcm.dart";
 import "package:flutter_test/flutter_test.dart";
 
 /// [samples] as little-endian PCM16, in a buffer with [before] bytes of

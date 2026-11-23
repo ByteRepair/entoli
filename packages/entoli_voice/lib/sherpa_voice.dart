@@ -9,13 +9,12 @@ import "package:path/path.dart" as p;
 import "package:record/record.dart";
 import "package:sherpa_onnx/sherpa_onnx.dart" as sherpa;
 import "package:entoli_core/model/loudness.dart";
+import "package:entoli_core/model/model_process.dart";
 import "package:entoli_core/model/voice.dart";
 import "package:entoli_core/model/voice_model.dart";
 import "package:entoli_core/model/voice_model_store.dart";
 import "package:entoli_core/model/wav.dart";
 
-import "../model_host/model_process.dart";
-import "../model_host/worker.dart";
 import "pcm.dart";
 import "played_speaker.dart";
 import "remote_speaker.dart";
@@ -39,7 +38,8 @@ class SherpaVoice extends Voice {
   /// to sherpa as bytes: every model it takes, it takes as a path.
   final String _cacheDir;
 
-  static const _vadAsset = "assets/models/silero_vad.onnx";
+  static const _vadAsset =
+      "packages/entoli_voice/assets/models/silero_vad.onnx";
 
   @override
   Future<VoiceSession> start({

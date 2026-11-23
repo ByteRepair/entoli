@@ -4,22 +4,18 @@ import "dart:isolate";
 
 import "package:archive/archive.dart";
 import "package:path/path.dart" as p;
-import "package:http/http.dart" as http;
 import "package:entoli_core/model/download.dart";
 import "package:entoli_core/model/voice_model.dart";
 import "package:entoli_core/model/voice_model_store.dart";
 import "package:entoli_core/model/workspace.dart";
 
-import "../download.dart";
-
 /// Voice models in a directory of their own, outside the data directory — see
 /// [VoiceModelStore] for why that matters.
 class FileVoiceModelStore extends VoiceModelStore {
-  FileVoiceModelStore(this.root, {this.client});
+  FileVoiceModelStore(this.root, {required this.download});
 
-  /// The client downloads go through. Injected only by the tests, which have
-  /// no socket to reach.
-  final http.Client? client;
+  /// What fetches a model: the app's, which knows how it reaches the network.
+  final StartDownload download;
 
   /// `<cacheDir>/models`. Holds `stt/` and `tts/` under it.
   final String root;
@@ -63,12 +59,11 @@ class FileVoiceModelStore extends VoiceModelStore {
   }
 
   /// Two to four files, or one archive, into the model's own directory. The
-  /// fetching and the giving up are [DownloadRun]'s; what is left here is the
+  /// fetching and the giving up are [download]'s; what is left here is the
   /// bz2 an archive has to be put through and the marker that says the model is
   /// whole.
   @override
-  Stream<DownloadProgress> install(VoiceModel model) => DownloadRun(
-    client: client,
+  Stream<DownloadProgress> install(VoiceModel model) => download(
     discard: () => delete(model),
     run: (run) async {
       // Whatever an earlier attempt left: partial files under a name we are
@@ -102,7 +97,7 @@ class FileVoiceModelStore extends VoiceModelStore {
       if (run.cancelled) return;
       await File(p.join(dir.path, _marker)).writeAsString("");
     },
-  ).stream;
+  );
 
   /// Off the UI thread, because bz2 in Dart runs at about 8 MB/s and Kokoro is
   /// a minute of solid CPU. Its own method so that the closure handed to the

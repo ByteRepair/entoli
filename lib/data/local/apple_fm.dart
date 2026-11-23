@@ -7,8 +7,8 @@ import "package:entoli_core/model/model_budget.dart";
 import "package:entoli_core/model/models.dart" show ModelChoice;
 import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:entoli_core/agent/llm/providers/provider.dart";
+import "package:entoli_core/model/model_process.dart";
 import "channel_generation.dart";
-import "../model_host/model_process.dart";
 
 // The ids live in the domain beside `localProviderId`, exported here for the
 // tests and the pages that name the model.

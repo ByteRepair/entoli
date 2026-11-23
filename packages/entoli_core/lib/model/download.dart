@@ -27,3 +27,32 @@ class DownloadProgress {
   /// reports no count of its own.
   double? get bar => unpacking ? null : fraction;
 }
+
+/// A download as the code doing it sees it: files fetched to disk, progress
+/// reported, and [cancelled] checked wherever it would carry on doing work
+/// nobody is waiting for. The app's `DownloadRun` is the one there is; a
+/// store outside the app is handed a [StartDownload] that makes one.
+abstract interface class DownloadTask {
+  /// Whether the listener has gone.
+  bool get cancelled;
+
+  void report(DownloadProgress progress);
+
+  /// One file, streamed to [to], and how many bytes it turned out to be.
+  /// [done] is what earlier files already added up to and [total] what they
+  /// will in the end, so several files report one bar.
+  Future<int> fetch({
+    required String url,
+    required String to,
+    int? total,
+    int done = 0,
+  });
+}
+
+/// Starts a download whose [run] does the fetching, and whose [discard] undoes
+/// a half-done one when the listener leaves or [run] throws.
+typedef StartDownload =
+    Stream<DownloadProgress> Function({
+      required Future<void> Function(DownloadTask task) run,
+      required Future<void> Function() discard,
+    });

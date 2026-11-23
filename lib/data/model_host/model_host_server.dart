@@ -4,6 +4,7 @@ import "dart:io";
 import "package:flutter/services.dart";
 import "package:flutter/widgets.dart" show WidgetsFlutterBinding;
 import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/model_process.dart";
 
 import "host_connection.dart";
 import "host_frame.dart";

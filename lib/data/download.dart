@@ -12,7 +12,7 @@ import "../core/tls.dart";
 /// Fetching something big onto the disk, reported as it goes and abandoned
 /// whole if the listener leaves: a cancelled listener takes the half-written
 /// directory with it, and cancel's own future waits for that discard.
-class DownloadRun {
+class DownloadRun implements DownloadTask {
   DownloadRun({required this.run, required this.discard, http.Client? client})
     : _client = client ?? tlsClient() {
     _out = StreamController<DownloadProgress>(
@@ -70,8 +70,10 @@ class DownloadRun {
 
   /// Whether the listener has gone. The run is expected to check this after
   /// anything slow and give up.
+  @override
   bool get cancelled => _cancelled;
 
+  @override
   void report(DownloadProgress progress) => _out.add(progress);
 
   /// One file, streamed to disk, and how many bytes it turned out to be.
@@ -81,6 +83,7 @@ class DownloadRun {
   /// the way past — a checksum, where the caller wants one, without a second
   /// read of the file. A body shorter than the length the response declared
   /// is an error, since a dropped connection otherwise ends like a finished one.
+  @override
   Future<int> fetch({
     required String url,
     required String to,
@@ -144,6 +147,12 @@ class DownloadRun {
     return "${hash.digest}";
   }
 }
+
+/// A [StartDownload] over [DownloadRun], for a store outside the app.
+/// [client] is the tests'.
+StartDownload startDownload({http.Client? client}) =>
+    ({required run, required discard}) =>
+        DownloadRun(run: run, discard: discard, client: client).stream;
 
 /// Where the hash of the download lands. `package:convert` has one of these and
 /// is not a dependency for four lines.

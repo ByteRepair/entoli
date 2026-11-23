@@ -60,9 +60,7 @@ export "host.dart"
         installBundledTools,
         linuxHostOf,
         listenForIntents,
-        registerRecorder,
         readOnlyDirs,
-        registerVoiceLicences,
         setupComplete;
 
 // The app's platform seam: everything platform-varying is resolved here or

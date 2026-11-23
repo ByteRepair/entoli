@@ -6,14 +6,13 @@ import "dart:isolate";
 import "package:file/local.dart";
 import "package:ffi/ffi.dart";
 import "package:flutter/foundation.dart";
-import "package:flutter/services.dart" show MethodChannel, rootBundle;
-import "package:record_platform_interface/record_platform_interface.dart"
-    show RecordPlatform;
+import "package:flutter/services.dart" show MethodChannel;
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
 import "package:path_provider_foundation/path_provider_foundation.dart";
 import "package:entoli_core/model/read_only_dirs.dart";
 import "package:entoli_core/model/model_budget.dart";
+import "package:entoli_core/model/model_process.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/agent_browser.dart";
 import "package:entoli_core/model/app_update.dart";
@@ -35,8 +34,11 @@ import "package:entoli_core/model/sync/lan_signaling.dart";
 import "package:entoli_core/model/voice.dart";
 import "package:entoli_core/model/voice_model_store.dart";
 import "package:entoli_core/model/config.dart";
+import "package:entoli_voice/entoli_voice.dart"
+    show openVoiceModelStore, platformVoice;
 
 import "../../data/backup_handoff.dart";
+import "../../data/download.dart" show startDownload;
 import "../../data/local/android_assistant_launch.dart";
 import "../../data/local/android_device_name.dart";
 import "../../data/local/android_file_handoff.dart";
@@ -76,14 +78,8 @@ import "../../data/browser/helium.dart";
 import "../tls.dart" show tlsClient;
 import "../../data/builtin/llm/providers/cli.dart" show CliGuest, HostCliGuest;
 import "../../data/builtin/local_shell.dart";
-import "../../data/voice/android_voice.dart";
-import "../../data/voice/file_voice_model_store.dart";
-import "../../data/voice/ios_voice.dart";
-import "../../data/voice/macos_voice.dart";
-import "../../data/voice/sherpa_voice.dart";
 import "form_factor.dart" show isPhone;
 import "keyring_secret_store.dart";
-import "linux_recorder.dart";
 import "signaling_server.dart";
 import "update.dart";
 
@@ -632,23 +628,8 @@ Future<String> cacheDir() async {
   return dir;
 }
 
-/// Silero's detector ships inside the app, so its licence does too.
-void registerVoiceLicences() {
-  LicenseRegistry.addLicense(() async* {
-    yield LicenseEntryWithLineBreaks(const [
-      "silero-vad",
-    ], await rootBundle.loadString("assets/models/silero-vad-LICENSE.txt"));
-  });
-}
-
 VoiceModelStore createVoiceModelStore(String cacheDir) =>
-    FileVoiceModelStore(p.join(cacheDir, "models"));
-
-/// record's own Linux implementation is parecord-only; ours falls back to
-/// pw-record.
-void registerRecorder() {
-  if (Platform.isLinux) RecordPlatform.instance = LinuxRecorder();
-}
+    openVoiceModelStore(cacheDir, startDownload());
 
 /// Where this process's on-device models run, one for the process so MLX and
 /// voice share it: a model host on macOS, where MLX's GPU work beside the
@@ -659,15 +640,8 @@ final ModelProcess _modelProcess = Platform.isMacOS && HelperProcess.canLaunch
     ? HelperModelProcess(HelperProcess.launch)
     : const InAppModelProcess();
 
-/// sherpa-onnx on the desktops; Android and macOS also have their system
-/// engines (see [AndroidVoice], [MacosVoice]); iOS has Apple's alone (see
-/// [IosVoice]).
-Voice createVoice(VoiceModelStore store, String cacheDir) {
-  if (Platform.isAndroid) return AndroidVoice(store, cacheDir, _modelProcess);
-  if (Platform.isIOS) return const IosVoice();
-  if (Platform.isMacOS) return MacosVoice(store, cacheDir, _modelProcess);
-  return SherpaVoice(store, cacheDir, _modelProcess);
-}
+Voice createVoice(VoiceModelStore store, String cacheDir) =>
+    platformVoice(store, cacheDir, _modelProcess);
 
 /// The process's environment. The Dart VM's iOS build leaves
 /// `Platform.environment` empty, so a launch variable never reached a

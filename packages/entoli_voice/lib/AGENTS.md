@@ -1,17 +1,17 @@
 # Voice mode
 
-A circle for what the microphone hears and five scrolling lines of what has
-been said, over a chat that was already open. It runs on the device unless the
-user picks a provider's model for a half (see "A provider's models"), and
-which device decides how: **the desktops run `sherpa_onnx`** — speech
-recognition, speech synthesis and voice activity detection from one dependency,
-with the models downloaded from the settings page rather than shipped — while
-**Android, iOS and macOS also run the system's own engines** — Android's
-`TextToSpeech` and `SpeechRecognizer`, Apple's `AVSpeechSynthesizer` and
-on-device `SFSpeechRecognizer` — behind the one native channel contract and
-the same shared Dart strategies; iOS has nothing else, while Android and macOS
-keep the sherpa catalog beside them (see `macos/AGENTS.md` for the Mac's). See "The system engines", which is also
-where the reasoning for that split is.
+A circle for what the microphone hears and five scrolling lines of what has been
+said, over a chat that was already open. It runs on the device unless the user
+picks a provider's model for a half (see "A provider's models"), and which
+device decides how: **the desktops run `sherpa_onnx`** — speech recognition,
+speech synthesis and voice activity detection from one dependency, with the
+models downloaded from the settings page rather than shipped — while **Android,
+iOS and macOS also run the system's own engines** — Android's `TextToSpeech` and
+`SpeechRecognizer`, Apple's `AVSpeechSynthesizer` and on-device
+`SFSpeechRecognizer` — behind the one native channel contract and the same
+shared Dart strategies; iOS has nothing else, while Android and macOS keep the
+sherpa catalog beside them (see `macos/AGENTS.md` for the Mac's). See "The
+system engines", which is also where the reasoning for that split is.
 
 **A voice turn is an ordinary turn, and that is the constraint the rest is
 written to keep.** `VoiceController` hands what it heard to
@@ -28,8 +28,11 @@ the sub-agent strip are **the same widgets** drawn here too, rather than reduced
 voice-only versions: a turn waiting on an answer nobody can see is a hung turn,
 and a second copy of either is a second thing to keep right.
 
-The port is `Voice`, resolved in `core/platform/` like `Shell` and
-`WebSearch`. Every platform has one, so the composer's circle is always drawn.
+The port is `Voice`, in the core's `model/voice.dart`; this package is its
+implementations, behind `entoli_voice.dart`: `registerVoice`, which the app's
+`main` calls once, and `platformVoice` and `openVoiceModelStore`, which the
+app's `core/platform/` binds to its model process and its downloads. Every
+platform has one, so the composer's circle is always drawn.
 
 **Android ships the libraries and downloads the models, like the desktops.**
 sherpa's native code is in the APK again — it was excluded once, when Android's
@@ -57,11 +60,11 @@ downloaded model instead.
 
 ## What listens and what speaks
 
-`model/voice_model.dart` is the catalog, as const data: five recognition models
-and three speech ones, each naming its files, what it costs to fetch, and which
-sherpa family runs it, and the two Android-system sentinels beside them. A model
-Entoli can run is one someone wired an engine for, so a new entry is a line
-there and a case in `sherpa_voice.dart`.
+The core's `model/voice_model.dart` is the catalog, as const data: five
+recognition models and three speech ones, each naming its files, what it costs
+to fetch, and which sherpa family runs it, and the two Android-system sentinels
+beside them. A model Entoli can run is one someone wired an engine for, so a new
+entry is a line there and a case in `sherpa_voice.dart`.
 
 Recognition models are fetched **file by file** from HuggingFace — two to four
 each — which skips the fp32 copies the release tarballs carry beside the int8
@@ -82,12 +85,12 @@ that nobody has wired an engine for yet. Whisper hears 99 languages and Kokoro
 answers in two (three of its 103 voices are English), and the honest fix for a
 third is one more const entry.
 
-Silero's detector is the exception that ships: 644 KB, an asset rather than a
-catalog entry, because voice mode that cannot start until a second and invisible
-download has finished is worse to explain than an app that is slightly bigger.
-Every model sherpa takes it takes as a path, so it is copied out of the bundle
-on first use. Its MIT licence is an asset too, read into `LicenseRegistry` the
-way the font's OFL is.
+Silero's detector is the exception that ships: 644 KB, an asset of this package
+(`assets/models/`) rather than a catalog entry, because voice mode that cannot
+start until a second and invisible download has finished is worse to explain
+than an app that is slightly bigger. Every model sherpa takes it takes as a
+path, so it is copied out of the bundle on first use. Its MIT licence is an
+asset too, read into `LicenseRegistry` the way the font's OFL is.
 
 **sherpa-onnx vendors espeak-ng, which is GPL-3.0.** Entoli is AGPL-3.0, so that
 is fine — it would not be for a permissively licensed app, and it is the sort of
@@ -148,23 +151,23 @@ audio in an ordinary request, and nothing Live.
 
 ## The system engines
 
-**iOS is the same story over Apple's engines, and simpler.** `VoiceChannel.swift`
-answers the contract `VoiceChannel.kt` does — the Dart `Native*` strategies in
-`android_voice.dart` are shared, which is why they are named Native — with
-`SFSpeechRecognizer` asked on-device only (`requiresOnDeviceRecognition`, no
-network rung) and `AVSpeechSynthesizer` for the voice. The languages answer is
-the on-device intersection, so a locale the device cannot hear without a
-server is never offered rather than fallen back. The grants — microphone and
-speech recognition — are asked at the first listening turn, and a refusal is
-the session's failure to show, not a state anything remembers; the next launch
-re-probes. Endpointing is the level rather than the transcription, a shortcut
-the Touch-to-speak toggle covers the way it does on Android.
-`Voice.hasModelCatalog` is false here, which takes the pickers and the
-downloads off the settings page: the engines are the whole of what this
+**iOS is the same story over Apple's engines, and simpler.**
+`VoiceChannel.swift` answers the contract `VoiceChannel.kt` does — the Dart
+`Native*` strategies in `android_voice.dart` are shared, which is why they are
+named Native — with `SFSpeechRecognizer` asked on-device only
+(`requiresOnDeviceRecognition`, no network rung) and `AVSpeechSynthesizer` for
+the voice. The languages answer is the on-device intersection, so a locale the
+device cannot hear without a server is never offered rather than fallen back.
+The grants — microphone and speech recognition — are asked at the first
+listening turn, and a refusal is the session's failure to show, not a state
+anything remembers; the next launch re-probes. Endpointing is the level rather
+than the transcription, a shortcut the Touch-to-speak toggle covers the way it
+does on Android. `Voice.hasModelCatalog` is false here, which takes the pickers
+and the downloads off the settings page: the engines are the whole of what this
 platform can listen and speak with. The simulator cannot exercise any of it —
 iOS 26's Speech framework will not initialize without the dictation assets
-simulators do not ship (`kLSRErrorDomain 300`) — so iOS voice is hand-run on
-a real device by construction.
+simulators do not ship (`kLSRErrorDomain 300`) — so iOS voice is hand-run on a
+real device by construction.
 
 A phone already has a speech recognizer and a speech synthesiser, and until this
 landed voice mode ignored both and asked for a download first. So on Android
@@ -203,15 +206,15 @@ above for what that costs the APK. The same fact is why the probe reports the
 system's pick rather than any installed service — see "The probe's answer"
 below.
 
-**What that costs on a phone with neither system engine** is a choice the
-page offers either way: an install — RHVoice or eSpeak NG for speaking, FUTO
+**What that costs on a phone with neither system engine** is a choice the page
+offers either way: an install — RHVoice or eSpeak NG for speaking, FUTO
 VoiceInput for hearing — or a downloaded model from the catalog, which every
 platform sherpa runs on draws beside the engines; iOS offers no install, which
 is why its `hasEngineInstalls` stays false and the block is Android's alone.
-`_MissingEngines` in `voice_settings.dart` is the engines' half said on the
-page, with the links, drawn from whether the device has them — and, for the
-recognizer, from whether the system's pick has been made. Nothing has to be
-told when one arrives: the next launch asks the device again.
+`_MissingEngines` in the app's `ui/settings/voice_settings.dart` is the engines'
+half said on the page, with the links, drawn from whether the device has them —
+and, for the recognizer, from whether the system's pick has been made. Nothing
+has to be told when one arrives: the next launch asks the device again.
 
 **They are catalog entries rather than a mode.** `android-recognition` and
 `android-speech` are a `RecognitionModel` and a `SpeechModel` with no downloads,
@@ -249,11 +252,12 @@ was the second, and it was the thing this section's own rule warns about — a
 second question each gate had to remember, silently wrong in the one that
 forgot.
 
-It is on `Voice` rather than in `core/platform/` because that port is already
-per-platform and already built there, which keeps `host.dart` resolving
-`Platform.isAndroid` once instead of twice and leaves `platform.dart` with no
-member exposed any way but its own. `FakeVoice` is then the test seam, so
-`TestApp.create` takes `nativeVoice` and nothing parallel has to be overridden.
+It is on `Voice` rather than beside it because that port is already per-platform
+and already built in `platformVoice`, which keeps it resolving
+`Platform.isAndroid` once instead of twice and leaves the app's `platform.dart`
+with no member exposed any way but its own. `FakeVoice` is then the test seam,
+so `TestApp.create` takes `nativeVoice` and nothing parallel has to be
+overridden.
 
 So **each side is defaulted on its own**. A phone with a synthesiser and no
 recognition service gets the speaking half and leaves the listening half
@@ -495,7 +499,7 @@ pending relisten so nothing else can stack them either.
 **Both engines are generous about what counts as speech**, in their own ways: a
 system recogniser transcribes a television two rooms away, and Silero calls
 plenty of it voice. Every one of those was a turn. So an utterance is judged
-after the fact by `LoudnessGate` in `model/loudness.dart` — fed by
+after the fact by `LoudnessGate` in the core's `model/loudness.dart` — fed by
 `MicrophoneListener` from whatever its engine reports, and asked at each result.
 
 **There is not a single absolute number in it, and the first version's bug is
@@ -588,8 +592,8 @@ are `Listener` and `Speaker` in `voice_strategies.dart`, and
 knows which the other is.
 
 The split was built to let the two kinds mix per side, which Android and macOS
-do — a system recognizer with a downloaded voice, or the reverse.
-It earns its keep anyway, twice: `AndroidVoice` is a dozen lines because the session, the
+do — a system recognizer with a downloaded voice, or the reverse. It earns its
+keep anyway, twice: `AndroidVoice` is a dozen lines because the session, the
 shut-microphone rule and the silence reporting were already somewhere neither
 engine owned, and `read_aloud` gets a speak-only session by passing a null
 `Listener` rather than by either engine knowing what reading one message out is.
@@ -644,8 +648,8 @@ voice mode is listening; only the engine behind it changed.
 
 ## Where the models live
 `<cacheDir>/models/{stt,tts}/<id>/`, and **outside the data directory** for a
-reason bigger than tidiness: `backup.dart` zips that directory whole, so a
-Kokoro and a Whisper base in it would put three hundred megabytes of
+reason bigger than tidiness: the app's `backup.dart` zips that directory whole,
+so a Kokoro and a Whisper base in it would put three hundred megabytes of
 bytes-you-can-fetch-again into every export — and a restore, which *replaces*
 the data directory, would drag them between machines and wipe whatever was
 already downloaded. Outside it, both are true by construction rather than by a
@@ -692,19 +696,19 @@ class of its own because both things it gets right are invisible: a chunk is a
 it on Android, and `asInt16List` refuses an odd offset outright — every frame of
 every session threw, so voice mode listened to nothing at all. The other is that
 a chunk does not have to end on a sample, and a byte dropped there shifts every
-sample after it. Audio out is `audioplayers` over a WAV written per
-sentence, into the system's temporary directory rather than the model one —
-which on Android is deliberately the directory that is *not* evicted, and is
-the wrong home for a file that lives for one sentence. `flutter_pcm_sound`
-would be lower latency and has no Linux or Windows. **On Linux the microphone
-is `parecord`**, which `record` shells out to — `pulseaudio-utils`, which a
-PipeWire system *does not* have; it ships `pw-record` beside its own daemon
-instead. So `LinuxRecorder` (`core/platform/`) sits under `record`'s
-platform interface, asks `PATH` for `parecord` first and `pw-record` where it
-is missing — the stock implementation verbatim where the first is found, the
-argv translated where it is not — and says which packages to install where
-there is neither, rather than the bare `ProcessException` the missing binary
-used to arrive as.
+sample after it. Audio out is `audioplayers` over a WAV written per sentence,
+into the system's temporary directory rather than the model one — which on
+Android is deliberately the directory that is *not* evicted, and is the wrong
+home for a file that lives for one sentence. `flutter_pcm_sound` would be lower
+latency and has no Linux or Windows. **On Linux the microphone is `parecord`**,
+which `record` shells out to — `pulseaudio-utils`, which a PipeWire system *does
+not* have; it ships `pw-record` beside its own daemon instead. So
+`LinuxRecorder`, which `registerVoice` installs, sits under `record`'s platform
+interface, asks `PATH` for `parecord` first and `pw-record` where it is missing
+— the stock implementation verbatim where the first is found, the argv
+translated where it is not — and says which packages to install where there is
+neither, rather than the bare `ProcessException` the missing binary used to
+arrive as.
 
 **Only text parts are spoken**, and sentence by sentence as they stream, so the
 first sentence is being read while the rest of the reply is still being written.

@@ -7,6 +7,7 @@ import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:agent_chat/data/local/mlx_engine.dart";
 import "package:agent_chat/data/local/prompt_cache.dart";
 import "package:agent_chat/data/model_host/model_process.dart";
+import "package:entoli_core/model/model_process.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/local_llm.dart";
 import "package:entoli_core/model/local_model.dart";
