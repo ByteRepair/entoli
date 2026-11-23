@@ -79,7 +79,11 @@ Future<void> _athenaIn(File log) async {
     changed = true;
   }
   if (changed) {
-    await RenameWriter(log.fileSystem).write(log.path, "${lines.join("\n")}\n");
+    await writeThroughRename(
+      log.fileSystem,
+      log.path,
+      utf8.encode("${lines.join("\n")}\n"),
+    );
   }
 }
 
@@ -155,7 +159,7 @@ Future<void> _rewriteJson<T>(
     return;
   }
   if (json is! T || !change(json)) return;
-  await RenameWriter(fs).write(path, jsonEncode(json));
+  await writeThroughRename(fs, path, utf8.encode(jsonEncode(json)));
 }
 
 /// Each setting under the key it had before, moved under today's: kept where
@@ -293,4 +297,8 @@ Future<List<Migration>> _pending(
 /// naming no entry, and that directory is frozen out of every migration to
 /// come.
 Future<void> _stamp(FileSystem fs, String dataDir, Migration migration) =>
-    RenameWriter(fs).write(migrationStamp(dataDir), migration.version);
+    writeThroughRename(
+      fs,
+      migrationStamp(dataDir),
+      utf8.encode(migration.version),
+    );

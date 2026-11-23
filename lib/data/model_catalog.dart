@@ -1,3 +1,4 @@
+import "dart:convert";
 import "dart:io";
 
 import "package:flutter/foundation.dart" show compute;
@@ -53,9 +54,11 @@ Future<void> loadModelCatalog(
       response.body,
     )).fetchedAt(DateTime.now());
     ModelCatalog.notifier.value = catalog;
-    await RenameWriter(
+    await writeThroughRename(
       config.fs,
-    ).write(config.modelsFile, catalog.toJsonText());
+      config.modelsFile,
+      utf8.encode(catalog.toJsonText()),
+    );
   } catch (e) {
     logFailure("models", "fetching the model catalog failed", e);
   }

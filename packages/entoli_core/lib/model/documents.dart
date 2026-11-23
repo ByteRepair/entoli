@@ -9,6 +9,18 @@ import "file_errors.dart";
 /// rename a kill landed in, not a file anything reads.
 const writingSuffix = ".writing";
 
+/// [bytes] written whole to [path]: to the [writingSuffix] sibling, then a
+/// rename. A write nothing else can overlap; [RenameWriter] queues the rest.
+Future<void> writeThroughRename(
+  FileSystem fs,
+  String path,
+  List<int> bytes,
+) async {
+  final temp = fs.file("$path$writingSuffix");
+  await temp.writeAsBytes(bytes);
+  await temp.rename(path);
+}
+
 /// The one writer of a path: whole-file writes no reader may catch mid-way —
 /// to the [writingSuffix] sibling, then a rename — queued per path, so two
 /// overlapping saves land in the order they were asked and the disk ends on
@@ -26,19 +38,12 @@ const writingSuffix = ".writing";
 /// [RenameWriter.over] runs a given write in place of the rename, so queue
 /// behavior needs no filesystem at all.
 class RenameWriter {
-  RenameWriter(FileSystem fs) : _writeOne = _throughRename(fs);
+  RenameWriter(FileSystem fs)
+    : _writeOne = ((path, bytes) => writeThroughRename(fs, path, bytes));
 
   RenameWriter.over(this._writeOne);
 
   final Future<void> Function(String path, List<int> bytes) _writeOne;
-
-  static Future<void> Function(String, List<int>) _throughRename(
-    FileSystem fs,
-  ) => (path, bytes) async {
-    final temp = fs.file("$path$writingSuffix");
-    await temp.writeAsBytes(bytes);
-    await temp.rename(path);
-  };
 
   /// One write per path at a time. Taken out once it is the tail: a write
   /// landing behind it queues behind it, and a clean finish leaves the map
