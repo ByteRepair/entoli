@@ -27,6 +27,7 @@ import "package:entoli_files/entoli_files.dart"
     show platformAttachmentPicker, platformFilePicker;
 import "package:entoli_links/entoli_links.dart"
     show InAppSignInPages, PluginLinkLauncher, incomingLinks;
+import "package:entoli_scanner/entoli_scanner.dart" show PluginCodeScanner;
 import "package:entoli_share/entoli_share.dart" show PluginShareSheet;
 import "package:entoli_voice/entoli_voice.dart"
     show registerVoice, sherpaWorkers;
@@ -340,6 +341,7 @@ class AppSession {
         ),
         appLinksProvider.overrideWithValue(incomingLinks()),
         shareSheetProvider.overrideWithValue(const PluginShareSheet()),
+        codeScannerProvider.overrideWithValue(const PluginCodeScanner()),
         marketplaceClientProvider.overrideWithValue(tlsClient()),
         backgroundWorkProvider.overrideWithValue(foreground),
         fileHandoffProvider.overrideWithValue(handoff),

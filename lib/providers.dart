@@ -21,6 +21,7 @@ import "package:entoli_core/model/app_restart.dart";
 import "package:entoli_core/model/sign_in_page.dart";
 import "package:entoli_core/model/link_launcher.dart";
 import "package:entoli_core/model/share_sheet.dart";
+import "package:entoli_core/view/code_scanner.dart";
 import "package:entoli_core/model/app_secrets.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/confinement.dart";
@@ -163,6 +164,12 @@ final linkLauncherProvider = Provider<LinkLauncher>(
 
 /// Where a share link goes to be sent on. Bound in `main` to `entoli_share`.
 final shareSheetProvider = Provider<ShareSheet>(
+  (ref) => throw UnimplementedError(),
+);
+
+/// The camera a pairing code is scanned with. Bound in `main` to
+/// `entoli_scanner`.
+final codeScannerProvider = Provider<CodeScanner>(
   (ref) => throw UnimplementedError(),
 );
 final voiceModelStoreProvider = Provider<VoiceModelStore>(

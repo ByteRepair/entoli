@@ -3,7 +3,6 @@ import "dart:async";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:mobile_scanner/mobile_scanner.dart";
 import "package:qr_flutter/qr_flutter.dart";
 import "package:entoli_core/model/link_launcher.dart";
 import "package:entoli_core/model/log.dart";
@@ -649,49 +648,23 @@ Widget _pairingFailed(BuildContext context, String? error) => Padding(
 /// until a second refusal, after which it is as silent as iOS; the page names
 /// the path to its permission screen instead, since there is no URL that opens
 /// one.
-class ScanQrPage extends StatefulWidget {
+class ScanQrPage extends ConsumerWidget {
   const ScanQrPage({super.key});
 
   @override
-  State<ScanQrPage> createState() => ScanQrPageState();
-}
-
-class ScanQrPageState extends State<ScanQrPage> {
-  final _controller = MobileScannerController();
-  bool _done = false;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: PageBar(title: "Scan QR code"),
-      body: MobileScanner(
-        controller: _controller,
-        errorBuilder: (context, error) =>
-            error.errorCode == MobileScannerErrorCode.permissionDenied
-            ? const _CameraRefused()
-            : _pairingFailed(
-                context,
-                error.errorDetails?.message ?? error.errorCode.message,
-              ),
-        onDetect: (capture) {
-          if (_done) return;
-          for (final barcode in capture.barcodes) {
-            final value = barcode.displayValue ?? barcode.rawValue;
-            if (value != null && value.isNotEmpty) {
-              _done = true;
-              _controller.stop();
-              Navigator.of(context).pop(value);
-              return;
-            }
-          }
-        },
-      ),
+      body: ref
+          .watch(codeScannerProvider)
+          .view(
+            onCode: (code) {
+              Navigator.of(context).pop(code);
+              return true;
+            },
+            refused: (_) => const _CameraRefused(),
+            failed: _pairingFailed,
+          ),
     );
   }
 }

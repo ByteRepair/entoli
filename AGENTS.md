@@ -87,6 +87,8 @@ named in a cross-reference is findable from this list.
   incoming ones: the launcher, the in-app sign-in browser, the incoming stream
 - `packages/entoli_share/lib/AGENTS.md` — The share sheet a chat's share
   link leaves through
+- `packages/entoli_scanner/lib/AGENTS.md` — The camera that reads a pairing
+  code
 - `lib/ui/voice/AGENTS.md` — Reading one message out, The screen, Touch to
   speak, Taking turns
 - `packages/entoli_core/lib/view/workspace/AGENTS.md` — The workspace explorer

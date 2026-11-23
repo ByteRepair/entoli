@@ -18,6 +18,7 @@ workspace:
   - packages/entoli_files
   - packages/entoli_links
   - packages/entoli_share
+  - packages/entoli_scanner
 
 dependencies:
   flutter:
@@ -40,6 +41,9 @@ dependencies:
   # The share sheet a chat's share link leaves through.
   entoli_share:
     path: packages/entoli_share
+  # The camera that reads a pairing code.
+  entoli_scanner:
+    path: packages/entoli_scanner
 
   # State management
   flutter_riverpod: ^3.4.2
@@ -105,7 +109,6 @@ dependencies:
   cryptography_flutter: ^2.3.4
   web_socket_channel: ^3.0.3
   qr_flutter: ^4.1.0
-  mobile_scanner: ^7.4.0
   freedesktop_secret: ^0.1.2
   # The session bus. It was already in the tree through freedesktop_secret's
   # keyring; direct here so Linux reminders can post over

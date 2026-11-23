@@ -44,6 +44,7 @@ import "package:entoli_core/model/file_handoff.dart";
 import "package:entoli_core/model/link_launcher.dart";
 import "package:entoli_core/model/link_opener.dart";
 import "package:entoli_core/model/share_sheet.dart";
+import "package:entoli_core/view/code_scanner.dart";
 import "package:entoli_core/model/llm_provider.dart";
 import "package:entoli_core/model/local_model.dart";
 import "package:entoli_core/model/local_model_store.dart";
@@ -102,6 +103,16 @@ class FakeShareSheet implements ShareSheet {
     shared.add(link);
     return true;
   }
+}
+
+/// A [CodeScanner] with no camera: its view is empty and reads nothing.
+class FakeCodeScanner implements CodeScanner {
+  @override
+  Widget view({
+    required bool Function(String code) onCode,
+    required WidgetBuilder refused,
+    required Widget Function(BuildContext context, String reason) failed,
+  }) => const SizedBox.shrink();
 }
 
 /// A [LinkOpener] that records what it was asked to open, for UI tests that
