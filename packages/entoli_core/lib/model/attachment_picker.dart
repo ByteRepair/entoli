@@ -1,8 +1,41 @@
+import "file_picker.dart";
+import "mime.dart";
 import "models.dart";
 
-/// Opens the platform's file chooser and reads what comes back. Abstract so
-/// the composer can be driven in a test, where no plugin answers.
-abstract class AttachmentPicker {
-  /// The files the user chose, or an empty list if they cancelled.
-  Future<List<Attachment>> pick(AttachmentKind kind);
+/// What the composer's Image offers.
+const imageFileTypes = FileTypes(
+  label: "Images",
+  extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "avif"],
+  mimeTypes: [
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "image/bmp",
+  ],
+  uniformTypeIdentifiers: ["public.image"],
+);
+
+/// The files the user chose through [picker] as attachments, or none if they
+/// cancelled.
+Future<List<Attachment>> pickAttachments(
+  FilePicker picker,
+  AttachmentKind kind,
+) async {
+  final files = await picker.files(
+    types: switch (kind) {
+      AttachmentKind.image => imageFileTypes,
+      AttachmentKind.file => null,
+    },
+  );
+  return Future.wait(
+    files.map((file) async {
+      final bytes = await file.readAsBytes();
+      return Attachment(
+        filename: file.name,
+        mimeType: attachmentMime(file.name, bytes, declared: file.mimeType),
+        bytes: bytes,
+      );
+    }),
+  );
 }

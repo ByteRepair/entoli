@@ -30,7 +30,6 @@ import "package:entoli_core/model/app_update.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/app_restart.dart";
 import "package:entoli_core/model/agent_backend.dart";
-import "package:entoli_core/model/attachment_picker.dart";
 import "package:entoli_core/model/file_picker.dart";
 import "package:entoli_core/model/clipboard_files.dart";
 import "package:entoli_core/model/backup_handoff.dart";
@@ -355,20 +354,6 @@ Message userMessage(
   references: references,
 );
 
-/// Stands in for the platform's file chooser, which no test can drive.
-class FakeAttachmentPicker implements AttachmentPicker {
-  final List<AttachmentKind> picks = [];
-
-  /// What the next pick returns. Empty is a cancelled dialog.
-  List<Attachment> scripted = const [];
-
-  @override
-  Future<List<Attachment>> pick(AttachmentKind kind) async {
-    picks.add(kind);
-    return scripted;
-  }
-}
-
 /// Stands in for the platform's folder and file choosers.
 class FakeFilePicker implements FilePicker {
   /// What the next folder pick returns. Null is a cancelled dialog.
@@ -385,11 +370,42 @@ class FakeFilePicker implements FilePicker {
   Future<PickedFile?> file({String? confirmLabel, FileTypes? types}) async =>
       scriptedFiles.map(FakePickedFile.new).firstOrNull;
 
+  /// What the next files pick returns after [scriptedFiles], held in memory
+  /// for a widget test, where a read of the disk would not land.
+  List<Attachment> scriptedAttachments = const [];
+
+  /// The filter each files pick was asked with, in order.
+  final List<FileTypes?> asked = [];
+
   @override
   Future<List<PickedFile>> files({
     String? confirmLabel,
     FileTypes? types,
-  }) async => [for (final path in scriptedFiles) FakePickedFile(path)];
+  }) async {
+    asked.add(types);
+    return [
+      for (final path in scriptedFiles) FakePickedFile(path),
+      for (final attachment in scriptedAttachments) _HeldFile(attachment),
+    ];
+  }
+}
+
+class _HeldFile implements PickedFile {
+  const _HeldFile(this._attachment);
+
+  final Attachment _attachment;
+
+  @override
+  String get path => _attachment.filename;
+
+  @override
+  String get name => _attachment.filename;
+
+  @override
+  String? get mimeType => _attachment.mimeType;
+
+  @override
+  Future<Uint8List> readAsBytes() async => _attachment.bytes;
 }
 
 /// A picked file on the real disk, which is where a test's files are.
@@ -401,6 +417,9 @@ class FakePickedFile implements PickedFile {
 
   @override
   String get name => p.basename(path);
+
+  @override
+  String? get mimeType => null;
 
   @override
   Future<Uint8List> readAsBytes() => File(path).readAsBytes();

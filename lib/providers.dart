@@ -29,7 +29,6 @@ import "package:entoli_core/model/agent_browser.dart";
 import "package:entoli_core/model/app_update.dart";
 import "package:entoli_core/model/app_theme.dart";
 import "package:entoli_core/model/assistant_launch.dart";
-import "package:entoli_core/model/attachment_picker.dart";
 import "package:entoli_core/model/file_picker.dart";
 import "package:entoli_core/model/clipboard_files.dart";
 import "package:entoli_core/model/backup_handoff.dart";
@@ -128,9 +127,6 @@ final linkedInstructionsStoreProvider = Provider(
 /// The client the marketplace's fetches ride. An override in tests, so the
 /// suite answers the URLs rather than the binding's all-400s stand-in.
 final marketplaceClientProvider = Provider<http.Client>(
-  (ref) => throw UnimplementedError(),
-);
-final attachmentPickerProvider = Provider<AttachmentPicker>(
   (ref) => throw UnimplementedError(),
 );
 final filePickerProvider = Provider<FilePicker>(

@@ -23,8 +23,7 @@ import "package:entoli_core/view/theme.dart";
 import "package:entoli_core/agent/llm/providers/provider.dart" show LlmProvider;
 import "package:entoli_core/store/prompts/prompt_sources.dart"
     show promptDirsOf;
-import "package:entoli_files/entoli_files.dart"
-    show platformAttachmentPicker, platformFilePicker;
+import "package:entoli_files/entoli_files.dart" show platformFilePicker;
 import "package:entoli_links/entoli_links.dart"
     show InAppSignInPages, PluginLinkLauncher, incomingLinks;
 import "package:entoli_menu/entoli_menu.dart" show nativeMenuBar;
@@ -329,7 +328,6 @@ class AppSession {
         appConfigProvider.overrideWithValue(config),
         fileSystemProvider.overrideWithValue(config.fs),
         appSecretsProvider.overrideWithValue(secrets),
-        attachmentPickerProvider.overrideWithValue(platformAttachmentPicker()),
         filePickerProvider.overrideWithValue(platformFilePicker()),
         clipboardFilesProvider.overrideWithValue(createClipboardFiles()),
         // Seed every project's library at startup: each family member gets its

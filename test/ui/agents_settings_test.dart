@@ -652,7 +652,7 @@ void main() {
   });
 }
 
-/// Simulate a picture pick: the editor's chooser is `AttachmentPicker`, which
+/// Simulate a picture pick: the editor's chooser is `FilePicker`, which
 /// the harness fakes, so scripting the answer and tapping the picture is the
 /// whole of it — the pick carries [onePixelPng] under [name].
 Future<void> pickImage(
@@ -660,10 +660,10 @@ Future<void> pickImage(
   TestApp app, {
   required String name,
 }) async {
-  app.picker.scripted = [
+  app.chooser.scriptedAttachments = [
     testAttachment(name, mimeType: "image/png", bytes: onePixelPng),
   ];
-  addTearDown(() => app.picker.scripted = const []);
+  addTearDown(() => app.chooser.scriptedAttachments = const []);
   await openFaceMenu(tester);
   await tester.tap(find.text("Upload photo"));
   await tester.pump();

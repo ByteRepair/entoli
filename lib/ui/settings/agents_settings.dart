@@ -4,6 +4,7 @@ import "package:entoli_core/model/agent_definition.dart";
 import "package:entoli_core/model/agent_face.dart";
 import "package:entoli_core/model/bot_avatar/spec.dart";
 import "package:entoli_core/model/file_picker.dart";
+import "package:entoli_core/model/attachment_picker.dart";
 import "package:entoli_core/model/models.dart";
 import "package:entoli_core/model/project.dart" show promptsDirUserWritable;
 import "package:entoli_core/model/prompt_library.dart";
@@ -411,9 +412,10 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
   }
 
   Future<void> _pickPicture() => guarded(context, () async {
-    final picks = await ref
-        .read(attachmentPickerProvider)
-        .pick(AttachmentKind.image);
+    final picks = await pickAttachments(
+      ref.read(filePickerProvider),
+      AttachmentKind.image,
+    );
     if (picks.isEmpty || !mounted) return;
     final attachment = picks.single;
     if (!attachment.filename.toLowerCase().endsWith(".png")) {

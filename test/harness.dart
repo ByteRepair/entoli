@@ -96,7 +96,6 @@ class TestApp {
     required this.config,
     required this.secrets,
     required this.backend,
-    required this.picker,
     required this.chooser,
     required this.clipboard,
     required this.handoff,
@@ -208,7 +207,6 @@ class TestApp {
     final config = tempConfig();
     seedCatalog(testProviderModels);
     final backend = FakeBackend();
-    final picker = FakeAttachmentPicker();
     final chooser = FakeFilePicker();
     final clipboard = FakeClipboardFiles();
     final files = handoff ?? FakeFileHandoff();
@@ -245,7 +243,6 @@ class TestApp {
       config: config,
       secrets: appSecrets,
       backend: backend,
-      picker: picker,
       chooser: chooser,
       clipboard: clipboard,
       handoff: files,
@@ -279,7 +276,6 @@ class TestApp {
           if (browser != null)
             agentBrowserProvider.overrideWithValue(browser(config)),
           appSecretsProvider.overrideWithValue(appSecrets),
-          attachmentPickerProvider.overrideWithValue(picker),
           filePickerProvider.overrideWithValue(chooser),
           clipboardFilesProvider.overrideWithValue(clipboard),
           promptLibraryProvider.overrideWith2(
@@ -393,7 +389,6 @@ class TestApp {
 
   final AppConfig config;
   final FakeBackend backend;
-  final FakeAttachmentPicker picker;
   final FakeFilePicker chooser;
   final FakeClipboardFiles clipboard;
   final FakeFileHandoff handoff;

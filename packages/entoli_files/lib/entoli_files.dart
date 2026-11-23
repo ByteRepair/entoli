@@ -1,6 +1,5 @@
 import "dart:io";
 
-import "package:entoli_core/model/attachment_picker.dart";
 import "package:entoli_core/model/backup_handoff.dart";
 import "package:entoli_core/model/file_handoff.dart";
 import "package:entoli_core/model/file_picker.dart";
@@ -13,9 +12,6 @@ import "ios_file_handoff.dart";
 import "shared_backup.dart";
 
 export "zip.dart" show zipTo;
-
-/// The chooser an attachment comes from.
-AttachmentPicker platformAttachmentPicker() => const FileSelectorPicker();
 
 /// The chooser for a folder or for files.
 FilePicker platformFilePicker() => const FileSelectorFilePicker();

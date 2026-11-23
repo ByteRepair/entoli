@@ -20,10 +20,11 @@ class FileTypes {
 
 /// A file the user chose. [path] is a real file on every platform the app
 /// runs on, Android's being a copy the chooser made under the cache, named
-/// [name].
+/// [name]. [mimeType] is what the chooser said it is, where it said.
 abstract interface class PickedFile {
   String get path;
   String get name;
+  String? get mimeType;
   Future<Uint8List> readAsBytes();
 }
 

@@ -1,6 +1,7 @@
 import "package:flutter/foundation.dart" show ChangeNotifier;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
+import "package:entoli_core/model/attachment_picker.dart";
 import "package:entoli_core/model/models.dart";
 import "package:entoli_core/model/room/room_state.dart";
 import "package:entoli_core/transcript/reader.dart" show SettingReader;
@@ -19,7 +20,7 @@ class ChatSession {
     text = _ref.read(composerTextProvider)();
     composer = ComposerModel(
       text,
-      pick: (kind) => _ref.read(attachmentPickerProvider).pick(kind),
+      pick: (kind) => pickAttachments(_ref.read(filePickerProvider), kind),
     );
   }
 

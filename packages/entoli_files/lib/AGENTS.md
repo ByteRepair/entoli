@@ -3,23 +3,21 @@
 `entoli_files` is the adapter for what a page does with a file outside
 Entoli: the platform's choosers, and the routes a file takes to another app.
 `entoli_files.dart` is the whole of what the app reaches —
-`platformAttachmentPicker`, `platformFilePicker`, `platformFileHandoff` and
+`platformFilePicker`, `platformFileHandoff` and
 `platformBackupHandoff`, bound in `main` and `lib/core/platform/host.dart` —
 plus `zipTo`, which the backup streams through too.
 
 ## The choosers
 
 `file_selector` is the one plugin under every chooser, on every platform the
-app runs on. Two of the core's ports are answered with it:
-
-- `AttachmentPicker` (`FileSelectorPicker`) — the composer's Image and File,
-  read into `Attachment`s.
-- `FilePicker` (`FileSelectorFilePicker`) — a folder, one file or several,
-  each filtered by a `FileTypes` the page names. A page holds a `PickedFile`,
-  never the plugin's `XFile`, so no page imports the plugin and a test answers
-  with a file on its own disk. Android's chooser hands back a content URI,
-  which the plugin copies under the cache by its display name, so `path` is a
-  real file there too.
+app runs on, answering the core's `FilePicker` (`FileSelectorFilePicker`):
+a folder, one file or several, each filtered by a `FileTypes` the page names.
+A page holds a `PickedFile`, never the plugin's `XFile`, so no page imports
+the plugin and a test answers with a file on its own disk. Android's chooser
+hands back a content URI, which the plugin copies under the cache by its
+display name, so `path` is a real file there too. The composer's Image and
+File are the core's `pickAttachments` over it, which reads the files into
+`Attachment`s.
 
 A filter names extensions, MIME types and uniform type identifiers together,
 since each platform reads only its own field: the desktops the extension,
