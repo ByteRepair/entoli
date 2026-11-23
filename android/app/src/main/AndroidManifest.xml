@@ -115,6 +115,16 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="entoli"/>
             </intent-filter>
+            <!-- A shared chat's link, opened here rather than in the viewer
+                 where Entoli is installed. Verified against the host's
+                 .well-known/assetlinks.json, which the viewer deploys. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"/>
+                <data android:host="share.entoli.byterepair.io"/>
+            </intent-filter>
         </activity>
 
         <!-- dataSync rather than one of the named types: what a turn is doing

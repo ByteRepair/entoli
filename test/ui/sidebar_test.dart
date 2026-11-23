@@ -6,21 +6,22 @@ import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/builtin_project.dart";
-import "package:agent_chat/domain/chat_meta.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/project.dart";
-import "package:agent_chat/domain/project_settings.dart";
-import "package:agent_chat/domain/temp_chat_ttl.dart";
+import "package:entoli_chat/domain/builtin_project.dart";
+import "package:entoli_chat/domain/chat_meta.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/project.dart";
+import "package:entoli_chat/domain/project_settings.dart";
+import "package:entoli_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/app/chat_groups.dart" show pinnedHeading;
 import "package:agent_chat/ui/sidebar/project_palette.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/chat/share_chat_dialog.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/widgets/search_field.dart";
-import "package:agent_chat/ui/workspace/workspace_page.dart";
+import "package:entoli_chat/ui/workspace/workspace_page.dart";
 
 import "../harness.dart";
 
@@ -824,6 +825,19 @@ void main() {
           )
           .first;
       expect(tester.widget<Text>(label).style?.fontStyle, FontStyle.italic);
+    });
+
+    testWidgets("a chat's menu shares it", (tester) async {
+      await io(tester, () => app.seedChat(title: "at home"));
+      await pumpBeside(tester);
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await settleIo(tester);
+      await tester.tap(find.text("Share…"));
+      await pumpUntil(tester, find.byType(ShareChatDialog));
+      await settleIo(tester);
+
+      expect(find.text("Search files to share"), findsOneWidget);
     });
 
     testWidgets("moving a chat follows it into the project it went to", (

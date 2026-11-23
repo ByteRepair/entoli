@@ -10,22 +10,22 @@ import "package:flutter_test/flutter_test.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "package:agent_chat/app/chat_controller.dart" show TurnDriver;
-import "package:agent_chat/app/transcript/message.dart" show MessageMoment;
-import "package:agent_chat/app/transcript/transcript.dart" show MessageActions;
-import "package:agent_chat/domain/agent_face.dart";
-import "package:agent_chat/domain/ask.dart";
-import "package:agent_chat/domain/chat_log.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/todo.dart";
-import "package:agent_chat/domain/quote.dart";
-import "package:agent_chat/domain/reaction.dart";
-import "package:agent_chat/domain/theme_colour.dart";
-import "package:agent_chat/ui/theme.dart";
-import "package:agent_chat/ui/chat/activity/card.dart"
+import "package:entoli_chat/app/transcript/message.dart" show MessageMoment;
+import "package:entoli_chat/app/transcript/transcript.dart" show MessageActions;
+import "package:entoli_chat/domain/agent_face.dart";
+import "package:entoli_chat/domain/ask.dart";
+import "package:entoli_chat/domain/chat_log.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/todo.dart";
+import "package:entoli_chat/domain/quote.dart";
+import "package:entoli_chat/domain/reaction.dart";
+import "package:entoli_chat/domain/theme_colour.dart";
+import "package:entoli_chat/ui/theme.dart";
+import "package:entoli_chat/ui/chat/activity/card.dart"
     show ActivitySource, LiveMessage;
-import "package:agent_chat/ui/chat/activity/label.dart" show ActivityGroup;
-import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
-import "package:agent_chat/ui/chat/widgets/message_text.dart";
+import "package:entoli_chat/ui/chat/activity/label.dart" show ActivityGroup;
+import "package:entoli_chat/ui/chat/widgets/message_bubble.dart";
+import "package:entoli_chat/ui/chat/widgets/message_text.dart";
 
 import "../fakes.dart";
 import "../harness.dart";

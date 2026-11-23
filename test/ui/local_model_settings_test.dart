@@ -4,9 +4,9 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/local/local_instance.dart" show LocalUsage;
-import "package:agent_chat/domain/local_llm.dart";
-import "package:agent_chat/domain/local_model.dart";
-import "package:agent_chat/domain/model_budget.dart";
+import "package:entoli_chat/domain/local_llm.dart";
+import "package:entoli_chat/domain/local_model.dart";
+import "package:entoli_chat/domain/model_budget.dart";
 import "package:agent_chat/providers.dart";
 
 import "../fakes.dart";

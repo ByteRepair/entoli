@@ -1,6 +1,6 @@
 import "../../../app/composer.dart";
-import "../../../domain/goal.dart";
-import "../../../domain/wired_skill.dart";
+import "package:entoli_chat/domain/goal.dart";
+import "package:entoli_chat/domain/wired_skill.dart";
 
 /// What the composer says about its [ComposerMode].
 extension ComposerModeWords on ComposerMode {

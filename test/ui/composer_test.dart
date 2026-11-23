@@ -6,14 +6,14 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/app/composer.dart"
     show ComposerBinding, ComposerModel;
 import "package:agent_chat/providers.dart" show attachmentPickerProvider;
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/prompt_library.dart";
-import "package:agent_chat/domain/quote.dart";
-import "package:agent_chat/domain/room/roster.dart" show isCommand;
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/prompt_library.dart";
+import "package:entoli_chat/domain/quote.dart";
+import "package:entoli_chat/domain/room/roster.dart" show isCommand;
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/composer_controller.dart";
 import "package:agent_chat/ui/chat/widgets/composer_embed.dart";
-import "package:agent_chat/ui/widgets/attachment_chip.dart";
+import "package:entoli_chat/ui/widgets/attachment_chip.dart";
 
 import "../data/builtin/builtin_fakes.dart";
 import "../fakes.dart";

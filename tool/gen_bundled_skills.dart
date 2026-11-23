@@ -18,14 +18,14 @@
 // Each entry is tagged with the project it belongs to. `default` is the base
 // set every project inherits; another project's entries override a
 // same-named default one for that project alone. See "Skills and agents" in
-// lib/domain/AGENTS.md.
+// packages/entoli_chat/lib/domain/AGENTS.md.
 import "dart:convert";
 import "dart:io";
 
 import "package:agent_chat/data/prompts/skill_validate.dart";
-import "package:agent_chat/domain/bot_avatar/spec.dart";
-import "package:agent_chat/domain/bundled_prompt_file.dart";
-import "package:agent_chat/domain/frontmatter.dart";
+import "package:entoli_chat/domain/bot_avatar/spec.dart";
+import "package:entoli_chat/domain/bundled_prompt_file.dart";
+import "package:entoli_chat/domain/frontmatter.dart";
 
 import "gen_common.dart";
 
@@ -58,7 +58,7 @@ void main() {
   buf.writeln("// source of truth for presets. Regenerate with prepare.sh.");
   buf.writeln();
   buf.writeln(
-    'import "../../domain/bundled_prompt_file.dart" '
+    'import "package:entoli_chat/domain/bundled_prompt_file.dart" '
     'show BundledPromptFile;',
   );
   buf.writeln();

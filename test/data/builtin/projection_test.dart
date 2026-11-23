@@ -6,12 +6,12 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/projection.dart";
 import "package:agent_chat/data/builtin/templates.dart";
-import "package:agent_chat/domain/ask.dart";
-import "package:agent_chat/domain/end_turn.dart";
-import "package:agent_chat/domain/goal.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/todo.dart";
-import "package:agent_chat/domain/reaction.dart";
+import "package:entoli_chat/domain/ask.dart";
+import "package:entoli_chat/domain/end_turn.dart";
+import "package:entoli_chat/domain/goal.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/todo.dart";
+import "package:entoli_chat/domain/reaction.dart";
 
 void main() {
   final at = DateTime.utc(2026, 1, 1);

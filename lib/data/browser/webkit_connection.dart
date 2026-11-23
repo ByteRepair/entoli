@@ -4,7 +4,7 @@ import "dart:typed_data";
 
 import "package:flutter/services.dart" show MethodChannel, PlatformException;
 
-import "../../core/log.dart";
+import "package:entoli_chat/core/log.dart";
 import "cdp.dart";
 
 /// iOS's browser, behind the slice of the DevTools Protocol `CdpBrowser`'s

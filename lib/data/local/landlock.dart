@@ -3,7 +3,7 @@ import "dart:io";
 
 import "package:path/path.dart" as p;
 
-import "../../domain/shell.dart";
+import "package:entoli_chat/domain/shell.dart";
 
 /// Landlock confinement for one command, on the machine itself.
 ///

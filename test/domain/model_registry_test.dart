@@ -3,9 +3,9 @@ import "dart:convert";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
-import "package:agent_chat/domain/llm_provider.dart";
-import "package:agent_chat/domain/local_model.dart";
-import "package:agent_chat/domain/model_registry.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_chat/domain/local_model.dart";
+import "package:entoli_chat/domain/model_registry.dart";
 
 const _openai = LlmProviderConfig(
   id: "openai",

@@ -2,8 +2,8 @@ import "dart:async";
 
 import "package:flutter/services.dart";
 
-import "../../domain/background_work.dart";
-import "../log.dart";
+import "package:entoli_chat/domain/background_work.dart";
+import "package:entoli_chat/core/log.dart";
 
 /// Android's foreground services, on the other end of `agent_chat/background`
 /// and implemented by `ForegroundWork.kt` and the services beside it (and

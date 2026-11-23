@@ -3,8 +3,8 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-import "package:agent_chat/core/config.dart";
-import "package:agent_chat/core/migrations.dart";
+import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/core/migrations.dart";
 
 import "../harness.dart";
 

@@ -15,6 +15,13 @@ browsing actions, and a Share button where there is a share sheet. A
 selection is one folder's, so leaving the folder ends it. New Folder and
 Select are offered once the folder has been read.
 
+`readOnly` is the explorer for files that are someone else's: a chat shared
+from elsewhere, in the web viewer. It browses and opens and changes nothing —
+no New Folder, no selection, no Delete, and a text file opens with no Edit. A
+row keeps its menu only while it has something left in it. What an empty
+folder says is the caller's (`whenEmpty`): the viewer's says the chat was
+shared without its workspace.
+
 The default project's is reached from the sidebar instead, from the slot beside
 the project switcher that a named project fills with its settings gear. The
 default project has no settings page — it cannot be renamed or deleted, which is
@@ -37,21 +44,21 @@ sharing where there is a share sheet, are on an entry's own row menu as well as
 on a selection.
 
 A text file is the one thing a tap does not leave the app for.
-`TextFilePage` (`lib/ui/widgets/text_file_page.dart`; `openTextFile` where the
-profile opens a linked instruction file or a chat a job's log) reads it off the
-disk the listing came from and holds the draft. It opens as a preview: markdown
-rendered, anything else as code — `re_editor`'s `CodeEditor` in
-`DocumentEditor` (`document_view.dart`, the core shared with every other
-document page), read-only and highlighted by the grammar `grammarOfFile` picks
-from the name —
-the same thirty-one `CodeBlockBuilder` registers, found by a grammar's alias the
-way a fence names one. Edit turns the editor writable (markdown switches to its
-source), and the save is a plain write rather than `writeThroughRename`, since a
-rename makes a new file and drops the mode an agent gave its script, and would
-replace a linked CLAUDE.md that is a symlink with a file of its own. Whether it
-is changed is measured against the controller's text, not the file as read: the
-editor writes every line break as the file's first kind, so a file of mixed
-breaks would otherwise read as edited before a key was pressed.
+`TextFilePage` (`packages/entoli_chat/lib/ui/widgets/text_file_page.dart`;
+`openTextFile` where the profile opens a linked instruction file or a chat a
+job's log) reads it off the disk the listing came from and holds the draft. It
+opens as a preview: markdown rendered, anything else as code — `re_editor`'s
+`CodeEditor` in `DocumentEditor` (`document_view.dart`, the core shared with
+every other document page), read-only and highlighted by the grammar
+`grammarOfFile` picks from the name — the same thirty-one `CodeBlockBuilder`
+registers, found by a grammar's alias the way a fence names one. Edit turns the
+editor writable (markdown switches to its source), and the save is a plain write
+rather than `writeThroughRename`, since a rename makes a new file and drops the
+mode an agent gave its script, and would replace a linked CLAUDE.md that is a
+symlink with a file of its own. Whether it is changed is measured against the
+controller's text, not the file as read: the editor writes every line break as
+the file's first kind, so a file of mixed breaks would otherwise read as edited
+before a key was pressed.
 
 The bar is icons — Save and Preview while editing, Edit while reading — and a
 More menu holding Wrap lines, Text size (a slider sheet, since a menu closes
@@ -121,9 +128,9 @@ which is what takes Share off a desktop's rows — Delete stays, since deleting
 is the filesystem's rather than a route out of the app.
 
 A share sheet does not take a folder, so a folder goes as a single zip,
-written straight to the staging directory by `zipTo` (`lib/data/zip.dart`,
-the walker a backup streams through too), which is what lets Android's
-staging directory stay flat.
+written straight to the staging directory by `zipTo`
+(`packages/entoli_chat/lib/data/zip.dart`, the walker a backup streams through
+too), which is what lets Android's staging directory stay flat.
 
 Coming the other way, an `IncomingFile` is deliberately **not** its bytes. A
 batch arrives with as many files as its source chose to send and then waits on

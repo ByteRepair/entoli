@@ -6,7 +6,7 @@ import "package:http/http.dart" as http;
 import "package:http/testing.dart";
 
 import "package:agent_chat/data/builtin/llm/anthropic_client.dart";
-import "package:agent_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/app_settings.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 
 import "sse.dart";

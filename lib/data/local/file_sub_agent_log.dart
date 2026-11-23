@@ -1,9 +1,9 @@
 import "dart:io";
 
-import "../../core/config.dart";
-import "../../domain/chat_log.dart";
-import "../../domain/models.dart";
-import "../../domain/sub_agent_log.dart";
+import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/domain/chat_log.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/sub_agent_log.dart";
 
 /// One chat's sub-agent transcripts, under `<chat>/subagents/`. Bound to a chat
 /// and a project because a sub-agent belongs to the turn that spawned it and

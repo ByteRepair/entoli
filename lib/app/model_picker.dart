@@ -4,11 +4,11 @@ import "package:collection/collection.dart";
 import "../data/builtin/llm/hosted_models.dart";
 import "../data/builtin/llm/providers/provider.dart"
     show LlmProvider, resolveIn;
-import "../domain/llm_provider.dart";
-import "../domain/local_model.dart" show isShortAskModel;
-import "../domain/model_capability.dart";
-import "../domain/model_registry.dart";
-import "../domain/models.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_chat/domain/local_model.dart" show isShortAskModel;
+import "package:entoli_chat/domain/model_capability.dart";
+import "package:entoli_chat/domain/model_registry.dart";
+import "package:entoli_chat/domain/models.dart";
 import "../providers.dart"
     show
         appSettingsProvider,
@@ -16,7 +16,7 @@ import "../providers.dart"
         refOf,
         sortedModelsProvider;
 import "model_role.dart";
-import "reader.dart" show SettingReader;
+import "package:entoli_chat/app/reader.dart" show SettingReader;
 
 /// One model a picker can offer, with the provider it is reached through.
 class CatalogEntry {

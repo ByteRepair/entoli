@@ -1,6 +1,6 @@
 import "package:flutter/material.dart";
 
-import "../widgets/empty_pane.dart";
+import "package:entoli_chat/ui/widgets/empty_pane.dart";
 
 /// The one answer an unreachable marketplace has, on the list and on a
 /// preview alike, so the two cannot drift into two different failures.

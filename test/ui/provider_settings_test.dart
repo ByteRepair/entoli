@@ -3,7 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
     show CodexCliProvider;
-import "package:agent_chat/domain/llm_provider.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/cli_sign_in_dialog.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";

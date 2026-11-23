@@ -1,6 +1,6 @@
-import "../../../domain/prompt_library.dart";
-import "../../../domain/agent_backend.dart";
-import "../../../domain/tool_arg.dart";
+import "package:entoli_chat/domain/prompt_library.dart";
+import "package:entoli_chat/domain/agent_backend.dart";
+import "package:entoli_chat/domain/tool_arg.dart";
 import "../llm/llm_client.dart";
 import "agent_tool.dart";
 import "turn.dart";

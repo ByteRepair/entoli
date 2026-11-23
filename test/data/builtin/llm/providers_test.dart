@@ -9,10 +9,10 @@ import "package:agent_chat/data/builtin/llm/hosted_models.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/openai_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
-import "package:agent_chat/domain/llm_provider.dart";
-import "package:agent_chat/domain/model_capability.dart";
-import "package:agent_chat/domain/model_registry.dart";
-import "package:agent_chat/domain/voice.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_chat/domain/model_capability.dart";
+import "package:entoli_chat/domain/model_registry.dart";
+import "package:entoli_chat/domain/voice.dart";
 
 void main() {
   group("providerOf", () {

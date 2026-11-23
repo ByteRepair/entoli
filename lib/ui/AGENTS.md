@@ -38,7 +38,8 @@ Entoli registers the `entoli://` scheme on every platform — Android's
 `HKLM\Software\Classes\entoli` in the MSI. `app_links` delivers them, the
 launching one and every one after, on one stream that `IncomingLinks` (wrapped
 in `main` beside `IncomingShares`) reads. What a link means is
-`AppLink.parse` (`lib/domain/app_link.dart`), and nothing else reads one:
+`AppLink.parse` (`packages/entoli_chat/lib/domain/app_link.dart`), and nothing
+else reads one:
 
 - `entoli://new?prompt=…` — the new-chat screen with the prompt in its
   composer, **unsent**: a web page wrote it, so the user sends it. This is the
@@ -68,6 +69,14 @@ in `main` beside `IncomingShares`) reads. What a link means is
 - `entoli://install/avatar?def=…` — a Bot Avatar definition, raw or base64url
   JSON (Open Bot Avatar's own `def`), on `BotAvatarInstallPage`: the bot and
   Install, landing in the editor's library.
+- `https://share.entoli.byterepair.io/#…` and `entoli://share?def=…` — a
+  shared chat, imported as a new chat and opened. The first is the link Share
+  makes, which the web viewer reads where the app is not installed; the second
+  is the viewer's Open in Entoli. A cut-short one says so and imports nothing.
+  The phones claim the host, so the first opens here where Entoli is
+  installed: Android's verified `VIEW` filter, iOS's `applinks:` associated
+  domain, both checked against the files the viewer's site serves.
+  See "A shared chat" in `lib/ui/chat/AGENTS.md`.
 
 The desktops are single-instance for it: Linux's runner lets GLib emit
 `command-line` (`G_APPLICATION_HANDLES_COMMAND_LINE`), here or in the running

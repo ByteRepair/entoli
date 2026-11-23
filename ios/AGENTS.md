@@ -91,10 +91,10 @@ long-lived background isolate so a guest command does not block the UI.
 The dispatcher script `LocalShell` uses — the trap that turns a Ctrl-C into a
 130 while the shell survives, the `EXIT` trap that reports where `exit` left
 it, the base64 line that keeps a multi-line command from stealing the queue —
-is shared, lifted to `lib/domain/shell.dart` so both shells read one source of
-truth. iSH runs it inside the guest's own `/bin/sh`, which is what makes a `cd`
-or an `export` in one command stick for the next, the same contract the agent
-is told on every other platform.
+is shared, lifted to `packages/entoli_chat/lib/domain/shell.dart` so both shells
+read one source of truth. iSH runs it inside the guest's own `/bin/sh`, which is
+what makes a `cd` or an `export` in one command stick for the next, the same
+contract the agent is told on every other platform.
 
 iSH's `current` is thread-local and the workers call in from whatever Dart
 pool thread they land on, so the bridge does its own guest work (the binds,
@@ -239,13 +239,13 @@ gap here, for once; this entry is.
 **It names chats and does nothing else.** The 8,192-token window is mostly
 the agent's own prompt and tools — about 6k before the first message — so a
 turn on it opens with a compaction every time, which is a chat that works in
-name only. `isTitleOnlyModel` (`lib/domain/local_model.dart`) is the one
-gate: the backend resolves it for the title's ask alone and refuses a turn
-on it with a line saying so, only the Title LLM picker (`ModelRole.title`)
-lists it, and the welcome tour does not count it as a model connected — so
-an iOS device sets up a provider before its first chat, or downloads an MLX
-model (below). Lifting it is the predicate and nothing else, once a slimmer
-prompt fits the window.
+name only. `isTitleOnlyModel`
+(`packages/entoli_chat/lib/domain/local_model.dart`) is the one gate: the
+backend resolves it for the title's ask alone and refuses a turn on it with a
+line saying so, only the Title LLM picker (`ModelRole.title`) lists it, and the
+welcome tour does not count it as a model connected — so an iOS device sets up a
+provider before its first chat, or downloads an MLX model (below). Lifting it is
+the predicate and nothing else, once a slimmer prompt fits the window.
 
 Three decisions worth knowing before touching it:
 
@@ -295,12 +295,12 @@ macOS's, wherever the handshake answers `mlx: true` — this build links
 the package missing, the engine is `NoLocalEngine` and the page has no text
 section. Requiring 27 is for the feature, not the app.
 
-The catalog is `mlxCatalog` (`lib/domain/local_model.dart`): the GGUF
-catalog's two larger sizes in MLX's 4-bit format, each pinned to a commit with
-every file's size and SHA-256, downloaded and checked by the same
-`FileLocalModelStore` as a GGUF into `<cacheDir>/llm/<id>/`. Only the files
-loading needs are fetched. `MlxFormat` describes a download from its
-`config.json`.
+The catalog is `mlxCatalog`
+(`packages/entoli_chat/lib/domain/local_model.dart`): the GGUF catalog's two
+larger sizes in MLX's 4-bit format, each pinned to a commit with every file's
+size and SHA-256, downloaded and checked by the same `FileLocalModelStore` as a
+GGUF into `<cacheDir>/llm/<id>/`. Only the files loading needs are fetched.
+`MlxFormat` describes a download from its `config.json`.
 
 **The Runner carries `com.apple.developer.kernel.increased-memory-limit`**
 (`Runner/Runner.entitlements`). The catalog is held to `ModelBudget.phone`,

@@ -9,9 +9,9 @@ import "package:path/path.dart" as p;
 import "package:agent_chat/app/marketplace/marketplace.dart";
 import "package:agent_chat/data/prompts/skill_import.dart";
 import "package:agent_chat/data/prompts/skill_package.dart";
-import "package:agent_chat/domain/models.dart";
+import "package:entoli_chat/domain/models.dart";
 import "package:agent_chat/providers.dart" show botAvatarPresetsProvider;
-import "package:agent_chat/ui/bot_avatar/bot_avatar_view.dart";
+import "package:entoli_chat/ui/bot_avatar/bot_avatar_view.dart";
 import "package:agent_chat/ui/marketplace/marketplace_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 

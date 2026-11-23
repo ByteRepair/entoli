@@ -6,12 +6,12 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/builtin/llm/on_device_provider.dart";
 import "package:agent_chat/data/local/local_engine.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/llm_provider.dart";
-import "package:agent_chat/domain/local_model.dart"
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_chat/domain/local_model.dart"
     show appleModelId, appleProviderId;
-import "package:agent_chat/domain/model_registry.dart";
-import "package:agent_chat/domain/models.dart";
+import "package:entoli_chat/domain/model_registry.dart";
+import "package:entoli_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/widgets/model_catalog_page.dart"
     show catalogEntries;

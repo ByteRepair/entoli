@@ -1,10 +1,10 @@
 import "package:flutter/foundation.dart";
 
-import "../../domain/app_settings.dart";
-import "../../domain/local_llm.dart";
-import "../../domain/local_model.dart";
-import "../../domain/model_budget.dart";
-import "../../domain/local_model_store.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/local_llm.dart";
+import "package:entoli_chat/domain/local_model.dart";
+import "package:entoli_chat/domain/model_budget.dart";
+import "package:entoli_chat/domain/local_model_store.dart";
 import "../builtin/llm/llm_client.dart";
 import "local_client.dart";
 import "local_instance.dart";

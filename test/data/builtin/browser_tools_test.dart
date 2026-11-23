@@ -13,12 +13,12 @@ import "package:agent_chat/data/browser/helium.dart";
 import "package:agent_chat/data/builtin/tools/browser_tools.dart";
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/domain/agent_backend.dart";
-import "package:agent_chat/domain/agent_browser.dart";
-import "package:agent_chat/domain/builtin_project.dart" show AgentCapability;
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/permission.dart";
-import "package:agent_chat/domain/shell.dart";
+import "package:entoli_chat/domain/agent_backend.dart";
+import "package:entoli_chat/domain/agent_browser.dart";
+import "package:entoli_chat/domain/builtin_project.dart" show AgentCapability;
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/permission.dart";
+import "package:entoli_chat/domain/shell.dart";
 import "package:agent_chat/data/builtin/tools/agent_tool.dart";
 
 import "../../fakes.dart";

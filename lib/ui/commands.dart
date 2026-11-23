@@ -4,14 +4,14 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
-import "../domain/availability.dart";
-import "../domain/builtin_project.dart";
-import "../domain/project.dart";
+import "package:entoli_chat/domain/availability.dart";
+import "package:entoli_chat/domain/builtin_project.dart";
+import "package:entoli_chat/domain/project.dart";
 import "../providers.dart";
 import "app_command.dart";
 import "../app/chat_controller.dart";
 import "chat/chat_settings_page.dart";
-import "chat/plan_page.dart";
+import "package:entoli_chat/ui/chat/plan_page.dart";
 import "chat_actions.dart";
 import "marketplace/marketplace_page.dart";
 import "profile/profile_page.dart";
@@ -71,6 +71,7 @@ class Commands {
       facts: (
         front: ModalRoute.isCurrentOf(context) ?? true,
         chatOpen: open != null,
+        mirrored: id != null && get(isMirroredChatProvider(id)),
         pinned: open?.pinned ?? false,
         running: open?.running ?? false,
         sidebarShown: get(sidebarShownProvider),
@@ -123,6 +124,7 @@ class Commands {
       case AppAction.pinChat ||
           AppAction.renameChat ||
           AppAction.moveChat ||
+          AppAction.shareChat ||
           AppAction.deleteChat:
         // Read as it is now: what the menu was drawn from is two facts of it.
         final chat = ref.read(chatControllerProvider(chatId!)).chat!.state;

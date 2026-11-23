@@ -1,14 +1,14 @@
-import "../../../domain/agent_backend.dart";
-import "../../../domain/date_words.dart" show describeFire;
-import "../../../domain/file_tools.dart" show outsideWorkspaces;
-import "../../../domain/tool_arg.dart";
-import "../../../domain/trigger.dart";
+import "package:entoli_chat/domain/agent_backend.dart";
+import "package:entoli_chat/domain/date_words.dart" show describeFire;
+import "package:entoli_chat/domain/file_tools.dart" show outsideWorkspaces;
+import "package:entoli_chat/domain/tool_arg.dart";
+import "package:entoli_chat/domain/trigger.dart";
 import "../llm/llm_client.dart";
 import "agent_tool.dart";
 import "turn.dart";
 
 /// The trigger tools. The registry they run against is in
-/// `lib/domain/trigger_manager.dart`, after the plan tools' pattern.
+/// `packages/entoli_chat/lib/domain/trigger_manager.dart`, after the plan tools' pattern.
 
 const triggerSetName = "trigger_set";
 const triggerRemoveName = "trigger_remove";

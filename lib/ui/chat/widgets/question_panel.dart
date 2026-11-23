@@ -1,6 +1,6 @@
 import "package:flutter/material.dart";
 
-import "../../../domain/ask.dart";
+import "package:entoli_chat/domain/ask.dart";
 
 /// What stands where the composer does while the agent is waiting on an answer.
 /// One question at a time, its options there to be clicked, and a bar of

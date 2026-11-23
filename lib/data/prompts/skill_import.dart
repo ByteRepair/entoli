@@ -7,13 +7,14 @@ import "dart:typed_data";
 import "package:archive/archive.dart";
 import "package:path/path.dart" as p;
 
-import "../../core/config.dart";
+import "package:entoli_chat/core/config.dart";
 import "bundled_skill_data.dart" show bundledSkillFiles, bundledAgentFiles;
-import "../../domain/bundled_prompt_file.dart" show bundledPromptFileOf;
-import "../../domain/models.dart";
-import "../../domain/prompt_library.dart";
-import "../../domain/project.dart" show projectLabel;
-import "../../domain/workspace.dart";
+import "package:entoli_chat/domain/bundled_prompt_file.dart"
+    show bundledPromptFileOf;
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/prompt_library.dart";
+import "package:entoli_chat/domain/project.dart" show projectLabel;
+import "package:entoli_chat/domain/workspace.dart";
 import "skill_validate.dart";
 
 /// Why a `.skill` file was refused. One line, meant for a snack bar — the

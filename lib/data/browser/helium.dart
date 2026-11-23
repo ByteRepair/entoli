@@ -6,8 +6,8 @@ import "package:archive/archive_io.dart" show extractFileToDisk;
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
-import "../../domain/agent_browser.dart";
-import "../../domain/download.dart";
+import "package:entoli_chat/domain/agent_browser.dart";
+import "package:entoli_chat/domain/download.dart";
 import "../download.dart" show latestReleaseTag;
 
 /// Which desktop a Helium release is fetched for. Each has a repository of its

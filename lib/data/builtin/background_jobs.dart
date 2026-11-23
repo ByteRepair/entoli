@@ -7,10 +7,10 @@ import "dart:typed_data";
 import "package:flutter/foundation.dart";
 import "package:path/path.dart" as p;
 
-import "../../core/log.dart";
-import "../../domain/models.dart" show JobEnd;
-import "../../domain/shell.dart";
-import "../../domain/shell_job.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/models.dart" show JobEnd;
+import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_chat/domain/shell_job.dart";
 
 /// Every chat's background jobs, held by the backend so a job outlives the
 /// turn that started it. The agent starts them through a chat's [ChatJobs];

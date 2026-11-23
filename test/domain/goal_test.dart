@@ -1,9 +1,9 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/chat_log.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/goal.dart";
-import "package:agent_chat/domain/wired_skill.dart";
+import "package:entoli_chat/domain/chat_log.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/goal.dart";
+import "package:entoli_chat/domain/wired_skill.dart";
 
 import "../harness.dart" show makeState;
 

@@ -4,8 +4,8 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-import "package:agent_chat/domain/plan.dart";
-import "package:agent_chat/ui/chat/plan_page.dart";
+import "package:entoli_chat/domain/plan.dart";
+import "package:entoli_chat/ui/chat/plan_page.dart";
 
 import "../harness.dart";
 

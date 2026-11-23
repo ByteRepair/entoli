@@ -2,24 +2,27 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/chat_settings_draft.dart";
-import "../../core/log.dart";
-import "../../domain/builtin_project.dart";
-import "../../domain/chat_meta.dart";
-import "../../domain/model_options.dart" show reasoningEffortLabels;
-import "../../domain/settings/keys.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/builtin_project.dart";
+import "package:entoli_chat/domain/chat_meta.dart";
+import "package:entoli_chat/domain/model_options.dart"
+    show reasoningEffortLabels;
+import "package:entoli_chat/domain/settings/keys.dart";
 import "../../providers.dart";
 import "../settings/llm_settings.dart" show ApproveModeChoice;
 import "../settings/scoped.dart";
 import "../settings/terminal_settings.dart" show SandboxSettings;
-import "../widgets/busy.dart";
+import "package:entoli_chat/ui/widgets/busy.dart";
 import "../widgets/destructive_button.dart";
-import "../widgets/dialogs.dart";
-import "../widgets/discard_guard.dart";
-import "../widgets/page_bar.dart";
+import "package:entoli_chat/ui/widgets/dialogs.dart";
+import "package:entoli_chat/ui/widgets/discard_guard.dart";
+import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 import "../widgets/temp_chat_ttl_field.dart";
-import "../workspace/workspace_page.dart";
+import "package:entoli_chat/ui/workspace/workspace_page.dart";
+import "../../app/app_items.dart" show AppAction, onMirror;
+import "../chat_actions.dart" show shareChat;
 import "context_page.dart";
 import "widgets/view_only_bar.dart" show DeviceNotice;
 
@@ -190,6 +193,23 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                       project: draft.project,
                     ),
                   ),
+                  if (device == null ||
+                      onMirror(AppAction.shareChat).isAvailable)
+                    Builder(
+                      builder: (tile) => ListTile(
+                        leading: const Icon(Icons.ios_share),
+                        title: const Text("Share"),
+                        subtitle: const Text("A link anyone can read it from"),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => catchAndSay(context, () async {
+                          final state = await ref
+                              .read(chatRepositoryProvider)
+                              .loadState(chatId);
+                          if (state == null || !tile.mounted) return;
+                          await shareChat(tile, ref, state);
+                        }),
+                      ),
+                    ),
                   const Divider(),
                   ChatSettingsFields(
                     draft: draft,

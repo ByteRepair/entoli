@@ -5,9 +5,9 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/custom_model.dart";
 import "../../app/model_role.dart";
-import "../../app/reader.dart";
-import "discard_guard.dart";
-import "page_bar.dart";
+import "package:entoli_chat/app/reader.dart";
+import "package:entoli_chat/ui/widgets/discard_guard.dart";
+import "package:entoli_chat/ui/widgets/page_bar.dart";
 
 /// [draft] as a page: the model's facts, what it is, and what it can do.
 /// Pops true once saved.

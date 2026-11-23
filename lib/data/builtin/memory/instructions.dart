@@ -2,11 +2,11 @@ import "dart:io";
 
 import "package:path/path.dart" as p;
 
-import "../../../core/config.dart"
+import "package:entoli_chat/core/config.dart"
     show instructionBlockHeader, instructionFileName;
-import "../../../core/log.dart";
-import "../../../domain/shell.dart" show repositoryRootOf;
-import "../../../domain/models.dart"
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/shell.dart" show repositoryRootOf;
+import "package:entoli_chat/domain/models.dart"
     show InstructionKind, InstructionRef, instructionKindPhrase;
 
 /// AGENTS.md files, read for a turn and rendered into its second system

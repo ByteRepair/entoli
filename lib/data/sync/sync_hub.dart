@@ -5,23 +5,26 @@ import "dart:typed_data";
 import "package:flutter/foundation.dart";
 import "package:http/http.dart" as http;
 
-import "../../core/log.dart";
+import "package:entoli_chat/core/log.dart";
 import "../builtin/memory/store.dart" show Memories, MemoryEntry;
-import "../../domain/app_settings.dart";
-import "../../domain/project.dart" show ProjectRef, everyProject, isProjectName;
-import "../../domain/project_settings.dart";
-import "../../domain/chat_log.dart" show ChatRecord, PartRecord, chatFrom;
-import "../../domain/chat_meta.dart";
-import "../../domain/chat_repository.dart";
-import "../../domain/models.dart"
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/project.dart"
+    show ProjectRef, everyProject, isProjectName;
+import "package:entoli_chat/domain/project_settings.dart";
+import "package:entoli_chat/domain/chat_log.dart"
+    show ChatRecord, PartRecord, chatFrom;
+import "package:entoli_chat/domain/chat_meta.dart";
+import "package:entoli_chat/domain/chat_repository.dart";
+import "package:entoli_chat/domain/models.dart"
     show ArtifactPart, Attachment, Chat, ChatState, ToolApproval;
-import "../../domain/prompt_library.dart";
-import "../../domain/sub_agent_log.dart" show SubAgentAppend, growTranscript;
-import "../../domain/sync/devices.dart";
-import "../../domain/sync/identity.dart";
-import "../../domain/sync/lan_signaling.dart";
-import "../../domain/sync/protocol.dart";
-import "../../domain/sync/relay_signaling.dart";
+import "package:entoli_chat/domain/prompt_library.dart";
+import "package:entoli_chat/domain/sub_agent_log.dart"
+    show SubAgentAppend, growTranscript;
+import "package:entoli_chat/domain/sync/devices.dart";
+import "package:entoli_chat/domain/sync/identity.dart";
+import "package:entoli_chat/domain/sync/lan_signaling.dart";
+import "package:entoli_chat/domain/sync/protocol.dart";
+import "package:entoli_chat/domain/sync/relay_signaling.dart";
 import "artifact_bytes.dart" show ArtifactBytes;
 import "channel.dart";
 import "pairing.dart";

@@ -2,10 +2,10 @@ import "dart:convert";
 import "dart:io";
 import "dart:math";
 
-import "../../core/config.dart";
-import "../../core/log.dart" show logFailure;
-import "../../domain/documents.dart" show RenameWriter;
-import "../../domain/trigger.dart";
+import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/core/log.dart" show logFailure;
+import "package:entoli_chat/domain/documents.dart" show RenameWriter;
+import "package:entoli_chat/domain/trigger.dart";
 
 /// The user's triggers, one JSON list at `<dataDir>/reminders.json` — the
 /// file the reminder feature wrote, kept where it is because a rename is a

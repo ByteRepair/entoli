@@ -1,7 +1,7 @@
-import "../../domain/settings/setting.dart";
-import "../../domain/project.dart" show ProjectRef;
+import "package:entoli_chat/domain/settings/setting.dart";
+import "package:entoli_chat/domain/project.dart" show ProjectRef;
 import "../../providers.dart";
-import "../reader.dart";
+import "package:entoli_chat/app/reader.dart";
 
 /// Which level a setting is read and written at, as a value: what a page
 /// names when it asks for a scope.

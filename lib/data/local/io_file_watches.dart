@@ -1,7 +1,7 @@
 import "dart:io" as io;
 
-import "../../domain/file_watches.dart";
-import "../../domain/trigger.dart" show FileEvent;
+import "package:entoli_chat/domain/file_watches.dart";
+import "package:entoli_chat/domain/trigger.dart" show FileEvent;
 
 /// The machine's watcher: `dart:io`'s `Directory.watch`, recursive — the
 /// file tools read workspaces whole, and a trigger over `project:notes/`

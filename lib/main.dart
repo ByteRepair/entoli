@@ -5,7 +5,7 @@ import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "core/config.dart";
+import "package:entoli_chat/core/config.dart";
 import "app/app_menus.dart";
 import "core/platform/app_menus.dart";
 import "core/platform/background_work.dart";
@@ -27,19 +27,20 @@ import "data/prompts/bundled_skills.dart";
 import "data/prompts/prompt_sources.dart" show promptDirsOf;
 import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
-import "domain/app_restart.dart";
-import "domain/app_secrets.dart";
-import "domain/chat_intents.dart" show ChatIntentAction;
-import "domain/intent_action.dart" show IntentRegistry;
-import "domain/app_settings.dart" show AppSettings;
-import "domain/trigger_manager.dart" show TriggerRegistryFactory;
-import "domain/project.dart" show everyProject;
-import "domain/prompt_library.dart";
-import "domain/sync/identity.dart";
+import "package:entoli_chat/domain/app_restart.dart";
+import "package:entoli_chat/domain/app_secrets.dart";
+import "package:entoli_chat/domain/chat_intents.dart" show ChatIntentAction;
+import "package:entoli_chat/domain/intent_action.dart" show IntentRegistry;
+import "package:entoli_chat/domain/app_settings.dart" show AppSettings;
+import "package:entoli_chat/domain/trigger_manager.dart"
+    show TriggerRegistryFactory;
+import "package:entoli_chat/domain/project.dart" show everyProject;
+import "package:entoli_chat/domain/prompt_library.dart";
+import "package:entoli_chat/domain/sync/identity.dart";
 import "providers.dart";
 import "ui/bot_avatar/licence.dart";
 import "app/remote_turns.dart";
-import "core/transcript_bindings.dart";
+import "core/app_transcript_bindings.dart";
 import "ui/app_licence.dart" show registerAppLicence, registerBlinkLicence;
 import "app/chat_edits.dart" show chatEditsProvider;
 import "ui/command_intents.dart";
@@ -49,13 +50,14 @@ import "ui/app_shell.dart";
 import "app/controller_turn_sender.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
-import "ui/fonts.dart";
+import "package:entoli_chat/ui/fonts.dart";
 import "ui/link_opener.dart";
 import "ui/incoming_links.dart";
 import "ui/share/incoming_shares.dart";
 import "ui/triggers/incoming_open.dart";
 import "ui/selection.dart";
-import "ui/theme.dart";
+import "package:entoli_chat/ui/theme.dart";
+import "ui/app_look.dart";
 import "ui/app_routes.dart";
 
 /// The model host's entry point: Entoli's own executable launched again as
@@ -166,7 +168,7 @@ class AppSession {
     // project inherits, and a project's own overrides same-named default
     // entries for that project alone. Built once at startup so nothing
     // downstream waits on disk; see "Skills and agents" in
-    // `lib/domain/AGENTS.md`. The builds read independent project dirs, so
+    // `packages/entoli_chat/lib/domain/AGENTS.md`. The builds read independent project dirs, so
     // they overlap rather than serialise.
     final libraries = Map.fromEntries(
       await Future.wait(
@@ -306,7 +308,7 @@ class AppSession {
       overrides: [
         chatStoreProvider.overrideWithValue(store),
         agentBackendProvider.overrideWithValue(backend),
-        ...transcriptOverrides,
+        ...appTranscriptOverrides,
         shellProvider.overrideWithValue(backend.shell),
         appConfigProvider.overrideWithValue(config),
         appSecretsProvider.overrideWithValue(secrets),

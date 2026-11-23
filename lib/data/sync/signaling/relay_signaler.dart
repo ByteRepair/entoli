@@ -5,7 +5,7 @@ import "package:crypto/crypto.dart" as slow;
 
 import "../../../core/tls.dart";
 
-import "../../../domain/sync/relay_signaling.dart";
+import "package:entoli_chat/domain/sync/relay_signaling.dart";
 
 /// The joiner-or-host half of a relay pairing. Both sides dial the same
 /// user-supplied WebSocket endpoint and join the same room — derived from the

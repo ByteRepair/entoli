@@ -1,5 +1,5 @@
-import "../../domain/profile.dart";
-import "../../domain/tone.dart";
+import "package:entoli_chat/domain/profile.dart";
+import "package:entoli_chat/domain/tone.dart";
 import "templates.dart";
 import "tools/agent_tool.dart";
 import "tools/registry.dart";

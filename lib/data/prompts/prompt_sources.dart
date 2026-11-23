@@ -5,14 +5,15 @@ import "dart:io";
 
 import "package:path/path.dart" as p;
 
-import "../../core/config.dart";
-import "../../core/log.dart";
-import "../../domain/bundled_prompt_file.dart";
-import "../../domain/builtin_project.dart" show omadaBaseProject, omadaFor;
-import "../../domain/models.dart";
-import "../../domain/project.dart" show defaultProjectDir;
-import "../../domain/project_settings.dart";
-import "../../domain/prompt_library.dart";
+import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/bundled_prompt_file.dart";
+import "package:entoli_chat/domain/builtin_project.dart"
+    show omadaBaseProject, omadaFor;
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/project.dart" show defaultProjectDir;
+import "package:entoli_chat/domain/project_settings.dart";
+import "package:entoli_chat/domain/prompt_library.dart";
 import "bundled_skill_data.dart";
 import "skill_validate.dart";
 
@@ -75,7 +76,7 @@ List<String> tiersFor(String? project, {required bool omada}) => [
 /// override a same-named default one for that project alone. [project] selects
 /// which project's overrides are layered on top of the default set, and `null`
 /// (or `"default"`) is the default project alone. See "Skills and agents" in
-/// `lib/domain/AGENTS.md`.
+/// `packages/entoli_chat/lib/domain/AGENTS.md`.
 class BundledPrompts implements PromptSource {
   // Not const: the tiers resolve off the config at first use, and no caller
   // constructs one in a constant expression.

@@ -2,7 +2,7 @@ import "dart:async";
 
 import "package:flutter/services.dart";
 
-import "../../domain/assistant_launch.dart";
+import "package:entoli_chat/domain/assistant_launch.dart";
 
 /// Android, where the system's assistant gesture arrives as an `ACTION_ASSIST`
 /// intent that `AssistantChannel.kt` notices on the other end of

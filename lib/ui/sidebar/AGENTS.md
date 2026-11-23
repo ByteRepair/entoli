@@ -88,9 +88,11 @@ in `lib/ui/AGENTS.md`.
 
 ## A chat's row menu
 
-The ⋮ button and a right-click open the same menu — Pin, Rename, Move, Delete,
-`_ChatTile._items` — and run the same `chat_actions.dart` functions the Chat
-menu runs on the open chat. Right-click is on every platform rather than a
+The ⋮ button and a right-click open the same menu — Pin, Rename, Move, Share,
+Delete, `_ChatTile._items` — and run the same `chat_actions.dart` functions
+the Chat menu runs on the open chat. A paired device's chat leaves out what
+`onMirror` (`lib/app/app_items.dart`) says it cannot have here, Move and
+Share, the same answer the menus, keys and its settings page take. Right-click is on every platform rather than a
 desktop's alone: it costs nothing where there is no mouse.
 
 ## A chat that is running
@@ -104,7 +106,9 @@ a turn starting or ending never moves the title; the docked sidebar is
 
 The switcher at the top of the sidebar opens `project_palette.dart`, and so does
 Ctrl+K (Cmd+K on Apple's platforms). It is the whole screen below
-`compactWidth` and a box in the middle above it. The default project and the
+`compactWidth` and a box in the middle above it — `showPaletteDialog`
+(`lib/ui/widgets/palette_dialog.dart`), which the share dialog is framed in
+too. The default project and the
 built-ins sit above a rule, the user's projects below it, other devices'
 projects under their own heading; each row is a spinner slot, the icon, the
 name and its chat count. Below another rule are the chats of every project,

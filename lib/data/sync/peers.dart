@@ -2,9 +2,9 @@ import "dart:async";
 
 import "package:flutter/foundation.dart";
 
-import "../../core/log.dart";
-import "../../domain/sync/devices.dart";
-import "../../domain/sync/protocol.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/sync/devices.dart";
+import "package:entoli_chat/domain/sync/protocol.dart";
 import "framing.dart";
 
 enum PeerStatus { connecting, online, offline, error }

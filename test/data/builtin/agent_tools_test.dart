@@ -4,9 +4,9 @@ import "package:agent_chat/data/builtin/tools/agent_tool.dart";
 import "package:agent_chat/data/builtin/tools/bash_tool.dart";
 import "package:agent_chat/data/builtin/tools/customization_tools.dart";
 import "package:agent_chat/data/builtin/tools/registry.dart";
-import "package:agent_chat/domain/agent_definition.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/prompt_library.dart";
+import "package:entoli_chat/domain/agent_definition.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/prompt_library.dart";
 
 AgentDefinition looker() => AgentDefinition.of(
   PromptDocument.parse(

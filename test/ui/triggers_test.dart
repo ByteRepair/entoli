@@ -3,9 +3,9 @@ import "package:flutter/material.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/date_words.dart" show describeFire;
-import "package:agent_chat/domain/trigger.dart";
-import "package:agent_chat/domain/temp_chat_ttl.dart";
+import "package:entoli_chat/domain/date_words.dart" show describeFire;
+import "package:entoli_chat/domain/trigger.dart";
+import "package:entoli_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/triggers/incoming_open.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";

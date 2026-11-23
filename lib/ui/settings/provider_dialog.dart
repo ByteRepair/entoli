@@ -4,7 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/settings/provider_edit.dart";
 import "../../data/builtin/llm/providers/presets.dart";
-import "../../domain/llm_provider.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
 import "../../providers.dart";
 import "../widgets/environment_section.dart";
 import "cli_sign_in_dialog.dart" show CliAccountSection;

@@ -5,15 +5,15 @@
 import "dart:io";
 import "dart:typed_data";
 
-import "../../core/config.dart";
+import "package:entoli_chat/core/config.dart";
 import "bundled_skill_data.dart" show bundledSkillFiles, bundledAgentFiles;
-import "../zip.dart" show archiveOf;
-import "../../domain/app_link.dart" show AppLink;
-import "../../domain/backup_handoff.dart";
-import "../../domain/bundled_prompt_file.dart"
+import "package:entoli_chat/data/zip.dart" show archiveOf;
+import "package:entoli_chat/domain/app_link.dart" show AppLink;
+import "package:entoli_chat/domain/backup_handoff.dart";
+import "package:entoli_chat/domain/bundled_prompt_file.dart"
     show bundledPromptFileOf, bundledPromptFilesOf;
-import "../../domain/models.dart";
-import "../../domain/project.dart" show defaultProjectDir;
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/project.dart" show defaultProjectDir;
 import "skill_import.dart"
     show SkillImportException, SkillPackage, skillDirectory, agentFilePath;
 import "skill_package.dart" show packageSkillBytes;

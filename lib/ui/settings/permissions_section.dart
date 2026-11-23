@@ -3,10 +3,10 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/settings/permission_rules.dart";
 import "../../app/settings/scope.dart";
-import "../../domain/permission.dart";
-import "../../domain/settings/keys.dart";
+import "package:entoli_chat/domain/permission.dart";
+import "package:entoli_chat/domain/settings/keys.dart";
 import "../widgets/add_button_row.dart";
-import "../widgets/busy.dart";
+import "package:entoli_chat/ui/widgets/busy.dart";
 import "../widgets/editable_row.dart";
 import "../widgets/section_header.dart";
 import "scoped.dart";

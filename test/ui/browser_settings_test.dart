@@ -4,8 +4,8 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/browser/cdp_browser.dart";
 import "package:agent_chat/data/browser/helium.dart";
-import "package:agent_chat/domain/agent_browser.dart";
-import "package:agent_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/agent_browser.dart";
+import "package:entoli_chat/domain/app_settings.dart";
 import "package:agent_chat/providers.dart";
 
 import "../harness.dart";

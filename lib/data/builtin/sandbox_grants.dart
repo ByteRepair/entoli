@@ -2,9 +2,11 @@ import "dart:io";
 
 import "package:path/path.dart" as p;
 
-import "../../core/log.dart";
-import "../../domain/shell.dart" show cdTarget, commandPath, repositoryRootOf;
-import "../../domain/shell_command_analysis.dart" show plainCommand;
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/shell.dart"
+    show cdTarget, commandPath, repositoryRootOf;
+import "package:entoli_chat/domain/shell_command_analysis.dart"
+    show plainCommand;
 import "local_shell.dart" show LocalShell;
 
 /// The caches developer tools write to as a matter of course, under the

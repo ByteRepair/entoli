@@ -2,7 +2,7 @@ import "dart:async";
 import "dart:convert";
 import "dart:io";
 
-import "../../../core/log.dart";
+import "package:entoli_chat/core/log.dart";
 import "../../../core/random_token.dart";
 import "llm_client.dart";
 

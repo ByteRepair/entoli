@@ -4,9 +4,9 @@ import "dart:typed_data";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/data/local/file_chat_store.dart";
+import "package:entoli_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/backup.dart";
-import "package:agent_chat/domain/models.dart";
+import "package:entoli_chat/domain/models.dart";
 
 import "../fakes.dart";
 import "../harness.dart";

@@ -5,11 +5,11 @@ import "package:flutter/rendering.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/agent_backend.dart";
-import "package:agent_chat/domain/background_work.dart";
+import "package:entoli_chat/domain/agent_backend.dart";
+import "package:entoli_chat/domain/background_work.dart";
 
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/project.dart" show localProject;
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/project.dart" show localProject;
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/app/chat_controller.dart";
 import "package:agent_chat/app/composer.dart"

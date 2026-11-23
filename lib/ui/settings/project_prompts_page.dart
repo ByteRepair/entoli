@@ -1,9 +1,9 @@
 import "package:flutter/material.dart";
 
 import "../../app/settings/scope.dart";
-import "../../domain/models.dart";
-import "../../domain/project.dart" show projectLabel;
-import "../widgets/page_bar.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/project.dart" show projectLabel;
+import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "agents_settings.dart";
 import "skills_settings.dart";
 

@@ -6,8 +6,8 @@
 /// page. A paired device's has no workspace here.
 library;
 
-import "../domain/builtin_project.dart";
-import "../domain/project.dart";
+import "package:entoli_chat/domain/builtin_project.dart";
+import "package:entoli_chat/domain/project.dart";
 
 bool projectHasWorkspace(ProjectRef at) =>
     at.device == null &&

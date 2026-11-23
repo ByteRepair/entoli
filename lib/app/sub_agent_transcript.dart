@@ -2,16 +2,14 @@ import "dart:async";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../domain/chat_log.dart";
-import "../domain/chat_repository.dart";
-import "../domain/models.dart";
-import "../domain/sub_agent_log.dart";
+import "package:entoli_chat/domain/chat_log.dart";
+import "package:entoli_chat/domain/chat_repository.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/sub_agent_log.dart";
 import "../providers.dart";
 import "mirror_controller.dart" show chatViewProvider;
-import "transcript/activity.dart" show LiveMessage;
-
-/// Which sub-agent: the chat, and the `task` call that spawned it.
-typedef SubAgentCall = ({String chatId, String callId});
+import "package:entoli_chat/app/transcript/activity.dart" show LiveMessage;
+import "package:entoli_chat/app/transcript/host.dart" show SubAgentCall;
 
 /// A sub-agent's transcript as the `task` detail shows it: the one message a
 /// run is, and whether its log has closed.

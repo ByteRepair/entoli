@@ -1,7 +1,7 @@
 import "package:flutter/foundation.dart";
 
-import "../../domain/local_llm.dart";
-import "../../domain/local_model_store.dart";
+import "package:entoli_chat/domain/local_llm.dart";
+import "package:entoli_chat/domain/local_model_store.dart";
 import "local_instance.dart";
 
 /// Which models are loaded, and the one rule for loading another: at most

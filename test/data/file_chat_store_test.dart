@@ -6,13 +6,13 @@ import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-import "package:agent_chat/core/config.dart";
+import "package:entoli_chat/core/config.dart";
 import "package:agent_chat/core/platform/host.dart" show deleteTree;
 import "package:agent_chat/data/local/file_modes.dart";
-import "package:agent_chat/core/read_only_dirs.dart";
-import "package:agent_chat/data/local/file_chat_store.dart";
-import "package:agent_chat/domain/chat_log.dart";
-import "package:agent_chat/domain/models.dart";
+import "package:entoli_chat/core/read_only_dirs.dart";
+import "package:entoli_chat/data/local/file_chat_store.dart";
+import "package:entoli_chat/domain/chat_log.dart";
+import "package:entoli_chat/domain/models.dart";
 
 import "../harness.dart";
 
@@ -485,6 +485,24 @@ void main() {
       );
       // The workspace copy the model reads is untouched.
       expect(File(p.join(src, "index.html")).readAsStringSync(), "<h1>hi</h1>");
+    });
+
+    test("createArtifact leaves a link out, and what it leads to", () async {
+      await store.saveState(makeState("a1"));
+      final src = p.join(config.workspaceDir("a1"), "report");
+      await Directory(src).create(recursive: true);
+      await File(p.join(src, "index.html")).writeAsString("<h1>hi</h1>");
+      final outside = tempDir().path;
+      File(p.join(outside, "id_ed25519")).writeAsStringSync("secret");
+      Link(p.join(src, "keys")).createSync(outside);
+      Link(p.join(src, "up")).createSync(src);
+
+      final id = await store.createArtifact("a1", src, "index.html");
+
+      final dir = config.artifactDir("a1", id);
+      expect(Directory(dir).listSync().map((e) => p.basename(e.path)), [
+        "index.html",
+      ]);
     });
 
     test("createArtifact accepts a single file (copies parent dir)", () async {

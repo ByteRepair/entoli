@@ -1,6 +1,6 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../domain/plan.dart";
+import "package:entoli_chat/domain/plan.dart";
 import "../providers.dart";
 import "mirror_controller.dart" show chatViewProvider;
 
@@ -21,13 +21,3 @@ final planProvider = FutureProvider.autoDispose
       final sections = planSectionsFrom(text);
       return sections.isEmpty ? null : sections;
     });
-
-/// The line under a plan's title.
-String planProgressLine(List<PlanSection>? sections, {required bool loading}) {
-  if (sections != null) {
-    final (done, total) = sectionsProgress(sections);
-    return "$done of $total tasks done";
-  }
-  // A mirror's first read is a round trip to the home device.
-  return loading ? "Reading the plan…" : "The plan could not be read.";
-}

@@ -1,9 +1,9 @@
 import "package:flutter/material.dart";
 
-import "../../domain/download.dart";
-import "../../domain/installable.dart" show ModelFacts;
-import "dialogs.dart";
-import "../../core/formatting.dart";
+import "package:entoli_chat/domain/download.dart";
+import "package:entoli_chat/domain/installable.dart" show ModelFacts;
+import "package:entoli_chat/ui/widgets/dialogs.dart";
+import "package:entoli_chat/core/formatting.dart";
 import "resettable_field.dart";
 
 // What both catalogs on the settings pages are made of: a row per thing that

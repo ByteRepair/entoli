@@ -3,8 +3,8 @@ import "package:flutter/material.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/ui/chat/widgets/reply_style.dart";
-import "package:agent_chat/ui/fonts.dart";
+import "package:entoli_chat/ui/chat/widgets/reply_style.dart";
+import "package:entoli_chat/ui/fonts.dart";
 
 import "../harness.dart";
 
@@ -105,9 +105,9 @@ void main() {
 
     final all = await LicenseRegistry.licenses.toList();
     for (final (family, name) in const [
-      (monoFamily, "Roboto Mono"),
-      (displayFamily, "Playfair Display"),
-      (bodyFamily, "Source Serif 4"),
+      ("RobotoMono", "Roboto Mono"),
+      ("PlayfairDisplay", "Playfair Display"),
+      ("SourceSerif4", "Source Serif 4"),
     ]) {
       final ours = all.where((l) => l.packages.contains(family)).toList();
 

@@ -4,7 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../widgets/side_panel_frame.dart";
 import "settings_category.dart";
 import "settings_pages.dart";
-import "../widgets/page_bar.dart";
+import "package:entoli_chat/ui/widgets/page_bar.dart";
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key, this.initialCategory, this.focus = false});

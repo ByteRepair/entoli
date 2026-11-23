@@ -3,9 +3,9 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/chat_search.dart";
-import "../../domain/models.dart";
-import "../../domain/project.dart";
+import "package:entoli_chat/domain/chat_search.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/project.dart";
 import "../../providers.dart";
 import "../app_command.dart";
 import "../chat_actions.dart";
@@ -441,17 +441,18 @@ class _ChatTile extends ConsumerWidget {
   }
 
   /// The row's menu, the same from the button and from a right-click: the
-  /// chat commands, in the row's own shorter words, less Move for a mirror,
-  /// whose projects are its home device's.
+  /// chat commands, in the row's own shorter words, less what a mirror cannot
+  /// have here ([onMirror]).
   List<PopupMenuEntry<AppAction>> get _items => [
     for (final command in chatCommands)
-      if (!(remote && command == AppAction.moveChat))
+      if (!remote || onMirror(command).isAvailable)
         PopupMenuItem(
           value: command,
           child: Text(switch (command) {
             AppAction.pinChat => chat.pinned ? "Unpin" : "Pin",
             AppAction.renameChat => "Rename",
             AppAction.moveChat => "Move to project…",
+            AppAction.shareChat => "Share…",
             _ => "Delete",
           }),
         ),

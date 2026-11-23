@@ -8,9 +8,9 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../widgets/anchored_menu.dart";
-import "../../../core/log.dart";
-import "../../../domain/agent_browser.dart";
+import "package:entoli_chat/ui/widgets/anchored_menu.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/agent_browser.dart";
 import "../../../providers.dart";
 import "browser_input.dart";
 import "../../../app/running.dart" show browserTabOf;

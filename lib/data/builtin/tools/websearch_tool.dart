@@ -1,8 +1,8 @@
-import "../../../core/log.dart";
-import "../../../domain/agent_backend.dart";
-import "../../../domain/shell.dart";
-import "../../../domain/tool_arg.dart";
-import "../../../domain/web_search.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/agent_backend.dart";
+import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_chat/domain/tool_arg.dart";
+import "package:entoli_chat/domain/web_search.dart";
 import "../approval_gate.dart";
 import "../llm/llm_client.dart";
 import "../templates.dart" show systemProse;

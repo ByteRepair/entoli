@@ -2,9 +2,9 @@ import "dart:async";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../core/log.dart";
-import "../../domain/background_work.dart";
-import "../../domain/download.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/background_work.dart";
+import "package:entoli_chat/domain/download.dart";
 import "../../providers.dart";
 
 /// What a catalog of downloadable things has downloaded, is downloading, and is

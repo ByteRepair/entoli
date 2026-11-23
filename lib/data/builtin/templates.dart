@@ -1,16 +1,18 @@
 import "dart:convert";
 
-import "../../core/formatting.dart" show safeCut;
-import "../../domain/agent_backend.dart" show taskToolName;
-import "../../domain/bundled_prompt_file.dart";
-import "../../domain/bundled_project_prompts.dart" show bundledSystemPrompts;
-import "../../domain/file_tools.dart";
-import "../../domain/models.dart" show CompletionKind, ReactionPart;
-import "../../domain/quote.dart" show blockquoted;
-import "../../domain/reaction.dart" show Reaction;
-import "../../domain/profile.dart";
-import "../../domain/shell.dart" show CommandSandbox;
-import "../../domain/tone.dart";
+import "package:entoli_chat/core/formatting.dart" show safeCut;
+import "package:entoli_chat/domain/agent_backend.dart" show taskToolName;
+import "package:entoli_chat/domain/bundled_prompt_file.dart";
+import "package:entoli_chat/domain/bundled_project_prompts.dart"
+    show bundledSystemPrompts;
+import "package:entoli_chat/domain/file_tools.dart";
+import "package:entoli_chat/domain/models.dart"
+    show CompletionKind, ReactionPart;
+import "package:entoli_chat/domain/quote.dart" show blockquoted;
+import "package:entoli_chat/domain/reaction.dart" show Reaction;
+import "package:entoli_chat/domain/profile.dart";
+import "package:entoli_chat/domain/shell.dart" show CommandSandbox;
+import "package:entoli_chat/domain/tone.dart";
 
 /// The prompt prose, embedded at build time from
 /// `assets/prompts/projects/default/system/` (`tool/gen_prompts.dart`). The
@@ -178,7 +180,7 @@ of this conversation, and answer from what it returns.""";
 /// `conv.jsonl`; wording it twice is what left a reopened or regenerated chat
 /// sending different text from the one that was cached, so [at] is the
 /// message's own `createdAt` rather than the clock. See "The projection" in
-/// `lib/domain/AGENTS.md`.
+/// `packages/entoli_chat/lib/domain/AGENTS.md`.
 String userTurnText(String text, {required DateTime at, required bool first}) =>
     _withNow(first ? _firstTask(text) : text, at);
 
@@ -317,7 +319,7 @@ String unknownTool(String name, Iterable<String> available) =>
 /// the one it tracked just before it. Null where there is nothing to say: the
 /// turn's opening move, where nothing is tracked yet, a command that was killed
 /// or never ran, which leaves no directory to read, and one that stayed where
-/// it was. See "The projection" in `lib/domain/AGENTS.md`.
+/// it was. See "The projection" in `packages/entoli_chat/lib/domain/AGENTS.md`.
 String? cwdChangedNote(String? before, String? after) =>
     (after == null || before == null || after == before)
     ? null

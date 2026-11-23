@@ -2,10 +2,10 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/prompts/bundled_skill_data.dart"
     show bundledSkillFiles;
-import "package:agent_chat/domain/models.dart" show CompletionKind;
-import "package:agent_chat/domain/prompt_library.dart"
+import "package:entoli_chat/domain/models.dart" show CompletionKind;
+import "package:entoli_chat/domain/prompt_library.dart"
     show PromptDocument, PromptLibrary, promptReferences;
-import "package:agent_chat/domain/wired_skill.dart"
+import "package:entoli_chat/domain/wired_skill.dart"
     show WiredSkill, wiredSkillFromText;
 
 void main() {

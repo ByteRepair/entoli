@@ -6,8 +6,8 @@ import "package:flutter_test/flutter_test.dart";
 import "package:qr_flutter/qr_flutter.dart";
 
 import "package:agent_chat/data/sync/sync_hub.dart";
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/sync/devices.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/sync/devices.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/paired_device_page.dart";
 

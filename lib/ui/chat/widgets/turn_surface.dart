@@ -2,10 +2,10 @@ import "../../../app/approvals.dart";
 import "../../../app/turn_surface.dart";
 import "package:flutter/material.dart";
 
-import "../../../domain/goal.dart" show ChatGoals;
-import "../../../domain/models.dart";
-import "../../../domain/room/room_state.dart";
-import "../../../domain/todo.dart";
+import "package:entoli_chat/domain/goal.dart" show ChatGoals;
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/room/room_state.dart";
+import "package:entoli_chat/domain/todo.dart";
 import "../../../app/chat_controller.dart";
 import "approval_banner.dart";
 import "browser_strip.dart";

@@ -1,4 +1,4 @@
-import "../domain/availability.dart";
+import "package:entoli_chat/domain/availability.dart";
 
 /// A key as the menus and the key handlers take it: the chord key (Cmd on
 /// Apple's platforms, Ctrl elsewhere) plus [char], with Shift and Alt
@@ -35,6 +35,7 @@ enum AppAction implements AppItem {
   pinChat("Pin Chat", key: AppKey("p", shift: true)),
   renameChat("Rename Chat…"),
   moveChat("Move Chat to Project…"),
+  shareChat("Share Chat…"),
   deleteChat("Delete Chat…"),
   stopTurn("Stop Turn", key: AppKey("."));
 
@@ -98,6 +99,7 @@ const List<AppItem> appItems = [
   AppAction.pinChat,
   AppAction.renameChat,
   AppAction.moveChat,
+  AppAction.shareChat,
   AppAction.deleteChat,
   Destination.chatSettings,
   Destination.showPlan,
@@ -112,6 +114,9 @@ const List<AppItem> appItems = [
 typedef AppFacts = ({
   bool front,
   bool chatOpen,
+
+  /// The chat on screen is a paired device's.
+  bool mirrored,
   bool pinned,
   bool running,
   bool sidebarShown,
@@ -126,6 +131,9 @@ Availability availabilityOf(AppItem item, AppFacts facts) {
   if (!item.anywhere && !facts.front) {
     return const Unavailable("A page is open over the chat.");
   }
+  if (facts.mirrored) {
+    if (onMirror(item) case final Unavailable why) return why;
+  }
   Availability needs(bool ok, String why) =>
       ok ? const Available() : Unavailable(why);
   const noChat = "No chat is open.";
@@ -133,6 +141,7 @@ Availability availabilityOf(AppItem item, AppFacts facts) {
     AppAction.pinChat ||
     AppAction.renameChat ||
     AppAction.moveChat ||
+    AppAction.shareChat ||
     AppAction.deleteChat ||
     Destination.chatSettings ||
     // The page says where a chat has none.
@@ -153,6 +162,19 @@ Availability availabilityOf(AppItem item, AppFacts facts) {
     _ => const Available(),
   };
 }
+
+/// What of [item] a paired device's chat cannot have here: its projects and
+/// its files are its home device's. The row menu, the settings page and the
+/// commands themselves ask this too.
+Availability onMirror(AppItem item) => switch (item) {
+  AppAction.moveChat => const Unavailable(
+    "A paired device's chat is moved on that device.",
+  ),
+  AppAction.shareChat => const Unavailable(
+    "A paired device's chat is shared from that device.",
+  ),
+  _ => const Available(),
+};
 
 /// [item]'s title, saying which way a toggle goes.
 String titleOf(AppItem item, AppFacts facts) => switch (item) {
@@ -190,7 +212,12 @@ const List<AppMenu> appMenus = [
     [Destination.backUp],
   ]),
   AppMenu("Chat", MenuRole.own, [
-    [AppAction.pinChat, AppAction.renameChat, AppAction.moveChat],
+    [
+      AppAction.pinChat,
+      AppAction.renameChat,
+      AppAction.moveChat,
+      AppAction.shareChat,
+    ],
     [
       Destination.chatSettings,
       Destination.showPlan,

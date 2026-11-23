@@ -3,9 +3,9 @@ import "dart:typed_data";
 import "package:freedesktop_secret/freedesktop_secret.dart";
 import "package:flutter/foundation.dart" show kDebugMode;
 
-import "../brand.dart";
-import "../log.dart";
-import "../../domain/secret_store.dart";
+import "package:entoli_chat/core/brand.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/secret_store.dart";
 
 const _tag = "secrets";
 

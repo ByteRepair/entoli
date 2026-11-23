@@ -21,7 +21,6 @@ analyzer:
     deprecated_member_use: ignore
   exclude:
     - lib/data/prompts/bundled_skill_data.dart
-    - lib/domain/bundled_project_prompts.dart
     - build/**
     - android/**
     - linux/**

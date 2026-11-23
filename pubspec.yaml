@@ -10,12 +10,20 @@ version: 8.6.1
 environment:
   sdk: ^3.12.2
 
+# One lock for the app and the packages it shares code with.
+workspace:
+  - packages/entoli_chat
+  - packages/entoli_share_viewer
+
 dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.9
   entoli_menu:
     path: packages/entoli_menu
+  # The chat as data and on screen, which the share viewer runs too.
+  entoli_chat:
+    path: packages/entoli_chat
 
   # State management
   flutter_riverpod: ^3.4.2
@@ -69,6 +77,9 @@ dependencies:
   # Hybrid composition, which the platform-neutral API cannot ask for.
   webview_flutter_android: ^4.14.1
 
+  # The system share sheet for a chat's share link. Linux has none, and copies.
+  share_plus: ^13.3.1
+
   # Voice mode. sherpa-onnx is speech recognition, speech synthesis and voice
   # activity detection from one dependency: `record` opens the microphone and
   # `audioplayers` says the reply back. See "Voice mode" in AGENTS.md. The
@@ -119,9 +130,6 @@ dev_dependencies:
   # the classes a fake implementation has to extend.
   webview_flutter_platform_interface: ^2.15.1
 
-  build_runner: ^2.15.1
-  json_serializable: ^6.14.1
-  freezed: ^3.2.5
   pigeon: ^27.3.0
 
 flutter:
@@ -141,12 +149,6 @@ flutter:
     # Flutter writes its own version.json for Linux, which overrides this
     # there; on every other platform this is the only copy.
     - assets/version.json
-    # The fonts' licences, read into `LicenseRegistry` at startup. An asset
-    # rather than only a file in the repo, since the OFL asks for it to travel
-    # with the font.
-    - assets/fonts/OFL.txt
-    - assets/fonts/PlayfairDisplay-OFL.txt
-    - assets/fonts/SourceSerif4-OFL.txt
     # Open Bot Avatar's starters and gallery, each a spec the avatar editor
     # reads like any other, and the MIT licence the engine port and the
     # shapes travel under, read into `LicenseRegistry` at startup.
@@ -178,33 +180,3 @@ flutter:
     # committing.
     - path: assets/certs/cacert.pem
       platforms: [windows]
-
-  # The faces the artifact stylesheet names, bundled so the whole app wears
-  # them and not only its artifacts. Both are OFL — `assets/fonts/OFL.txt` and
-  # the per-family `-OFL.txt` files ship with them. Static instances rather
-  # than the variable fonts: the engine does not read `opsz`, and a 400-to-900
-  # `wght` axis makes every weight request synthetise or clamp.
-  fonts:
-    - family: RobotoMono
-      fonts:
-        - asset: assets/fonts/RobotoMono-Regular.ttf
-        - asset: assets/fonts/RobotoMono-Bold.ttf
-          weight: 700
-    - family: PlayfairDisplay
-      fonts:
-        - asset: assets/fonts/PlayfairDisplay-Regular.ttf
-        - asset: assets/fonts/PlayfairDisplay-Medium.ttf
-          weight: 500
-        - asset: assets/fonts/PlayfairDisplay-Bold.ttf
-          weight: 700
-    - family: SourceSerif4
-      fonts:
-        - asset: assets/fonts/SourceSerif4-Regular.ttf
-        - asset: assets/fonts/SourceSerif4-Medium.ttf
-          weight: 500
-        - asset: assets/fonts/SourceSerif4-SemiBold.ttf
-          weight: 600
-        - asset: assets/fonts/SourceSerif4-Bold.ttf
-          weight: 700
-        - asset: assets/fonts/SourceSerif4-Italic.ttf
-          style: italic

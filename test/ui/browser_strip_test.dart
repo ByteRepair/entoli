@@ -8,13 +8,16 @@ import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/agent_browser.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/room/room_state.dart";
+import "package:entoli_chat/domain/agent_browser.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/room/room_state.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/widgets/browser_input.dart";
 import "package:agent_chat/ui/chat/widgets/browser_strip.dart";
 import "package:agent_chat/ui/chat/widgets/running_strip.dart";
+import "package:entoli_chat/ui/chat/activity/card.dart"
+    show transcriptHandOffProvider;
+import "package:agent_chat/ui/chat/activity/context_hand_off.dart";
 
 import "../fakes.dart";
 import "../harness.dart" show clipboard;
@@ -158,6 +161,7 @@ void main() {
         overrides: [
           agentBrowserProvider.overrideWithValue(browser),
           isMirroredChatProvider("chat-1").overrideWithValue(mirrored),
+          transcriptHandOffProvider.overrideWithValue(ContextHandOff.new),
         ],
         child: MaterialApp(
           home: Scaffold(

@@ -1,5 +1,5 @@
 import "package:agent_chat/data/local/residency.dart";
-import "package:agent_chat/domain/local_llm.dart";
+import "package:entoli_chat/domain/local_llm.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "../../fakes.dart";

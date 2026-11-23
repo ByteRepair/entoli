@@ -2,10 +2,10 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/llm/llm_client.dart" show LlmException;
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/llm_provider.dart";
-import "package:agent_chat/domain/permission.dart";
-import "package:agent_chat/domain/project_settings.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_chat/domain/permission.dart";
+import "package:entoli_chat/domain/project_settings.dart";
 import "package:agent_chat/providers.dart";
 
 import "../harness.dart";

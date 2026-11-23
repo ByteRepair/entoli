@@ -1,19 +1,19 @@
-import "../../../domain/agent_backend.dart";
-import "../../../domain/agent_browser.dart";
-import "../../../domain/ask.dart";
-import "../../../domain/file_tools.dart";
-import "../../../domain/permission.dart" show ApproveMode;
-import "../../../domain/shell.dart";
-import "../../../domain/todo.dart";
-import "../../../domain/trigger_manager.dart" show TriggerRegistry;
-import "../../../domain/web_search.dart";
+import "package:entoli_chat/domain/agent_backend.dart";
+import "package:entoli_chat/domain/agent_browser.dart";
+import "package:entoli_chat/domain/ask.dart";
+import "package:entoli_chat/domain/file_tools.dart";
+import "package:entoli_chat/domain/permission.dart" show ApproveMode;
+import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_chat/domain/todo.dart";
+import "package:entoli_chat/domain/trigger_manager.dart" show TriggerRegistry;
+import "package:entoli_chat/domain/web_search.dart";
 import "../approval_gate.dart";
 import "../background_jobs.dart";
 import "../builtin_options.dart";
 import "../llm/llm_client.dart";
 import "../memory/store.dart";
 import "grant_nudge.dart";
-import "../../../domain/app_settings.dart" show SettingsEditor;
+import "package:entoli_chat/domain/app_settings.dart" show SettingsEditor;
 
 /// What a running tool may reach of the turn it runs in: the workspaces, the
 /// shell, the gate, the user, and whichever of the optional collaborators

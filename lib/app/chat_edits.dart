@@ -1,7 +1,7 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../domain/chat_intents.dart" show ChatEditor;
-import "../domain/models.dart";
+import "package:entoli_chat/domain/chat_intents.dart" show ChatEditor;
+import "package:entoli_chat/domain/models.dart";
 import "../providers.dart";
 import "chat_controller.dart";
 import "selection.dart";
@@ -55,6 +55,17 @@ class ChatEdits implements ChatEditor {
   Future<void> move(ChatState chat, String? project) async {
     await _ref.read(chatRepositoryProvider).moveChat(chat.id, project);
     _ref.invalidate(chatControllerProvider(chat.id));
+    _ref.invalidate(chatListProvider);
+  }
+
+  /// Lets an imported [chat] run; see `ChatRepository.enableChat`.
+  Future<void> enable(ChatState chat, {required bool keepWorkspace}) async {
+    final written = await _ref
+        .read(chatRepositoryProvider)
+        .enableChat(chat.id, chat, keepWorkspace: keepWorkspace);
+    if (_openHere(chat)) {
+      _ref.read(chatControllerProvider(chat.id).notifier).applyState(written);
+    }
     _ref.invalidate(chatListProvider);
   }
 

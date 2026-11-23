@@ -3,10 +3,10 @@ import "dart:io";
 
 import "package:path/path.dart" as p;
 
-import "../../core/config.dart";
-import "../../domain/documents.dart" show RenameWriter;
-import "../../domain/secret_store.dart";
-import "../../domain/sync/devices.dart";
+import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/domain/documents.dart" show RenameWriter;
+import "package:entoli_chat/domain/secret_store.dart";
+import "package:entoli_chat/domain/sync/devices.dart";
 
 /// Paired devices on the disk, their pairing secrets beside them in the
 /// [SecretStore].

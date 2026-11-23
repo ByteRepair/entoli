@@ -2,12 +2,12 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../data/sync/peers.dart" show PeerStatus;
-import "../../../domain/project.dart";
+import "package:entoli_chat/domain/project.dart";
 import "../../../providers.dart";
 import "../../selection.dart";
 import "../../../app/remote_projects.dart";
 import "../../widgets/chip_row.dart";
-import "omada_separator.dart";
+import "package:entoli_chat/ui/chat/widgets/omada_separator.dart";
 
 /// The new-chat screen's badges for the projects of the devices paired with
 /// this one: under a line naming each device, every project it last listed —

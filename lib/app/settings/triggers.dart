@@ -3,10 +3,11 @@ import "dart:convert";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:uuid/uuid.dart";
 
-import "../../domain/date_words.dart" show describeFire, shortDate;
-import "../../domain/project.dart";
-import "../../domain/temp_chat_ttl.dart";
-import "../../domain/trigger.dart";
+import "package:entoli_chat/domain/date_words.dart"
+    show describeFire, shortDate;
+import "package:entoli_chat/domain/project.dart";
+import "package:entoli_chat/domain/temp_chat_ttl.dart";
+import "package:entoli_chat/domain/trigger.dart";
 import "../../providers.dart";
 
 /// What the system says of the two permissions a trigger leans on. The rows

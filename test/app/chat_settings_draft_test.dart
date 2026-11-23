@@ -4,12 +4,12 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/app/chat_settings_draft.dart";
 import "package:agent_chat/app/settings/scope.dart";
-import "package:agent_chat/app/reader.dart";
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/chat_meta.dart";
-import "package:agent_chat/domain/permission.dart";
-import "package:agent_chat/domain/settings/keys.dart";
-import "package:agent_chat/domain/temp_chat_ttl.dart";
+import "package:entoli_chat/app/reader.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/chat_meta.dart";
+import "package:entoli_chat/domain/permission.dart";
+import "package:entoli_chat/domain/settings/keys.dart";
+import "package:entoli_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart"

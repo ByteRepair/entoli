@@ -48,19 +48,19 @@ nothing guesses it from the words: a model that announces work and stops is
 the prompt's to prevent ("Finishing a turn" says a reply either acts or ends).
 
 Past those, a goal. Where the chat has an active one (see "Goals" in
-`lib/domain/AGENTS.md`), the stop is put to `GoalReviewer`: one call, no
-tools, a text digest of the conversation's last 40,000 characters — text
-because the reviewer may be another provider, and a transcript of tool calls
-it was never offered is a request some refuse. The model is the classifier
+`packages/entoli_chat/lib/domain/AGENTS.md`), the stop is put to `GoalReviewer`:
+one call, no tools, a text digest of the conversation's last 40,000 characters —
+text because the reviewer may be another provider, and a transcript of tool
+calls it was never offered is a request some refuse. The model is the classifier
 model where one is set, as Claude Code's reviewer is a small fast model, else
 the turn's own, as OpenCode's is. Short of the goal, the reason and the next
 step go in as a `<system-notification>` steer and the turn carries on; met or
-blocked goes out as a `GoalEvent` — the room logs it, the turn never writes
-the goal — and the turn ends. A send-back is not one of
-`maxStopNudges`: the step limit is what bounds them, each being a step, and
-the last step is never sent back. A review with no usable verdict ends the turn as a stop did
-before goals, and leaves the goal active. The goal is read again after the
-review, so a pause the user made while the reviewer read stands.
+blocked goes out as a `GoalEvent` — the room logs it, the turn never writes the
+goal — and the turn ends. A send-back is not one of `maxStopNudges`: the step
+limit is what bounds them, each being a step, and the last step is never sent
+back. A review with no usable verdict ends the turn as a stop did before goals,
+and leaves the goal active. The goal is read again after the review, so a pause
+the user made while the reviewer read stands.
 
 How a reply ended is `LlmStop`, one vocabulary that each client maps its own
 wire word into (`stopOf` on `OpenAiClient`, `AnthropicEventReader` and
@@ -128,13 +128,14 @@ read the parent's capabilities through `unattended`, which zeroes `ask` and
 
 **Then the agent picks.** A tool with a `group` is one an agent may be
 granted, and the offer's `AgentDefinition` decides it by `id` (see "Tools per
-agent" in `lib/domain/AGENTS.md`); a tool with none — `ask`, `task`,
-`end_turn`, `list_participants` — is the turn's machinery, which no list adds
-or takes. A tool that changes something the user owns is never machinery:
-`set_profile` and `set_tone` are grantable, and their own gate (the
-customization skill loaded) still applies on top. `group` is also where the agent editor lists it.
-Two tools may share a name and differ by `id`, and `offeredTools` keeps the
-first an agent picked: `bash` and `bash(readonly)` are one tool to the model.
+agent" in `packages/entoli_chat/lib/domain/AGENTS.md`); a tool with none —
+`ask`, `task`, `end_turn`, `list_participants` — is the turn's machinery, which
+no list adds or takes. A tool that changes something the user owns is never
+machinery: `set_profile` and `set_tone` are grantable, and their own gate (the
+customization skill loaded) still applies on top. `group` is also where the
+agent editor lists it. Two tools may share a name and differ by `id`, and
+`offeredTools` keeps the first an agent picked: `bash` and `bash(readonly)` are
+one tool to the model.
 
 **`ReadOnlyBashTool` is `bash` for an agent that only looks**, off by default
 and `explore`'s. It refuses, as the call's result and ahead of the gate, any
@@ -165,8 +166,9 @@ rather than on state any other call could read. What a rule is matched against i
 
 Adding a tool is a class beside its kin and a line in the registry; where the
 chat should show it differently, a `ToolUI` too (see "Activities, on screen" in
-`lib/ui/chat/AGENTS.md`). A name the chat draws lives in `lib/domain`, beside
-what it is about, since the log records it and the UI reads it.
+`lib/ui/chat/AGENTS.md`). A name the chat draws lives in
+`packages/entoli_chat/lib/domain`, beside what it is about, since the log
+records it and the UI reads it.
 
 One thing the prompt has to say explicitly, learned from watching a real model
 fail: that a command only runs when the `bash` tool is called (a model shown a
@@ -514,7 +516,7 @@ end until a tool result carries its note or a wake tells it
 that was stopped or failed wakes nothing then: the end waits for the next
 call, or for the next turn that ends settled. The chat
 draws that prompt as the app's note, not the user's; see "When a turn is
-over" in `lib/domain/room/AGENTS.md`.
+over" in `packages/entoli_chat/lib/domain/room/AGENTS.md`.
 
 Offered where `Shell.canRunInBackground` (the
 machine's shell, a guest under proot included), never to a sub-agent: nobody
@@ -591,10 +593,11 @@ the banner), `auto` (a classifier model decides allow/ask/deny per command),
 `never` (run everything). An older file's `approveCommands` bool migrates:
 `true` → `ask`, `false` → `never`.
 
-Before the mode, the **rules** decide. `PermissionRule` (`lib/domain/permission.dart`)
-names a tool, a pattern and a decision, and the tiers merge chat over project
-over app (`meta.json`'s `permissions`, `project.json`'s, the default
-project's); deny outranks ask outranks allow whatever tier wrote it.
+Before the mode, the **rules** decide. `PermissionRule`
+(`packages/entoli_chat/lib/domain/permission.dart`) names a tool, a pattern and
+a decision, and the tiers merge chat over project over app (`meta.json`'s
+`permissions`, `project.json`'s, the default project's); deny outranks ask
+outranks allow whatever tier wrote it.
 
 **A command is matched by its words, not its text.** The parse splits it at
 its top-level operators into segments, and each segment is matched as
@@ -656,42 +659,40 @@ the matched rules'. The turn's grant is the chat's workspace, its tmp, the
 project's workspace beside it, and the tiers' `writableDirs`.
 
 Beside those, the grants ordinary work needs and a user should never have
-had to make, each a `SandboxGrant` (`lib/domain/sandbox_grant.dart`): on
-unless switched off, per project over the default project's
-(`sandboxTemps`, `sandboxCaches`, `sandboxToolchains`, `sandboxGit` in
-`project.json`), and drawn as their own toggles on Terminal > Permissions
-and a project's page rather than as work folders, being the app's defaults
-and not the user's additions. The policy carries the ones on
-(`StandingPermissions.grants`). Each goes into the sandbox's `extraWrites`
-from `_sandboxFor` (`sandbox_grants.dart` finds the folders), so a
-`CommandSandbox` is always the whole write set and a helper renders it and
-adds nothing of its own. The sandbox is there to bound the damage a turn can
-do, not to stop it working: every grant that was missing sent the model out
-of the sandbox altogether, which grants everything. **The system's temp
-folders** (`systemTemps`): on macOS `/private/tmp` and the per-user folder
-`getconf DARWIN_USER_TEMP_DIR` names (Seatbelt's helper resolves it to the
-real path, like every grant), on Linux `/tmp` and `/var/tmp` where they
-exist, and nothing elsewhere. Found once per process as a future the gate
-starts before its policy read, so parallel sub-agents' first commands share
-one `getconf`. `TMPDIR` still names the chat's `.entoli-tmp`, and a program
-that honours it writes there; the grant is for the ones that do not.
-macOS's `mktemp` asks `_CS_DARWIN_USER_TEMP_DIR` before `TMPDIR` (its manual
-says so), so it failed whatever `TMPDIR` said, meson's compiler check with
-it; the system's bash 3.2 never reads `TMPDIR` for a here document — it
-tries `/var/tmp`, `/tmp`, then the working directory — so `python3 - <<'EOF'`
-worked in the workspace and failed after a `cd` out of it. `TMPDIR` reached
-every one of those commands; they did not ask it. **The cost is accepted,
-and it is this**: those folders are shared with every program the user
-runs, so a confined command can overwrite or delete another app's temp
-files there. The alternative was a stream of failures in ordinary tools,
-each one sending the model out of the sandbox altogether, which grants far
-more. The phones, the guests and Windows change nothing: a phone's host
-shell is inside the app's own OS sandbox, a guest Linux (proot, iSH) has
-its own `/tmp` inside the rootfs, and Windows has no sandbox to grant it
-in. With them writable, the parse no longer counts a `TMPDIR` assignment as
-an escalation: it picks no program and no configuration, only where scratch
-lands, and the parse gate stands only where the sandbox already bounds
-that.
+had to make, each a `SandboxGrant`
+(`packages/entoli_chat/lib/domain/sandbox_grant.dart`): on unless switched off,
+per project over the default project's (`sandboxTemps`, `sandboxCaches`,
+`sandboxToolchains`, `sandboxGit` in `project.json`), and drawn as their own
+toggles on Terminal > Permissions and a project's page rather than as work
+folders, being the app's defaults and not the user's additions. The policy
+carries the ones on (`StandingPermissions.grants`). Each goes into the sandbox's
+`extraWrites` from `_sandboxFor` (`sandbox_grants.dart` finds the folders), so a
+`CommandSandbox` is always the whole write set and a helper renders it and adds
+nothing of its own. The sandbox is there to bound the damage a turn can do, not
+to stop it working: every grant that was missing sent the model out of the
+sandbox altogether, which grants everything. **The system's temp folders**
+(`systemTemps`): on macOS `/private/tmp` and the per-user folder `getconf
+DARWIN_USER_TEMP_DIR` names (Seatbelt's helper resolves it to the real path,
+like every grant), on Linux `/tmp` and `/var/tmp` where they exist, and nothing
+elsewhere. Found once per process as a future the gate starts before its policy
+read, so parallel sub-agents' first commands share one `getconf`. `TMPDIR` still
+names the chat's `.entoli-tmp`, and a program that honours it writes there; the
+grant is for the ones that do not. macOS's `mktemp` asks
+`_CS_DARWIN_USER_TEMP_DIR` before `TMPDIR` (its manual says so), so it failed
+whatever `TMPDIR` said, meson's compiler check with it; the system's bash 3.2
+never reads `TMPDIR` for a here document — it tries `/var/tmp`, `/tmp`, then the
+working directory — so `python3 - <<'EOF'` worked in the workspace and failed
+after a `cd` out of it. `TMPDIR` reached every one of those commands; they did
+not ask it. **The cost is accepted, and it is this**: those folders are shared
+with every program the user runs, so a confined command can overwrite or delete
+another app's temp files there. The alternative was a stream of failures in
+ordinary tools, each one sending the model out of the sandbox altogether, which
+grants far more. The phones, the guests and Windows change nothing: a phone's
+host shell is inside the app's own OS sandbox, a guest Linux (proot, iSH) has
+its own `/tmp` inside the rootfs, and Windows has no sandbox to grant it in.
+With them writable, the parse no longer counts a `TMPDIR` assignment as an
+escalation: it picks no program and no configuration, only where scratch lands,
+and the parse gate stands only where the sandbox already bounds that.
 
 **The toolchain caches** under the machine
 user's home that exist, looked up once per turn — `~/.cache`, `~/Library/Caches`, Xcode's
@@ -734,9 +735,10 @@ is how a grant made mid-chat reaches the next command. Seatbelt matches the
 path the kernel resolved, so its helper resolves symlinks (`/tmp`, `/var`)
 before granting, and passes the paths as `-D` parameters so no directory name
 is ever SBPL source. Every environment declares which it is as a
-`Confinement` (`lib/domain/confinement.dart`), and the Terminal page's status
-card says whether the picked one enforces. A new enforcer is a new
-`SandboxHelper` and a `Confinement` that says so — not a change to the rules.
+`Confinement` (`packages/entoli_chat/lib/domain/confinement.dart`), and the
+Terminal page's status card says whether the picked one enforces. A new enforcer
+is a new `SandboxHelper` and a `Confinement` that says so — not a change to the
+rules.
 
 The sandbox itself is a setting, `sandbox` in `project.json` and in a chat's
 `meta.json`: the default project's is the app's answer, a project's own
@@ -768,31 +770,29 @@ refuses), so no folder grant could have been the answer there. Old results
 carry a `rerun` decision, still worded so their logs read.
 
 **What the sandbox refused is read off the kernel's own error**
-(`lib/domain/sandbox_denials.dart`), since neither enforcer reports a denial
-to anyone.
-Seatbelt logs none for a `sandbox-exec` profile nested under another sandbox
-(checked: neither `(debug deny)` nor `log show --info --debug` shows one, and
-`(with report)` is refused on a deny), and a `log show` over the run's window
-costs a second or two on every failing command. Landlock logs nothing, and
-its helper has exec'd the command before the write happens, so it has nothing
-to report either. What both leave is the errno, printed by whatever made the
-call: Seatbelt's EPERM ("Operation not permitted") and Landlock's EACCES
-("Permission denied"). The output is read for those lines where the
-confined run ends, in `LocalShell`'s one-shot run, so every run under a
-sandbox reports them on its `ShellResult` — the model's command and a
-background job alike — and output with neither errno is answered before
-anything is resolved. The path is the quoted string on the line, or the
-field just before the error, must hold a slash (a bare name is a program, as
-in `execvp() of 'ps'`), and counts only if it is outside
-`CommandSandbox.writes` — the one list the helpers grant from — resolved
-through symlinks as Seatbelt resolves them, outside the read-only
-directories, whose EACCES is the app's file modes, and outside `/dev`, a
-device being no folder to grant. That is the OS's error,
-not the model's words. What it finds is the result's `violations`, at most
-five, which the observation words as "Denied by the sandbox" beside the
-output and the activity draws under "Sandbox": the model is told the failure
-was the sandbox's, which it cannot tell from the error alone. A command that
-merely failed — a test, a `grep` with no match — has none.
+(`packages/entoli_chat/lib/domain/sandbox_denials.dart`), since neither enforcer
+reports a denial to anyone. Seatbelt logs none for a `sandbox-exec` profile
+nested under another sandbox (checked: neither `(debug deny)` nor `log show
+--info --debug` shows one, and `(with report)` is refused on a deny), and a `log
+show` over the run's window costs a second or two on every failing command.
+Landlock logs nothing, and its helper has exec'd the command before the write
+happens, so it has nothing to report either. What both leave is the errno,
+printed by whatever made the call: Seatbelt's EPERM ("Operation not permitted")
+and Landlock's EACCES ("Permission denied"). The output is read for those lines
+where the confined run ends, in `LocalShell`'s one-shot run, so every run under
+a sandbox reports them on its `ShellResult` — the model's command and a
+background job alike — and output with neither errno is answered before anything
+is resolved. The path is the quoted string on the line, or the field just before
+the error, must hold a slash (a bare name is a program, as in `execvp() of
+'ps'`), and counts only if it is outside `CommandSandbox.writes` — the one list
+the helpers grant from — resolved through symlinks as Seatbelt resolves them,
+outside the read-only directories, whose EACCES is the app's file modes, and
+outside `/dev`, a device being no folder to grant. That is the OS's error, not
+the model's words. What it finds is the result's `violations`, at most five,
+which the observation words as "Denied by the sandbox" beside the output and the
+activity draws under "Sandbox": the model is told the failure was the sandbox's,
+which it cannot tell from the error alone. A command that merely failed — a
+test, a `grep` with no match — has none.
 
 **A `bash` result steers toward the grant** (`tools/grant_nudge.dart`) on
 two signals. One is a sandbox refusal: the note names the denied path's
@@ -806,10 +806,11 @@ directory share), since a build writes across the tree. It rides `ToolResult.not
 turn, and is left off where `add_directory` is not the turn's to call
 (`grantsDirectories`: `AgentTool.handed`, the predicate the tool list is
 built from), or would be
-refused by the tool itself: `refuseFolder` (`lib/domain/work_folders.dart`)
-answers for both, so the note never names a folder `add_directory` turns
-away. A banner the user denied gets none, being their answer; a
-classifier's or a rule's refusal is not theirs, and still gets one.
+refused by the tool itself: `refuseFolder`
+(`packages/entoli_chat/lib/domain/work_folders.dart`) answers for both, so the
+note never names a folder `add_directory` turns away. A banner the user denied
+gets none, being their answer; a classifier's or a rule's refusal is not theirs,
+and still gets one.
 
 The two "always" banner answers on an ordinary banner write the derived rule:
 `ruleFromApproval` reads the command's leading words, the file's directory or
@@ -829,14 +830,14 @@ list — `outsideWorkspaces` carries the turn's writable set — so a granted
 directory behaves the same by command or by file tool; and auto mode's
 classifier is handed it as `alsoWritable`, beside the project workspace.
 What may be granted at all is one test, `refuseFolder` in
-`lib/domain/work_folders.dart`, which the settings page's work folders take
-too. A grant must be a directory that is not the root, not the home or a
-folder holding it, and not a folder holding the workspaces. The app's data
-directory refuses in both directions: anything beneath it, or anything
+`packages/entoli_chat/lib/domain/work_folders.dart`, which the settings page's
+work folders take too. A grant must be a directory that is not the root, not the
+home or a folder holding it, and not a folder holding the workspaces. The app's
+data directory refuses in both directions: anything beneath it, or anything
 containing it, would make the app's own settings, secrets and chats writable
-from inside its own permit. The tool's door refuses before any banner, and
-the repository drops data-tree paths from an "always" answer. The tool rides `ask` and
-runs top-level only, having nobody to answer the banner otherwise.
+from inside its own permit. The tool's door refuses before any banner, and the
+repository drops data-tree paths from an "always" answer. The tool rides `ask`
+and runs top-level only, having nobody to answer the banner otherwise.
 
 **A project's work folders are the same list, granted up front.** The
 project tier's `writableDirs` is what its settings page shows as "Work
@@ -1014,15 +1015,16 @@ reports its result and the projection words it, so the report is the answer;
 `toolRan` is only the ShellResult a command hands back, said as the result of the
 call that asked for it. See "One accumulation".
 
-`lib/domain/ask.dart` holds both directions of the format, `askAnswers` beside
-`askAnswersFrom`, so the round trip is one file. `askQuestionsFrom` is
-deliberately liberal: the arguments are the model's writing, not ours, so it may
-batch under `questions` or write one question out at the top level, and it
-reaches for whichever word its prompt left in its head — `angles`, `choices`,
-`query` for a value. A question with no options is the one thing rejected,
-because the panel answers by clicking and there would be nothing to click. Every
-question comes back to the model whether or not it was answered: one that asked
-three and got two needs to know which one it is still missing.
+`packages/entoli_chat/lib/domain/ask.dart` holds both directions of the format,
+`askAnswers` beside `askAnswersFrom`, so the round trip is one file.
+`askQuestionsFrom` is deliberately liberal: the arguments are the model's
+writing, not ours, so it may batch under `questions` or write one question out
+at the top level, and it reaches for whichever word its prompt left in its head
+— `angles`, `choices`, `query` for a value. A question with no options is the
+one thing rejected, because the panel answers by clicking and there would be
+nothing to click. Every question comes back to the model whether or not it was
+answered: one that asked three and got two needs to know which one it is still
+missing.
 
 **Every question also takes a typed answer.** The panel ends each question's
 options with a field, and what is typed there is the answer, as text, the
@@ -1062,19 +1064,20 @@ counter leaves out, for the same reason.
 
 ## Sub-agents (the `task` tool)
 
-In the room's terms (see "The room and its participants" in `lib/domain/room/AGENTS.md`),
-a `task` call has the **answering participant schedule delegated turns**: each
-sub-agent is a participant with the full per-participant shape — its own
-`BuiltinSession`, its transcript per call id, revived through `projectionOf` —
-and what makes it sub is the reply route, enforced structurally below: its
-events never reach the controller that writes `conv.jsonl`, so it cannot
-address the room. That route is the one thing Omada will change: in an
-Omada-on project the named member is promoted to address the room directly,
-and `task` goes away. The room contract that replaces the tool's prompting
-is not this file's business — it is the project's bundled note, My Team's
-(`assets/prompts/projects/my-team/system/instructions.md`), which the
-repository hands every Omada turn; see "The room contract is My Team's note"
-in `lib/domain/room/AGENTS.md`.
+In the room's terms (see "The room and its participants" in
+`packages/entoli_chat/lib/domain/room/AGENTS.md`), a `task` call has the
+**answering participant schedule delegated turns**: each sub-agent is a
+participant with the full per-participant shape — its own `BuiltinSession`, its
+transcript per call id, revived through `projectionOf` — and what makes it sub
+is the reply route, enforced structurally below: its events never reach the
+controller that writes `conv.jsonl`, so it cannot address the room. That route
+is the one thing Omada will change: in an Omada-on project the named member is
+promoted to address the room directly, and `task` goes away. The room contract
+that replaces the tool's prompting is not this file's business — it is the
+project's bundled note, My Team's
+(`assets/prompts/projects/my-team/system/instructions.md`), which the repository
+hands every Omada turn; see "The room contract is My Team's note" in
+`packages/entoli_chat/lib/domain/room/AGENTS.md`.
 
 `task` spawns a sub-agent with its own session under the named `@agent`'s
 prompt, runs it to completion headless, and returns its final text as the tool
@@ -1224,15 +1227,15 @@ browser off still read pages.
 
 A real browser window, with a profile of its own under `<cache>/browser/profile/`
 so a login the agent makes is kept, driven over the Chrome DevTools Protocol.
-`AgentBrowser` is the port (`lib/domain/agent_browser.dart`), `CdpBrowser` the
+`AgentBrowser` is the port
+(`packages/entoli_chat/lib/domain/agent_browser.dart`), `CdpBrowser` the
 implementation (`lib/data/browser/`) — iOS's through a stand-in for the
 protocol, below — `UnavailableAgentBrowser` where there is none, and the
-settings category is not drawn where `available` is false.
-Settings > Agent Browser
-writes `agentBrowser`: null off, `embedded` for the downloaded Helium, or a
-Chromium-family executable's path, detected or picked with a file picker and
-launched once to prove it answers before it is saved. Firefox is not offered:
-it speaks WebDriver BiDi, not this protocol.
+settings category is not drawn where `available` is false. Settings > Agent
+Browser writes `agentBrowser`: null off, `embedded` for the downloaded Helium,
+or a Chromium-family executable's path, detected or picked with a file picker
+and launched once to prove it answers before it is saved. Firefox is not
+offered: it speaks WebDriver BiDi, not this protocol.
 
 **Helium is the embedded one for its uBlock Origin**: pages come without the
 ads and trackers, and without most of the scripts that would put text in front
@@ -1474,23 +1477,23 @@ left in staging, logged, and cleared at the next start.
 
 The user moves the page from the card, hides and gives back the browser, and
 quits it, and the agent has to hear of it — but a turn is never handed a
-message mid-flight (see "The projection" in `lib/domain/AGENTS.md`). So the
-tab keeps notes, and `BrowserTool.noted` puts them at the head of the agent's next
-browser result, success or refusal, as "Since your last browser call:". A
-tool result is in the log, so the note is part of the conversation from then
-on and a reload words it the same. What is noted: the user's back and forward
-with the address reached (`historyBack` is the user's back; the agent's `back`
-leaves no note, it being the agent's own move), reload, hiding and giving
-back (the agent's own hide is not noted back to it), the quit with who quit
-it (`close(why:)`: the user, the idle timer; the window closed by hand or a
-crash, which `cdp.done` turns into the same quit), a restart (the settings
-changed, or the user opening a window from another chat's card, which every
-chat's tab but the showing one hears of), and one
-"clicked or typed in the page" however much the user did — never what they
-typed. A note is scrubbed of sign-in values as it is written, since the quit
-it may describe drops them. A note waits for the agent's next browser call,
-in this turn or a later one; an agent that never uses the browser again is
-never told, and does not need to be.
+message mid-flight (see "The projection" in
+`packages/entoli_chat/lib/domain/AGENTS.md`). So the tab keeps notes, and
+`BrowserTool.noted` puts them at the head of the agent's next browser result,
+success or refusal, as "Since your last browser call:". A tool result is in the
+log, so the note is part of the conversation from then on and a reload words it
+the same. What is noted: the user's back and forward with the address reached
+(`historyBack` is the user's back; the agent's `back` leaves no note, it being
+the agent's own move), reload, hiding and giving back (the agent's own hide is
+not noted back to it), the quit with who quit it (`close(why:)`: the user, the
+idle timer; the window closed by hand or a crash, which `cdp.done` turns into
+the same quit), a restart (the settings changed, or the user opening a window
+from another chat's card, which every chat's tab but the showing one hears of),
+and one "clicked or typed in the page" however much the user did — never what
+they typed. A note is scrubbed of sign-in values as it is written, since the
+quit it may describe drops them. A note waits for the agent's next browser call,
+in this turn or a later one; an agent that never uses the browser again is never
+told, and does not need to be.
 
 ### Signing in
 
@@ -1697,10 +1700,11 @@ running label. Athena is always on it.
 `end_turn` rides the same gate plus `mayDecline`, which the room sets where
 the turn may decline its say: a handoff, or a say that named its answerer —
 never one routed by default, nor a resumed turn (see "A say nobody else was
-asked cannot be declined" in `lib/domain/room/AGENTS.md`). Its call sets `_ended`, and the loop stops
-after that batch rather than asking the model again — the follow-up step
-would be the reply the call declined to write. See "The room and its
-participants" in `lib/domain/room/AGENTS.md` for what a silent reply is.
+asked cannot be declined" in `packages/entoli_chat/lib/domain/room/AGENTS.md`).
+Its call sets `_ended`, and the loop stops after that batch rather than asking
+the model again — the follow-up step would be the reply the call declined to
+write. See "The room and its participants" in
+`packages/entoli_chat/lib/domain/room/AGENTS.md` for what a silent reply is.
 
 ## Compaction (the `compact` callback)
 
@@ -1785,9 +1789,9 @@ The plan is a `PLAN.md` in the chat's own workspace — the directory the model
 works in, so the model can read it and edit it around the tools, and the
 project workspace stays work another conversation picks up. The file is also
 the model's own writing: the tools are line edits over it, never a
-re-serialization, and the parser (`lib/domain/plan.dart`) is deliberately
-liberal — a bare bullet is a pending task — so a plan the model wrote by hand
-still reads.
+re-serialization, and the parser (`packages/entoli_chat/lib/domain/plan.dart`)
+is deliberately liberal — a bare bullet is a pending task — so a plan the model
+wrote by hand still reads.
 
 **A task is a title and a plan.** The title is a bullet at the start of a
 line; its details are the lines indented under it, a markdown list item's

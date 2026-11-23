@@ -2,16 +2,16 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/core/config.dart";
-import "package:agent_chat/data/local/file_chat_store.dart";
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/builtin_project.dart";
-import "package:agent_chat/domain/chat_intents.dart";
-import "package:agent_chat/domain/chat_log.dart";
-import "package:agent_chat/domain/chat_repository.dart";
-import "package:agent_chat/domain/intent_action.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/turn_sender.dart";
+import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/data/local/file_chat_store.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/builtin_project.dart";
+import "package:entoli_chat/domain/chat_intents.dart";
+import "package:entoli_chat/domain/chat_log.dart";
+import "package:entoli_chat/domain/chat_repository.dart";
+import "package:entoli_chat/domain/intent_action.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/turn_sender.dart";
 
 import "../fakes.dart";
 

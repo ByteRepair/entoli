@@ -27,46 +27,46 @@ import "package:agent_chat/data/sync/channel.dart";
 import "package:agent_chat/data/sync/peers.dart" show PeerState;
 import "package:agent_chat/data/sync/sync_hub.dart"
     show RemoteChatEntry, RemoteProject;
-import "package:agent_chat/domain/app_update.dart";
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/app_restart.dart";
-import "package:agent_chat/domain/agent_backend.dart";
-import "package:agent_chat/domain/attachment_picker.dart";
-import "package:agent_chat/domain/folder_picker.dart";
-import "package:agent_chat/domain/clipboard_files.dart";
-import "package:agent_chat/domain/backup_handoff.dart";
-import "package:agent_chat/domain/shell_job.dart";
-import "package:agent_chat/domain/background_work.dart";
-import "package:agent_chat/domain/chat_log.dart";
-import "package:agent_chat/domain/chat_meta.dart";
-import "package:agent_chat/domain/chat_store.dart";
-import "package:agent_chat/domain/assistant_launch.dart";
-import "package:agent_chat/domain/file_handoff.dart";
-import "package:agent_chat/domain/link_opener.dart";
-import "package:agent_chat/domain/llm_provider.dart";
-import "package:agent_chat/domain/local_model.dart";
-import "package:agent_chat/domain/local_model_store.dart";
-import "package:agent_chat/domain/model_capability.dart";
-import "package:agent_chat/domain/model_registry.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/room/room_state.dart";
-import "package:agent_chat/domain/prompt_library.dart";
-import "package:agent_chat/domain/provider_usage.dart";
-import "package:agent_chat/domain/file_watches.dart";
-import "package:agent_chat/domain/reminder_alarms.dart";
-import "package:agent_chat/domain/trigger.dart";
-import "package:agent_chat/domain/trigger_runner.dart";
-import "package:agent_chat/domain/turn_sender.dart";
-import "package:agent_chat/domain/voice.dart";
-import "package:agent_chat/domain/voice_model.dart";
-import "package:agent_chat/domain/download.dart";
-import "package:agent_chat/domain/rootfs.dart";
-import "package:agent_chat/domain/rootfs_store.dart";
-import "package:agent_chat/domain/secret_store.dart";
-import "package:agent_chat/domain/sync/devices.dart";
-import "package:agent_chat/domain/sync/relay_signaling.dart";
-import "package:agent_chat/domain/voice_model_store.dart";
-import "package:agent_chat/domain/project.dart" show ProjectRef;
+import "package:entoli_chat/domain/app_update.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/app_restart.dart";
+import "package:entoli_chat/domain/agent_backend.dart";
+import "package:entoli_chat/domain/attachment_picker.dart";
+import "package:entoli_chat/domain/folder_picker.dart";
+import "package:entoli_chat/domain/clipboard_files.dart";
+import "package:entoli_chat/domain/backup_handoff.dart";
+import "package:entoli_chat/domain/shell_job.dart";
+import "package:entoli_chat/domain/background_work.dart";
+import "package:entoli_chat/domain/chat_log.dart";
+import "package:entoli_chat/domain/chat_meta.dart";
+import "package:entoli_chat/domain/chat_store.dart";
+import "package:entoli_chat/domain/assistant_launch.dart";
+import "package:entoli_chat/domain/file_handoff.dart";
+import "package:entoli_chat/domain/link_opener.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_chat/domain/local_model.dart";
+import "package:entoli_chat/domain/local_model_store.dart";
+import "package:entoli_chat/domain/model_capability.dart";
+import "package:entoli_chat/domain/model_registry.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/room/room_state.dart";
+import "package:entoli_chat/domain/prompt_library.dart";
+import "package:entoli_chat/domain/provider_usage.dart";
+import "package:entoli_chat/domain/file_watches.dart";
+import "package:entoli_chat/domain/reminder_alarms.dart";
+import "package:entoli_chat/domain/trigger.dart";
+import "package:entoli_chat/domain/trigger_runner.dart";
+import "package:entoli_chat/domain/turn_sender.dart";
+import "package:entoli_chat/domain/voice.dart";
+import "package:entoli_chat/domain/voice_model.dart";
+import "package:entoli_chat/domain/download.dart";
+import "package:entoli_chat/domain/rootfs.dart";
+import "package:entoli_chat/domain/rootfs_store.dart";
+import "package:entoli_chat/domain/secret_store.dart";
+import "package:entoli_chat/domain/sync/devices.dart";
+import "package:entoli_chat/domain/sync/relay_signaling.dart";
+import "package:entoli_chat/domain/voice_model_store.dart";
+import "package:entoli_chat/domain/project.dart" show ProjectRef;
 import "package:agent_chat/providers.dart"
     show DeviceProjects, PairedDevices, RemoteChats, RemoteProjectNotifier;
 import "package:agent_chat/app/app_items.dart";
@@ -1000,6 +1000,10 @@ class FakeChatStore implements ChatStore {
 
   @override
   Future<void> saveState(ChatState state) async => _states[state.id] = state;
+
+  @override
+  Future<String> importChat(String dataDir, String chatId, {String? project}) =>
+      throw UnimplementedError();
 
   @override
   Future<void> retitle(String chatId, String title) async {

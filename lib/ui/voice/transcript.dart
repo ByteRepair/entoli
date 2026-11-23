@@ -1,7 +1,9 @@
-import "../../domain/models.dart";
-import "../../domain/speech_text.dart";
-import "../../app/transcript/activities/catalog.dart" show toolActivityFor;
-import "../../app/transcript/activities/command.dart" show ranACommand;
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/speech_text.dart";
+import "package:entoli_chat/app/transcript/activities/catalog.dart"
+    show toolActivityFor;
+import "package:entoli_chat/app/transcript/activities/command.dart"
+    show ranACommand;
 
 /// Who a transcript line belongs to. Three rather than the issue's two: a turn
 /// can spend half a minute inside a sub-agent, and a screen that says nothing

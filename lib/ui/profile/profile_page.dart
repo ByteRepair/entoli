@@ -2,18 +2,18 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/profile_draft.dart";
-import "../../core/log.dart";
+import "package:entoli_chat/core/log.dart";
 import "../../core/platform/form_factor.dart";
-import "../../domain/tone.dart";
+import "package:entoli_chat/domain/tone.dart";
 import "../../providers.dart";
-import "../widgets/busy.dart";
-import "../widgets/dialogs.dart";
-import "../widgets/discard_guard.dart";
-import "../widgets/page_bar.dart";
+import "package:entoli_chat/ui/widgets/busy.dart";
+import "package:entoli_chat/ui/widgets/dialogs.dart";
+import "package:entoli_chat/ui/widgets/discard_guard.dart";
+import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "../widgets/prompt_field.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
-import "../widgets/text_file_page.dart";
+import "package:entoli_chat/ui/widgets/text_file_page.dart";
 import "linked_instructions.dart";
 
 /// Open the profile: the app's with no [project] (the sidebar's tile and the

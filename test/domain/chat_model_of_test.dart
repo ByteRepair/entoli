@@ -1,6 +1,6 @@
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/chat_meta.dart";
-import "package:agent_chat/domain/chat_repository.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/chat_meta.dart";
+import "package:entoli_chat/domain/chat_repository.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {

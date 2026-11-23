@@ -7,12 +7,12 @@ import "../../app/composer.dart"
 import "../../app/completion.dart";
 
 export "../../app/completion.dart";
-import "../../domain/models.dart";
-import "../../domain/project.dart" show ProjectRef;
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/project.dart" show ProjectRef;
 import "../../providers.dart";
-import "agent_picture.dart";
-import "page_bar.dart";
-import "text_input.dart";
+import "package:entoli_chat/ui/widgets/agent_picture.dart";
+import "package:entoli_chat/ui/widgets/page_bar.dart";
+import "package:entoli_chat/ui/widgets/text_input.dart";
 
 class _MoveIntent extends Intent {
   const _MoveIntent(this.delta);

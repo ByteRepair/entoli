@@ -6,7 +6,7 @@ import "package:cryptography/cryptography.dart";
 
 import "channel.dart";
 import "handshake.dart" show Handshake;
-import "../../core/log.dart";
+import "package:entoli_chat/core/log.dart";
 
 /// An encrypted [ByteChannel]: every message on the wire is
 ///

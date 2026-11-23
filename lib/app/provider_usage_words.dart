@@ -1,5 +1,5 @@
-import "../core/formatting.dart" show formatUntil;
-import "../domain/provider_usage.dart";
+import "package:entoli_chat/core/formatting.dart" show formatUntil;
+import "package:entoli_chat/domain/provider_usage.dart";
 
 /// [usage] as one line, at [now]: what is spent of what and when it starts
 /// again where the provider says, or what is left of a balance.

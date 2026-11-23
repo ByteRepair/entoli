@@ -1,6 +1,6 @@
 import "../data/builtin/llm/hosted_models.dart" show ImageModel;
-import "../domain/local_model.dart" show isShortAskModel;
-import "../domain/model_capability.dart";
+import "package:entoli_chat/domain/local_model.dart" show isShortAskModel;
+import "package:entoli_chat/domain/model_capability.dart";
 
 /// What a picker's model is for, which decides what it is offered.
 enum ModelRole {

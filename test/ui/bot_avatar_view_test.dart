@@ -1,6 +1,6 @@
-import "package:agent_chat/domain/bot_avatar/definition.dart";
-import "package:agent_chat/domain/bot_avatar/spec.dart";
-import "package:agent_chat/ui/bot_avatar/bot_avatar_view.dart";
+import "package:entoli_chat/domain/bot_avatar/definition.dart";
+import "package:entoli_chat/domain/bot_avatar/spec.dart";
+import "package:entoli_chat/ui/bot_avatar/bot_avatar_view.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 

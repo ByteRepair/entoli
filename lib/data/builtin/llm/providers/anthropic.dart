@@ -1,6 +1,6 @@
 import "package:http/http.dart" as http;
 
-import "../../../../domain/llm_provider.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
 import "../anthropic_client.dart";
 import "../http_stream.dart";
 import "../llm_client.dart";

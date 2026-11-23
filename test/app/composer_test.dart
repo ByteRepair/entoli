@@ -3,8 +3,8 @@ import "dart:typed_data";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/app/composer.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/quote.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/quote.dart";
 import "package:agent_chat/ui/chat/widgets/composer_controller.dart";
 import "package:agent_chat/ui/chat/widgets/composer_embed.dart";
 import "package:agent_chat/ui/chat/widgets/composer_words.dart";

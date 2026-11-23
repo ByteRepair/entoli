@@ -1,8 +1,8 @@
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/voice/voice_strategies.dart";
-import "package:agent_chat/domain/loudness.dart";
-import "package:agent_chat/domain/voice.dart";
+import "package:entoli_chat/domain/loudness.dart";
+import "package:entoli_chat/domain/voice.dart";
 
 /// An engine with nothing behind it, which is what a [MicrophoneListener] is
 /// once its engine is taken away. Both real ones reach the gate, the level and

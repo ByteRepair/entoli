@@ -1,7 +1,7 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/permission.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/permission.dart";
 
 Message _message(String id, MessageRole role, String text) => Message(
   id: id,

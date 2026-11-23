@@ -3,14 +3,15 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../core/log.dart";
-import "../domain/app_link.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/app_link.dart";
 import "../providers.dart";
+import "../app/chat_shares.dart";
 import "../app/marketplace/preview.dart";
 import "bot_avatar/bot_avatar_install.dart";
 import "marketplace/marketplace_entry_preview.dart";
 import "selection.dart";
-import "widgets/dialogs.dart";
+import "package:entoli_chat/ui/widgets/dialogs.dart";
 
 /// Wraps the app so an `entoli://` link opens what it names over whatever is
 /// on screen. [appLinksProvider] delivers the link that launched the app and
@@ -72,6 +73,25 @@ class _IncomingLinksState extends ConsumerState<IncomingLinks> {
         );
       case AvatarLink(:final import):
         unawaited(openBotAvatarInstall(context, import));
+      case SharedChatLink(:final zip):
+        if (zip == null) {
+          logFailure("links", "a shared chat link arrived cut short");
+          say(context, "This shared chat's link arrived cut short.");
+          return;
+        }
+        navigator.popUntil((r) => r.isFirst);
+        final String? id;
+        try {
+          id = await ref.read(chatSharesProvider).import(zip);
+        } catch (e) {
+          logFailure("links", "importing a shared chat failed", e);
+          if (mounted) say(context, "Could not import this chat: $e");
+          return;
+        }
+        if (id == null && mounted) {
+          logFailure("links", "a shared chat link held no chat");
+          say(context, "This link does not hold a shared chat.");
+        }
       case InstallLink(:final kind, :final slug):
         // The provider logs a failed fetch; a missing slug is this one's.
         final entries = await ref

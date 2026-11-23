@@ -7,13 +7,13 @@ import "package:agent_chat/data/builtin/llm/gated_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/rate_limit_gate.dart";
 import "package:agent_chat/data/builtin/sub_agent.dart";
-import "package:agent_chat/domain/agent_backend.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/permission.dart";
+import "package:entoli_chat/domain/agent_backend.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/permission.dart";
 
 import "../../harness.dart";
-import "package:agent_chat/domain/prompt_library.dart";
-import "package:agent_chat/domain/shell.dart";
+import "package:entoli_chat/domain/prompt_library.dart";
+import "package:entoli_chat/domain/shell.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";

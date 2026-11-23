@@ -1,7 +1,7 @@
 import "package:flutter/material.dart";
 
-import "../../core/log.dart";
-import "dialogs.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/ui/widgets/dialogs.dart";
 
 /// A danger-colored filled button that asks for confirmation before running
 /// [onConfirmed]. Used by the chat, project, and "delete all" settings entries

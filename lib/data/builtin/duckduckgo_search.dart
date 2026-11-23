@@ -5,8 +5,8 @@ import "package:http/http.dart" as http;
 import "../../core/tls.dart";
 import "package:html/parser.dart";
 
-import "../../domain/shell.dart";
-import "../../domain/web_search.dart";
+import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_chat/domain/web_search.dart";
 
 /// DuckDuckGo Lite, reached through plain HTTP — no API key. It does limit:
 /// a client it takes for a bot gets HTTP 202 and no results, often after the

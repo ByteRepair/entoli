@@ -1,6 +1,6 @@
 import "package:agent_chat/app/custom_model.dart";
 import "package:agent_chat/app/model_role.dart";
-import "package:agent_chat/domain/model_info.dart";
+import "package:entoli_chat/domain/model_info.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {

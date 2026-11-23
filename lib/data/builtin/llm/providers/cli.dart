@@ -8,13 +8,14 @@ import "package:flutter/foundation.dart" show mustCallSuper, protected;
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
-import "../../../../core/log.dart";
+import "package:entoli_chat/core/log.dart";
 import "../../../../core/tls.dart";
-import "../../../../domain/download.dart";
-import "../../../../domain/llm_provider.dart";
-import "../../../../domain/model_capability.dart";
-import "../../../../domain/model_registry.dart";
-import "../../../../domain/shell.dart" show guestHome, guestPath, shellQuoted;
+import "package:entoli_chat/domain/download.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_chat/domain/model_capability.dart";
+import "package:entoli_chat/domain/model_registry.dart";
+import "package:entoli_chat/domain/shell.dart"
+    show guestHome, guestPath, shellQuoted;
 import "../../../download.dart";
 import "../../../local/file_modes.dart";
 import "../hosted_models.dart";

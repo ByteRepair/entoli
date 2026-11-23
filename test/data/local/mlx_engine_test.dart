@@ -8,9 +8,9 @@ import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/local/mlx_engine.dart";
 import "package:agent_chat/data/local/prompt_cache.dart";
 import "package:agent_chat/data/model_host/model_process.dart";
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/local_llm.dart";
-import "package:agent_chat/domain/local_model.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/local_llm.dart";
+import "package:entoli_chat/domain/local_model.dart";
 
 import "../../fakes.dart";
 import "../../harness.dart" show tempDir;

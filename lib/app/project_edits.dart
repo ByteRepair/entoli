@@ -1,9 +1,9 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../data/sync/sync_hub.dart" show RemoteChatEntry;
-import "../domain/models.dart" show ChatState;
-import "../domain/project.dart";
-import "../domain/work_folders.dart";
+import "package:entoli_chat/domain/models.dart" show ChatState;
+import "package:entoli_chat/domain/project.dart";
+import "package:entoli_chat/domain/work_folders.dart";
 import "../providers.dart";
 import "selection.dart";
 

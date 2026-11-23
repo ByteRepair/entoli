@@ -4,13 +4,13 @@ import "package:file_selector/file_selector.dart";
 import "package:flutter/services.dart" show rootBundle;
 import "package:path/path.dart" as p;
 
-import "../../core/config.dart";
-import "../../core/log.dart";
+import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/core/log.dart";
 import "../../core/platform/form_factor.dart";
-import "../../domain/app_settings.dart";
-import "../../domain/rootfs.dart";
-import "../../domain/rootfs_store.dart";
-import "../../domain/shell.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/rootfs.dart";
+import "package:entoli_chat/domain/rootfs_store.dart";
+import "package:entoli_chat/domain/shell.dart";
 import "tree_ops.dart";
 
 /// Installs and queries the Byte Repair tooling — make, github-cli and ESBMC —

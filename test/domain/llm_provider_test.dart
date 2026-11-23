@@ -4,9 +4,9 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/llm_provider.dart";
-import "package:agent_chat/domain/permission.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_chat/domain/permission.dart";
 
 import "../data/builtin/builtin_fakes.dart";
 import "../harness.dart";

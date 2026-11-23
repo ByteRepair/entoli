@@ -1,10 +1,10 @@
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../domain/file_tools.dart" show guestWorkspacePath;
-import "../domain/models.dart";
-import "../domain/shell.dart";
-import "../domain/wired_skill.dart";
+import "package:entoli_chat/domain/file_tools.dart" show guestWorkspacePath;
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_chat/domain/wired_skill.dart";
 import "completion.dart";
 
 typedef SendCallback = void Function(String text, List<Attachment> attachments);
@@ -90,6 +90,12 @@ final class ComposerNeedsSetup extends ComposerSlot {
 /// paired device's project gone frozen.
 final class ComposerViewOnly extends ComposerSlot {
   const ComposerViewOnly();
+}
+
+/// Made from a share link and not yet enabled: someone else wrote it, so
+/// nothing is sent until the user says they trust it.
+final class ComposerImported extends ComposerSlot {
+  const ComposerImported();
 }
 
 /// The turn waits on the user's answers, asked in the composer's place.

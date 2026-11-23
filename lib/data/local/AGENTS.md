@@ -585,22 +585,22 @@ bartowski's. LFM3 is why `LLAMA_CPP_VERSION` is at least `b11951`, the first
 release that reads its architecture.
 
 **What a device is offered is measured, not listed.** `ModelBudget`
-(`lib/domain/model_budget.dart`) holds a model to its footprint — its weights
-and the `kvBudgetBytes` every loaded model may have — against what the device
-says it can give, and the page offers only the entries that fit
-(`LocalEngine.offers`). A list of devices and what each can run would be a list
-to keep; the device can answer for itself. Android's RAM comes from the tools
-channel (`ActivityManager`'s `totalMem`), Linux's from `/proc/meminfo`.
-llama.cpp gets three fifths of a Linux machine's and half a phone's, since a
-phone shares that RAM with every app it keeps alive and its low-memory killer
-starts on them well short of three fifths — on a 12 GB phone the 4B and not
-the 9B. Apple's comes from the handshake: Metal's
+(`packages/entoli_chat/lib/domain/model_budget.dart`) holds a model to its
+footprint — its weights and the `kvBudgetBytes` every loaded model may have —
+against what the device says it can give, and the page offers only the entries
+that fit (`LocalEngine.offers`). A list of devices and what each can run would
+be a list to keep; the device can answer for itself. Android's RAM comes from
+the tools channel (`ActivityManager`'s `totalMem`), Linux's from
+`/proc/meminfo`. llama.cpp gets three fifths of a Linux machine's and half a
+phone's, since a phone shares that RAM with every app it keeps alive and its
+low-memory killer starts on them well short of three fifths — on a 12 GB phone
+the 4B and not the 9B. Apple's comes from the handshake: Metal's
 `recommendedMaxWorkingSetSize`, the GPU the window draws on too, of which a Mac
 gets three quarters; on iOS also what the OS still lets the app grow by, which
 is what ends an app there, and a phone gets three fifths of the smaller — on an
-8 GB iPhone nothing at all, being short of the 4B, since a model that slows
-the UI slows the whole phone with it. A model already downloaded keeps its row whatever it
-measures, and a device that answers nothing is offered everything.
+8 GB iPhone nothing at all, being short of the 4B, since a model that slows the
+UI slows the whole phone with it. A model already downloaded keeps its row
+whatever it measures, and a device that answers nothing is offered everything.
 
 ### What the NPU actually is
 
@@ -770,10 +770,11 @@ export and a deletion on every restore.
 `FileLocalModelStore` is `FileRootfsStore` without the unpacking: a `DownloadRun`
 and, after it, the checksum where there is one, the header read, and the record.
 A text model and a voice model are both an `Installable`
-(`lib/domain/installable.dart`), bound to its store by `InstallableLocalModel`
-or `InstallableVoiceModel`, so one `ModelDownloads` queue fetches either and
-one `ModelDownloadTile` draws either — see "A catalog of things to download".
-A text model's facts are the file's own once it is on disk.
+(`packages/entoli_chat/lib/domain/installable.dart`), bound to its store by
+`InstallableLocalModel` or `InstallableVoiceModel`, so one `ModelDownloads`
+queue fetches either and one `ModelDownloadTile` draws either — see "A catalog
+of things to download". A text model's facts are the file's own once it is on
+disk.
 
 Where it parts company with the other two is that the list is the disk's, not
 the catalog's: `downloadedSync()` reads the records once and is kept in step by

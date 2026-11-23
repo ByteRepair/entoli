@@ -3,12 +3,12 @@ import "dart:async";
 import "package:clock/clock.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/reminder_alarms.dart";
-import "package:agent_chat/domain/trigger.dart";
-import "package:agent_chat/domain/trigger_kinds.dart";
-import "package:agent_chat/domain/trigger_manager.dart";
-import "package:agent_chat/domain/trigger_runner.dart";
-import "package:agent_chat/domain/turn_sender.dart";
+import "package:entoli_chat/domain/reminder_alarms.dart";
+import "package:entoli_chat/domain/trigger.dart";
+import "package:entoli_chat/domain/trigger_kinds.dart";
+import "package:entoli_chat/domain/trigger_manager.dart";
+import "package:entoli_chat/domain/trigger_runner.dart";
+import "package:entoli_chat/domain/turn_sender.dart";
 
 import "../fakes.dart";
 

@@ -6,11 +6,11 @@ import "dart:async";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../core/log.dart";
-import "../domain/chat_intents.dart" show ChatPresenter;
-import "../domain/chat_meta.dart";
-import "../domain/models.dart";
-import "../domain/project.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/chat_intents.dart" show ChatPresenter;
+import "package:entoli_chat/domain/chat_meta.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/project.dart";
 import "../providers.dart";
 import "chat_controller.dart";
 

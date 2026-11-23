@@ -3,10 +3,10 @@
 import "package:path/path.dart" as p;
 import "dart:io";
 
-import "../../core/config.dart";
-import "../../domain/agent_face.dart";
-import "../../domain/bot_avatar/spec.dart";
-import "../../domain/models.dart";
+import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/domain/agent_face.dart";
+import "package:entoli_chat/domain/bot_avatar/spec.dart";
+import "package:entoli_chat/domain/models.dart";
 import "bundled_skill_data.dart" show bundledAgentFaces;
 import "prompt_sources.dart";
 

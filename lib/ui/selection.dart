@@ -6,9 +6,9 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../app/selection.dart";
-import "../domain/chat_meta.dart";
-import "../domain/models.dart";
-import "../domain/project.dart";
+import "package:entoli_chat/domain/chat_meta.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/project.dart";
 import "widgets/nav_drawer.dart";
 
 export "../app/selection.dart";

@@ -5,17 +5,17 @@ import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/bot_avatar/library.dart";
-import "../../domain/bot_avatar/definition.dart";
-import "../../domain/bot_avatar/import.dart";
-import "../../domain/bot_avatar/pose.dart";
-import "../../domain/bot_avatar/spec.dart";
+import "package:entoli_chat/domain/bot_avatar/definition.dart";
+import "package:entoli_chat/domain/bot_avatar/import.dart";
+import "package:entoli_chat/domain/bot_avatar/pose.dart";
+import "package:entoli_chat/domain/bot_avatar/spec.dart";
 import "../../providers.dart";
-import "../fonts.dart";
-import "../widgets/anchored_menu.dart";
+import "package:entoli_chat/ui/fonts.dart";
+import "package:entoli_chat/ui/widgets/anchored_menu.dart";
 import "../widgets/choice.dart";
-import "../widgets/dialogs.dart";
-import "../widgets/page_bar.dart";
-import "bot_avatar_view.dart";
+import "package:entoli_chat/ui/widgets/dialogs.dart";
+import "package:entoli_chat/ui/widgets/page_bar.dart";
+import "package:entoli_chat/ui/bot_avatar/bot_avatar_view.dart";
 import "colour_dialog.dart";
 
 /// The spec an import is held to. The prompt a model designs one with is the

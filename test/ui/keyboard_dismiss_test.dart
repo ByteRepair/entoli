@@ -1,7 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/ui/widgets/scrolling.dart";
+import "package:entoli_chat/ui/widgets/scrolling.dart";
 
 void main() {
   late FocusNode field;

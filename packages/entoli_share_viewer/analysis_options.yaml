@@ -1,0 +1,10 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  # Flutter 3.50 deprecates `package:flutter/material.dart`; silenced as the
+  # root's analysis_options.yaml says why.
+  errors:
+    deprecated_member_use: ignore
+  exclude:
+    - build/**
+    - web/**

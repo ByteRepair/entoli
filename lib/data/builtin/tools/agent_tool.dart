@@ -1,9 +1,9 @@
-import "../../../domain/agent_backend.dart";
-import "../../../domain/agent_definition.dart";
-import "../../../domain/agent_browser.dart" show BrowserUploadPolicy;
-import "../../../domain/builtin_project.dart";
-import "../../../domain/models.dart";
-import "../../../domain/prompt_library.dart";
+import "package:entoli_chat/domain/agent_backend.dart";
+import "package:entoli_chat/domain/agent_definition.dart";
+import "package:entoli_chat/domain/agent_browser.dart" show BrowserUploadPolicy;
+import "package:entoli_chat/domain/builtin_project.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/prompt_library.dart";
 import "../llm/llm_client.dart";
 import "../templates.dart" show defaultInlineLimit;
 import "turn.dart";

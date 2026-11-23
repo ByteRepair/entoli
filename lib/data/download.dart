@@ -5,8 +5,9 @@ import "package:crypto/crypto.dart";
 import "package:http/http.dart" as http;
 
 import "../core/tls.dart";
-import "../domain/app_update.dart" show latestReleaseUrl, latestTagOf;
-import "../domain/download.dart";
+import "package:entoli_chat/domain/app_update.dart"
+    show latestReleaseUrl, latestTagOf;
+import "package:entoli_chat/domain/download.dart";
 
 /// Fetching something big onto the disk, reported as it goes and abandoned
 /// whole if the listener leaves: a cancelled listener takes the half-written

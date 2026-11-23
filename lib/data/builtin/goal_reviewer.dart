@@ -1,6 +1,6 @@
 import "dart:convert";
 
-import "../../core/log.dart";
+import "package:entoli_chat/core/log.dart";
 import "llm/llm_client.dart";
 
 /// What the reviewer found: the goal met, not met yet (and why, and what

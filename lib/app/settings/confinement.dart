@@ -1,6 +1,6 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/confinement.dart";
+import "package:entoli_chat/domain/confinement.dart";
 import "../../providers.dart";
 
 /// What the picked driver does about the sandbox: the environment's own

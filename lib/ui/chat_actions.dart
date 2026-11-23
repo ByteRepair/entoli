@@ -8,19 +8,22 @@ library;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../domain/models.dart";
-import "../domain/project.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/project.dart";
 import "../providers.dart";
 import "app_command.dart";
 import "../app/chat_edits.dart";
+import "package:entoli_chat/domain/availability.dart";
+import "chat/share_chat_dialog.dart";
 import "selection.dart";
-import "widgets/dialogs.dart";
+import "package:entoli_chat/ui/widgets/dialogs.dart";
 
 /// The commands that act on one chat, in the order a menu offers them.
 const chatCommands = [
   AppAction.pinChat,
   AppAction.renameChat,
   AppAction.moveChat,
+  AppAction.shareChat,
   AppAction.deleteChat,
 ];
 
@@ -35,9 +38,42 @@ Future<void> runOnChat(
     ref.read(chatEditsProvider).setPinned(chat, !chat.pinned),
   AppAction.renameChat => renameChat(context, ref, chat),
   AppAction.moveChat => moveChat(context, ref, chat),
+  AppAction.shareChat => shareChat(context, ref, chat),
   AppAction.deleteChat => deleteChat(context, ref, chat),
   _ => throw ArgumentError.value(command, "command", "not a chat command"),
 };
+
+/// Whether [command] may run on [chat], saying why not where it may not.
+bool _mayRun(
+  BuildContext context,
+  WidgetRef ref,
+  ChatState chat,
+  AppAction command,
+) {
+  if (!ref.read(isMirroredChatProvider(chat.id))) return true;
+  if (onMirror(command) case Unavailable(:final reason)) {
+    say(context, reason);
+    return false;
+  }
+  return true;
+}
+
+Future<void> shareChat(
+  BuildContext context,
+  WidgetRef ref,
+  ChatState chat,
+) async {
+  if (!_mayRun(context, ref, chat, AppAction.shareChat)) return;
+  await showShareChat(context, chat, origin: shareOrigin(context));
+}
+
+/// Where an iPad's share sheet points from: [context]'s box.
+Rect? shareOrigin(BuildContext context) {
+  final box = context.findRenderObject();
+  return box is RenderBox && box.hasSize
+      ? box.localToGlobal(Offset.zero) & box.size
+      : null;
+}
 
 Future<void> renameChat(
   BuildContext context,
@@ -62,6 +98,7 @@ Future<void> moveChat(
   WidgetRef ref,
   ChatState chat,
 ) async {
+  if (!_mayRun(context, ref, chat, AppAction.moveChat)) return;
   final projects = await ref.read(chatRepositoryProvider).listProjects();
   if (!context.mounted) return;
   final picked = await pickProject(

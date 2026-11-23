@@ -109,26 +109,25 @@ at the preset's defaults, whatever was picked before, and nothing on the tour
 asks for a model.
 
 **What a model can do is its type.** A provider `serve`s a model id as one
-`Model` per thing it does (`lib/domain/model_capability.dart`): a
-`ChatModel`, an `ImageModel`, a `TranscriptionModel`, a `SynthesisModel`.
-`LlmProvider` serves chat alone; `OpenAiCompatibleProvider` adds the other
-three over its client's image and audio endpoints, as the model's catalog
-entry describes it, or all of them for an id the catalog does not describe.
-`OnDeviceProvider` serves the downloaded text models and the installed voice
-models, which the platform's `Voice` runs. A model holds what runs it, so the
-provider says what exists and never runs anything. The backend, the voice
-gates and the pickers resolve a pick to the kind they need (`resolve<T>`),
-never asking the provider's or the client's type; no transcription model is
-served where `ModelHost.cutsUtterances` is false. A key can be left out and
-named as
-`apiKeyEnv` instead, which is how one already exported stays out of the file.
-`LlmRegistry` builds a client per provider and rebuilds it when the URL or key
-changes; a provider that lists no models is asked, and one that cannot answer
-contributes nothing rather than failing the whole list. The on-device server
-and Apple's model are providers too, whose `client` is the pool or the channel —
-which is how "may not be answering yet" arrives without the registry knowing
-there is such a thing. See "Running a model on the device" in
-`lib/data/local/AGENTS.md`.
+`Model` per thing it does
+(`packages/entoli_chat/lib/domain/model_capability.dart`): a `ChatModel`, an
+`ImageModel`, a `TranscriptionModel`, a `SynthesisModel`. `LlmProvider` serves
+chat alone; `OpenAiCompatibleProvider` adds the other three over its client's
+image and audio endpoints, as the model's catalog entry describes it, or all of
+them for an id the catalog does not describe. `OnDeviceProvider` serves the
+downloaded text models and the installed voice models, which the platform's
+`Voice` runs. A model holds what runs it, so the provider says what exists and
+never runs anything. The backend, the voice gates and the pickers resolve a pick
+to the kind they need (`resolve<T>`), never asking the provider's or the
+client's type; no transcription model is served where `ModelHost.cutsUtterances`
+is false. A key can be left out and named as `apiKeyEnv` instead, which is how
+one already exported stays out of the file. `LlmRegistry` builds a client per
+provider and rebuilds it when the URL or key changes; a provider that lists no
+models is asked, and one that cannot answer contributes nothing rather than
+failing the whole list. The on-device server and Apple's model are providers
+too, whose `client` is the pool or the channel — which is how "may not be
+answering yet" arrives without the registry knowing there is such a thing. See
+"Running a model on the device" in `lib/data/local/AGENTS.md`.
 
 **The key is resolved in one order, by `resolveKeyFor`**: the key stored for
 the provider id in the secret store, then `apiKeyEnv` in the environment.
@@ -200,17 +199,17 @@ does allow is a reply that runs away, which the switch is for.
 ## How much of an allowance is spent
 
 `LlmProvider.usage` answers it, as a list of `ProviderUsage`s
-(`lib/domain/provider_usage.dart`), of two kinds. A `UsageWindow` is an
-allowance: a label in the provider's own period, what is `used` of a `max`,
-the unit the two are counted in, and when it starts again where the provider
-says. `used` is always what is gone — a provider that reports what is left is
-converted where it is read — and a max rather than a percentage, because what
-a provider counts is not always a share: a dollar cap is a number of dollars.
-A `CreditBalance` is money with no allowance behind it, credits bought rather
-than granted, so it is what is left and nothing to measure it against. The
-default is nothing, which is what most providers have to say; the Providers
-section in Settings draws a line per entry under the row, a bar under each
-window, and nothing at all for an empty list.
+(`packages/entoli_chat/lib/domain/provider_usage.dart`), of two kinds. A
+`UsageWindow` is an allowance: a label in the provider's own period, what is
+`used` of a `max`, the unit the two are counted in, and when it starts again
+where the provider says. `used` is always what is gone — a provider that reports
+what is left is converted where it is read — and a max rather than a percentage,
+because what a provider counts is not always a share: a dollar cap is a number
+of dollars. A `CreditBalance` is money with no allowance behind it, credits
+bought rather than granted, so it is what is left and nothing to measure it
+against. The default is nothing, which is what most providers have to say; the
+Providers section in Settings draws a line per entry under the row, a bar under
+each window, and nothing at all for an empty list.
 
 **Only where the answer is the provider's to keep stable.** Four say it:
 
@@ -537,10 +536,11 @@ Failures are reported as they happen: a rejected key or a bad request reaches
 that never opened) emits `RetryEvent` the instant it fails. `ErrorEvent` carries
 whether the failure was retryable — read off the exception the query died on —
 and that flag is what the controller's automatic retry rounds ask before
-re-entering `resume` (see `lib/domain/room/AGENTS.md`, "Automatic retry rounds");
-`_fail`, for a failure the turn never reached a model through, leaves it false.
-A request that died mid-stream is retryable too, and safe to resume, because
-resuming appends to the same reply rather than starting another.
+re-entering `resume` (see `packages/entoli_chat/lib/domain/room/AGENTS.md`,
+"Automatic retry rounds"); `_fail`, for a failure the turn never reached a model
+through, leaves it false. A request that died mid-stream is retryable too, and
+safe to resume, because resuming appends to the same reply rather than starting
+another.
 
 **The parent agent spends one attempt per request**, `maxAttempts: 1`: the
 controller owns the patience, and the two retrying would be the same patience

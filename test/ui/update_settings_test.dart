@@ -1,6 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/app_settings.dart";
 
 import "../fakes.dart";
 import "../harness.dart";

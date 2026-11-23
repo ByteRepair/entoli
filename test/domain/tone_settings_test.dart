@@ -3,12 +3,12 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/core/config.dart";
-import "package:agent_chat/data/local/file_chat_store.dart";
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/chat_repository.dart";
-import "package:agent_chat/domain/project_settings.dart";
-import "package:agent_chat/domain/tone.dart";
+import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/data/local/file_chat_store.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/chat_repository.dart";
+import "package:entoli_chat/domain/project_settings.dart";
+import "package:entoli_chat/domain/tone.dart";
 
 import "../fakes.dart";
 import "../harness.dart";

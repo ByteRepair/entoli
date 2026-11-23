@@ -10,13 +10,14 @@ obvious from reading a test. Everything about the app itself is in the root
 with the backend faked — plus `tempConfig`, `makeState`, the dropdown finders,
 and the pumping helpers below. `writeSkill` writes a skill the library will
 actually offer: since skills are held to the Agent Skills spec (see
-"Skills and agents" in `lib/domain/AGENTS.md`), its `SKILL.md` carries a
-`name:` matching the folder and a `description`, and its `metadata:` argument
-is the way a test writes the client keys — `{"invocation": "callback"}` makes
-it one the controller dispatches. `test/fakes.dart` holds `FakeBackend`, whose
-`scriptedEvents` and `hold` drive a turn, beside `FakeAttachmentPicker`, `FakeBackgroundWork`,
-`FakeFileHandoff`, `FakeBackupHandoff`, `FakeAppRestart`, `FakeVoice`,
-`FakeAssistantLaunch` and `testLibrary`.
+"Skills and agents" in `packages/entoli_chat/lib/domain/AGENTS.md`), its
+`SKILL.md` carries a `name:` matching the folder and a `description`, and its
+`metadata:` argument is the way a test writes the client keys — `{"invocation":
+"callback"}` makes it one the controller dispatches. `test/fakes.dart` holds
+`FakeBackend`, whose `scriptedEvents` and `hold` drive a turn, beside
+`FakeAttachmentPicker`, `FakeBackgroundWork`, `FakeFileHandoff`,
+`FakeBackupHandoff`, `FakeAppRestart`, `FakeVoice`, `FakeAssistantLaunch` and
+`testLibrary`.
 
 `FakeBackend.compact` is scripted with `scriptedSummary` (null is a
 summarizer that said nothing) and recorded in `compactionCalls`;
