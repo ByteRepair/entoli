@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 // Read with no Flutter engine running, so the layout `AppConfig` composes is
 // read off the disk here, as Android's `WorkspaceProvider` reads it.
 
-/// `iosAppGroup`, in lib/core/platform/host.dart.
+/// `iosAppGroup`, in packages/entoli_paths/lib/entoli_paths.dart.
 let workspaceAppGroup = "group.io.byterepair.entoli"
 
 /// "Local": this device's workspaces, which a domain per synced device's
@@ -39,11 +39,11 @@ enum WorkspaceNode: Equatable {
   // the other.
   private static let project = ":"
 
-  /// `defaultProjectDir`, in packages/entoli_chat/lib/domain/project.dart.
+  /// `defaultProjectDir`, in packages/entoli_core/lib/model/project.dart.
   static let defaultProject = "default"
 
   /// The built-in projects whose workspace is not shared
-  /// (packages/entoli_chat/lib/domain/builtin_project.dart), kept in step by hand as Android's
+  /// (packages/entoli_core/lib/model/builtin_project.dart), kept in step by hand as Android's
   /// `UNBROWSED` is: a chat that must not reach past itself is not one whose
   /// scratch the Files app browses.
   static let unbrowsed: Set<String> = ["anonymous"]
@@ -144,7 +144,7 @@ enum WorkspaceNode: Equatable {
     }
   }
 
-  // The shape rule, `isProjectDirName` in packages/entoli_chat/lib/domain/project.dart, bar
+  // The shape rule, `isProjectDirName` in packages/entoli_core/lib/model/project.dart, bar
   // `default`, which is a directory like any other here.
   static func isProjectDir(_ name: String) -> Bool {
     !name.isEmpty && !name.hasPrefix(".") && !name.contains("/") && !unbrowsed.contains(name)
@@ -214,7 +214,7 @@ struct WorkspaceTree {
     }
   }
 
-  // `everyProject`, in packages/entoli_chat/lib/domain/project.dart: the default one first, the
+  // `everyProject`, in packages/entoli_core/lib/model/project.dart: the default one first, the
   // rest by name.
   private func projectDirs() -> [String] {
     list(dataDir.appendingPathComponent("projects", isDirectory: true))
@@ -228,7 +228,7 @@ struct WorkspaceTree {
       }
   }
 
-  // `defaultProjectLabel`, in packages/entoli_chat/lib/domain/project.dart.
+  // `defaultProjectLabel`, in packages/entoli_core/lib/model/project.dart.
   private func projectLabel(_ name: String) -> String {
     name == WorkspaceNode.defaultProject ? "Default" : name
   }
@@ -333,8 +333,9 @@ final class WorkspaceItem: NSObject, NSFileProviderItem {
     return caps
   }
 
-  // `viewerMime`, in lib/data/mime.dart: an unrecognised file is offered as
-  // text, which is what most of a workspace is.
+  // `viewerMime`, in packages/entoli_core/lib/model/mime.dart: an
+  // unrecognised file is offered as text, which is what most of a workspace
+  // is.
   var contentType: UTType {
     if isFolder { return .folder }
     guard let type = UTType(filenameExtension: (filename as NSString).pathExtension),

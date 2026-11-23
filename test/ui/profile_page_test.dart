@@ -4,12 +4,11 @@ import "dart:io";
 import "package:flutter/gestures.dart" show kLongPressTimeout;
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/tone.dart";
+import "package:entoli_core/model/tone.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/profile/profile_page.dart";
 import "package:agent_chat/ui/widgets/prompt_field.dart";
-import "package:entoli_chat/ui/widgets/text_file_page.dart";
+import "package:entoli_core/view/widgets/text_file_page.dart";
 
 import "../harness.dart";
 
@@ -177,7 +176,7 @@ void main() {
     final notes = File("${app.config.dataDir}/../linked/NOTES.md")
       ..createSync(recursive: true)
       ..writeAsStringSync("notes");
-    app.folders.scriptedFiles = [notes.absolute.path];
+    app.chooser.scriptedFiles = [notes.absolute.path];
     await open(tester);
     await tester.tap(find.text("Link files…"));
     await settleIo(tester);

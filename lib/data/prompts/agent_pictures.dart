@@ -1,14 +1,15 @@
 // Where an agent's face lives: beside its `.md`, named after it — a picked
 // photo as `<name>.png`, a Bot Avatar as `<name>.avatar.json`.
-import "package:path/path.dart" as p;
 import "dart:io";
 
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/domain/agent_face.dart";
-import "package:entoli_chat/domain/bot_avatar/spec.dart";
-import "package:entoli_chat/domain/models.dart";
-import "bundled_skill_data.dart" show bundledAgentFaces;
-import "prompt_sources.dart";
+import "package:path/path.dart" as p;
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/agent_face.dart";
+import "package:entoli_core/model/bot_avatar/spec.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/bundled_skill_data.dart"
+    show bundledAgentFaces;
+import "package:entoli_core/store/prompts/prompt_sources.dart";
 
 /// Where an agent called [name] keeps its picture: a `.png` beside its `.md`
 /// in [project]'s agents directory — the default project's where it is null.

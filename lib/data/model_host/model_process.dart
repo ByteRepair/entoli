@@ -1,6 +1,7 @@
 import "dart:async";
 
 import "package:flutter/services.dart";
+import "package:entoli_core/model/model_process.dart";
 
 import "host_connection.dart";
 import "host_frame.dart";
@@ -11,100 +12,11 @@ import "worker.dart";
 /// whatever channels the host was given, since every host has one.
 const modelHostChannel = MethodChannel("agent_chat/model_host");
 
-/// Where the on-device models run. The engines ask this for what they talk
-/// to — a [ModelChannel] for the native half, a [Worker] for an isolate — and
-/// never learn which process answers. See "The model host" in
-/// macos/AGENTS.md.
-///
-/// macOS runs them in a second process ([HelperModelProcess]) because MLX's GPU
-/// work in the process that draws the window starves the window's frames:
-/// the GPU interleaves processes, not the queues of one. Everywhere else they
-/// run here ([InAppModelProcess]) — iOS cannot start a process, and the
-/// other platforms' models are a server of their own or run on the CPU.
-abstract interface class ModelProcess {
-  ModelChannel channel(String name);
-
-  Future<Worker> spawn(WorkerKind kind, List<Object?> argument);
-
-  /// The memory the models' process takes, where they have one of their own
-  /// and it is running; null where they share the app's, or nothing has
-  /// started it. Never starts one to answer.
-  Future<int?> footprint();
-
-  /// Keeps the models' process for as long as the lease is held: a loaded
-  /// model holds one, and so does every worker [spawn] makes. With none held
-  /// a process of their own has no reason to run, and goes; the next ask
-  /// starts another.
-  ModelProcessLease hold();
-}
-
-/// One reason for the models' process to keep running, given up once —
-/// by its holder, or by the process going while it was held.
-class ModelProcessLease {
-  ModelProcessLease(this._release);
-
-  void Function()? _release;
-  final _lost = Completer<void>();
-
-  /// Completes if the process went while this was held, and everything the
-  /// holder had in it with it. The lease is given up by then: the next
-  /// process owes this holder nothing.
-  Future<void> get lost => _lost.future;
-
-  /// Whether [lost] has completed: the process, and what was in it, gone.
-  bool get isLost => _lost.isCompleted;
-
-  void release() {
-    final release = _release;
-    _release = null;
-    release?.call();
-  }
-
-  /// The process going, said by the [ModelProcess] that granted it.
-  /// Not a release: the process that would have gone idle has gone already,
-  /// and its holds with it.
-  void lose() {
-    if (_release == null) return;
-    _release = null;
-    _lost.complete();
-  }
-}
-
-/// A method channel's two directions, wherever its native half is: calls out,
-/// and what the native half says unasked as [calls]. A failed call throws the
-/// [PlatformException] a channel in this process would.
-abstract interface class ModelChannel {
-  Future<T?> invokeMethod<T>(String method, [Object? arguments]);
-
-  /// Broadcast. An error here is the native half gone ([ModelProcessGone]).
-  Stream<MethodCall> get calls;
-}
-
-/// A channel whose native half is in this process. One per name for the
-/// process's life: a method channel takes one handler, so a second
-/// registration would land on the first's — this owns it and broadcasts.
-class PlatformModelChannel implements ModelChannel {
-  factory PlatformModelChannel(MethodChannel channel) =>
-      _channels[channel.name] ??= PlatformModelChannel._(channel);
-
-  PlatformModelChannel._(this._channel) {
-    _channel.setMethodCallHandler((call) async => _calls.add(call));
-  }
-
-  static final _channels = <String, PlatformModelChannel>{};
-
-  final MethodChannel _channel;
-  final _calls = StreamController<MethodCall>.broadcast();
-
-  @override
-  Future<T?> invokeMethod<T>(String method, [Object? arguments]) =>
-      _channel.invokeMethod<T>(method, arguments);
-
-  @override
-  Stream<MethodCall> get calls => _calls.stream;
-}
-
-/// The models in this process.
+/// The models in this process, everywhere but macOS: iOS cannot start a
+/// process, and the other platforms' models are a server of their own or run
+/// on the CPU. macOS runs them in a second process ([HelperModelProcess])
+/// because MLX's GPU work in the process that draws the window starves the
+/// window's frames: the GPU interleaves processes, not the queues of one.
 class InAppModelProcess implements ModelProcess {
   const InAppModelProcess();
 

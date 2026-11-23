@@ -1,10 +1,9 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/data/builtin/templates.dart";
-import "package:entoli_chat/domain/tone.dart";
-import "package:agent_chat/data/builtin/tools/agent_tool.dart";
-import "package:agent_chat/data/builtin/system_prompt.dart";
+import "package:entoli_core/agent/builtin_agent.dart";
+import "package:entoli_core/agent/templates.dart";
+import "package:entoli_core/model/tone.dart";
+import "package:entoli_core/agent/tools/agent_tool.dart";
+import "package:entoli_core/agent/system_prompt.dart";
 
 void main() {
   // The style prose is in the cacheable body under the capability sections, so

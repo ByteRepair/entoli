@@ -1,34 +1,33 @@
 import "dart:convert";
 
 import "package:flutter/services.dart" show rootBundle;
+import "package:entoli_core/store/file_chat_store.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/app_secrets.dart";
+import "package:entoli_core/model/background_work.dart";
+import "package:entoli_core/model/chat_store.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/trigger_manager.dart"
+    show TriggerRegistryFactory;
+import "package:entoli_core/model/rootfs_store.dart";
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/agent/builtin_agent.dart";
+import "package:entoli_core/agent/builtin_backend.dart";
+import "package:entoli_core/agent/duckduckgo_search.dart";
+import "package:entoli_core/agent/tools/agent_tool.dart";
+import "package:entoli_core/agent/tools/registry.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/llm_registry.dart";
+import "package:entoli_core/store/prompts/prompt_sources.dart";
+import "package:entoli_core/agent/builtin_options.dart";
+import "package:entoli_shell/entoli_shell.dart" show Toolset;
 
-import "../../data/builtin/builtin_agent.dart";
-import "../../data/builtin/builtin_backend.dart";
-import "../../data/builtin/duckduckgo_search.dart";
-import "../../data/builtin/tools/agent_tool.dart";
-import "../../data/builtin/tools/registry.dart";
-import "../../data/builtin/llm/llm_client.dart";
-import "../../data/builtin/llm/llm_registry.dart";
 import "../../data/builtin/llm/providers/presets.dart";
-import "package:entoli_chat/data/local/file_chat_store.dart";
 import "../../data/local/local_engine.dart";
 import "../../data/local/local_prefill.dart";
-import "../../data/prompts/prompt_sources.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/app_secrets.dart";
-import "package:entoli_chat/domain/background_work.dart";
-import "package:entoli_chat/domain/chat_store.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/trigger_manager.dart"
-    show TriggerRegistryFactory;
-import "package:entoli_chat/domain/rootfs_store.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/core/config.dart";
 import "host.dart";
-import "../../data/builtin/builtin_options.dart";
-
 export "host.dart"
     show
         processEnv,
@@ -39,12 +38,10 @@ export "host.dart"
         createAgentBrowser,
         createAppleFm,
         createAppUpdateHost,
-        createBackupHandoff,
         createByteRepairStore,
         cliCacheRoot,
         cliGuestOf,
         createAssistantLaunch,
-        createFileHandoff,
         createFileWatches,
         createLanSignaling,
         createLocalEngine,
@@ -61,13 +58,12 @@ export "host.dart"
         installBundledTools,
         linuxHostOf,
         listenForIntents,
-        registerRecorder,
         readOnlyDirs,
-        registerVoiceLicences,
         setupComplete;
 
-// The app's platform seam: everything platform-varying is resolved here or
-// re-exported from `host.dart`, which answers it.
+// The app's platform seam: what the app builds per platform is resolved here
+// or in `host.dart`, re-exported. An adapter's own factories are called from
+// `main` directly.
 
 /// The agent, wired to what this platform can reach and to whatever the
 /// settings page last wrote. [libraries] is Entoli's commands and agents per

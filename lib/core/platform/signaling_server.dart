@@ -2,9 +2,9 @@ import "dart:async";
 import "dart:convert";
 import "dart:io";
 
-import "package:entoli_chat/domain/sync/lan_signaling.dart";
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/sync/signaling_routes.dart";
+import "package:entoli_core/model/sync/lan_signaling.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/sync/signaling_routes.dart";
 
 /// The rendezvous two devices on one network meet at before WebRTC can take
 /// over. Binds all interfaces on the well-known port; that and a one-time code

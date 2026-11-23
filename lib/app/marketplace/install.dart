@@ -1,10 +1,10 @@
 import "dart:typed_data";
 
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/agent_face.dart";
+import "package:entoli_core/store/prompts/skill_import.dart";
 
-import "package:entoli_chat/core/log.dart";
-import "../../data/prompts/skill_import.dart";
-import "package:entoli_chat/domain/agent_face.dart";
 import "../../providers.dart";
 import "../prompts/agent_files.dart";
 import "../prompts/own_prompts.dart";

@@ -3,11 +3,10 @@ import "dart:io";
 
 import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/core/config.dart";
+import "package:entoli_core/model/config.dart";
 import "package:agent_chat/data/prompts/prompt_export.dart";
-import "package:agent_chat/data/prompts/skill_import.dart";
-import "package:entoli_chat/domain/models.dart";
+import "package:entoli_core/store/prompts/skill_import.dart";
+import "package:entoli_core/model/models.dart";
 
 import "../../harness.dart";
 

@@ -1,278 +1,81 @@
 import "dart:async";
 import "dart:ffi";
 import "dart:io";
-import "dart:isolate";
 
 import "package:ffi/ffi.dart";
-import "package:flutter/foundation.dart";
-import "package:flutter/services.dart" show MethodChannel, rootBundle;
-import "package:record_platform_interface/record_platform_interface.dart"
-    show RecordPlatform;
+import "package:flutter/services.dart" show MethodChannel;
 import "package:path/path.dart" as p;
-import "package:path_provider/path_provider.dart";
-import "package:path_provider_foundation/path_provider_foundation.dart";
+import "package:entoli_core/model/model_budget.dart";
+import "package:entoli_core/model/model_process.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/app_update.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/assistant_launch.dart";
+import "package:entoli_core/model/intent_action.dart";
+import "package:entoli_core/model/builtin_project.dart";
+import "package:entoli_core/model/file_watches.dart";
+import "package:entoli_core/model/reminder_alarms.dart";
+import "package:entoli_core/model/rootfs_store.dart";
+import "package:entoli_core/model/secret_store.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/sync/lan_signaling.dart";
+import "package:entoli_core/model/voice.dart";
+import "package:entoli_core/model/voice_model_store.dart";
+import "package:entoli_core/model/config.dart";
+import "package:entoli_paths/entoli_paths.dart" show appDirectories;
+import "package:entoli_voice/entoli_voice.dart"
+    show openVoiceModelStore, platformVoice;
+import "package:entoli_shell/entoli_shell.dart"
+    show BundledTools, LocalShell, environmentWithoutAppImage, openRootfsStore;
+import "package:entoli_browser/entoli_browser.dart"
+    show CdpBrowser, HeliumDownload;
+export "package:entoli_shell/entoli_shell.dart"
+    show
+        captureLoginPath,
+        cliGuestOf,
+        deleteTree,
+        deviceAbi,
+        hostConfinement,
+        hostToolsDirIn,
+        installBundledTools,
+        linuxHostOf,
+        platformDriver,
+        platformShell,
+        readOnlyDirs;
 
-import "../../data/backup_handoff.dart";
+import "../../data/download.dart" show startDownload;
 import "../../data/local/android_assistant_launch.dart";
 import "../../data/local/android_device_name.dart";
-import "../../data/local/android_file_handoff.dart";
 import "../../data/local/android_reminder_alarms.dart";
-import "../../data/local/bundled_tools.dart";
 import "../../data/local/byte_repair_store.dart";
 import "../../data/local/file_secret_store.dart";
-import "../../data/local/ios_file_handoff.dart";
 import "../../data/local/ios_reminder_alarms.dart";
-import "../../data/local/file_modes.dart";
-import "package:entoli_chat/core/read_only_dirs.dart";
 import "../../data/local/file_local_model_store.dart";
-import "../../data/local/file_rootfs_store.dart";
-import "../../data/local/ish_ffi.dart";
-import "../../data/local/ish_pipe.dart" show IshCliGuest;
-import "../../data/local/ish_shell.dart";
 import "../../data/local/llama_engine.dart";
 import "../../data/local/llama_server.dart";
 import "../../data/local/local_engine.dart";
 import "../../data/local/mlx_engine.dart";
 import "../../data/local/model_format.dart";
 import "../../data/local/prompt_cache.dart";
-import "../../data/local/proot.dart";
 import "../../data/local/apple_fm.dart";
-import "../../data/local/landlock.dart";
-import "../../data/local/seatbelt.dart";
-import "../../data/local/shared_backup.dart";
-import "../../data/local/tree_ops.dart";
-import "../../data/local/desktop_file_handoff.dart";
 import "../../data/model_host/helper_process.dart";
 import "../../data/model_host/model_process.dart";
 import "../../data/local/intent_channel.dart";
 import "../../data/local/io_file_watches.dart";
 import "../../data/local/linux_reminder_alarms.dart";
 import "../../data/local/macos_reminder_alarms.dart";
-import "../../data/browser/cdp_browser.dart";
-import "../../data/browser/helium.dart";
-import "../tls.dart" show tlsClient;
-import "../../data/builtin/llm/providers/cli.dart" show CliGuest, HostCliGuest;
-import "../../data/builtin/local_shell.dart";
-import "../../data/voice/android_voice.dart";
-import "../../data/voice/file_voice_model_store.dart";
-import "../../data/voice/ios_voice.dart";
-import "../../data/voice/macos_voice.dart";
-import "../../data/voice/sherpa_voice.dart";
-import "package:entoli_chat/domain/model_budget.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/app_update.dart";
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/core/migrations.dart";
-import "package:entoli_chat/domain/assistant_launch.dart";
-import "package:entoli_chat/domain/confinement.dart";
-import "package:entoli_chat/domain/intent_action.dart";
-import "package:entoli_chat/domain/backup_handoff.dart";
-import "package:entoli_chat/domain/builtin_project.dart";
-import "package:entoli_chat/domain/file_handoff.dart";
-import "package:entoli_chat/domain/file_watches.dart";
-import "package:entoli_chat/domain/reminder_alarms.dart";
-import "package:entoli_chat/domain/rootfs.dart";
-import "package:entoli_chat/domain/rootfs_store.dart";
-import "package:entoli_chat/domain/secret_store.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/sync/lan_signaling.dart";
-import "package:entoli_chat/domain/voice.dart";
-import "package:entoli_chat/domain/voice_model_store.dart";
-import "package:entoli_chat/core/config.dart";
+import "../../data/tls.dart" show tlsClient;
 import "form_factor.dart" show isPhone;
 import "keyring_secret_store.dart";
-import "linux_recorder.dart";
 import "signaling_server.dart";
 import "update.dart";
-
-Shell platformShell({
-  required Map<String, String> Function() environment,
-  required ShellDriver? Function({String? project}) driver,
-  String? dataDir,
-  RootfsStore? rootfsStore,
-
-  /// Asked per command: which Linux the settings page has picked. Null where
-  /// the platform has no picker at all.
-  String? Function()? rootfsId,
-
-  /// Where the guest's natively run tools live on iOS; see `HostTools`.
-  String? hostToolsDir,
-}) {
-  if (Platform.isIOS) {
-    // No host shell and no proot: IshShell drives the emulator through FFI,
-    // resolving the rootfs per command; the guest boots once, so a swap after
-    // the first command is refused until a restart. See ios/AGENTS.md.
-    String? rootfsDir() {
-      final rootfs = rootfsById(rootfsId?.call());
-      return rootfs != null ? rootfsStore?.directoryOfSync(rootfs.id) : null;
-    }
-
-    return IshShell(
-      rootfsDir: () => rootfsDir() ?? "",
-      dataDir: dataDir ?? "",
-      environment: environment,
-      hostToolsDir: hostToolsDir,
-      // Asked per session, since the setting is picked after startup.
-      transport: () => IshWorker(core: ishCoreOf(rootfsById(rootfsId?.call()))),
-      platformDescription: () => rootfsDir() != null
-          ? rootfsById(rootfsId?.call())!.describe(EmulatedLinux.key)
-          : "iOS, with no Linux installed. Install one from the Terminal "
-                "settings to run commands.",
-    );
-  }
-  return LocalShell(
-    environment: environment,
-    driver: driver,
-    withoutDriver: Platform.isAndroid
-        ? "Android, with no Linux installed. Install one from the Terminal "
-              "settings to run commands."
-        : null,
-  );
-}
-
-/// What the next command runs under: the picked Linux where it is installed
-/// and this build carries proot, else the machine itself — except on Android,
-/// where it is the Linux or nothing. Synchronous because it is asked before
-/// every command.
-///
-/// On the machine itself, a rootfs-isolated built-in project's bin directory
-/// is prefixed onto `PATH`; a user-set `PATH` in the command environment still
-/// wins over it.
-ShellDriver? platformDriver({
-  required String defaultSkillsBundledDir,
-  required String defaultUserSkillsDir,
-  String? projectSkillsBundledDir,
-  String? projectUserSkillsDir,
-  Toolset? tools,
-  Proot? proot,
-  RootfsStore? store,
-  String? rootfsId,
-  String? abi,
-  String? project,
-  AppConfig? config,
-  String? byteRepairBinDir,
-
-  /// The login shell's PATH, captured once per run by `main.dart`: the
-  /// driver is resolved synchronously, so the capture cannot happen here.
-  String? loginPath,
-}) {
-  final rootfs = rootfsById(rootfsId);
-  final baseDir = rootfs != null && store != null
-      ? store.directoryOfSync(rootfs.id)
-      : null;
-  if (rootfs != null && proot != null && baseDir != null) {
-    // proot refuses a binding whose host path is missing ("can't sanitize
-    // binding"), and a project's skill dirs exist only after a setup or a
-    // first turn. The default project's two are always there.
-    String? bindIfThere(String? path) =>
-        path != null && Directory(path).existsSync() ? path : null;
-    return prootDriver(
-      proot: proot,
-      rootfs: rootfs,
-      rootfsDir: baseDir,
-      defaultSkillsBundledDir: defaultSkillsBundledDir,
-      defaultUserSkillsDir: defaultUserSkillsDir,
-      projectSkillsBundledDir: bindIfThere(projectSkillsBundledDir),
-      projectUserSkillsDir: bindIfThere(projectUserSkillsDir),
-      abi: abi,
-    );
-  }
-  // Android's own shell is not offered: it has no /bin, its toybox is not
-  // what the model expects, and the CLIs and package installs everything
-  // else leans on live in the Linux. With none installed there is no
-  // terminal, as on iOS, and the first-run setup is what installs one.
-  if (Platform.isAndroid) return null;
-  return LocalShell.hostDriver(
-    tools: tools,
-    environment:
-        project != null &&
-            builtinProjectOf(project)?.requiresSetup == true &&
-            byteRepairBinDir != null
-        ? {
-            "PATH":
-                "$byteRepairBinDir${LocalShell.listSeparator()}"
-                "${loginPath ?? Platform.environment["PATH"] ?? ""}",
-          }
-        : null,
-    sandboxHelper: Platform.isLinux && config != null
-        ? LandlockSandboxHelper(cacheDir: landlockCacheDir(config))
-        : Platform.isMacOS
-        ? SeatbeltSandboxHelper()
-        : null,
-    // A desktop launch's inherited PATH misses what the user's profile adds
-    // (`~/.local/bin`); null leaves the inherited one standing.
-    loginPath: loginPath,
-  );
-}
-
-/// Where the Landlock helper is compiled: the data directory rather than the
-/// OS cache, so a cache clear does not cost the compile again.
-String landlockCacheDir(AppConfig config) => p.join(config.dataDir, "landlock");
-
-/// The device's ABI, which only Android answers: what proot runs, and which
-/// image of a distribution it downloads.
-Future<String?> deviceAbi() =>
-    Platform.isIOS ? Future.value(null) : BundledTools.abi();
-
-/// How this device runs a Linux: under the emulator on iOS, under proot on
-/// an Android whose build carries it for [abi], and in the machine's own
-/// shell on a desktop.
-LinuxHost linuxHostOf({String? abi, Toolset? tools}) => Platform.isIOS
-    ? const EmulatedLinux()
-    : abi == null
-    ? const NoLinux()
-    : tools?.proot != null
-    ? ProotLinux(abi)
-    : MissingProotLinux(abi);
-
-/// Where a CLI provider's program runs on a device with [linux]: this
-/// machine on a desktop, the picked Linux under proot on Android and in the
-/// emulator on iOS, and nowhere on an Android build with no proot in it.
-CliGuest? cliGuestOf(
-  LinuxHost linux, {
-  Proot? proot,
-  required RootfsStore store,
-  required String? Function() rootfsId,
-  required String dataDir,
-  String? loginPath,
-}) => switch (linux) {
-  NoLinux() => HostCliGuest(loginPath: loginPath),
-  ProotLinux() when proot != null => ProotCliGuest(
-    proot: proot,
-    store: store,
-    rootfsId: rootfsId,
-  ),
-  ProotLinux() || MissingProotLinux() => null,
-  // The x86-64 guest runs only a Linux built for it, so a picked one this
-  // device is not offered — an i386 Alpine kept from before — is none.
-  EmulatedLinux() => IshCliGuest(
-    rootfsDir: () {
-      final rootfs = rootfsById(rootfsId());
-      return rootfs != null && linux.catalog.contains(rootfs)
-          ? store.directoryOfSync(rootfs.id)
-          : null;
-    },
-    dataDir: dataDir,
-  ),
-};
 
 /// Where the CLI programs and their sessions' folders are kept: the cache,
 /// except on iOS, where the emulator sees the app's data directory at its
 /// own path and nothing else of the host.
 String cliCacheRoot({required String cache, required String dataDir}) =>
     Platform.isIOS ? p.join(dataDir, "cli-cache") : cache;
-
-/// What keeps the host shell's commands in. Linux's is the Landlock helper
-/// [hostDriver] is built with, macOS's the Seatbelt one; a phone's is the
-/// OS's own app sandbox.
-Confinement hostConfinement() => Platform.isLinux
-    ? Confinement.landlock
-    : Platform.isMacOS
-    ? Confinement.seatbelt
-    : Platform.isAndroid || Platform.isIOS
-    ? Confinement.appSandbox
-    : Confinement.none;
 
 AppUpdateHost createAppUpdateHost(String cacheDir) {
   final flavour = Platform.isLinux
@@ -288,14 +91,15 @@ AppUpdateHost createAppUpdateHost(String cacheDir) {
 }
 
 /// The browser the agent drives: on the three desktops whatever Settings >
-/// Agent Browser picked, under `<cache>/browser/`; on Android the app's own
-/// WebViews. iOS's WKWebView speaks no DevTools Protocol.
+/// Agent Browser picked, under `<cache>/browser/`; on the phones the app's
+/// own web views.
 AgentBrowser createAgentBrowser(AppConfig config, String cacheDir) {
   final dir = p.join(cacheDir, "browser");
   return CdpBrowser(
     browserDir: dir,
     picked: () => AppSettings.load(config).agentBrowser,
     visible: () => AppSettings.load(config).agentBrowserVisible,
+    environment: environmentWithoutAppImage,
     embedded: HeliumDownload(dir, client: tlsClient),
     webViews: Platform.isAndroid || Platform.isIOS
         ? const MethodChannel("agent_chat/browser")
@@ -303,11 +107,8 @@ AgentBrowser createAgentBrowser(AppConfig config, String cacheDir) {
   );
 }
 
-/// On iOS the unpack is iSH's fakefsify, not the system tar, which the exec
-/// ban denies.
-RootfsStore createRootfsStore(String cacheDir) => Platform.isIOS
-    ? FileRootfsStore(p.join(cacheDir, "rootfs"), tar: _ishFakefsify)
-    : FileRootfsStore(p.join(cacheDir, "rootfs"));
+RootfsStore createRootfsStore(String cacheDir) =>
+    openRootfsStore(cacheDir, startDownload());
 
 /// Installs into the guest's `/usr/local/bin` on the phones (proot, iSH) and
 /// the app's own bin directory on the desktops. A guest's `apk` installs in
@@ -329,9 +130,6 @@ ByteRepairStore createByteRepairStore(
     scratchDir: Platform.isIOS ? guestHome : null,
   );
 }
-
-/// Where the tools an emulated guest hands the host live: `HostTools`.
-String hostToolsDirIn(String cacheDir) => p.join(cacheDir, "host-tools");
 
 /// The host bin directory a rootfs-isolated project's tools land in, or null
 /// on the phones, whose setup installs inside the guest. The store's
@@ -357,16 +155,6 @@ bool setupComplete(AppConfig config, String? project, String? binDir) {
   }
   if (binDir == null) return true;
   return File(p.join(binDir, esbmcFileName)).existsSync();
-}
-
-/// Lays out the tools this build ships for the device's ABI (Android only),
-/// under the cache dir: rebuilt from the APK on demand, so a backup must not
-/// carry its symlinks.
-Future<Toolset?> installBundledTools(String cacheDir) async {
-  if (!Platform.isAndroid) return null;
-  final libDir = await BundledTools.nativeLibraryDir();
-  if (libDir == null) return null;
-  return BundledTools.install(root: p.join(cacheDir, "tools"), libDir: libDir);
 }
 
 /// What runs downloaded models here. Android and Linux run llama.cpp's server
@@ -503,16 +291,6 @@ String bundledLinuxLibDir({String? executablePath}) {
   return p.basename(dir) == "lib" ? dir : p.join(dir, "lib");
 }
 
-FileHandoff createFileHandoff() => Platform.isAndroid
-    ? AndroidFileHandoff()
-    : Platform.isIOS
-    ? const IosFileHandoff()
-    : const DesktopFileHandoff();
-
-/// Android has no save dialog; a backup leaves through the share sheet.
-BackupHandoff createBackupHandoff(FileHandoff handoff) =>
-    Platform.isAndroid ? SharedBackup(handoff) : const FileSelectorBackup();
-
 /// Shortcuts' App Intents, on the two platforms that have them: the Apple
 /// Runners answer `agent_chat/intents`, and nothing else does.
 void listenForIntents(IntentRegistry registry) {
@@ -539,114 +317,20 @@ Future<ReminderAlarms> createReminderAlarms() async {
 
 FileWatches createFileWatches() => IoFileWatches();
 
-/// `$ENTOLI_CONFIG` if set, else `~/.config/entoli` on desktop and
-/// app-private storage on the phones. A desktop debug build uses
-/// `entoli-debug`, so it never touches an installed copy's data; a
-/// phone's debug build is its own app, its storage already apart.
-Future<String> dataDir() async {
-  final override = processEnv("ENTOLI_CONFIG");
-  return override ?? p.join(await _resolveBase(), _dirLeaf);
-}
+/// Where this platform keeps the app's data and cache, resolved once.
+final _directories = appDirectories(home: LocalShell.machineHomeDir());
 
-String get _dirLeaf =>
-    (Platform.isLinux || Platform.isMacOS || Platform.isWindows) && kDebugMode
-    ? "entoli-debug"
-    : "entoli";
+/// `$ENTOLI_CONFIG` if set, else where this platform keeps the app's data.
+Future<String> dataDir() async =>
+    processEnv("ENTOLI_CONFIG") ?? await _directories.data;
 
-Future<String> _resolveBase() async {
-  if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
-    return p.join(_home, ".config");
-  }
-  if (Platform.isIOS) return _iosBase;
-  final dir = await getApplicationDocumentsDirectory();
-  return dir.path;
-}
-
-/// The App Group the Runner shares with its File Provider extension, which
-/// reads the workspaces from the data directory inside it. See "The
-/// workspaces in the Files app" in ios/AGENTS.md.
-const iosAppGroup = "group.io.byterepair.entoli";
-
-/// Resolved once per process, since resolving it may move the directory.
-final Future<String> _iosBase = _resolveIosBase();
-
-/// The App Group's container, once `relocateDataDir` has moved a data
-/// directory from before it out of Documents. Documents stays where the move
-/// fails, so the app still runs; the Files app then shows nothing until a
-/// launch where it lands.
-Future<String> _resolveIosBase() async {
-  final group = await PathProviderFoundation().getContainerPath(
-    appGroupIdentifier: iosAppGroup,
-  );
-  // Every launch after the move ends here, with no need of Documents.
-  if (group != null && Directory(p.join(group, _dirLeaf)).existsSync()) {
-    return group;
-  }
-  final documents = (await getApplicationDocumentsDirectory()).path;
-  if (group == null) {
-    logFailure("files", "no App Group container, data stays in Documents");
-    return documents;
-  }
-  final moved = relocateDataDir(
-    from: p.join(documents, _dirLeaf),
-    to: p.join(group, _dirLeaf),
-  );
-  return moved ? group : documents;
-}
-
-String get _home => LocalShell.machineHomeDir()!;
-
-/// Where things that can be fetched again live. `$ENTOLI_CACHE` if set,
-/// else the platform's cache directory, named by hand so it pairs with
-/// `~/.config/entoli`.
-///
-/// **Android uses the support directory, deliberately**: `getCacheDir()` is
-/// emptied under storage pressure and by Clear Cache, and a model the user
-/// chose to download is not something to lose that way.
-Future<String> cacheDir() async {
-  final override = processEnv("ENTOLI_CACHE");
-  if (override != null) return override;
-  if (Platform.isLinux) {
-    final xdg = Platform.environment["XDG_CACHE_HOME"];
-    return p.join(xdg ?? p.join(_home, ".cache"), _dirLeaf);
-  }
-  if (Platform.isMacOS) return p.join(_home, "Library", "Caches", _dirLeaf);
-  if (Platform.isWindows) {
-    final local =
-        Platform.environment["LOCALAPPDATA"] ??
-        p.join(_home, "AppData", "Local");
-    return p.join(local, _dirLeaf, "Cache");
-  }
-  final dir = p.join((await getApplicationSupportDirectory()).path, "entoli");
-  // iOS backs up Application Support, and Caches is purged under storage
-  // pressure, which a downloaded model must survive. Apple's answer for data
-  // that is refetchable yet kept is this, with the backup flag set.
-  if (Platform.isIOS) {
-    Directory(dir).createSync(recursive: true);
-    if (!excludeFromBackup(dir)) {
-      logFailure("files", "could not exclude the cache from backup");
-    }
-  }
-  return dir;
-}
-
-/// Silero's detector ships inside the app, so its licence does too.
-void registerVoiceLicences() {
-  LicenseRegistry.addLicense(() async* {
-    yield LicenseEntryWithLineBreaks(const [
-      "silero-vad",
-    ], await rootBundle.loadString("assets/models/silero-vad-LICENSE.txt"));
-  });
-}
+/// Where things that can be fetched again live: `$ENTOLI_CACHE` if set, else
+/// the platform's cache directory.
+Future<String> cacheDir() async =>
+    processEnv("ENTOLI_CACHE") ?? await _directories.cache;
 
 VoiceModelStore createVoiceModelStore(String cacheDir) =>
-    FileVoiceModelStore(p.join(cacheDir, "models"));
-
-/// record's own Linux implementation is parecord-only; ours falls back to
-/// pw-record.
-void registerRecorder() {
-  if (Platform.isLinux) RecordPlatform.instance = LinuxRecorder();
-}
+    openVoiceModelStore(cacheDir, startDownload());
 
 /// Where this process's on-device models run, one for the process so MLX and
 /// voice share it: a model host on macOS, where MLX's GPU work beside the
@@ -657,15 +341,8 @@ final ModelProcess _modelProcess = Platform.isMacOS && HelperProcess.canLaunch
     ? HelperModelProcess(HelperProcess.launch)
     : const InAppModelProcess();
 
-/// sherpa-onnx on the desktops; Android and macOS also have their system
-/// engines (see [AndroidVoice], [MacosVoice]); iOS has Apple's alone (see
-/// [IosVoice]).
-Voice createVoice(VoiceModelStore store, String cacheDir) {
-  if (Platform.isAndroid) return AndroidVoice(store, cacheDir, _modelProcess);
-  if (Platform.isIOS) return const IosVoice();
-  if (Platform.isMacOS) return MacosVoice(store, cacheDir, _modelProcess);
-  return SherpaVoice(store, cacheDir, _modelProcess);
-}
+Voice createVoice(VoiceModelStore store, String cacheDir) =>
+    platformVoice(store, cacheDir, _modelProcess);
 
 /// The process's environment. The Dart VM's iOS build leaves
 /// `Platform.environment` empty, so a launch variable never reached a
@@ -697,48 +374,6 @@ SecretStore createSecretStore(AppConfig config) => Platform.isLinux
 
 LanSignaling? createLanSignaling() => SignalingServer();
 
-/// The user's login shell's PATH, or null to keep the inherited one. Only
-/// bash and zsh are asked, their profile syntax being known; a profile that
-/// prints anything else is why the last non-empty line is read.
-Future<String?> captureLoginPath() async {
-  final home = LocalShell.machineHomeDir();
-  final login = Platform.environment["SHELL"];
-  if (home == null || login == null) return null;
-  if (!(login.endsWith("/bash") || login == "bash" || login.endsWith("/zsh"))) {
-    return null;
-  }
-  if (!File(login).existsSync()) return null;
-  try {
-    final process = await Process.start(
-      login,
-      ["-l", "-c", r'echo "$PATH"'],
-      environment: {"HOME": home, "PATH": "/usr/bin:/bin"},
-      includeParentEnvironment: false,
-    );
-    final stdout = process.stdout.transform(systemEncoding.decoder).join();
-    unawaited(process.stderr.drain<void>());
-    final int code;
-    try {
-      code = await process.exitCode.timeout(const Duration(seconds: 5));
-    } on TimeoutException {
-      // A profile that waits on input would otherwise be left running.
-      process.kill(ProcessSignal.sigkill);
-      return null;
-    }
-    if (code != 0) return null;
-    final lines = (await stdout)
-        .split("\n")
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .toList();
-    if (lines.isEmpty) return null;
-    final path = lines.last;
-    return path.contains("/") ? path : null;
-  } on Exception {
-    return null;
-  }
-}
-
 /// What this machine calls itself, for the sync device name. Android's
 /// `localHostname` is "localhost", so the system device name is read instead.
 Future<String?> deviceHostname() async {
@@ -749,48 +384,4 @@ Future<String?> deviceHostname() async {
   } catch (_) {
     return null;
   }
-}
-
-/// iOS's rootfs unpack: iSH's `fakefsify` in-process (iOS denies a child
-/// process for `tar`). The FFI call blocks, so it runs on its own isolate.
-Future<ProcessResult> _ishFakefsify(String archive, String into) =>
-    Isolate.run(() {
-      final fn = ishFakefsifyFn;
-      if (fn == null) {
-        return ProcessResult(
-          1,
-          1,
-          "",
-          "iSH fakefsify is not linked into this build.",
-        );
-      }
-      final archivePtr = archive.toNativeUtf8();
-      final intoPtr = into.toNativeUtf8();
-      try {
-        final rc = fn(archivePtr, intoPtr);
-        return rc == 0
-            ? ProcessResult(0, 0, "", "")
-            : ProcessResult(1, rc, "", "fakefsify failed (errno $rc)");
-      } finally {
-        malloc.free(archivePtr);
-        malloc.free(intoPtr);
-      }
-    });
-
-/// The app's read-only directories, one manager per path. See
-/// `core/read_only_dirs.dart`.
-final readOnlyDirs = ReadOnlyDirs(setTreeWritable);
-
-/// Deletes a tree that may hold proot's mode-0000 bind stubs, which a plain
-/// recursive delete cannot list. The restore clear needs it: the stubs sit
-/// deep inside `projects/<project>/rootfs/`.
-Future<void> deleteTree(String path) async {
-  // removeTree's own `chmod` is a process, which iOS refuses, and Windows'
-  // read-only attribute is not a mode at all; elsewhere it unlocks the tree
-  // itself, and a second walk would be one more pass over a whole rootfs.
-  if (Platform.isIOS || Platform.isWindows) {
-    await setTreeWritable([path], writable: true);
-  }
-  final err = await removeTree(path);
-  if (err != null) throw Exception("could not delete $path: $err");
 }

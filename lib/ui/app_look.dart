@@ -1,8 +1,8 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/view/theme.dart";
 
 import "../providers.dart";
-import "package:entoli_chat/ui/theme.dart";
 
 /// What the app is drawn with: the settings resolved against the system's own
 /// palette, so `main` watches one thing and the rule that an accent replaces

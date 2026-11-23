@@ -2,21 +2,20 @@ import "dart:async";
 
 import "package:flutter/foundation.dart";
 import "package:http/http.dart" as http;
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/sync/devices.dart";
+import "package:entoli_core/model/sync/identity.dart";
+import "package:entoli_core/model/sync/lan_signaling.dart";
+import "package:entoli_core/model/sync/peer_link.dart";
+import "package:entoli_core/model/sync/protocol.dart";
+import "package:entoli_core/model/sync/relay_signaling.dart";
 
-import "../../core/tls.dart";
-
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/sync/devices.dart";
-import "package:entoli_chat/domain/sync/identity.dart";
-import "package:entoli_chat/domain/sync/lan_signaling.dart";
-import "package:entoli_chat/domain/sync/protocol.dart";
-import "package:entoli_chat/domain/sync/relay_signaling.dart";
-import "channel.dart";
+import "../tls.dart";
+import "package:entoli_core/model/sync/channel.dart";
 import "framing.dart";
 import "handshake.dart";
 import "peers.dart";
-import "rtc_channel.dart";
 import "signaling/lan_signaler.dart";
 import "signaling/pairing_payload.dart";
 import "signaling/relay_signaler.dart";
@@ -97,6 +96,7 @@ class SyncPairing {
     String? Function()? turnPassword,
     required this._peers,
     required LanSignaling? Function() lanSignaling,
+    required this._createLink,
     required this.onMessage,
     required this.onPeerGone,
     required this.onReady,
@@ -134,6 +134,10 @@ class SyncPairing {
   final String? _hostname;
   final LanSignaling? Function() _lanFactory;
   final RelayDial _relayDial;
+
+  /// Opens the peer connection every route negotiates over — WebRTC in a
+  /// running app, bound in `main`.
+  final PeerLinkFactory _createLink;
   final http.Client _client;
 
   LanSignaling? _serverInstance;
@@ -320,7 +324,7 @@ class SyncPairing {
   /// hold the connection open until [completeManualPairing] takes the reply.
   Future<String> createManualInvite() async {
     final psk = generatePsk();
-    final link = await RtcLink.create(iceServers: iceServers());
+    final link = await _createLink(iceServers: iceServers());
     final sdp = await link.offer();
     _pendingManual = _PendingManual(link: link, psk: psk);
     return PairingOffer(
@@ -336,7 +340,7 @@ class SyncPairing {
   /// paste into the inviting device. Connecting continues on its own; the
   /// reply reaching the inviter is what completes the pair.
   Future<String> _acceptManualInvite(PairingOffer invite) async {
-    final link = await RtcLink.create(iceServers: iceServers());
+    final link = await _createLink(iceServers: iceServers());
     final answerSdp = await link.answer(invite.sdp);
     // The pairing card opens here: the answered handshake runs under no
     // window, so the codes-matched gate has this card to ask on and the
@@ -493,9 +497,15 @@ class SyncPairing {
     return [for (final host in await server.addresses()) "$host:$port"];
   }
 
+  /// The public STUN servers every ICE config starts from.
+  static const defaultStun = [
+    "stun:stun.l.google.com:19302",
+    "stun:stun1.l.google.com:19302",
+  ];
+
   List<Map<String, Object>> iceServers() {
     final servers = [
-      for (final url in RtcLink.defaultStun) {"urls": url},
+      for (final url in defaultStun) {"urls": url},
     ];
     final turn = _settings().turnUrl;
     if (turn != null && turn.isNotEmpty) {
@@ -529,9 +539,9 @@ class SyncPairing {
             : _reconnects[incoming.token];
         final psk = known?.psk ?? _windowPsk;
         if (psk == null) return;
-        RtcLink? link;
+        PeerLink? link;
         try {
-          link = await RtcLink.create(iceServers: iceServers());
+          link = await _createLink(iceServers: iceServers());
           final answerSdp = await link.answer(incoming.sdp);
           server.postAnswer(incoming.id, answerSdp);
           await _establish(
@@ -609,9 +619,9 @@ class SyncPairing {
       _relayWindow = messages.listen((message) {
         if (!message.containsKey("offer")) return;
         () async {
-          RtcLink? link;
+          PeerLink? link;
           try {
-            link = await RtcLink.create(iceServers: iceServers());
+            link = await _createLink(iceServers: iceServers());
             final answerSdp = await link.answer(message["offer"] as String);
             await closer.send({"answer": answerSdp});
             await _establish(
@@ -656,7 +666,7 @@ class SyncPairing {
     String token = "",
     String? knownDeviceId,
   }) async {
-    final link = await RtcLink.create(iceServers: iceServers());
+    final link = await _createLink(iceServers: iceServers());
     try {
       final sdp = await link.offer();
       final signaler = LanSignaler(client: _client);
@@ -705,7 +715,7 @@ class SyncPairing {
       role: weOffer ? "i" : "j",
     );
     try {
-      final link = await RtcLink.create(iceServers: iceServers());
+      final link = await _createLink(iceServers: iceServers());
       try {
         if (weOffer) {
           await closer.send({"offer": await link.offer()});
@@ -934,7 +944,7 @@ class SyncPairing {
 class _PendingManual {
   _PendingManual({required this.link, required this.psk});
 
-  final RtcLink link;
+  final PeerLink link;
   final String psk;
   String get pskTag => RelaySignaler.roomFor(psk);
 }

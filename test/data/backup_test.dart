@@ -1,12 +1,12 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/core/config.dart";
+import "package:entoli_core/model/config.dart";
 import "package:agent_chat/data/backup.dart";
-import "package:agent_chat/data/local/tree_ops.dart";
+import "package:entoli_shell/entoli_shell.dart" show deleteTree;
 
 import "../harness.dart";
 
@@ -102,7 +102,7 @@ void main() {
     final backup = await roundTrip();
     Directory(config.dataDir).deleteSync(recursive: true);
     Directory(config.dataDir).createSync(recursive: true);
-    await restoreBackup(config, backup);
+    await restoreBackup(config, backup, deleteTree: deleteTree);
 
     expect(File(config.settingsFile).readAsStringSync(), '{"appTheme":"dark"}');
     expect(
@@ -142,7 +142,7 @@ void main() {
       final backup = await roundTrip();
       Directory(config.dataDir).deleteSync(recursive: true);
       Directory(config.dataDir).createSync(recursive: true);
-      await restoreBackup(config, backup);
+      await restoreBackup(config, backup, deleteTree: deleteTree);
 
       expect(Link("$ws/keys").targetSync(), outside);
       expect(Link("$ws/gone").targetSync(), "$outside/missing");
@@ -155,7 +155,7 @@ void main() {
   );
 
   test("the manifest is not restored as a file of its own", () async {
-    await restoreBackup(config, await roundTrip());
+    await restoreBackup(config, await roundTrip(), deleteTree: deleteTree);
 
     expect(File("${config.dataDir}/$manifestName").existsSync(), isFalse);
   });
@@ -165,7 +165,7 @@ void main() {
     final backup = await roundTrip();
     write("projects/default/chats/later/state.json", "{}");
 
-    await restoreBackup(config, backup);
+    await restoreBackup(config, backup, deleteTree: deleteTree);
 
     expect(Directory(config.chatDir("kept")).existsSync(), isTrue);
     expect(Directory(config.chatDir("later")).existsSync(), isFalse);
@@ -181,7 +181,10 @@ void main() {
       // The file goes between the confirm and the restore reading it.
       File(backup.path).deleteSync();
 
-      await expectLater(restoreBackup(config, backup), throwsA(anything));
+      await expectLater(
+        restoreBackup(config, backup, deleteTree: deleteTree),
+        throwsA(anything),
+      );
 
       expect(Directory(config.chatDir("later")).existsSync(), isTrue);
       expect(Directory(restoringDirOf(config.dataDir)).existsSync(), isFalse);
@@ -195,8 +198,8 @@ void main() {
       final dataDir = config.dataDir;
       Directory(dataDir).renameSync(replacedDirOf(dataDir));
 
-      await recoverRestore(dataDir);
-      final loaded = await AppConfig.load(dataDir);
+      await recoverRestore(dataDir, deleteTree: deleteTree);
+      final loaded = await AppConfig.load(const LocalFileSystem(), dataDir);
 
       expect(Directory(loaded.chatDir("kept")).existsSync(), isTrue);
       expect(Directory(replacedDirOf(dataDir)).existsSync(), isFalse);
@@ -206,10 +209,10 @@ void main() {
   test("the directory a restore replaced goes at the next launch", () async {
     final backup = await roundTrip();
 
-    await restoreBackup(config, backup);
+    await restoreBackup(config, backup, deleteTree: deleteTree);
     expect(Directory(replacedDirOf(config.dataDir)).existsSync(), isTrue);
 
-    await recoverRestore(config.dataDir);
+    await recoverRestore(config.dataDir, deleteTree: deleteTree);
     await settleDeletes(replacedDirOf(config.dataDir));
 
     expect(Directory(replacedDirOf(config.dataDir)).existsSync(), isFalse);
@@ -231,7 +234,7 @@ void main() {
     File(path).writeAsBytesSync(ZipEncoder().encodeBytes(archive));
 
     await expectLater(
-      restoreBackup(config, await opened(path)),
+      restoreBackup(config, await opened(path), deleteTree: deleteTree),
       throwsA(anything),
     );
 
@@ -247,7 +250,7 @@ void main() {
       final backup = await roundTrip();
       expect(backup.members, isNot(contains("instruction_files.json")));
 
-      await restoreBackup(config, backup);
+      await restoreBackup(config, backup, deleteTree: deleteTree);
 
       expect(
         File(config.linkedInstructionsFile).readAsStringSync(),
@@ -261,7 +264,7 @@ void main() {
     () async {
       final backup = await roundTrip();
 
-      await restoreBackup(config, backup);
+      await restoreBackup(config, backup, deleteTree: deleteTree);
 
       expect(Directory(config.chatsDir()).existsSync(), isTrue);
       expect(Directory(config.projectWorkspaceDir()).existsSync(), isTrue);
@@ -330,11 +333,6 @@ void main() {
       addTearDown(() => Process.runSync("chmod", ["-R", "u+rwX", rootfs.path]));
 
       final backup = await roundTrip();
-      Future<void> deleteTree(String path) async {
-        final err = await removeTree(path);
-        if (err != null) throw Exception("could not delete $path: $err");
-      }
-
       await restoreBackup(config, backup, deleteTree: deleteTree);
 
       expect(rootfs.existsSync(), isFalse);
@@ -359,7 +357,7 @@ void main() {
     final inside = "${config.projectWorkspaceDir()}/backup.zip";
     await File(await written()).copy(inside);
 
-    await restoreBackup(config, await opened(inside));
+    await restoreBackup(config, await opened(inside), deleteTree: deleteTree);
 
     expect(
       File(
@@ -418,6 +416,7 @@ void main() {
       await restoreBackup(
         config,
         await opened(fileOf(ZipEncoder().encodeBytes(archive))),
+        deleteTree: deleteTree,
       );
 
       expect(File("${config.dataDir}/escaped.json").existsSync(), isTrue);

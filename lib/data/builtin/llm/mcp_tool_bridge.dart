@@ -2,9 +2,10 @@ import "dart:async";
 import "dart:convert";
 import "dart:io";
 
-import "package:entoli_chat/core/log.dart";
-import "../../../core/random_token.dart";
-import "llm_client.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+
+import "../../random_token.dart";
 
 /// A tool call a harness made over [McpToolBridge], held open until Entoli's
 /// own loop has run the tool and [answer] hands back what it said.

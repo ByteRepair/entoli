@@ -1,37 +1,7 @@
 import "dart:async";
 import "dart:isolate";
 
-/// A worker running a model: messages in, messages out, [close] to stop it.
-/// Messages are lists led by a tag — `["speak", generation, text]` — because
-/// a list crosses an isolate port and a process boundary alike, where a
-/// record crosses only the first.
-abstract interface class Worker {
-  /// What the worker said, in order, from the first word on. An error here is
-  /// the worker ended under it rather than in its own words — the model
-  /// host's process gone (`ModelProcessGone`), or the worker never started there
-  /// ([WorkerFailed]) — and the stream closes after it. In this process
-  /// neither reaches here: there is no second process to lose, and a worker
-  /// that cannot start fails its `spawn`.
-  Stream<Object?> get messages;
-
-  void send(Object? message);
-
-  /// Asks the worker to free its models and stop.
-  void close();
-}
-
-/// A worker's entry point, by a name the model host can be asked for: a
-/// function cannot cross a process, a name can. [entry] is a top-level
-/// function, which `Isolate.spawn` requires.
-class WorkerKind {
-  const WorkerKind(this.name, this.entry);
-
-  final String name;
-
-  /// Sends its own port first, then answers messages until `["close"]`, and
-  /// says `["closed"]` once its native handles are freed.
-  final void Function((SendPort, List<Object?>)) entry;
-}
+import "package:entoli_core/model/model_process.dart";
 
 /// A worker in an isolate of this process.
 class IsolateWorker implements Worker {
@@ -83,15 +53,4 @@ class IsolateWorker implements Worker {
     _to.send(["close"]);
     unawaited(_out.close());
   }
-}
-
-/// A worker the model host could not start, with the host's reason: the
-/// remote counterpart of a `spawn` in this process that threw.
-class WorkerFailed implements Exception {
-  const WorkerFailed(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
 }

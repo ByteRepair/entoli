@@ -1,4 +1,4 @@
-import "package:entoli_chat/domain/sync/lan_signaling.dart";
+import "package:entoli_core/model/sync/lan_signaling.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {

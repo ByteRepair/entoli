@@ -1,9 +1,9 @@
 import "dart:async";
 
-import "package:file_selector/file_selector.dart" show XFile;
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/builtin_project.dart";
+import "package:entoli_core/model/file_picker.dart";
 
-import "package:entoli_chat/domain/builtin_project.dart";
 import "../providers.dart";
 
 /// Whether setup or an import is running, what went wrong with the last, and
@@ -37,7 +37,7 @@ class ByteRepairRun extends Notifier<SetupRun> {
   });
 
   /// Puts [file], a local ESBMC binary, where setup would have.
-  Future<void> importEsbmc(XFile file) => _run((_) async {
+  Future<void> importEsbmc(PickedFile file) => _run((_) async {
     final error = await ref.read(byteRepairStoreProvider).importEsbmc(file);
     if (error == null && ref.mounted) {
       ref.invalidate(byteRepairToolVersionsProvider);

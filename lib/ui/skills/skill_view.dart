@@ -2,14 +2,14 @@ import "dart:typed_data";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/view/chat/widgets/markdown_text.dart";
+import "package:entoli_core/model/frontmatter.dart";
+import "package:entoli_core/model/formatting.dart" show formatSize;
+import "package:entoli_core/view/widgets/page_bar.dart";
 
-import "package:entoli_chat/ui/chat/widgets/markdown_text.dart";
 import "../../app/prompts/skill_files.dart";
-import "package:entoli_chat/domain/frontmatter.dart";
 import "../../providers.dart";
-import "package:entoli_chat/core/formatting.dart" show formatSize;
 import "../widgets/install_bar.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
 
 /// A full page showing one skill the library offers: its description, the
 /// SKILL.md body rendered, its files, and — where its frontmatter does not

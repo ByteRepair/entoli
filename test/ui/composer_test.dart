@@ -2,18 +2,18 @@ import "package:flutter/foundation.dart" show ValueListenable;
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/app/composer.dart"
     show ComposerBinding, ComposerModel;
-import "package:agent_chat/providers.dart" show attachmentPickerProvider;
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/quote.dart";
-import "package:entoli_chat/domain/room/roster.dart" show isCommand;
+import "package:agent_chat/providers.dart" show filePickerProvider;
+import "package:entoli_core/model/attachment_picker.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/quote.dart";
+import "package:entoli_core/model/room/roster.dart" show isCommand;
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/composer_controller.dart";
 import "package:agent_chat/ui/chat/widgets/composer_embed.dart";
-import "package:entoli_chat/ui/widgets/attachment_chip.dart";
+import "package:entoli_core/view/widgets/attachment_chip.dart";
 
 import "../data/builtin/builtin_fakes.dart";
 import "../fakes.dart";
@@ -31,7 +31,8 @@ void main() {
     app = TestApp.create();
     model = ComposerModel(
       controller,
-      pick: (kind) => app.container.read(attachmentPickerProvider).pick(kind),
+      pick: (kind) =>
+          pickAttachments(app.container.read(filePickerProvider), kind),
     );
     controller.clear();
     queued.clear();
@@ -549,14 +550,14 @@ void main() {
     await insertVia(tester, "Image");
     await insertVia(tester, "File");
 
-    expect(app.picker.picks, [AttachmentKind.image, AttachmentKind.file]);
+    expect(app.chooser.asked, [imageFileTypes, null]);
     expect(controller.text, isEmpty);
   });
 
   testWidgets(
     "what was chosen shows above the field and goes out with the message",
     (tester) async {
-      app.picker.scripted = [testAttachment("notes.txt")];
+      app.chooser.scriptedAttachments = [testAttachment("notes.txt")];
       await pump(tester);
       await insertVia(tester, "File");
 
@@ -573,7 +574,7 @@ void main() {
   );
 
   testWidgets("an image shows itself rather than its name", (tester) async {
-    app.picker.scripted = [
+    app.chooser.scriptedAttachments = [
       testAttachment("shot.png", mimeType: "image/png", bytes: onePixelPng),
     ];
     await pump(tester);
@@ -584,7 +585,7 @@ void main() {
   });
 
   testWidgets("the X on an attachment drops it", (tester) async {
-    app.picker.scripted = [
+    app.chooser.scriptedAttachments = [
       testAttachment("notes.txt"),
       testAttachment("other.txt"),
     ];
@@ -640,7 +641,7 @@ void main() {
   testWidgets(
     "an attachment on its own is worth sending, nothing at all is not",
     (tester) async {
-      app.picker.scripted = [testAttachment("notes.txt")];
+      app.chooser.scriptedAttachments = [testAttachment("notes.txt")];
       await pump(tester);
 
       // The button is dead here, so this taps a live pixel that does nothing.
@@ -822,7 +823,7 @@ void main() {
     testWidgets(
       "stays down for a file that was attached, and for a menu opened from +",
       (tester) async {
-        app.picker.scripted = [testAttachment("notes.txt")];
+        app.chooser.scriptedAttachments = [testAttachment("notes.txt")];
         await pump(tester);
         await insertVia(tester, "File");
 

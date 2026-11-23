@@ -55,7 +55,7 @@ the still mode — a hushed microphone repainted sixty times a second to draw th
 same frame is a wake lock being spent on nothing.
 
 **The two voices are the one place the scheme is left behind.** `heardColour`
-and `spokenColour` in `ui/theme.dart` are flat indigo and teal rather than
+and `spokenColour` in `view/theme.dart` are flat indigo and teal rather than
 `colorScheme.primary` and `tertiary`: a scheme's tones are picked to be read
 *on* a surface, so the dark primary is nearly white and makes a pale smudge of
 something meant to be lit, and an indigo seed resolves `tertiary` to a rose
@@ -245,7 +245,7 @@ whatever is on screen, a running session included, and the two are not
 necessarily on the same key: over a chat it is `openVoice(X)`, and the gesture's
 is null. Two keys are two controllers, and before this they were two
 `VoiceSession`s — two microphones and two worker isolates, where
-`packages/entoli_chat/lib/domain/voice.dart` says there is one of each.
+`packages/entoli_core/lib/model/voice.dart` says there is one of each.
 `BackgroundWork.listening` is a flag rather than a count, so the first of them
 to end released the foreground hold the other was still relying on. It predates
 deferring the chat; two keys were reachable before that too.

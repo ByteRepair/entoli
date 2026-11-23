@@ -13,7 +13,8 @@
 // contract the host shell keeps.
 //
 // Built by tool/ios/ish/build.sh alongside the iSH core, and linked into
-// the same XCFramework. The Dart side is lib/data/local/ish_ffi.dart.
+// the same XCFramework. The Dart side is
+// packages/entoli_shell/lib/ish_ffi.dart.
 #ifndef ISH_BRIDGE_H
 #define ISH_BRIDGE_H
 

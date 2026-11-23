@@ -10,22 +10,22 @@ import "package:flutter_test/flutter_test.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "package:agent_chat/app/chat_controller.dart" show TurnDriver;
-import "package:entoli_chat/app/transcript/message.dart" show MessageMoment;
-import "package:entoli_chat/app/transcript/transcript.dart" show MessageActions;
-import "package:entoli_chat/domain/agent_face.dart";
-import "package:entoli_chat/domain/ask.dart";
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/todo.dart";
-import "package:entoli_chat/domain/quote.dart";
-import "package:entoli_chat/domain/reaction.dart";
-import "package:entoli_chat/domain/theme_colour.dart";
-import "package:entoli_chat/ui/theme.dart";
-import "package:entoli_chat/ui/chat/activity/card.dart"
+import "package:entoli_core/transcript/message.dart" show MessageMoment;
+import "package:entoli_core/transcript/transcript.dart" show MessageActions;
+import "package:entoli_core/model/agent_face.dart";
+import "package:entoli_core/model/ask.dart";
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/todo.dart";
+import "package:entoli_core/model/quote.dart";
+import "package:entoli_core/model/reaction.dart";
+import "package:entoli_core/model/theme_colour.dart";
+import "package:entoli_core/view/theme.dart";
+import "package:entoli_core/view/chat/activity/card.dart"
     show ActivitySource, LiveMessage;
-import "package:entoli_chat/ui/chat/activity/label.dart" show ActivityGroup;
-import "package:entoli_chat/ui/chat/widgets/message_bubble.dart";
-import "package:entoli_chat/ui/chat/widgets/message_text.dart";
+import "package:entoli_core/view/chat/activity/label.dart" show ActivityGroup;
+import "package:entoli_core/view/chat/widgets/message_bubble.dart";
+import "package:entoli_core/view/chat/widgets/message_text.dart";
 
 import "../fakes.dart";
 import "../harness.dart";

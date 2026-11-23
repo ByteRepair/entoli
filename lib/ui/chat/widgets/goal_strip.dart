@@ -1,14 +1,13 @@
 import "package:flutter/material.dart";
-
-import "package:entoli_chat/app/transcript/transcript.dart" show goalGlyph;
-import "package:entoli_chat/domain/goal.dart";
-import "package:entoli_chat/ui/widgets/action_icon.dart";
-import "package:entoli_chat/ui/chat/activity/glyphs.dart";
+import "package:entoli_core/transcript/transcript.dart" show goalGlyph;
+import "package:entoli_core/model/goal.dart";
+import "package:entoli_core/view/widgets/action_icon.dart";
+import "package:entoli_core/view/chat/activity/glyphs.dart";
 
 /// The chat's goal, one row above the composer while there is one: what it
 /// is, where it stands, and the buttons `/goal pause`, `resume` and `clear`
 /// are — pressed, each is sent as that command, so the composer and the row
-/// are one route. See "Goals" in `packages/entoli_chat/lib/domain/AGENTS.md`.
+/// are one route. See "Goals" in `packages/entoli_core/lib/model/AGENTS.md`.
 class GoalStrip extends StatelessWidget {
   const GoalStrip({super.key, required this.goal, required this.onCommand});
 

@@ -10,9 +10,9 @@ flutter pub get ${CI:+--enforce-lockfile}
 # Build_runner before the generators: they import the domain (gen_bundled_skills
 # reaches models.dart through skill_validate), whose freezed and json parts do
 # not exist until this has run — a cold checkout cannot compile them first.
-(cd packages/entoli_chat && dart run build_runner build)
-# The menu bar's protocol, both ends: packages/entoli_menu.
-dart run pigeon --input pigeons/menu.dart
+(cd packages/entoli_core && dart run build_runner build)
+# The menu bar's protocol, both ends.
+(cd packages/entoli_menu && dart run pigeon --input pigeons/menu.dart)
 dart run tool/gen_bundled_skills.dart
 dart run tool/gen_prompts.dart
 dart run tool/gen_privacy_policy.dart

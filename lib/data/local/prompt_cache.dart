@@ -5,9 +5,9 @@ import "dart:io";
 import "package:crypto/crypto.dart";
 import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:path/path.dart" as p;
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
 
-import "package:entoli_chat/core/log.dart";
-import "../builtin/llm/llm_client.dart";
 import "local_instance.dart";
 
 /// A loaded model's prompt state, kept on disk so reopening a chat restores it

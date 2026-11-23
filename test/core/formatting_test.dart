@@ -1,6 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/core/formatting.dart";
+import "package:entoli_core/model/formatting.dart";
 
 void main() {
   test("a cut never leaves half a surrogate pair", () {

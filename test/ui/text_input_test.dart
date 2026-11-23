@@ -1,8 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/ui/widgets/text_input.dart";
+import "package:entoli_core/view/widgets/text_input.dart";
 
 void main() {
   late TextEditingController controller;

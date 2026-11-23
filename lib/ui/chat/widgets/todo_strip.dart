@@ -1,8 +1,7 @@
 import "package:flutter/material.dart";
-
-import "package:entoli_chat/app/transcript/activities/todo.dart" show TodoWords;
-import "package:entoli_chat/domain/todo.dart";
-import "package:entoli_chat/ui/chat/widgets/plan_view.dart" show taskLook;
+import "package:entoli_core/transcript/activities/todo.dart" show TodoWords;
+import "package:entoli_core/model/todo.dart";
+import "package:entoli_core/view/chat/widgets/plan_view.dart" show taskLook;
 
 /// The latest turn's task list, one row above the composer while it has one:
 /// how far it is and the task under way, opening to every task. See "The

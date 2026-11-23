@@ -1,17 +1,17 @@
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/data/local/file_chat_store.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/builtin_project.dart";
-import "package:entoli_chat/domain/chat_intents.dart";
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/chat_repository.dart";
-import "package:entoli_chat/domain/intent_action.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/turn_sender.dart";
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/store/file_chat_store.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/builtin_project.dart";
+import "package:entoli_core/model/chat_intents.dart";
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/chat_repository.dart";
+import "package:entoli_core/model/intent_action.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/turn_sender.dart";
 
 import "../fakes.dart";
 
@@ -70,7 +70,7 @@ void main() {
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync("chat_intents_test_");
-    config = AppConfig.forDirectory(tmp.path);
+    config = AppConfig.forDirectory(const LocalFileSystem(), tmp.path);
     repo = ChatRepository(
       FileChatStore(config),
       FakeBackend(),

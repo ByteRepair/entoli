@@ -1,16 +1,16 @@
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/builtin/templates.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/profile.dart";
+import "package:entoli_core/agent/builtin_agent.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/templates.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/profile.dart";
+import "package:entoli_core/agent/builtin_options.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
-import "package:agent_chat/data/builtin/builtin_options.dart";
 
 void main() {
   test(
@@ -29,6 +29,7 @@ void main() {
         ],
       ]);
       final events = await BuiltinAgent(
+        fs: const LocalFileSystem(),
         session: BuiltinSession(),
         client: client,
         shell: FakeShell((_) => ok("")),

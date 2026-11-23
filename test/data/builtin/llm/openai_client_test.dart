@@ -4,11 +4,10 @@ import "dart:typed_data";
 import "package:flutter_test/flutter_test.dart";
 import "package:http/http.dart" as http;
 import "package:http/testing.dart";
-
-import "package:agent_chat/data/builtin/llm/gemini_client.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/builtin/llm/openai_client.dart";
-import "package:agent_chat/data/builtin/llm/openai_platform_client.dart";
+import "package:entoli_core/agent/llm/gemini_client.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/openai_client.dart";
+import "package:entoli_core/agent/llm/openai_platform_client.dart";
 
 import "sse.dart";
 

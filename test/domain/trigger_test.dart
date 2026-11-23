@@ -1,7 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/temp_chat_ttl.dart";
-import "package:entoli_chat/domain/trigger.dart";
+import "package:entoli_core/model/temp_chat_ttl.dart";
+import "package:entoli_core/model/trigger.dart";
 
 void main() {
   group("schedule nextOccurrence", () {

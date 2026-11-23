@@ -1,8 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/settings/keys.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/settings/keys.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
 

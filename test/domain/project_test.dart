@@ -1,7 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/builtin_project.dart";
-import "package:entoli_chat/domain/project.dart";
+import "package:entoli_core/model/builtin_project.dart";
+import "package:entoli_core/model/project.dart";
 
 void main() {
   test(

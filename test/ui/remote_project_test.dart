@@ -1,14 +1,13 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/sync/peers.dart" show PeerState, PeerStatus;
 import "package:agent_chat/data/sync/sync_hub.dart"
     show RemoteChatEntry, RemoteProject;
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart" show ProjectRef;
-import "package:entoli_chat/domain/project_settings.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart" show ProjectRef;
+import "package:entoli_core/model/project_settings.dart";
+import "package:entoli_core/model/prompt_library.dart";
 import "package:agent_chat/app/remote_projects.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";

@@ -1,9 +1,9 @@
 import "dart:async";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/speech_text.dart";
+import "package:entoli_core/model/voice.dart";
 
-import "package:entoli_chat/domain/speech_text.dart";
-import "package:entoli_chat/domain/voice.dart";
 import "../providers.dart";
 
 /// Reading one thing out loud: a message, from the button under it, or the

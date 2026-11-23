@@ -1,13 +1,12 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/ui/chat/chat_settings_page.dart";
 import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry;
-import "package:entoli_chat/domain/ask.dart";
-import "package:entoli_chat/domain/chat_meta.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/room/room_state.dart";
+import "package:entoli_core/model/ask.dart";
+import "package:entoli_core/model/chat_meta.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/room/room_state.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/view_only_bar.dart";

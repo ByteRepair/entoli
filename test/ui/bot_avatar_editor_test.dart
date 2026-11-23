@@ -1,11 +1,11 @@
 import "dart:convert";
 import "dart:io";
 
-import "package:entoli_chat/domain/bot_avatar/pose.dart";
-import "package:entoli_chat/domain/bot_avatar/spec.dart";
+import "package:entoli_core/model/bot_avatar/pose.dart";
+import "package:entoli_core/model/bot_avatar/spec.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/bot_avatar/bot_avatar_editor.dart";
-import "package:entoli_chat/ui/bot_avatar/bot_avatar_view.dart";
+import "package:entoli_core/view/bot_avatar/bot_avatar_view.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 

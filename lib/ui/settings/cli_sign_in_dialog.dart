@@ -3,9 +3,9 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/llm_provider.dart";
 
 import "../../app/settings/cli_account.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
 import "../../providers.dart";
 
 /// [CliSignInDialog] over an account of [config]'s own, which goes with the

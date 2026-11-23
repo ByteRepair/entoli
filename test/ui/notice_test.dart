@@ -1,4 +1,4 @@
-import "package:entoli_chat/ui/widgets/notice.dart";
+import "package:entoli_core/view/widgets/notice.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 

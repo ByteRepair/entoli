@@ -1,10 +1,9 @@
 import "dart:async";
 
 import "package:flutter_test/flutter_test.dart";
-
-import "package:agent_chat/data/builtin/llm/gated_client.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/builtin/llm/rate_limit_gate.dart";
+import "package:entoli_core/agent/llm/gated_client.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/rate_limit_gate.dart";
 
 import "../builtin_fakes.dart";
 import "../../../harness.dart";

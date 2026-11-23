@@ -1,11 +1,9 @@
 import "dart:async";
 
 import "package:flutter/services.dart";
-
-import "package:entoli_chat/core/log.dart";
-import "../builtin/llm/llm_client.dart";
-import "../model_host/host_connection.dart";
-import "../model_host/model_process.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/model_process.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
 
 /// One generation over a channel whose native half answers in frames —
 /// `text`, `reasoning`, `toolCall`, `done`, `error`, each carrying the id it

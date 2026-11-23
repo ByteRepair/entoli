@@ -1,7 +1,7 @@
 import "package:flutter/material.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
 
 import "add_button_row.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
 import "editable_row.dart";
 import "section_header.dart";
 

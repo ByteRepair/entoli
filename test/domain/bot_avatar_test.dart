@@ -1,13 +1,13 @@
 import "dart:convert";
 import "dart:io";
 
-import "package:entoli_chat/domain/bot_avatar/definition.dart";
-import "package:entoli_chat/domain/bot_avatar/frame.dart";
-import "package:entoli_chat/domain/bot_avatar/import.dart";
-import "package:entoli_chat/domain/bot_avatar/path.dart";
-import "package:entoli_chat/domain/bot_avatar/pose.dart";
-import "package:entoli_chat/domain/bot_avatar/spec.dart";
-import "package:entoli_chat/domain/bot_avatar/volume.dart";
+import "package:entoli_core/model/bot_avatar/definition.dart";
+import "package:entoli_core/model/bot_avatar/frame.dart";
+import "package:entoli_core/model/bot_avatar/import.dart";
+import "package:entoli_core/model/bot_avatar/path.dart";
+import "package:entoli_core/model/bot_avatar/pose.dart";
+import "package:entoli_core/model/bot_avatar/spec.dart";
+import "package:entoli_core/model/bot_avatar/volume.dart";
 import "package:flutter_test/flutter_test.dart";
 
 Map<String, Object?> _box({String path = "M20 20 H80 V80 H20 Z"}) => {

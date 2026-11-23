@@ -1,0 +1,725 @@
+import "models.dart"
+    show
+        Message,
+        MessageParts,
+        MessageRole,
+        PermissionDecision,
+        PermissionTier,
+        ToolApproval;
+import "safe_command.dart" show SegmentReach, profileSegment, readsOnly;
+import "shell.dart" show bashToolName, pathInside;
+import "shell_command_analysis.dart" show ShellCommandAnalysis, plainCommand;
+import "web_search.dart" show webfetchToolName;
+export "models.dart" show PermissionDecision, PermissionSource, PermissionTier;
+
+/// The directory grant's tools, named here because the banner and the
+/// repository's answer to it read the name.
+const addDirectoryName = "add_directory";
+const writableDirectoriesName = "writable_directories";
+
+/// How a chat handles a command before it runs.
+enum ApproveMode {
+  /// Every command waits for the user to allow or deny it.
+  ask,
+
+  /// A classifier model decides: safe commands run, dangerous ones are denied,
+  /// and anything uncertain is escalated to the user. Falls back to [ask]
+  /// when no classifier model is configured.
+  auto,
+
+  /// Every command runs without asking.
+  never,
+}
+
+/// Human-readable labels for each [ApproveMode], shared by the app and chat
+/// settings pages so they always agree. Each names the whole posture, not
+/// just the mechanism: what runs unasked, what waits, and what can be refused
+/// without the user ever seeing it.
+const approveModeLabels = {
+  ApproveMode.ask: "Ask before every command",
+  ApproveMode.auto: "Auto: run what the classifier rates safe, ask on the rest",
+  ApproveMode.never: "Run everything without asking (DANGEROUS)",
+};
+
+/// Classifies a tool call as safe, uncertain, or dangerous. The one
+/// implementation reaches a provider; [NoClassifier] is the safe fallback
+/// that asks for everything, used when no classifier model is configured.
+///
+/// [findings] are what the command parse could not answer for in a `bash`
+/// call — a redirect through a variable, an unterminated quote — handed over
+/// so the classifier judges the whole command knowing why it was asked.
+/// [request] is what the user asked the turn for, so a call is judged
+/// against the work it serves; null where the turn has nothing to say.
+abstract class PermissionClassifier {
+  Future<ClassifierVerdict> classify(
+    String toolName,
+    String argumentsJson, {
+    required String workspace,
+    List<String> alsoWritable,
+    List<String> findings,
+    ClassifierRequest? request,
+  });
+}
+
+/// What the user asked a turn for, in the words they typed: the message the
+/// turn opened on ([said]; a sub-agent's is its task), their messages before
+/// it, the reply it answers, and what they steered in while it ran. Read off
+/// the log rather than the session, where a `/skill` is expanded and a
+/// file's bytes inlined.
+///
+/// [answering] is the one piece of the agent's prose the classifier reads:
+/// the user read it and answered it, and a "do this" says nothing without it.
+/// Every text is trimmed and a blank one dropped here, so a part's presence
+/// past this point means it has something to say.
+class Asked {
+  Asked({
+    String? said,
+    Iterable<String> earlier = const [],
+    String? answering,
+    Iterable<String> steered = const [],
+  }) : said = _kept(said),
+       earlier = earlier.map(_kept).nonNulls.toList(),
+       answering = _kept(answering),
+       steered = steered.map(_kept).nonNulls.toList();
+
+  /// From [since], the log after the last compaction, up to [said]: a
+  /// resumed turn's [said] is in it, a new turn's is not yet.
+  factory Asked.fromLog(Iterable<Message> since, Message? said) {
+    final before = since.takeWhile((m) => m.id != said?.id).toList();
+    return Asked(
+      said: said?.plainText,
+      earlier: [
+        for (final m in before)
+          if (m.role == MessageRole.user) m.plainText,
+      ],
+      answering: before.reversed
+          .where((m) => m.role == MessageRole.assistant)
+          .firstOrNull
+          ?.plainText,
+    );
+  }
+
+  final String? said;
+  final List<String> earlier;
+  final String? answering;
+  final List<String> steered;
+
+  Asked steer(String text) => Asked(
+    said: said,
+    earlier: earlier,
+    answering: answering,
+    steered: [...steered, text],
+  );
+
+  bool get isEmpty =>
+      said == null && answering == null && earlier.isEmpty && steered.isEmpty;
+
+  static String? _kept(String? text) {
+    final trimmed = text?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+}
+
+/// What the classifier reads beside a call: what was [asked], the chat's
+/// active goal, the plan's task under way, and the calls the agent made
+/// before this one, their arguments and what the sandbox refused them. Tool
+/// output is left out, as Claude Code's classifier leaves it, being where
+/// injected text arrives.
+/// Data the classifier weighs, never instructions it takes — see the rubric
+/// in `LlmClassifier`. Message content, so it is never put in a log line.
+class ClassifierRequest {
+  ClassifierRequest({
+    Asked? asked,
+    String? goal,
+    String? task,
+    this.calls = const [],
+  }) : asked = asked ?? Asked(),
+       goal = Asked._kept(goal),
+       task = Asked._kept(task);
+
+  /// Null where there is nothing to say.
+  static ClassifierRequest? of({
+    Asked? asked,
+    String? goal,
+    String? task,
+    List<ClassifierCall> calls = const [],
+  }) {
+    final request = ClassifierRequest(
+      asked: asked,
+      goal: goal,
+      task: task,
+      calls: calls,
+    );
+    return request.asked.isEmpty &&
+            request.goal == null &&
+            request.task == null &&
+            calls.isEmpty
+        ? null
+        : request;
+  }
+
+  final Asked asked;
+  final String? goal;
+  final String? task;
+
+  /// Oldest first.
+  final List<ClassifierCall> calls;
+}
+
+/// One call the agent made, as the classifier reads it: never its output.
+/// [refused] is what the sandbox refused it, the result's `violations` —
+/// paths the sandbox reported, not text the command printed — so the
+/// classifier tells a command that hit the sandbox's wall from one that
+/// never tried it.
+typedef ClassifierCall = ({
+  String tool,
+  String argumentsJson,
+  List<String> refused,
+});
+
+/// What the classifier answers about a call. [sandbox] is for a call asking
+/// to leave the sandbox that the sandbox can run: refused, with the agent
+/// told to run it sandboxed. Only the classifier says so; a [deny] of such a
+/// call is a deny.
+enum ClassifierVerdict {
+  allow,
+  ask,
+  deny,
+  sandbox;
+
+  /// What the outcome records: staying in the sandbox is a refusal of the
+  /// call as asked.
+  PermissionDecision get decision => switch (this) {
+    allow => PermissionDecision.allow,
+    ask => PermissionDecision.ask,
+    deny || sandbox => PermissionDecision.deny,
+  };
+}
+
+/// Always asks. What auto mode falls back to when no classifier model is
+/// configured: every command escalates to the banner, which is the same as
+/// [ApproveMode.ask].
+class NoClassifier implements PermissionClassifier {
+  const NoClassifier();
+
+  @override
+  Future<ClassifierVerdict> classify(
+    String toolName,
+    String argumentsJson, {
+    required String workspace,
+    List<String> alsoWritable = const [],
+    List<String> findings = const [],
+    ClassifierRequest? request,
+  }) async => ClassifierVerdict.ask;
+}
+
+/// One permission rule, written at the app, project or chat tier: for [tool]
+/// calls matching [pattern], the decision to take. Rules are consulted before
+/// the classifier and the banner in every mode, so a rule is a standing
+/// decision the user made in advance — the same answer a banner decision
+/// records, applied ahead of time.
+class PermissionRule {
+  const PermissionRule({
+    required this.tool,
+    required this.pattern,
+    this.decision,
+    this.unconfined = false,
+    this.writes = const [],
+    this.origin,
+  });
+
+  /// The tool the rule names: `bash`, `read`, `write`, `edit` or `webfetch`.
+  /// A bare `*` names every tool.
+  final String tool;
+
+  /// What the rule matches on, read per tool:
+  ///
+  /// - `bash`: a glob over one command segment (`git checkout *`). Segments
+  ///   are the top-level pipeline pieces — a compound command must find an
+  ///   allow for every one of them.
+  /// - `read` / `write` / `edit`: a path — an exact file, or a directory the
+  ///   subtree of.
+  /// - `webfetch`: a host name, matching itself and subdomains.
+  final String pattern;
+
+  /// Whether a matching call is asked about. Null where the rule speaks only
+  /// to [sandbox], leaving the asking to the other rules and the mode.
+  final PermissionDecision? decision;
+
+  /// What a matching `bash` command may touch once it runs, whoever decided
+  /// it runs: no Landlock at all, or the turn's grant plus [writes] — for the
+  /// commands this rule matches and no others. Independent of [decision]: an
+  /// allow stops the asking, and the sandbox matters most for exactly the
+  /// runs nobody watches. Other tools ignore both.
+  final bool unconfined;
+  final List<String> writes;
+
+  /// Whether a rule for [tool] can shape the sandbox: only a command runs in
+  /// one.
+  static bool takesSandbox(String tool) => tool == bashToolName || tool == "*";
+
+  /// Whether [unconfined] and [writes] mean anything here: a blocked command
+  /// never runs.
+  bool get setsSandbox =>
+      takesSandbox(tool) && decision != PermissionDecision.deny;
+
+  /// Whether this rule changes nothing — no decision, and no sandbox that
+  /// applies.
+  bool get saysNothing =>
+      decision == null && !(setsSandbox && (unconfined || writes.isNotEmpty));
+
+  /// Which tier carried this rule, stamped by the repository when it
+  /// composes a turn's settings. Not
+  /// persisted — the tier is a fact of the file a rule was read from, not
+  /// of the rule itself — so a rule moved between files is stamped anew
+  /// rather than lying about where it came from. Null on a rule written by
+  /// hand or read back alone.
+  final PermissionTier? origin;
+
+  factory PermissionRule.fromJson(Map<String, dynamic> json) => PermissionRule(
+    tool: json["tool"] as String? ?? "*",
+    pattern: json["pattern"] as String? ?? "",
+    decision: json["decision"] == null
+        ? null
+        : _decision(json["decision"] as String?),
+    unconfined: json["unconfined"] == true,
+    writes: [
+      for (final w in (json["sandboxWrites"] as List<dynamic>? ?? const []))
+        if (w is String) w,
+    ],
+  );
+
+  static PermissionDecision _decision(String? name) =>
+      PermissionDecision.values.asNameMap()[name] ?? PermissionDecision.ask;
+
+  Map<String, dynamic> toJson() => {
+    "tool": tool,
+    "pattern": pattern,
+    if (decision != null) "decision": decision!.name,
+    if (unconfined) "unconfined": true,
+    if (writes.isNotEmpty) "sandboxWrites": writes,
+  };
+
+  /// This rule with [origin] stamped — the one field a rule gains after it
+  /// is read, the tier the turn's composition found it in. Not persisted;
+  /// a rule moved between files is stamped anew.
+  PermissionRule copyWith({PermissionTier? origin}) => PermissionRule(
+    tool: tool,
+    pattern: pattern,
+    decision: decision,
+    unconfined: unconfined,
+    writes: writes,
+    origin: origin ?? this.origin,
+  );
+
+  /// This rule with [resolve] applied wherever it names a path: the sandbox
+  /// [writes], and the pattern of a file tool. A command's pattern is left
+  /// alone — it is matched against the command as the model wrote it.
+  PermissionRule withPaths(String Function(String path) resolve) =>
+      PermissionRule(
+        tool: tool,
+        pattern: switch (tool) {
+          "read" || "write" || "edit" => resolve(pattern),
+          _ => pattern,
+        },
+        decision: decision,
+        unconfined: unconfined,
+        writes: [for (final w in writes) resolve(w)],
+        origin: origin,
+      );
+
+  /// The same rule whatever tier it was read from: [origin] is not part of it.
+  @override
+  bool operator ==(Object other) =>
+      other is PermissionRule &&
+      other.tool == tool &&
+      other.pattern == pattern &&
+      other.decision == decision &&
+      other.unconfined == unconfined &&
+      other.writes.length == writes.length &&
+      other.writes.toSet().containsAll(writes);
+
+  @override
+  int get hashCode => Object.hash(tool, pattern, decision, unconfined);
+
+  @override
+  String toString() =>
+      "$decision${unconfined ? " unconfined" : ""} $tool $pattern";
+}
+
+/// The sandbox the rules set for one run of [segments]. The confinement is
+/// per run, not per segment, so the run is unconfined only where every
+/// segment that could use the freedom matches an unconfined rule — one that
+/// does not would otherwise leave with it. A segment the parse proves reads
+/// only (`podman ps | head`) has nothing to use it for, so it does not hold
+/// the run confined; one must still match. The extra writes are those of
+/// every rule that matched a segment. Only grants combine here: no rule can
+/// confine more than the turn does, so there is no stricter answer for a
+/// looser one to lose to.
+({bool unconfined, List<String> writes}) rulesSandbox(
+  List<PermissionRule> rules,
+  List<String> segments,
+) {
+  var matched = false;
+  var unconfined = true;
+  final writes = <String>{};
+  for (final segment in segments) {
+    var segmentUnconfined = false;
+    final subject = _subjectOf(segment);
+    if (subject != null) {
+      for (final rule in rules) {
+        if (!rule.setsSandbox || !_ruleMatches(rule, bashToolName, subject)) {
+          continue;
+        }
+        if (rule.unconfined) segmentUnconfined = true;
+        writes.addAll(rule.writes);
+      }
+    }
+    if (segmentUnconfined) {
+      matched = true;
+    } else if (!readsOnly(segment)) {
+      unconfined = false;
+    }
+  }
+  return (unconfined: matched && unconfined, writes: writes.toList());
+}
+
+/// Reads a persisted rule list; entries that do not parse are skipped rather
+/// than failing the file, the way the rest of the settings read.
+List<PermissionRule> permissionRulesFromJson(List<dynamic>? json) {
+  final rules = <PermissionRule>[];
+  for (final entry in json ?? const []) {
+    if (entry is! Map<String, dynamic>) continue;
+    if (entry["tool"] is! String || entry["pattern"] is! String) continue;
+    if ((entry["pattern"] as String).isEmpty) continue;
+    rules.add(PermissionRule.fromJson(entry));
+  }
+  return rules;
+}
+
+List<Map<String, dynamic>> permissionRulesToJson(List<PermissionRule> rules) =>
+    [for (final r in rules) r.toJson()];
+
+/// Whether [text] matches [glob], where `*` spans anything. Anchored at both
+/// ends, and a glob ending in ` *` — the shape every derived rule carries —
+/// also covers the bare prefix: `git status *` is the rule for `git status`.
+/// A command arrives as its words ([_subjectOf]), its operators and
+/// redirects already gone, so nothing here has to know shell syntax.
+/// Compiled once per glob: the patterns are few and repeat for the life of
+/// the process.
+final _globCache = <String, RegExp>{};
+
+bool globMatch(String glob, String text) => _globCache
+    .putIfAbsent(glob, () => _compileGlob(glob))
+    .hasMatch(text.trim());
+
+RegExp _compileGlob(String glob) {
+  const anyArgs = " .*";
+  var body = RegExp.escape(glob.trim()).replaceAll(RegExp(r"(\\\*)+"), ".*");
+  if (body.endsWith(anyArgs)) {
+    body = "${body.substring(0, body.length - anyArgs.length)}(?: .*)?";
+  }
+  return RegExp("^$body\$", caseSensitive: false, dotAll: true);
+}
+
+/// What the rules say about one tool call, deny first — a deny is the user's
+/// explicit no, an ask their "always show me", an allow the standing yes.
+/// Null where no rule matches, which the caller escalates. The tiers arrive
+/// merged, chat first; `PermissionDecision`'s declaration order is the
+/// strength order, so the stronger rule wins whatever tier wrote it.
+///
+/// A `bash` command is matched segment by segment — [segments] are the
+/// pieces a top-level operator splits it into, from the parse — and every
+/// one must find an allow: a compound command whose tail no rule covers is
+/// not allowed by its head. [command] is the whole string, the fallback
+/// where no parse is offered.
+///
+/// The verdict and where it came from, together: a deny carries the tier
+/// that denied; an allow carries the tiers of every rule that covered a
+/// segment — a compound covered from two tiers says both — and a covered
+/// subject that matched more than one tier carries each of them, the
+/// wording naming the set. Null where no rule matches, which the caller
+/// escalates.
+RuleVerdict? rulesDecideTraced(
+  List<PermissionRule> rules,
+  String toolName, {
+  List<String>? segments,
+  String? path,
+  String? url,
+}) {
+  if (toolName == bashToolName && segments != null && segments.isNotEmpty) {
+    PermissionDecision? verdict;
+    final tiers = <PermissionTier>{};
+    for (final segment in segments) {
+      final found = segmentVerdict(rules, segment);
+      final d = found?.decision;
+      if (d == PermissionDecision.deny) {
+        return (
+          decision: PermissionDecision.deny,
+          tiers: found!.tiers.toList(),
+        );
+      }
+      if (d == null) {
+        verdict = PermissionDecision.ask;
+        continue;
+      }
+      verdict = _stronger(verdict, d);
+      tiers.addAll(found!.tiers);
+    }
+    return verdict == PermissionDecision.ask
+        ? null
+        : (decision: verdict!, tiers: tiers.toList());
+  }
+  final subject = switch (toolName) {
+    // A command the parse could not split is matched by no rule: the mode
+    // decides it.
+    bashToolName => null,
+    webfetchToolName => _hostOf(url),
+    _ => path,
+  };
+  if (subject == null) return null;
+  return _strongestTraced(rules, toolName, subject);
+}
+
+/// What [rules] say of one command segment, an ask included: the
+/// deterministic tiers need to know a segment is one the user wants shown.
+RuleVerdict? segmentVerdict(List<PermissionRule> rules, String segment) {
+  final subject = _subjectOf(segment);
+  return subject == null
+      ? null
+      : _strongestTraced(rules, bashToolName, subject);
+}
+
+/// Whether a `bash` rule deciding [decision] could match some part of a
+/// command the rules cannot read — the reason a command with parse findings
+/// is not handed to the classifier where a deny or an ask rule is the
+/// user's: those are the user's word on what never runs or always shows,
+/// and a model's judgement of text the rule never saw does not stand in for
+/// it. [segments] are the parse's, null where it saw none.
+///
+/// A part is unread where its words are not plain text — an expansion, a
+/// substitution — or where its words are plain but a redirect's target is
+/// not: the rule then reads the words alone, and one matching them is a
+/// rule the command's text was hiding from. A command whose every segment
+/// the rules read in full has already met them, and hides nothing.
+bool rulesBlindTo(
+  List<PermissionRule> rules,
+  List<String>? segments,
+  PermissionDecision decision,
+) {
+  final speaking = [
+    for (final rule in rules)
+      if (rule.decision == decision && PermissionRule.takesSandbox(rule.tool))
+        rule,
+  ];
+  if (speaking.isEmpty) return false;
+  if (segments == null || segments.isEmpty) return true;
+  for (final segment in segments) {
+    if (_subjectOf(segment) != null) continue;
+    final words = plainCommand(segment, expandedTargets: true)?.words;
+    if (words == null) return true;
+    if (_strongestTraced(speaking, bashToolName, words.join(" ")) != null) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// The verdict [rules] makes of one subject, with the tiers of the rules
+/// that made it — the strongest decision wins; every rule at that strength
+/// adds its origin, so a subject covered by two tiers says both.
+RuleVerdict? _strongestTraced(
+  List<PermissionRule> rules,
+  String toolName,
+  String subject,
+) {
+  PermissionDecision? verdict;
+  final tiers = <PermissionTier>{};
+  for (final rule in rules) {
+    final decision = rule.decision;
+    if (decision == null) continue;
+    if (rule.tool != "*" && rule.tool != toolName) continue;
+    if (!_ruleMatches(rule, toolName, subject)) continue;
+    if (_stronger(verdict, decision) != verdict) {
+      // A strictly stronger decision clears the weaker tiers: they did not
+      // decide this.
+      tiers.clear();
+      verdict = decision;
+    }
+    if (decision == verdict && rule.origin != null) tiers.add(rule.origin!);
+  }
+  return verdict == null ? null : (decision: verdict, tiers: tiers.toList());
+}
+
+/// The outcome of [rulesDecideTraced]: the decision and the tiers that
+/// spoke for it.
+typedef RuleVerdict = ({
+  PermissionDecision decision,
+  List<PermissionTier> tiers,
+});
+
+PermissionDecision? _stronger(PermissionDecision? a, PermissionDecision b) =>
+    a == null || b.index > a.index ? b : a;
+
+/// What a rule is matched against for one command segment: its words, the
+/// operators already split off by the parse and the redirects left out, so
+/// `podman ps 2>&1` is `podman ps`. Null where the words are not plain text
+/// (an expansion, a substitution): no rule speaks for what cannot be read.
+String? _subjectOf(String segment) => plainCommand(segment)?.words.join(" ");
+
+bool _ruleMatches(PermissionRule rule, String toolName, String subject) =>
+    expandBraces(rule.pattern).any(
+      (pattern) => switch (toolName) {
+        bashToolName => globMatch(pattern, subject),
+        webfetchToolName => _hostMatch(pattern, subject),
+        _ => pathInside(subject, pattern) || globMatch(pattern, subject),
+      },
+    );
+
+/// The alternatives a pattern names with shell brace syntax:
+/// `{podman,toolbox} *` is `podman *` and `toolbox *`. Braces rather than
+/// `|`, which is a pipe to the segment split, or a bare comma, which real
+/// arguments carry. A brace with no comma in it, or one left open, is
+/// literal, as it is to bash.
+List<String> expandBraces(String pattern) => pattern.contains("{")
+    ? _braceCache.putIfAbsent(pattern, () => _expandBraces(pattern))
+    : [pattern];
+
+final _braceCache = <String, List<String>>{};
+
+List<String> _expandBraces(String pattern) {
+  for (
+    var open = pattern.indexOf("{");
+    open >= 0;
+    open = pattern.indexOf("{", open + 1)
+  ) {
+    var depth = 0;
+    final commas = <int>[];
+    int? close;
+    for (var i = open; i < pattern.length; i++) {
+      final c = pattern[i];
+      if (c == "{") depth++;
+      if (c == "}" && --depth == 0) {
+        close = i;
+        break;
+      }
+      if (c == "," && depth == 1) commas.add(i);
+    }
+    if (close == null) return [pattern];
+    if (commas.isEmpty) continue;
+    final head = pattern.substring(0, open);
+    final tail = pattern.substring(close + 1);
+    final cuts = [open, ...commas, close];
+    return [
+      for (var k = 0; k + 1 < cuts.length; k++)
+        ..._expandBraces(
+          "$head${pattern.substring(cuts[k] + 1, cuts[k + 1])}$tail",
+        ),
+    ];
+  }
+  return [pattern];
+}
+
+/// The host of [url], as the fetch itself would parse it. Null where the
+/// string names none — a scheme-less or malformed URL matches nothing.
+String? _hostOf(String? url) {
+  if (url == null || url.isEmpty) return null;
+  final host = Uri.tryParse(url)?.host;
+  return host == null || host.isEmpty ? null : host;
+}
+
+/// A host pattern matches itself and its subdomains: `example.com` covers
+/// `www.example.com` and `example.com`, not `notexample.com`. A pattern of
+/// `*` matches every host — what the webfetch banner's standing answers
+/// write, one answer covering the fetch tool and the fetcher commands
+/// alike, the per-domain rules being the settings page's to add.
+bool _hostMatch(String pattern, String host) {
+  if (pattern == "*") return true;
+  final p = pattern.toLowerCase();
+  return host == p || host.endsWith(".$p");
+}
+
+/// The standing rule an "Allow in Chat" or "Allow in Project" banner answer
+/// writes. Read from what the call carried: a `bash` command becomes a glob
+/// over its leading words up to the first operator (`git checkout *`), a file
+/// tool's path becomes its directory's scope, a fetch URL becomes the host.
+/// Null where the call carries nothing matchable.
+///
+/// The "always" on a call leaving the sandbox is about the sandbox, not the
+/// asking: it
+/// writes a no-sandbox rule for the same leading words and leaves the
+/// decision to whatever already made it.
+PermissionRule? ruleFromApproval(ToolApproval? approval) {
+  if (approval == null) return null;
+  switch (approval.toolName) {
+    case bashToolName:
+      final command = approval.argumentsText ?? "";
+      if (command.trim().isEmpty) return null;
+      if (approval.unsandboxed) {
+        return PermissionRule(
+          tool: bashToolName,
+          pattern: _commandPrefix(command.trim()),
+          unconfined: true,
+        );
+      }
+      // A command that is one fetch — reach network, the fetcher family
+      // with a host the consult reads — is a network subject, not a
+      // command-prefix one: the standing answer is the same `webfetch *` a
+      // webfetch banner writes, so what the next identical call is read by
+      // is what this one was allowed by. A redirecting or compound variant
+      // stays command-shaped, where its own shape is what matched.
+      final segments = ShellCommandAnalysis.parse(command).modelableSegments;
+      if (segments != null &&
+          segments.length == 1 &&
+          profileSegment(segments.single).reach == SegmentReach.network) {
+        return const PermissionRule(
+          tool: webfetchToolName,
+          pattern: "*",
+          decision: PermissionDecision.allow,
+        );
+      }
+      return PermissionRule(
+        tool: bashToolName,
+        pattern: _commandPrefix(command.trim()),
+        decision: PermissionDecision.allow,
+      );
+    case "read" || "write" || "edit":
+      final path = approval.argumentsText ?? "";
+      if (path.trim().isEmpty) return null;
+      return PermissionRule(
+        tool: approval.toolName,
+        pattern: path.trim(),
+        decision: PermissionDecision.allow,
+      );
+    case webfetchToolName:
+      final host = _hostOf(approval.argumentsText);
+      if (host == null) return null;
+      // `*` rather than the registrable suffix: the standing answer covers
+      // every host the model fetches, tool or fetcher command — webfetch
+      // itself, the curl and wget segments a command carries. Per-domain
+      // rules remain the settings page's to write, and an ask rule there
+      // still outranks this for the domain it names.
+      return const PermissionRule(
+        tool: webfetchToolName,
+        pattern: "*",
+        decision: PermissionDecision.allow,
+      );
+    default:
+      return null;
+  }
+}
+
+/// The matchable prefix of a command: its first two words — the command and
+/// its subcommand — with ` *` appended, so the rule covers the arguments the
+/// same command may carry next time. `git checkout -b foo` => `git checkout
+/// *`; `ls -la` => `ls -la *`. The head is the parse's first segment, so a
+/// quoted operator does not cut it mid-quote.
+String _commandPrefix(String command) {
+  final head =
+      ShellCommandAnalysis.parse(command).modelableSegments?.firstOrNull ??
+      command;
+  final words = head.split(RegExp(r"\s+"));
+  final prefix = words.length <= 2 ? head : words.take(2).join(" ");
+  if (prefix.isEmpty) return command;
+  return "$prefix *";
+}

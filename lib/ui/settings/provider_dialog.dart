@@ -1,10 +1,9 @@
-import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/llm_provider.dart";
 
 import "../../app/settings/provider_edit.dart";
 import "../../data/builtin/llm/providers/presets.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
 import "../../providers.dart";
 import "../widgets/environment_section.dart";
 import "cli_sign_in_dialog.dart" show CliAccountSection;
@@ -302,7 +301,9 @@ class _ProviderDialogState extends ConsumerState<ProviderDialog> {
   }
 
   Future<void> _chooseExecutable() async {
-    final file = await openFile(confirmButtonText: "Use this program");
+    final file = await ref
+        .read(filePickerProvider)
+        .file(confirmLabel: "Use this program");
     if (file == null || !mounted) return;
     setState(() => _command.text = file.path);
   }

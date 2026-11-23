@@ -1,9 +1,8 @@
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/domain/project_settings.dart";
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/project_settings.dart";
 
 import "../harness.dart";
 

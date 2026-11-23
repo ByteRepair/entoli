@@ -1,6 +1,6 @@
 import "package:agent_chat/data/local/apple_fm.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/llm_provider.dart";
 import "package:agent_chat/providers.dart";
 import "package:flutter_test/flutter_test.dart";
 

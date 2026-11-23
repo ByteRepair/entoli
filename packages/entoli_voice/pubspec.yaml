@@ -1,0 +1,44 @@
+name: entoli_voice
+description: >
+  Voice mode's engines: sherpa-onnx and the system recognisers and voices,
+  the microphone and the speaker, and the downloaded speech models on disk.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  entoli_core:
+    path: ../entoli_core
+  # A speech model that arrives as a `.tar.bz2`.
+  archive: ^4.1.0
+  path: ^1.9.1
+  # Speech recognition, speech synthesis and voice activity detection from one
+  # dependency: `record` opens the microphone and `audioplayers` says the reply
+  # back. The interface and Linux packages are reached directly by the
+  # pw-record fallback, `LinuxRecorder`.
+  sherpa_onnx: ^1.13.6
+  record: ^7.1.1
+  record_platform_interface: ^2.1.0
+  record_linux: ^2.1.1
+  audioplayers: ^6.8.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  assets:
+    # Silero's voice activity detector, and its licence beside it. 644 KB, so
+    # it ships rather than joining the catalog: voice mode that cannot start
+    # until a second, invisible download has finished is worse to explain than
+    # an app that is slightly bigger. Every model sherpa takes, it takes as a
+    # path, so this is copied out of the bundle on first use.
+    - assets/models/silero_vad.onnx
+    - assets/models/silero-vad-LICENSE.txt

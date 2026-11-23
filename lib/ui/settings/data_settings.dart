@@ -1,12 +1,12 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/formatting.dart" show formatSize;
+import "package:entoli_core/view/widgets/busy.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
 
 import "../../app/backup_actions.dart";
-import "package:entoli_chat/core/formatting.dart" show formatSize;
 import "../../data/backup.dart" show Backup, BackupFormatException;
 import "../widgets/add_button_row.dart";
-import "package:entoli_chat/ui/widgets/busy.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
 import "../widgets/section_header.dart";
 
 /// Settings > Data: everything as one file, out and back in. The work is

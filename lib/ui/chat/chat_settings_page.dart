@@ -2,25 +2,25 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/chat_settings_draft.dart";
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/builtin_project.dart";
-import "package:entoli_chat/domain/chat_meta.dart";
-import "package:entoli_chat/domain/model_options.dart"
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/builtin_project.dart";
+import "package:entoli_core/model/chat_meta.dart";
+import "package:entoli_core/model/model_options.dart"
     show reasoningEffortLabels;
-import "package:entoli_chat/domain/settings/keys.dart";
+import "package:entoli_core/model/settings/keys.dart";
 import "../../providers.dart";
 import "../settings/llm_settings.dart" show ApproveModeChoice;
 import "../settings/scoped.dart";
 import "../settings/terminal_settings.dart" show SandboxSettings;
-import "package:entoli_chat/ui/widgets/busy.dart";
+import "package:entoli_core/view/widgets/busy.dart";
 import "../widgets/destructive_button.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
-import "package:entoli_chat/ui/widgets/discard_guard.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
+import "package:entoli_core/view/widgets/discard_guard.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 import "../widgets/temp_chat_ttl_field.dart";
-import "package:entoli_chat/ui/workspace/workspace_page.dart";
+import "package:entoli_core/view/workspace/workspace_page.dart";
 import "../../app/app_items.dart" show AppAction, onMirror;
 import "../chat_actions.dart" show shareChat;
 import "context_page.dart";

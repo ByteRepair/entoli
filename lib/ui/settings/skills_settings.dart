@@ -1,24 +1,24 @@
-import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/file_picker.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart" show promptsDirUserWritable;
+import "package:entoli_core/view/widgets/busy.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
+import "package:entoli_core/store/prompts/skill_import.dart";
 
 import "../../app/marketplace/install.dart" show PromptInstall;
 import "../../app/prompts/own_prompts.dart";
 import "../../app/prompts/skill_files.dart";
 import "../../app/settings/scope.dart";
-import "../../data/prompts/skill_import.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart" show promptsDirUserWritable;
 import "../../providers.dart";
 import "../skills/skill_view.dart";
 import "../widgets/add_button_row.dart";
-import "package:entoli_chat/ui/widgets/busy.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
 import "../widgets/install_destination.dart";
 import "../widgets/section_header.dart";
 import "copy_install_link.dart";
 
-const _skillFiles = XTypeGroup(
+const _skillFiles = FileTypes(
   label: "Skill",
   extensions: ["skill", "zip"],
   mimeTypes: ["application/zip"],
@@ -72,7 +72,7 @@ class _SkillsSettingsState extends ConsumerState<SkillsSettings> {
     final target = _global ? ref.read(skillDestinationProvider) : _project;
     SkillPackage? package;
     await _guard(() async {
-      final file = await openFile(acceptedTypeGroups: const [_skillFiles]);
+      final file = await ref.read(filePickerProvider).file(types: _skillFiles);
       if (file == null) return;
       final bytes = await file.readAsBytes();
       try {

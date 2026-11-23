@@ -2,9 +2,10 @@ import "dart:typed_data";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "package:entoli_chat/data/chat_share.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart" show localProject;
+import "package:entoli_core/transcript/storage.dart" show fileSystemProvider;
+import "package:entoli_core/store/chat_share.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart" show localProject;
 import "../providers.dart";
 import "selection.dart";
 
@@ -41,6 +42,7 @@ class ChatShares {
     final id = await importShare(
       zip,
       _ref.read(chatStoreProvider),
+      _ref.read(fileSystemProvider),
       project: project,
     );
     if (id == null) return null;

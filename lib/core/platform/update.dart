@@ -5,11 +5,10 @@ import "package:ffi/ffi.dart";
 import "package:flutter/foundation.dart" show kDebugMode, kProfileMode;
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/app_update.dart";
 
-import "../tls.dart";
-import "package:entoli_chat/core/log.dart";
-import "../../data/download.dart" show latestReleaseTag;
-import "package:entoli_chat/domain/app_update.dart";
+import "../../data/tls.dart";
 
 const _tag = "update";
 

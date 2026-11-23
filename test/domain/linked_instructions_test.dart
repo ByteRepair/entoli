@@ -1,6 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/linked_instructions.dart";
+import "package:entoli_core/model/linked_instructions.dart";
 
 void main() {
   const global = "/data/AGENTS.md";

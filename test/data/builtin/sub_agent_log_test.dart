@@ -1,15 +1,15 @@
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/core/config.dart";
-import "package:agent_chat/data/local/file_sub_agent_log.dart";
-import "package:agent_chat/data/builtin/sub_agent.dart";
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/sub_agent_log.dart";
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/store/file_sub_agent_log.dart";
+import "package:entoli_core/agent/sub_agent.dart";
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/sub_agent_log.dart";
 
 import "../../harness.dart";
 import "builtin_fakes.dart";
@@ -45,6 +45,7 @@ void main() {
     FakeLlmClient client, {
     ShellResult Function(String)? respond,
   }) => SubAgentRunner(
+    fs: const LocalFileSystem(),
     client: client,
     shell: FakeShell(respond ?? (_) => ok(""), canRunCommands: true),
     workspace: config.workspaceDir(chatId),

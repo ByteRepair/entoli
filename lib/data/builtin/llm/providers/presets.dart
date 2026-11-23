@@ -1,25 +1,25 @@
-import "package:entoli_chat/domain/llm_provider.dart";
-import "anthropic.dart";
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/agent/llm/providers/anthropic.dart";
+import "package:entoli_core/agent/llm/providers/google.dart";
+import "package:entoli_core/agent/llm/providers/hosted.dart";
+import "package:entoli_core/agent/llm/providers/local_servers.dart";
+import "package:entoli_core/agent/llm/providers/openai.dart";
+import "package:entoli_core/agent/llm/providers/openrouter.dart";
+import "package:entoli_core/agent/llm/providers/provider.dart";
+export "package:entoli_core/agent/llm/providers/anthropic.dart";
+export "package:entoli_core/agent/llm/providers/google.dart";
+export "package:entoli_core/agent/llm/providers/hosted.dart";
+export "package:entoli_core/agent/llm/providers/local_servers.dart";
+export "package:entoli_core/agent/llm/providers/openai.dart";
+export "package:entoli_core/agent/llm/providers/openrouter.dart";
+export "package:entoli_core/agent/llm/providers/provider.dart";
+
 import "claude_cli.dart";
 import "cli.dart";
 import "codex_cli.dart";
-import "google.dart";
-import "hosted.dart";
-import "local_servers.dart";
-import "openai.dart";
-import "openrouter.dart";
-import "provider.dart";
-
-export "anthropic.dart";
 export "claude_cli.dart";
 export "cli.dart";
 export "codex_cli.dart";
-export "google.dart";
-export "hosted.dart";
-export "local_servers.dart";
-export "openai.dart";
-export "openrouter.dart";
-export "provider.dart";
 
 /// Each preset's class, read with a config. The one list a new provider is
 /// added to: the presets and [providerOf] are both built from it.

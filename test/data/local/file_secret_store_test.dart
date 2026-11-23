@@ -1,9 +1,9 @@
 import "dart:io";
 import "dart:typed_data";
 
-import "package:entoli_chat/core/config.dart";
+import "package:entoli_core/model/config.dart";
 import "package:agent_chat/data/local/file_secret_store.dart";
-import "package:entoli_chat/domain/sync/identity.dart";
+import "package:entoli_core/model/sync/identity.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "../../harness.dart";

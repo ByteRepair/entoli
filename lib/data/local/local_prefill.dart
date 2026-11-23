@@ -1,10 +1,10 @@
 import "dart:async";
 
 import "package:flutter/foundation.dart";
+import "package:entoli_core/model/background_work.dart";
+import "package:entoli_core/model/local_llm.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
 
-import "package:entoli_chat/domain/background_work.dart";
-import "package:entoli_chat/domain/local_llm.dart";
-import "../builtin/llm/llm_client.dart";
 import "local_engine.dart";
 import "local_instance.dart";
 

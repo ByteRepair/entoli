@@ -1,0 +1,22 @@
+name: entoli_scanner
+description: >
+  The camera view that reads a QR code, for sync pairing.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  entoli_core:
+    path: ../entoli_core
+  mobile_scanner: ^7.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

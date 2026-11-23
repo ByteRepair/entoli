@@ -1,8 +1,7 @@
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_core/model/shell.dart";
 
 /// What can be pinned on a machine with no iOS on it: the shared dispatcher
 /// script (the wire protocol both LocalShell and IshShell run) and the FFI
@@ -71,7 +70,9 @@ void main() {
 /// written once over its core's prefix, so they are every core's prefix
 /// with every one of those, beside the lookups named outright.
 Set<String> _lookedUp() {
-  final source = File("lib/data/local/ish_ffi.dart").readAsStringSync();
+  final source = File(
+    "packages/entoli_shell/lib/ish_ffi.dart",
+  ).readAsStringSync();
   final prefixes = RegExp(
     r'^\s*\w+\("((?:ish|blinkish))"\)[,;]$',
     multiLine: true,

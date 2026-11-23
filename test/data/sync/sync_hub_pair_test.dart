@@ -3,24 +3,25 @@ import "dart:convert";
 import "dart:io" show Directory;
 import "dart:typed_data";
 
-import "package:entoli_chat/core/config.dart";
-import "package:agent_chat/data/builtin/memory/store.dart";
-import "package:entoli_chat/data/local/file_chat_store.dart";
-import "package:agent_chat/data/sync/channel.dart";
+import "package:file/local.dart";
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/agent/memory/store.dart";
+import "package:entoli_core/store/file_chat_store.dart";
+import "package:entoli_core/model/sync/channel.dart";
 import "package:agent_chat/data/sync/handshake.dart" show HandshakeException;
 import "package:agent_chat/data/sync/sync_hub.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/chat_meta.dart";
-import "package:entoli_chat/domain/chat_repository.dart";
-import "package:entoli_chat/domain/chat_store.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart" show ProjectRef;
-import "package:entoli_chat/domain/project_settings.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/sync/devices.dart";
-import "package:entoli_chat/domain/sync/identity.dart";
-import "package:entoli_chat/domain/sync/protocol.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/chat_meta.dart";
+import "package:entoli_core/model/chat_repository.dart";
+import "package:entoli_core/model/chat_store.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart" show ProjectRef;
+import "package:entoli_core/model/project_settings.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/sync/devices.dart";
+import "package:entoli_core/model/sync/identity.dart";
+import "package:entoli_core/model/sync/protocol.dart";
 import "package:agent_chat/providers.dart" show syncHubProvider;
 import "package:agent_chat/app/mirror_controller.dart";
 import "package:archive/archive.dart";
@@ -179,7 +180,9 @@ void main() {
   test("a chat on a real store mirrors with its records", () async {
     final onDisk = await _Device.create(
       "${tempDir.path}/disk",
-      store: FileChatStore(await AppConfig.load("${tempDir.path}/disk")),
+      store: FileChatStore(
+        await AppConfig.load(const LocalFileSystem(), "${tempDir.path}/disk"),
+      ),
     );
     addTearDown(onDisk.hub.dispose);
 
@@ -1522,7 +1525,7 @@ class _Turns implements RemoteTurns {
 
   @override
   Memories memories(String? project) =>
-      MemoryStore(config.memoryDir(project: project));
+      MemoryStore(const LocalFileSystem(), config.memoryDir(project: project));
 }
 
 class _Device {
@@ -1537,7 +1540,7 @@ class _Device {
   );
 
   static Future<_Device> create(String dir, {ChatStore? store}) async {
-    final config = await AppConfig.load(dir);
+    final config = await AppConfig.load(const LocalFileSystem(), dir);
     final registry = FakeDeviceRegistry();
     final chats = store ?? FakeChatStore();
     final backend = FakeBackend();

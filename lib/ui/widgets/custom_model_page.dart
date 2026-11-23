@@ -2,12 +2,12 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/transcript/reader.dart";
+import "package:entoli_core/view/widgets/discard_guard.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
 
 import "../../app/custom_model.dart";
 import "../../app/model_role.dart";
-import "package:entoli_chat/app/reader.dart";
-import "package:entoli_chat/ui/widgets/discard_guard.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
 
 /// [draft] as a page: the model's facts, what it is, and what it can do.
 /// Pops true once saved.

@@ -1,5 +1,4 @@
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/app/embed_text.dart";
 
 /// A quote, as the core sees one: a paragraph of `> ` lines.

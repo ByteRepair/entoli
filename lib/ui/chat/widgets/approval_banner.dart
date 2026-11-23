@@ -1,12 +1,12 @@
 import "package:flutter/material.dart";
-
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/ui/fonts.dart";
-import "../../../app/approvals.dart" show approvalPurpose;
-import "package:entoli_chat/app/transcript/activities/catalog.dart"
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/view/fonts.dart";
+import "package:entoli_core/transcript/activities/catalog.dart"
     show toolActivityFor;
-import "package:entoli_chat/app/transcript/activity.dart" show TranscriptGlyph;
-import "package:entoli_chat/ui/chat/activity/glyphs.dart";
+import "package:entoli_core/transcript/activity.dart" show TranscriptGlyph;
+import "package:entoli_core/view/chat/activity/glyphs.dart";
+
+import "../../../app/approvals.dart" show approvalPurpose;
 
 /// What the turn stops on: the agent wants to run something, and nothing moves
 /// until this is answered. It sits above the composer rather than in the

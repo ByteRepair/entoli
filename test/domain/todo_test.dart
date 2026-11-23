@@ -1,9 +1,8 @@
 import "dart:convert";
 
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/todo.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/todo.dart";
 
 String _args(List<(String, String)> items) => jsonEncode({
   "todos": [

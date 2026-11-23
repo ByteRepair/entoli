@@ -1,6 +1,6 @@
 import "package:flutter/services.dart";
+import "package:entoli_core/model/log.dart";
 
-import "package:entoli_chat/core/log.dart";
 import "form_factor.dart";
 
 /// The colour the system is themed to, as ARGB, or null where it has none —

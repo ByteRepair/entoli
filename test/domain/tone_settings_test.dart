@@ -2,13 +2,12 @@ import "dart:convert";
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/data/local/file_chat_store.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/chat_repository.dart";
-import "package:entoli_chat/domain/project_settings.dart";
-import "package:entoli_chat/domain/tone.dart";
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/store/file_chat_store.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/chat_repository.dart";
+import "package:entoli_core/model/project_settings.dart";
+import "package:entoli_core/model/tone.dart";
 
 import "../fakes.dart";
 import "../harness.dart";

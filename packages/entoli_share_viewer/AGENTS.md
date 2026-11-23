@@ -2,8 +2,8 @@
 
 A web page for a chat shared as a link (see "A shared chat" in
 `lib/ui/chat/AGENTS.md`), for where the app is not installed: the conversation
-read-only, as the app draws it. It is the app's own code, the chat package
-(`entoli_chat`, see "The chat package" in the root `AGENTS.md`), with its ports
+read-only, as the app draws it. It is the app's own code, the core
+(`entoli_core`, see "The core" in the root `AGENTS.md`), with its ports
 bound to this page's few — not a second drawing of the conversation. It does
 not depend on the app, so none of the app's plugins or assets are in it.
 
@@ -19,15 +19,14 @@ from Flutter's CDN, so `build/web/canvaskit/` is never fetched.
 
 - **`setUrlStrategy(null)`.** The chat is the fragment, and Flutter's default
   hash routing would rewrite it to `#/`. The URL stays what was opened.
-- **`useMemoryFileSystem`** (`memory_io.dart`). A browser has no disk, and
-  `lib/` reads its files through `dart:io` with no port over it, so the whole
-  process gets `IOOverrides` over `package:file`'s `MemoryFileSystem`. The
-  app's readers, `FileChatStore` and the migration chain run unchanged over it.
-- **`unpackShare`** into `/entoli`, whose `AppConfig.load` migrates a link
-  from an older build and is the config the viewer runs on. A fragment that is not a whole zip, or not a chat,
-  is the "incomplete" page.
-- **The overrides.** The drawing's ports (`transcriptOverrides`), and in place
-  of the app's:
+- **A `MemoryFileSystem`**, since a browser has no disk. The core is handed
+  its filesystem, so the app's readers, `FileChatStore` and the migration
+  chain run over this one unchanged.
+- **`unpackShare`** into its `/entoli`, whose `AppConfig.load` migrates a link
+  from an older build and is the config the viewer runs on. A fragment that
+  is not a whole zip, or not a chat, is the "incomplete" page.
+- **The overrides.** The drawing's ports (`transcriptOverrides`), the
+  filesystem (`fileSystemProvider`), and in place of the app's:
   - `SharedChatHost` — the chat as loaded, never running: the plan, the
     sub-agents' transcripts and the attachments read from the store; no
     agent pictures and no job logs, a job having ended where it was shared.
@@ -42,6 +41,26 @@ from Flutter's CDN, so `build/web/canvaskit/` is never fetched.
     blob: a blob URL runs as the viewer's origin, with the viewer as its
     opener, and the page is a stranger's.
 
+## The core plus its web adapters
+
+`main.dart` binds every port the page needs, in one list, as the app's `main`
+does. One adapter is among them: `entoli_links`, whose `PluginLinkLauncher`
+is `url_launcher`, which opens a tab on the web; `WebLinkOpener` and the
+bar's two buttons leave the page through it. The rest the viewer implements itself, because the adapter
+for it does not build for a browser or brings what a page cannot use:
+
+- **Files.** `entoli_files` is the platform's choosers and `dart:io` paths,
+  with `path_provider`, which has no web implementation. A browser does one
+  thing with a file, download it, and `WebFileHandoff` is that.
+- **The filesystem.** The core's own port, bound to a `MemoryFileSystem`.
+- **The host and the hand-off.** What a read-only chat is, which no adapter
+  knows.
+
+Every other adapter is a capability the page has no use for, and depending on
+one is not free: Flutter bundles every dependency's assets, so voice alone
+would ship its models. `test/core/plugin_boundary_test.dart` at the root holds
+the viewer to the core and the adapters its pubspec names.
+
 `SharedChatPage` is the bar and a `ConversationView` with nothing under it:
 the chapter rail and jump to latest as in the app. The bar has the plan, the
 workspace (the host's `workspaceDir`) in the explorer's `readOnly` mode, **Open in Entoli**
@@ -52,7 +71,5 @@ Entoli**, the product page.
 
 `test/` runs on the VM, not in a browser, over the same in-memory filesystem:
 a link unpacked with nothing written to disk, an older stamp migrated, what
-the host reads and what the hand-off opens. `IOOverrides` reach only the
-isolate that set them, which is why the app reads a share's files before
-handing the compressing to `compute`. The web hand-offs need a browser and are
-not tested.
+the host reads and what the hand-off opens, and that the disk is left alone.
+The web hand-offs need a browser and are not tested.

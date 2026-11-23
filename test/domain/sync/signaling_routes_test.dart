@@ -1,7 +1,7 @@
 import "dart:async";
 import "dart:convert";
 
-import "package:entoli_chat/domain/sync/signaling_routes.dart";
+import "package:entoli_core/model/sync/signaling_routes.dart";
 import "package:flutter_test/flutter_test.dart";
 
 /// What the LAN rendezvous decides, with no socket under it. All of this used

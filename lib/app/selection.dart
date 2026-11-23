@@ -5,12 +5,12 @@ library;
 import "dart:async";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/chat_intents.dart" show ChatPresenter;
+import "package:entoli_core/model/chat_meta.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart";
 
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/chat_intents.dart" show ChatPresenter;
-import "package:entoli_chat/domain/chat_meta.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart";
 import "../providers.dart";
 import "chat_controller.dart";
 

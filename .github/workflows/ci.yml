@@ -59,3 +59,15 @@ jobs:
       # The viewer is its own package, which the root's suite does not reach.
       - run: flutter test
         working-directory: packages/entoli_share_viewer
+
+      # The deploy is the only other web build; this one proves a PR's core
+      # still compiles for the browser.
+      - run: flutter build web --release
+        working-directory: packages/entoli_share_viewer
+
+      # So is each adapter, and one with tests of its own runs them here.
+      - run: |
+          for dir in packages/entoli_*/; do
+            case "$dir" in */entoli_core/ | */entoli_share_viewer/) continue ;; esac
+            if [ -d "$dir/test" ]; then (cd "$dir" && flutter test) || exit 1; fi
+          done

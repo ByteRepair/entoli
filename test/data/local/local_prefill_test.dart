@@ -1,11 +1,11 @@
 import "dart:async";
 import "dart:io";
 
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:agent_chat/data/local/llama_engine.dart";
 import "package:agent_chat/data/local/local_prefill.dart";
 import "package:agent_chat/data/local/prompt_cache.dart";
-import "package:entoli_chat/domain/background_work.dart";
+import "package:entoli_core/model/background_work.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 

@@ -91,7 +91,7 @@ long-lived background isolate so a guest command does not block the UI.
 The dispatcher script `LocalShell` uses — the trap that turns a Ctrl-C into a
 130 while the shell survives, the `EXIT` trap that reports where `exit` left
 it, the base64 line that keeps a multi-line command from stealing the queue —
-is shared, lifted to `packages/entoli_chat/lib/domain/shell.dart` so both shells
+is shared, lifted to `packages/entoli_core/lib/model/shell.dart` so both shells
 read one source of truth. iSH runs it inside the guest's own `/bin/sh`, which is
 what makes a `cd` or an `export` in one command stick for the next, the same
 contract the agent is told on every other platform.
@@ -185,8 +185,8 @@ contract is the same one LocalShell keeps: the escalation answers a run
 still pending at the second, and nothing else.
 
 The session and one-shot logic over this seam is pinned by
-`test/data/local/ish_session_test.dart` over a fake transport; that a real
-guest honours the 130, that a hangup unblocks the loop, and that output
+`packages/entoli_shell/test/ish_session_test.dart` over a fake transport; that
+a real guest honours the 130, that a hangup unblocks the loop, and that output
 arrives live is the simulator's hand-run, like the wire — witnessed on this
 build: the stop ends a running command at once, the escalation answers a
 SIGINT-ignoring one on its second, and output reaches the chat while the
@@ -240,7 +240,7 @@ gap here, for once; this entry is.
 the agent's own prompt and tools — about 6k before the first message — so a
 turn on it opens with a compaction every time, which is a chat that works in
 name only. `isTitleOnlyModel`
-(`packages/entoli_chat/lib/domain/local_model.dart`) is the one gate: the
+(`packages/entoli_core/lib/model/local_model.dart`) is the one gate: the
 backend resolves it for the title's ask alone and refuses a turn on it with a
 line saying so, only the Title LLM picker (`ModelRole.title`) lists it, and the
 welcome tour does not count it as a model connected — so an iOS device sets up a
@@ -296,7 +296,7 @@ the package missing, the engine is `NoLocalEngine` and the page has no text
 section. Requiring 27 is for the feature, not the app.
 
 The catalog is `mlxCatalog`
-(`packages/entoli_chat/lib/domain/local_model.dart`): the GGUF catalog's two
+(`packages/entoli_core/lib/model/local_model.dart`): the GGUF catalog's two
 larger sizes in MLX's 4-bit format, each pinned to a commit with every file's
 size and SHA-256, downloaded and checked by the same `FileLocalModelStore` as a
 GGUF into `<cacheDir>/llm/<id>/`. Only the files loading needs are fetched.
@@ -566,7 +566,7 @@ added to it stays on the device.
 
 **The data directory lives in the App Group** (`group.io.byterepair.entoli`),
 because the extension is a process of its own and sees nothing of the app's
-container. `dataDir()` asks `path_provider_foundation` for the group's
+container. `entoli_paths` asks `path_provider_foundation` for the group's
 container and has `relocateDataDir` (`migrations.dart`) move a
 `Documents/entoli` from before into it, once. Where the move fails the app
 runs from Documents and Files shows nothing until a launch where it lands. Both targets carry the group's entitlement, so the group has to exist
@@ -673,7 +673,7 @@ the guest, and a download is TLS decrypted the same way, 240 MB of ESBMC
 sitting on "Downloading" for minutes. `unzip`, `tar`, `wget`, `curl` and a
 recursive `grep` are therefore the host's where they can be, for the setup
 script and for an agent's own commands alike.
-`HostTools` (`lib/data/local/host_tools.dart`) puts a shim for each in a host
+`HostTools` (`packages/entoli_shell/lib/host_tools.dart`) puts a shim for each in a host
 directory the bridge binds writable at `/run/entoli` (`ish_set_host_calls`,
 once, as the guest boots), first on the guest's `PATH`. A shim leaves its
 arguments and working directory in `/run/entoli/calls/` and waits; Dart,

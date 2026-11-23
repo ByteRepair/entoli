@@ -2,22 +2,22 @@ import "dart:async";
 import "dart:convert";
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/data/local/file_chat_store.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/chat_meta.dart";
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/chat_repository.dart";
-import "package:entoli_chat/domain/builtin_project.dart"
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/store/file_chat_store.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/chat_meta.dart";
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/chat_repository.dart";
+import "package:entoli_core/model/builtin_project.dart"
     show AgentCapability, myTeamNote;
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/profile.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/project_settings.dart";
-import "package:entoli_chat/domain/temp_chat_ttl.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/profile.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/project_settings.dart";
+import "package:entoli_core/model/temp_chat_ttl.dart";
 import "package:path/path.dart" as p;
 
 import "../fakes.dart";
@@ -55,7 +55,7 @@ void main() {
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync("chat_repo_test_");
-    config = AppConfig.forDirectory(tmp.path);
+    config = AppConfig.forDirectory(const LocalFileSystem(), tmp.path);
     Directory(config.chatsDir()).createSync(recursive: true);
     backend = FakeBackend();
   });

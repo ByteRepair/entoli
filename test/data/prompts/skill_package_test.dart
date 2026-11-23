@@ -1,10 +1,10 @@
 import "dart:io";
 import "dart:typed_data";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:agent_chat/data/prompts/skill_import.dart";
-import "package:agent_chat/data/prompts/skill_package.dart";
+import "package:entoli_core/store/prompts/skill_import.dart";
+import "package:entoli_core/store/prompts/skill_package.dart";
 
 void main() {
   late Directory dir;
@@ -33,7 +33,11 @@ void main() {
         "references/notes.md": "notes\n",
       });
 
-      final package = await packageSkillDirectory(dir.path, null);
+      final package = await packageSkillDirectory(
+        const LocalFileSystem(),
+        dir.path,
+        null,
+      );
 
       expect(package.name, "demo");
       final names = package.entries.map((e) => e.$1).toSet();
@@ -49,7 +53,11 @@ void main() {
             "---\nname: from-frontmatter\ndescription: d\n---\n\nDo it.\n",
       });
 
-      final package = await packageSkillDirectory(dir.path, "from-arg");
+      final package = await packageSkillDirectory(
+        const LocalFileSystem(),
+        dir.path,
+        "from-arg",
+      );
 
       expect(package.name, "from-arg");
 
@@ -57,7 +65,11 @@ void main() {
       // the folder is a temp dir whose name is not a spec name, so the
       // packager is handed the name the folder would be renamed to.
       write({"SKILL.md": "---\ndescription: d\n---\n\nDo it.\n"});
-      final fromFolder = await packageSkillDirectory(dir.path, "demo");
+      final fromFolder = await packageSkillDirectory(
+        const LocalFileSystem(),
+        dir.path,
+        "demo",
+      );
 
       expect(fromFolder.name, "demo");
     });
@@ -71,7 +83,7 @@ void main() {
         });
 
         await expectLater(
-          packageSkillDirectory(dir.path, null),
+          packageSkillDirectory(const LocalFileSystem(), dir.path, null),
           throwsA(
             isA<SkillImportException>().having(
               (e) => e.message,
@@ -94,7 +106,11 @@ void main() {
         "scripts/run.sh": "#!/bin/sh\necho hi\n",
       });
 
-      final original = await packageSkillDirectory(dir.path, null);
+      final original = await packageSkillDirectory(
+        const LocalFileSystem(),
+        dir.path,
+        null,
+      );
       final bytes = packageSkillBytes(original);
       expect(bytes.length, greaterThan(0));
 

@@ -5,28 +5,29 @@ import "dart:typed_data";
 import "package:flutter/foundation.dart";
 import "package:http/http.dart" as http;
 
-import "package:entoli_chat/core/log.dart";
-import "../builtin/memory/store.dart" show Memories, MemoryEntry;
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/project.dart"
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/agent/memory/store.dart" show Memories, MemoryEntry;
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/project.dart"
     show ProjectRef, everyProject, isProjectName;
-import "package:entoli_chat/domain/project_settings.dart";
-import "package:entoli_chat/domain/chat_log.dart"
+import "package:entoli_core/model/project_settings.dart";
+import "package:entoli_core/model/chat_log.dart"
     show ChatRecord, PartRecord, chatFrom;
-import "package:entoli_chat/domain/chat_meta.dart";
-import "package:entoli_chat/domain/chat_repository.dart";
-import "package:entoli_chat/domain/models.dart"
+import "package:entoli_core/model/chat_meta.dart";
+import "package:entoli_core/model/chat_repository.dart";
+import "package:entoli_core/model/models.dart"
     show ArtifactPart, Attachment, Chat, ChatState, ToolApproval;
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/sub_agent_log.dart"
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/sub_agent_log.dart"
     show SubAgentAppend, growTranscript;
-import "package:entoli_chat/domain/sync/devices.dart";
-import "package:entoli_chat/domain/sync/identity.dart";
-import "package:entoli_chat/domain/sync/lan_signaling.dart";
-import "package:entoli_chat/domain/sync/protocol.dart";
-import "package:entoli_chat/domain/sync/relay_signaling.dart";
+import "package:entoli_core/model/sync/devices.dart";
+import "package:entoli_core/model/sync/identity.dart";
+import "package:entoli_core/model/sync/lan_signaling.dart";
+import "package:entoli_core/model/sync/peer_link.dart";
+import "package:entoli_core/model/sync/protocol.dart";
+import "package:entoli_core/model/sync/relay_signaling.dart";
 import "artifact_bytes.dart" show ArtifactBytes;
-import "channel.dart";
+import "package:entoli_core/model/sync/channel.dart";
 import "pairing.dart";
 import "peers.dart";
 import "sync_byte_cache.dart";
@@ -209,6 +210,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     required AppSettings Function() settings,
     String? Function()? turnPassword,
     required LanSignaling? Function() lanSignaling,
+    required PeerLinkFactory createLink,
     String? hostname,
     http.Client? client,
     RelayDial? relayDial,
@@ -220,6 +222,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
       turnPassword: turnPassword,
       peers: _peers,
       lanSignaling: lanSignaling,
+      createLink: createLink,
       onMessage: _dispatch,
       onPeerGone: _peerGone,
       onReady: _greet,

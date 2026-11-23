@@ -1,0 +1,26 @@
+name: entoli_browser
+description: >
+  The browser the agent drives: a launched Chromium over the DevTools
+  Protocol on the desktops, the app's own web views on the phones.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  entoli_core:
+    path: ../entoli_core
+  path: ^1.9.1
+  # Helium's release, fetched and unpacked.
+  http: ^1.6.0
+  archive: ^4.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

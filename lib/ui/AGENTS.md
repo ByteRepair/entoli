@@ -5,7 +5,7 @@
 `PlatformLinkOpener` is here rather than under `core/platform/` because it is a
 page, not a port. What it dispatches on is the platform, which is what filed it
 there to begin with, but two of its three answers are a `Navigator.push` of a
-webview it also defines — it takes a `BuildContext`, builds `Scaffold`s and
+web view's page — it takes a `BuildContext`, builds `Scaffold`s and
 `AppBar`s, and reaches the shared `copyToClipboard` the rest of the UI uses.
 Under `core/` that last one was the only import in the tree pointing from
 `core/` back into `ui/`, which is the direction that says a file is on the wrong
@@ -18,11 +18,23 @@ Desktop needs no server at all: the base stylesheet is injected into the artifac
 over `file://` and nothing about the page needs building at open time. That is
 also why the injection had to move: opening a temp copy of the entry file, as
 this used to, would break every relative reference to the files sitting beside
-it. The `LinkOpener` interface stays in `domain/`,
+it. The `LinkOpener` interface is the core's (`model/link_opener.dart`),
 which is what lets `main` inject it and the tests fake it.
 
-The one thing the opener asks beyond the store is the `SyncHub`, handed in
-`main` beside it and null in tests: a chat being mirrored has no artifact
+The web view itself is the plugin, so it is `entoli_webview`'s: the core's
+`WebView` (`view/web_view.dart`) is handed to the opener in `main` beside the
+launcher, and the opener's two pages — a link's and a phone's artifact's —
+ask it for the view (see `packages/entoli_webview/lib/AGENTS.md`).
+
+Every route out of the app goes through the `LinkLauncher` it is handed —
+the external app a scheme belongs to, or the system's in-app browser for a
+sign-in page on the phones — which `main` binds to `entoli_links`' plugin
+(see `packages/entoli_links/lib/AGENTS.md`). The opener decides which route
+and refuses what is not a web, mail or phone link; the launcher only hands
+the URL over.
+
+Last, the opener is handed the `SyncHub`, in `main` beside the rest and null
+in tests: a chat being mirrored has no artifact
 directory here, so its artifacts come down as one zip (see "Artifacts" in the
 root notes) and open out of a temp directory by the same platform paths. The
 staging itself is the `RemoteArtifacts` port, not opener code — the opener
@@ -35,10 +47,11 @@ what keeps every sync-unaware caller on the local paths unchanged.
 Entoli registers the `entoli://` scheme on every platform — Android's
 `VIEW` filter on `MainActivity`, `CFBundleURLTypes` in both Apple `Info.plist`s,
 `x-scheme-handler/entoli` in the Linux desktop entry, and
-`HKLM\Software\Classes\entoli` in the MSI. `app_links` delivers them, the
-launching one and every one after, on one stream that `IncomingLinks` (wrapped
-in `main` beside `IncomingShares`) reads. What a link means is
-`AppLink.parse` (`packages/entoli_chat/lib/domain/app_link.dart`), and nothing
+`HKLM\Software\Classes\entoli` in the MSI. `entoli_links` delivers them
+(`incomingLinks`, over `app_links`), the launching one and every one after, on
+one stream, `appLinksProvider`, that `IncomingLinks` (wrapped in `main` beside
+`IncomingShares`) reads. What a link means is
+`AppLink.parse` (`packages/entoli_core/lib/model/app_link.dart`), and nothing
 else reads one:
 
 - `entoli://new?prompt=…` — the new-chat screen with the prompt in its
@@ -98,7 +111,7 @@ the text theme, and Playfair Display on the display and headline tiers plus
 the reason the artifacts are the best-looking thing in the app. The cut sits
 below `titleMedium`: at 14pt a serif reads as prose, and putting the buttons
 and timestamps of a UI in a display face is a poster rather than a screen.
-Both are bundled in `ui/fonts.dart` beside Roboto Mono, as static instances of
+Both are bundled in `view/fonts.dart` beside Roboto Mono, as static instances of
 the Google Fonts variable fonts — the engine reads no `opsz` axis, and a
 variable `wght` makes every weight request synthetise or clamp. They reach the
 theme through `entoliTheme`'s `fontFamily: bodyFamily` plus a partial
@@ -137,7 +150,7 @@ softening is what makes them pastel; bold and theme seeds go through
 `fidelity`, which keeps the seed's chroma so the app looks like the swatch.
 That is also why there is no pastel brown or slate: `tonalSpot` lands
 them next to amber and a blue. The variant travels with the seed (`Seed` in
-`ui/theme.dart`), since a bold primary can sit beside a pastel secondary.
+`view/theme.dart`), since a bold primary can sit beside a pastel secondary.
 
 `fidelity` also tints every surface with the seed, which the operating systems'
 own themes do not: iOS/macOS, Windows, Adwaita, Breeze and Ubuntu paint their
@@ -195,10 +208,10 @@ The exceptions are the two voice colours beside `entoliIndigo`, and why they
 are not seeded is in "The screen".
 
 `AppTheme` mirrors material's `ThemeMode` rather than holding one. Nothing in
-`domain/` imports material — `core/config.dart` does reach `foundation`, so this
+`domain/` imports material — `model/config.dart` does reach `foundation`, so this
 is about the framework's UI half rather than about Flutter at all — and the name
 in `settings.json` should not be pinned to a framework enum's, which would make
-the file unreadable if that enum were ever renamed. `ui/theme.dart` is the one
+the file unreadable if that enum were ever renamed. `view/theme.dart` is the one
 place that maps between them, and the label the settings page draws is on the
 enum, the arrangement `ApproveMode` already has.
 
@@ -303,17 +316,13 @@ held by that screen until there is a chat, for the same reason.
 **The menu bar is a module of its own.** On Apple's platforms it belongs to
 the app rather than to a window. `appMenus` (`lib/app/app_items.dart`) is its layout as data: menus of
 groups of items, and the platform's own after them (Hide, Quit, Full Screen —
-macOS's alone). `packages/entoli_menu` draws it, one Swift source for macOS and
-iPadOS over its own Pigeon contract (`pigeons/menu.dart`): Dart sends the
-whole bar, titled and greyed, whenever that changed, and Swift sends back the
-id of the item picked. The bar is SwiftUI's — `AppCommands`, in each Runner's
-`.commands` — so the platform puts in what it always does (Hide, Quit, Full
-Screen, the Window menu) and the layout says only each menu's role: the app
-menu, File, View and Help take the app's items into the platform's own, and
-an `own` menu is one of the app's. It is a port, `AppMenus`
-(`lib/app/app_menus.dart`), bound in `main` as `NativeAppMenus`
-(`core/platform/app_menus.dart`) on the two Apples and absent everywhere
-else. Before the app is up nothing is sent, so the welcome tour has no app
+macOS's alone), and the layout says only each menu's role: the app menu,
+File, View and Help take the app's items into the platform's own, and an
+`own` menu is one of the app's. It is a port, `AppMenus`
+(`lib/app/app_menus.dart`), bound in `main` as `HostAppMenus` on the two
+Apples — the items titled, greyed and handed to the core's `MenuBarHost`,
+which `entoli_menu` draws (see `packages/entoli_menu/lib/AGENTS.md`) — and
+absent everywhere else. Before the app is up nothing is sent, so the welcome tour has no app
 items to reach past it by.
 
 `AppMenuSync` (`app_menu.dart`), mounted in `AppShell` below the Navigator,

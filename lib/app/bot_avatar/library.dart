@@ -1,5 +1,5 @@
-import "package:entoli_chat/domain/bot_avatar/definition.dart";
-import "package:entoli_chat/domain/bot_avatar/spec.dart";
+import "package:entoli_core/model/bot_avatar/definition.dart";
+import "package:entoli_core/model/bot_avatar/spec.dart";
 
 /// One shape the avatar editor offers, and where it came from.
 class BotAvatarEntry {

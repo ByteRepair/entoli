@@ -1,0 +1,22 @@
+name: entoli_share
+description: >
+  The platform's share sheet, for a link the user sends on.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  entoli_core:
+    path: ../entoli_core
+  share_plus: ^13.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

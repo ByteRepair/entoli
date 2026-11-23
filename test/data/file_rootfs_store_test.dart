@@ -1,8 +1,9 @@
 import "dart:async";
 import "dart:io";
 
-import "package:agent_chat/data/local/file_rootfs_store.dart";
-import "package:entoli_chat/domain/rootfs.dart";
+import "package:agent_chat/data/download.dart" show startDownload;
+import "package:entoli_shell/file_rootfs_store.dart";
+import "package:entoli_core/model/rootfs.dart";
 import "package:crypto/crypto.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
@@ -69,8 +70,15 @@ void main() {
   FileRootfsStore storeIn({
     Future<ProcessResult> Function(String, String)? tar,
   }) => tar == null
-      ? FileRootfsStore(p.join(root.path, "rootfs"), client: net)
-      : FileRootfsStore(p.join(root.path, "rootfs"), client: net, tar: tar);
+      ? FileRootfsStore(
+          p.join(root.path, "rootfs"),
+          download: startDownload(client: net),
+        )
+      : FileRootfsStore(
+          p.join(root.path, "rootfs"),
+          download: startDownload(client: net),
+          tar: tar,
+        );
 
   test(
     "a finished install is unpacked, marked whole, and the tarball is gone",

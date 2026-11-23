@@ -1,8 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/ask.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/ask.dart";
 import "package:agent_chat/app/chat_controller.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/question_panel.dart";

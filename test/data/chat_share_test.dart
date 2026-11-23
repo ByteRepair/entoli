@@ -3,16 +3,16 @@ import "dart:io";
 import "dart:math";
 import "dart:typed_data";
 
+import "package:file/local.dart";
 import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/core/migrations.dart";
-import "package:entoli_chat/data/chat_share.dart";
-import "package:entoli_chat/data/local/file_chat_store.dart";
-import "package:entoli_chat/domain/chat_share.dart";
-import "package:entoli_chat/domain/models.dart";
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/migrations.dart";
+import "package:entoli_core/store/chat_share.dart";
+import "package:entoli_core/store/file_chat_store.dart";
+import "package:entoli_core/model/chat_share.dart";
+import "package:entoli_core/model/models.dart";
 
 import "../harness.dart";
 
@@ -75,7 +75,10 @@ void main() {
 
   Future<AppConfig> unpacked(String? link) async {
     final dir = tempDir("share_unpacked_");
-    final unpacked = await unpackShare(zipOf(link), dir.path);
+    final unpacked = await unpackShare(
+      zipOf(link),
+      const LocalFileSystem().directory(dir.path),
+    );
     expect(unpacked?.chatId, "c1");
     return unpacked!.config;
   }
@@ -324,7 +327,7 @@ void main() {
             "version": [1],
             conv: [],
           }),
-          dir.path,
+          const LocalFileSystem().directory(dir.path),
         ),
         isNull,
       );
@@ -338,7 +341,10 @@ void main() {
         conv: [],
       });
 
-      expect(await unpackShare(shared, dir.path), isNull);
+      expect(
+        await unpackShare(shared, const LocalFileSystem().directory(dir.path)),
+        isNull,
+      );
     });
 
     final state = "projects/default/chats/c1/state.json";
@@ -364,7 +370,13 @@ void main() {
         "projects/default/chats/c2/conv.jsonl": [],
       });
 
-      expect((await unpackShare(shared, dir.path))?.chatId, "c1");
+      expect(
+        (await unpackShare(
+          shared,
+          const LocalFileSystem().directory(dir.path),
+        ))?.chatId,
+        "c1",
+      );
       expect(File(p.join(dir.path, "settings.json")).existsSync(), isFalse);
       expect(
         Directory(p.join(dir.path, "projects/default/chats/c2")).existsSync(),
@@ -384,7 +396,10 @@ void main() {
         ),
       });
 
-      final unpacked = await unpackShare(shared, dir.path);
+      final unpacked = await unpackShare(
+        shared,
+        const LocalFileSystem().directory(dir.path),
+      );
 
       expect(unpacked?.chatId, "c1");
       expect(File(unpacked!.config.metaFile("c1")).existsSync(), isFalse);
@@ -398,9 +413,18 @@ void main() {
         state: ?bytes,
       });
 
-      expect(await unpackShare(withState(null), tempDir().path), isNull);
       expect(
-        await unpackShare(withState(utf8.encode("{")), tempDir().path),
+        await unpackShare(
+          withState(null),
+          const LocalFileSystem().directory(tempDir().path),
+        ),
+        isNull,
+      );
+      expect(
+        await unpackShare(
+          withState(utf8.encode("{")),
+          const LocalFileSystem().directory(tempDir().path),
+        ),
         isNull,
       );
     });
@@ -413,7 +437,13 @@ void main() {
         state: stateBytes,
       });
 
-      expect(await unpackShare(shared, tempDir().path), isNull);
+      expect(
+        await unpackShare(
+          shared,
+          const LocalFileSystem().directory(tempDir().path),
+        ),
+        isNull,
+      );
     });
   });
 
@@ -429,6 +459,7 @@ void main() {
         final id = await importShare(
           zipOf(link),
           FileChatStore(into),
+          const LocalFileSystem(),
           project: "work",
         );
 
@@ -451,8 +482,8 @@ void main() {
       await chat("c1");
       final zip = zipOf(await pack(picks()));
 
-      final first = await importShare(zip, store);
-      final second = await importShare(zip, store);
+      final first = await importShare(zip, store, const LocalFileSystem());
+      final second = await importShare(zip, store, const LocalFileSystem());
 
       expect({first, second, "c1"}, hasLength(3));
     });

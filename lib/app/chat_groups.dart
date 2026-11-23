@@ -1,4 +1,4 @@
-import "package:entoli_chat/domain/models.dart";
+import "package:entoli_core/model/models.dart";
 
 /// The heading pinned chats sit under, ahead of every date group.
 const pinnedHeading = "Pinned";

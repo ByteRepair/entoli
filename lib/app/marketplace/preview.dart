@@ -3,12 +3,12 @@ import "dart:typed_data";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:http/http.dart" as http;
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/app_link.dart" show SharedEntryLink;
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/store/prompts/skill_import.dart";
 
-import "package:entoli_chat/core/log.dart";
-import "../../data/prompts/skill_import.dart";
-import "package:entoli_chat/domain/app_link.dart" show SharedEntryLink;
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
 import "../../providers.dart";
 import "marketplace.dart";
 

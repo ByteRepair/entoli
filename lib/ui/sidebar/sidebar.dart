@@ -2,10 +2,10 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/chat_search.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart";
 
-import "package:entoli_chat/domain/chat_search.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart";
 import "../../providers.dart";
 import "../app_command.dart";
 import "../chat_actions.dart";

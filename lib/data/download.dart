@@ -3,16 +3,14 @@ import "dart:io";
 
 import "package:crypto/crypto.dart";
 import "package:http/http.dart" as http;
+import "package:entoli_core/model/download.dart";
 
-import "../core/tls.dart";
-import "package:entoli_chat/domain/app_update.dart"
-    show latestReleaseUrl, latestTagOf;
-import "package:entoli_chat/domain/download.dart";
+import "tls.dart";
 
 /// Fetching something big onto the disk, reported as it goes and abandoned
 /// whole if the listener leaves: a cancelled listener takes the half-written
 /// directory with it, and cancel's own future waits for that discard.
-class DownloadRun {
+class DownloadRun implements DownloadTask {
   DownloadRun({required this.run, required this.discard, http.Client? client})
     : _client = client ?? tlsClient() {
     _out = StreamController<DownloadProgress>(
@@ -70,8 +68,10 @@ class DownloadRun {
 
   /// Whether the listener has gone. The run is expected to check this after
   /// anything slow and give up.
+  @override
   bool get cancelled => _cancelled;
 
+  @override
   void report(DownloadProgress progress) => _out.add(progress);
 
   /// One file, streamed to disk, and how many bytes it turned out to be.
@@ -81,6 +81,7 @@ class DownloadRun {
   /// the way past — a checksum, where the caller wants one, without a second
   /// read of the file. A body shorter than the length the response declared
   /// is an error, since a dropped connection otherwise ends like a finished one.
+  @override
   Future<int> fetch({
     required String url,
     required String to,
@@ -130,6 +131,7 @@ class DownloadRun {
 
   /// [fetch] one file and answer its SHA-256 in hex, hashed on the way past
   /// rather than by reading back what may be gigabytes.
+  @override
   Future<String> fetchSha256({
     required String url,
     required String to,
@@ -145,6 +147,12 @@ class DownloadRun {
   }
 }
 
+/// A [StartDownload] over [DownloadRun], for a store outside the app.
+/// [client] is the tests'.
+StartDownload startDownload({http.Client? client}) =>
+    ({required run, required discard}) =>
+        DownloadRun(run: run, discard: discard, client: client).stream;
+
 /// Where the hash of the download lands. `package:convert` has one of these and
 /// is not a dependency for four lines.
 class _Sha256Sink implements Sink<Digest> {
@@ -155,41 +163,4 @@ class _Sha256Sink implements Sink<Digest> {
 
   @override
   void close() {}
-}
-
-/// [repo]'s newest release tag, read off the redirect its `releases/latest`
-/// page answers with — no API call, no rate limit, and the tag in the one
-/// header GitHub has always put there.
-Future<String> latestReleaseTag(
-  http.Client client,
-  String repo, {
-  Duration timeout = const Duration(seconds: 30),
-}) async {
-  final request = http.Request("GET", latestReleaseUrl(repo))
-    ..followRedirects = false
-    ..maxRedirects = 0;
-  final response = await client.send(request).timeout(timeout);
-  try {
-    if (response.statusCode >= 400) {
-      throw HttpException(
-        "${response.statusCode} for the latest release of $repo",
-      );
-    }
-    final location = response.headers["location"];
-    final tag = location == null ? null : latestTagOf(Uri.parse(location));
-    if (tag == null) {
-      throw FormatException(
-        "the latest release of $repo points at $location, which names no "
-        "tag",
-      );
-    }
-    return tag;
-  } finally {
-    // A redirect's body is nothing, but a body nobody reads holds the
-    // socket until the client is closed. A body that errors while it is
-    // drained says nothing about the tag, which is already in hand.
-    try {
-      await response.stream.drain<void>();
-    } catch (_) {}
-  }
 }

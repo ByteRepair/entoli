@@ -1,8 +1,7 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/agent_definition.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
+import "package:entoli_core/model/agent_definition.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/prompt_library.dart";
 
 AgentDefinition agentFrom(String source) =>
     AgentDefinition.of(PromptDocument.parse(CompletionKind.agent, "a", source));

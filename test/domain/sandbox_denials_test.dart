@@ -1,10 +1,10 @@
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
-import "package:entoli_chat/domain/sandbox_denials.dart";
-import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_core/model/sandbox_denials.dart";
+import "package:entoli_core/model/shell.dart";
 
 void main() {
   late String root;
@@ -28,7 +28,13 @@ void main() {
   });
 
   List<String> denials(String output, {List<String> readOnly = const []}) =>
-      sandboxDenials(output, sandbox, cwd: outside, readOnly: readOnly);
+      sandboxDenials(
+        const LocalFileSystem(),
+        output,
+        sandbox,
+        cwd: outside,
+        readOnly: readOnly,
+      );
 
   test("reads the path each tool's error names", () {
     final file = p.join(outside, "f");

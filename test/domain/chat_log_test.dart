@@ -1,9 +1,8 @@
 import "dart:convert";
 
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/models.dart";
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/models.dart";
 
 void main() {
   final at = DateTime.utc(2026, 1, 1);

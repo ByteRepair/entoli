@@ -1,35 +1,36 @@
-import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/agent_definition.dart";
+import "package:entoli_core/model/agent_face.dart";
+import "package:entoli_core/model/bot_avatar/spec.dart";
+import "package:entoli_core/model/file_picker.dart";
+import "package:entoli_core/model/attachment_picker.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart" show promptsDirUserWritable;
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/agent/tools/agent_tool.dart";
+import "package:entoli_core/store/prompts/skill_import.dart" show isFolderName;
 
 import "../../app/marketplace/install.dart" show PromptInstall;
 import "../../app/prompts/agent_files.dart";
 import "../../app/prompts/agent_tools.dart";
 import "../../app/prompts/own_prompts.dart";
 import "../../app/settings/scope.dart";
-import "../../data/builtin/tools/agent_tool.dart";
 import "../../data/prompts/agent_pictures.dart" show readOwnAgentFace;
-import "../../data/prompts/skill_import.dart" show isFolderName;
-import "package:entoli_chat/domain/agent_definition.dart";
-import "package:entoli_chat/domain/agent_face.dart";
-import "package:entoli_chat/domain/bot_avatar/spec.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart" show promptsDirUserWritable;
-import "package:entoli_chat/domain/prompt_library.dart";
 import "../../providers.dart";
 import "../bot_avatar/bot_avatar_editor.dart";
 import "../widgets/add_button_row.dart";
-import "package:entoli_chat/ui/widgets/agent_picture.dart";
-import "package:entoli_chat/ui/widgets/anchored_menu.dart";
-import "package:entoli_chat/ui/widgets/busy.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
-import "package:entoli_chat/ui/widgets/discard_guard.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
+import "package:entoli_core/view/widgets/agent_picture.dart";
+import "package:entoli_core/view/widgets/anchored_menu.dart";
+import "package:entoli_core/view/widgets/busy.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
+import "package:entoli_core/view/widgets/discard_guard.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
 import "../widgets/prompt_field.dart";
 import "../widgets/section_header.dart";
 import "copy_install_link.dart";
 
-const _agentFiles = XTypeGroup(
+const _agentFiles = FileTypes(
   label: "Agent",
   extensions: ["md"],
   mimeTypes: ["text/markdown"],
@@ -158,7 +159,7 @@ class _AgentsSettingsState extends ConsumerState<AgentsSettings> {
   Future<void> _import() async {
     ({String name, String source})? read;
     await _guard(() async {
-      final file = await openFile(acceptedTypeGroups: const [_agentFiles]);
+      final file = await ref.read(filePickerProvider).file(types: _agentFiles);
       if (file == null) return;
       read = AgentFiles.import(
         file.name,
@@ -411,9 +412,10 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
   }
 
   Future<void> _pickPicture() => guarded(context, () async {
-    final picks = await ref
-        .read(attachmentPickerProvider)
-        .pick(AttachmentKind.image);
+    final picks = await pickAttachments(
+      ref.read(filePickerProvider),
+      AttachmentKind.image,
+    );
     if (picks.isEmpty || !mounted) return;
     final attachment = picks.single;
     if (!attachment.filename.toLowerCase().endsWith(".png")) {

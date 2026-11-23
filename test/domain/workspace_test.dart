@@ -1,13 +1,13 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/domain/file_handoff.dart";
-import "package:entoli_chat/domain/file_tools.dart"
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/file_handoff.dart";
+import "package:entoli_core/model/file_tools.dart"
     show outsideWorkspaces, resolveWorkspacePath;
-import "package:entoli_chat/domain/workspace.dart";
+import "package:entoli_core/model/workspace.dart";
 import "package:path/path.dart" as p;
 
 import "../fakes.dart";
@@ -29,7 +29,7 @@ void main() {
       File("$dir/b.txt").writeAsStringSync("b");
       File("$dir/a.txt").writeAsStringSync("a");
 
-      final entries = await listWorkspace(dir);
+      final entries = await const Workspace(LocalFileSystem()).list(dir);
 
       expect(entries.map((e) => e.name), ["alpha", "zeta", "a.txt", "b.txt"]);
       expect(entries.map((e) => e.isDirectory), [true, true, false, false]);
@@ -40,7 +40,7 @@ void main() {
         File("$dir/$name").writeAsStringSync("x");
       }
 
-      final entries = await listWorkspace(dir);
+      final entries = await const Workspace(LocalFileSystem()).list(dir);
 
       expect(entries.map((e) => e.name), [
         "alpha.txt",
@@ -53,7 +53,7 @@ void main() {
       File("$dir/a.txt").writeAsStringSync("hello");
       Directory("$dir/sub").createSync();
 
-      final entries = await listWorkspace(dir);
+      final entries = await const Workspace(LocalFileSystem()).list(dir);
 
       expect(entries.singleWhere((e) => e.name == "a.txt").size, 5);
       expect(entries.singleWhere((e) => e.name == "sub").size, 0);
@@ -62,7 +62,10 @@ void main() {
     // A workspace is created with the chat and may never be written to, so a
     // missing one is empty rather than a page that fails to draw.
     test("a folder that is not there is empty", () async {
-      expect(await listWorkspace("$dir/never-made"), isEmpty);
+      expect(
+        await const Workspace(LocalFileSystem()).list("$dir/never-made"),
+        isEmpty,
+      );
     });
   });
 
@@ -90,7 +93,9 @@ void main() {
     test("a small one comes back whole", () async {
       File("$dir/a.txt").writeAsStringSync("hello\nthere");
 
-      final content = await readTextHead("$dir/a.txt");
+      final content = await const Workspace(
+        LocalFileSystem(),
+      ).readTextHead("$dir/a.txt");
 
       expect(content!.text, "hello\nthere");
       expect(content.truncated, isFalse);
@@ -99,7 +104,9 @@ void main() {
     test("a big one stops at the cap and says so", () async {
       File("$dir/big.log").writeAsStringSync("x" * (textViewLimit + 500));
 
-      final content = await readTextHead("$dir/big.log");
+      final content = await const Workspace(
+        LocalFileSystem(),
+      ).readTextHead("$dir/big.log");
 
       expect(content!.text.length, textViewLimit);
       expect(content.truncated, isTrue);
@@ -112,7 +119,9 @@ void main() {
         ...utf8.encode("é" * 10),
       ]);
 
-      final content = await readTextHead("$dir/big.log");
+      final content = await const Workspace(
+        LocalFileSystem(),
+      ).readTextHead("$dir/big.log");
 
       expect(content!.text.length, textViewLimit - 1);
       expect(content.truncated, isTrue);
@@ -121,13 +130,21 @@ void main() {
     test("nor is one that is not UTF-8", () async {
       File("$dir/a.txt").writeAsBytesSync([0x68, 0xc3, 0x28, 0x69]);
 
-      expect(await readTextHead("$dir/a.txt"), isNull);
+      expect(
+        await const Workspace(LocalFileSystem()).readTextHead("$dir/a.txt"),
+        isNull,
+      );
     });
 
     test("an empty file is text with nothing in it", () async {
       File("$dir/a.txt").writeAsStringSync("");
 
-      expect((await readTextHead("$dir/a.txt"))!.text, isEmpty);
+      expect(
+        (await const Workspace(
+          LocalFileSystem(),
+        ).readTextHead("$dir/a.txt"))!.text,
+        isEmpty,
+      );
     });
 
     // The listing under the explorer is re-read, and the agent writes to the
@@ -135,20 +152,25 @@ void main() {
     test(
       "one that is no longer there is an error rather than an empty page",
       () {
-        expect(readTextHead("$dir/gone.txt"), throwsException);
+        expect(
+          const Workspace(LocalFileSystem()).readTextHead("$dir/gone.txt"),
+          throwsException,
+        );
       },
     );
   });
 
   group("writing what arrived", () {
     test("a path creates the folders it names", () async {
-      await writeIncoming(dir, [incomingFile("notes/today/a.txt", "one")]);
+      await const Workspace(
+        LocalFileSystem(),
+      ).writeIncoming(dir, [incomingFile("notes/today/a.txt", "one")]);
 
       expect(File("$dir/notes/today/a.txt").readAsStringSync(), "one");
     });
 
     test("several files land together", () async {
-      await writeIncoming(dir, [
+      await const Workspace(LocalFileSystem()).writeIncoming(dir, [
         incomingFile("a.txt", "a"),
         incomingFile("b.txt", "b"),
       ]);
@@ -160,7 +182,9 @@ void main() {
     // The name was written by whatever app shared the file, which is why it is
     // sanitised on the way in rather than trusted.
     test("a path climbing out of the workspace is written inside it", () async {
-      await writeIncoming(dir, [incomingFile("../../settings.json", "stolen")]);
+      await const Workspace(
+        LocalFileSystem(),
+      ).writeIncoming(dir, [incomingFile("../../settings.json", "stolen")]);
 
       expect(File("$dir/settings.json").readAsStringSync(), "stolen");
       expect(
@@ -170,7 +194,9 @@ void main() {
     });
 
     test("an absolute path is written inside it too", () async {
-      await writeIncoming(dir, [incomingFile("/etc/passwd", "nope")]);
+      await const Workspace(
+        LocalFileSystem(),
+      ).writeIncoming(dir, [incomingFile("/etc/passwd", "nope")]);
 
       expect(File("$dir/etc/passwd").readAsStringSync(), "nope");
     });
@@ -197,7 +223,7 @@ void main() {
 
     test("is moved, not copied", () async {
       final file = staged("shared.txt", "from elsewhere");
-      await writeIncoming(dir, [file]);
+      await const Workspace(LocalFileSystem()).writeIncoming(dir, [file]);
 
       expect(File("$dir/shared.txt").readAsStringSync(), "from elsewhere");
       expect(File(file.staged).existsSync(), isFalse);
@@ -206,7 +232,9 @@ void main() {
     // The folder has to exist before a rename can land in it, which a write
     // would have created on its own.
     test("keeps the folder its name asks for", () async {
-      await writeIncoming(dir, [staged("notes/a.txt", "deep")]);
+      await const Workspace(
+        LocalFileSystem(),
+      ).writeIncoming(dir, [staged("notes/a.txt", "deep")]);
 
       expect(File("$dir/notes/a.txt").readAsStringSync(), "deep");
     });
@@ -216,7 +244,9 @@ void main() {
     // real cause and look like nothing.
     test("a staged copy that is no longer there is reported, not skipped", () {
       expect(
-        writeIncoming(dir, [IncomingStaged("gone.txt", "$staging/gone.txt")]),
+        const Workspace(
+          LocalFileSystem(),
+        ).writeIncoming(dir, [IncomingStaged("gone.txt", "$staging/gone.txt")]),
         throwsA(isA<FileSystemException>()),
       );
     });
@@ -228,7 +258,7 @@ void main() {
         ..createSync(recursive: true)
         ..writeAsStringSync("a");
 
-      await createFolder(dir, "notes");
+      await const Workspace(LocalFileSystem()).createFolder(dir, "notes");
 
       expect(File("$dir/notes/a.txt").readAsStringSync(), "a");
     });
@@ -244,7 +274,9 @@ void main() {
     test("one that is already gone is a deletion that happened", () async {
       File("$dir/a.txt").writeAsStringSync("a");
 
-      await deleteEntries(["$dir/never-was", "$dir/a.txt"]);
+      await const Workspace(
+        LocalFileSystem(),
+      ).deleteEntries(["$dir/never-was", "$dir/a.txt"]);
 
       expect(File("$dir/a.txt").existsSync(), isFalse);
     });

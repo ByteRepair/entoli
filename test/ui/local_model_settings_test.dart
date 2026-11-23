@@ -2,17 +2,16 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/local/local_instance.dart" show LocalUsage;
-import "package:entoli_chat/domain/local_llm.dart";
-import "package:entoli_chat/domain/local_model.dart";
-import "package:entoli_chat/domain/model_budget.dart";
+import "package:entoli_core/model/local_llm.dart";
+import "package:entoli_core/model/local_model.dart";
+import "package:entoli_core/model/model_budget.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
+import "package:agent_chat/ui/settings/settings_page.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
-import "package:agent_chat/ui/settings/settings_category.dart";
-import "package:agent_chat/ui/settings/settings_page.dart";
 
 void main() {
   late TestApp app;

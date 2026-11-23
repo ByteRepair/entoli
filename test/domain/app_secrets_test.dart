@@ -1,11 +1,11 @@
 import "dart:convert";
 import "dart:io";
 
-import "package:entoli_chat/core/config.dart";
+import "package:entoli_core/model/config.dart";
 import "package:agent_chat/data/local/file_secret_store.dart";
-import "package:entoli_chat/domain/app_secrets.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/secret_store.dart";
+import "package:entoli_core/model/app_secrets.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/secret_store.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "../harness.dart";

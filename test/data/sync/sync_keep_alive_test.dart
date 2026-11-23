@@ -2,11 +2,10 @@ import "dart:convert";
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/sync/sync_keep_alive.dart";
 import "package:agent_chat/data/sync/sync_hub.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/background_work.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/background_work.dart";
 
 import "../../fakes.dart";
 import "../../harness.dart";

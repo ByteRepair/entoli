@@ -3,13 +3,14 @@ import "dart:convert";
 import "dart:ffi" show Abi;
 import "dart:io";
 
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/mcp_tool_bridge.dart";
 import "package:agent_chat/data/builtin/llm/providers/cli_sign_in.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/shell.dart" show guestHome, guestPath;
-import "package:entoli_chat/domain/model_registry.dart";
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/shell.dart" show guestHome, guestPath;
+import "package:entoli_core/model/model_registry.dart";
+import "package:entoli_shell/entoli_shell.dart";
 import "package:archive/archive.dart";
 import "package:crypto/crypto.dart";
 import "package:http/http.dart" as http;

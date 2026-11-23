@@ -1,6 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/artifact.dart";
+import "package:entoli_core/model/artifact.dart";
 
 void main() {
   test("parses path, title, and derives entryFile", () {

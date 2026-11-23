@@ -1,60 +1,59 @@
-import "package:agent_chat/app/app_menus.dart";
 import "dart:async";
 import "dart:io";
 
+import "package:file/local.dart";
+import "package:agent_chat/app/app_menus.dart";
 import "package:clock/clock.dart";
 import "package:flutter/gestures.dart" show PointerDeviceKind;
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-
 import "package:http/http.dart" as http;
-
-import "package:entoli_chat/core/config.dart";
+import "package:entoli_core/model/config.dart";
 import "package:agent_chat/data/local/local_instance.dart";
 import "package:agent_chat/data/local/local_prefill.dart";
-import "package:agent_chat/data/builtin/local_shell.dart";
-import "package:entoli_chat/data/local/file_chat_store.dart";
+import "package:entoli_shell/entoli_shell.dart";
+import "package:entoli_core/store/file_chat_store.dart";
 import "package:agent_chat/data/local/llama_engine.dart";
 import "package:agent_chat/data/local/local_engine.dart";
 import "package:agent_chat/data/local/byte_repair_store.dart";
 import "package:agent_chat/data/sync/peers.dart" show PeerState, PeerStatus;
 import "package:agent_chat/data/sync/sync_hub.dart"
     show RemoteChatEntry, RemoteProject, SyncHub;
-import "package:entoli_chat/domain/model_budget.dart";
-import "package:entoli_chat/domain/confinement.dart";
-import "package:entoli_chat/domain/sync/devices.dart";
-import "package:entoli_chat/domain/sync/identity.dart";
-import "package:entoli_chat/domain/sync/relay_signaling.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/app_secrets.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/app_update.dart";
-import "package:entoli_chat/domain/builtin_project.dart";
+import "package:entoli_core/model/model_budget.dart";
+import "package:entoli_core/model/confinement.dart";
+import "package:entoli_core/model/sync/devices.dart";
+import "package:entoli_core/model/sync/identity.dart";
+import "package:entoli_core/model/sync/relay_signaling.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/app_secrets.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/app_update.dart";
+import "package:entoli_core/model/builtin_project.dart";
 import "package:agent_chat/ui/widgets/prompt_field.dart";
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/chat_meta.dart";
-import "package:entoli_chat/domain/chat_repository.dart";
-import "package:entoli_chat/domain/chat_store.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/model_registry.dart";
-import "package:entoli_chat/domain/models.dart";
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/chat_meta.dart";
+import "package:entoli_core/model/chat_repository.dart";
+import "package:entoli_core/model/chat_store.dart";
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/model_registry.dart";
+import "package:entoli_core/model/models.dart";
 import "package:agent_chat/app/settings/scope.dart" show ProjectAddress;
 import "package:agent_chat/ui/settings/project_prompts_page.dart";
-import "package:entoli_chat/domain/room/room_state.dart";
+import "package:entoli_core/model/room/room_state.dart";
 import "package:agent_chat/core/app_transcript_bindings.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart" show LabelledField;
 import "package:agent_chat/ui/app_routes.dart";
 import "package:agent_chat/ui/routes.dart";
 import "package:agent_chat/ui/widgets/model_picker.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/trigger.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/temp_chat_ttl.dart";
-import "package:entoli_chat/domain/voice.dart";
-import "package:entoli_chat/domain/project.dart" show ProjectRef;
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/trigger.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/temp_chat_ttl.dart";
+import "package:entoli_core/model/voice.dart";
+import "package:entoli_core/model/project.dart" show ProjectRef;
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
     show CliProvider;
 import "package:agent_chat/data/local/apple_fm.dart" show AppleFm;
@@ -63,16 +62,16 @@ import "package:agent_chat/app/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/app/mirror_controller.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
-import "package:entoli_chat/ui/chat/widgets/message_bubble.dart";
+import "package:entoli_core/view/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/focus_follows_keyboard.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/selection.dart";
-import "package:entoli_chat/ui/theme.dart";
-import "package:entoli_chat/ui/widgets/decorative_motion.dart";
+import "package:entoli_core/view/theme.dart";
+import "package:entoli_core/view/widgets/decorative_motion.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
+import "package:entoli_core/model/rootfs.dart";
 
 import "fakes.dart";
-import "package:agent_chat/ui/settings/settings_category.dart";
-import "package:entoli_chat/domain/rootfs.dart";
 
 /// The shell a test gets by default: a real host shell where the test pretends
 /// to be a phone — any [LinuxHost] but a desktop's — and `UnavailableShell`
@@ -96,8 +95,7 @@ class TestApp {
     required this.config,
     required this.secrets,
     required this.backend,
-    required this.picker,
-    required this.folders,
+    required this.chooser,
     required this.clipboard,
     required this.handoff,
     required this.assistant,
@@ -208,8 +206,7 @@ class TestApp {
     final config = tempConfig();
     seedCatalog(testProviderModels);
     final backend = FakeBackend();
-    final picker = FakeAttachmentPicker();
-    final folders = FakeFolderPicker();
+    final chooser = FakeFilePicker();
     final clipboard = FakeClipboardFiles();
     final files = handoff ?? FakeFileHandoff();
     final assist = FakeAssistantLaunch(hasGesture: assistantGesture);
@@ -245,8 +242,7 @@ class TestApp {
       config: config,
       secrets: appSecrets,
       backend: backend,
-      picker: picker,
-      folders: folders,
+      chooser: chooser,
       clipboard: clipboard,
       handoff: files,
       assistant: assist,
@@ -278,8 +274,7 @@ class TestApp {
           if (browser != null)
             agentBrowserProvider.overrideWithValue(browser(config)),
           appSecretsProvider.overrideWithValue(appSecrets),
-          attachmentPickerProvider.overrideWithValue(picker),
-          folderPickerProvider.overrideWithValue(folders),
+          filePickerProvider.overrideWithValue(chooser),
           clipboardFilesProvider.overrideWithValue(clipboard),
           promptLibraryProvider.overrideWith2(
             (project) =>
@@ -300,6 +295,9 @@ class TestApp {
           backupHandoffProvider.overrideWithValue(backups),
           appRestartProvider.overrideWithValue(restart),
           linkOpenerProvider.overrideWithValue(linkOpener),
+          linkLauncherProvider.overrideWithValue(FakeLinkLauncher()),
+          shareSheetProvider.overrideWithValue(FakeShareSheet()),
+          codeScannerProvider.overrideWithValue(FakeCodeScanner()),
           // Nothing here reaches a provider: a key is accepted unless the test
           // says otherwise, and no variable is set.
           keyCheckProvider.overrideWithValue(
@@ -389,8 +387,7 @@ class TestApp {
 
   final AppConfig config;
   final FakeBackend backend;
-  final FakeAttachmentPicker picker;
-  final FakeFolderPicker folders;
+  final FakeFilePicker chooser;
   final FakeClipboardFiles clipboard;
   final FakeFileHandoff handoff;
   final FakeAssistantLaunch assistant;
@@ -571,6 +568,10 @@ Future<SyncHub> testSyncHub({
   registry: devices ?? FakeDeviceRegistry(),
   settings: settings ?? AppSettings.new,
   lanSignaling: () => null,
+  // The VM has no WebRTC engine, so a route that gets as far as a peer
+  // connection fails here the way it would without the plugin.
+  createLink: ({required iceServers}) =>
+      throw UnsupportedError("no peer connection under test"),
   hostname: hostname,
   // Nothing to dial by default, so a test that forgets one fails rather
   // than reaching the network from whatever URL it configured.
@@ -1135,7 +1136,7 @@ Future<void> waitFor(
 /// directories — made with `dart:io` so this stays synchronous.
 AppConfig tempConfig([String prefix = "agent_chat_test_"]) {
   final tmp = Directory.systemTemp.createTempSync(prefix);
-  final config = AppConfig.forDirectory(tmp.path);
+  final config = AppConfig.forDirectory(const LocalFileSystem(), tmp.path);
   Directory(config.chatsDir()).createSync(recursive: true);
   Directory(config.projectWorkspaceDir()).createSync(recursive: true);
   addTearDown(() {
@@ -1163,7 +1164,8 @@ Directory tempDir([String prefix = "agent_chat_test_"]) {
 
 /// A data directory [AppConfig.load] made from nothing, the state a first
 /// launch is in — unlike [tempConfig], which builds the folders itself.
-Future<AppConfig> loadedTempConfig() => AppConfig.load(tempDir().path);
+Future<AppConfig> loadedTempConfig() =>
+    AppConfig.load(const LocalFileSystem(), tempDir().path);
 
 /// Reload a project's prompt library and settle, so what a page draws reflects
 /// what is on disk rather than the test's seeded library. The reload is real

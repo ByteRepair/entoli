@@ -2,10 +2,9 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/view/widgets/dialogs.dart" show notify;
 
 import "../../app/read_aloud.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart" show notify;
-
 export "../../app/read_aloud.dart";
 
 /// Read [said] out under [id], or stop if it is what is already being read,

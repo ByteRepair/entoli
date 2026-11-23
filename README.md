@@ -144,7 +144,7 @@ also why `useLegacyPackaging` has to stay on in `android/app/build.gradle.kts`:
 without it the file is mapped from inside the APK and there is nothing on disk
 to exec.
 
-Then tell the app. `BundledTools.install` in `lib/data/local/bundled_tools.dart`
+Then tell the app. `BundledTools.install` in `packages/entoli_shell/lib/bundled_tools.dart`
 symlinks the binary into its prefix under its real name; the link is what gives
 it a name without a `lib` prefix, since the file itself may not be renamed; and
 adds it to `Toolset.names`, which is what the system prompt tells the model is
@@ -162,7 +162,7 @@ On Android the agent can run its commands inside a downloaded rootfs under
 proot, which is where a package manager comes from; nothing downloaded may be
 executed directly, so the bundled tools are otherwise the whole of what a phone
 can run. A distribution Entoli offers is a const entry in
-`packages/entoli_chat/lib/domain/rootfs.dart` and a name in `rootfsCatalog`;
+`packages/entoli_core/lib/model/rootfs.dart` and a name in `rootfsCatalog`;
 nothing else has to be told, because the Terminal settings category lists the
 catalog, downloads what is picked, and the next command runs in it.
 

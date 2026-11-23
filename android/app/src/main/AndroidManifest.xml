@@ -33,9 +33,9 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 
-    <!-- Sync: scan a pairing QR from the paste-code field on Android. Linux has
-         no camera, so the button is Android-only. Not required: a device with
-         no camera still pairs by typing the code. -->
+    <!-- Sync: scan a pairing QR from the paste-code field, a button the
+         phones alone show. Not required: a device with no camera still pairs
+         by typing the code. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
 

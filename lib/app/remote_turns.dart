@@ -1,17 +1,17 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/chat_meta.dart";
+import "package:entoli_core/model/chat_repository.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/reaction.dart";
+import "package:entoli_core/model/room/room_state.dart";
+import "package:entoli_core/model/project.dart" show localProject;
+import "package:entoli_core/model/project_settings.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/sync/protocol.dart";
+import "package:entoli_core/agent/memory/store.dart";
 
-import "../data/builtin/memory/store.dart";
 import "../data/sync/sync_hub.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/chat_meta.dart";
-import "package:entoli_chat/domain/chat_repository.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/reaction.dart";
-import "package:entoli_chat/domain/room/room_state.dart";
-import "package:entoli_chat/domain/project.dart" show localProject;
-import "package:entoli_chat/domain/project_settings.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/sync/protocol.dart";
 import "../providers.dart";
 import "selection.dart";
 import "chat_controller.dart";
@@ -271,7 +271,7 @@ class RemoteTurnDriver implements RemoteTurns {
   @override
   Memories memories(String? project) {
     final config = _ref.read(appConfigProvider);
-    return MemoryStore(config.memoryDir(project: project));
+    return MemoryStore(config.fs, config.memoryDir(project: project));
   }
 
   void dispose() {

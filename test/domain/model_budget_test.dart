@@ -1,7 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/local_model.dart";
-import "package:entoli_chat/domain/model_budget.dart";
+import "package:entoli_core/model/local_model.dart";
+import "package:entoli_core/model/model_budget.dart";
 
 /// Which catalog models a device is offered, from what it measured. The
 /// numbers are the shapes real devices answer with, so a change to the shares

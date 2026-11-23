@@ -3,16 +3,15 @@ import "dart:convert";
 import "package:flutter_test/flutter_test.dart";
 import "package:http/http.dart" as http;
 import "package:http/testing.dart";
-
-import "package:agent_chat/data/builtin/llm/gemini_client.dart";
-import "package:agent_chat/data/builtin/llm/hosted_models.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/data/builtin/llm/openai_client.dart";
+import "package:entoli_core/agent/llm/gemini_client.dart";
+import "package:entoli_core/agent/llm/hosted_models.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/openai_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/model_capability.dart";
-import "package:entoli_chat/domain/model_registry.dart";
-import "package:entoli_chat/domain/voice.dart";
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/model_capability.dart";
+import "package:entoli_core/model/model_registry.dart";
+import "package:entoli_core/model/voice.dart";
 
 void main() {
   group("providerOf", () {

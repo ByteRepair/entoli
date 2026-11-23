@@ -1,7 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/todo.dart";
+import "package:entoli_core/model/todo.dart";
 import "package:agent_chat/ui/chat/widgets/todo_strip.dart";
 
 import "../harness.dart";

@@ -1,16 +1,16 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
-import "package:agent_chat/data/builtin/background_jobs.dart";
-import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/shell_job.dart";
+import "package:entoli_core/agent/background_jobs.dart";
+import "package:entoli_core/agent/builtin_agent.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/shell_job.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
@@ -35,8 +35,9 @@ void main() {
       respond ?? (_) => ok("output"),
       canRunInBackground: background,
     );
-    jobs = BackgroundJobs();
+    jobs = BackgroundJobs(const LocalFileSystem());
     return BuiltinAgent(
+      fs: const LocalFileSystem(),
       session: BuiltinSession(),
       client: client,
       shell: shell,
@@ -176,7 +177,7 @@ void main() {
   });
 
   test("a job's id is not reused after it ends", () async {
-    jobs = BackgroundJobs();
+    jobs = BackgroundJobs(const LocalFileSystem());
     shell = FakeShell((_) => ok(""), canRunInBackground: true);
     final chat = jobs.forChat("chat-1");
     ShellRun spawn(String script) =>
@@ -199,7 +200,7 @@ void main() {
   test(
     "an end is unheard until a call carries it or a wake tells it",
     () async {
-      jobs = BackgroundJobs();
+      jobs = BackgroundJobs(const LocalFileSystem());
       shell = FakeShell((_) => ok(""), canRunInBackground: true);
       final chat = jobs.forChat("chat-1");
       ShellRun spawn(String script) =>
@@ -239,7 +240,7 @@ void main() {
   });
 
   test("the log tail reads the end of the file", () async {
-    jobs = BackgroundJobs();
+    jobs = BackgroundJobs(const LocalFileSystem());
     final tempDir = Directory.systemTemp.createTempSync("background-log");
     addTearDown(() => tempDir.deleteSync(recursive: true));
     File(p.join(tempDir.path, backgroundLog("c1")))
@@ -264,7 +265,7 @@ void main() {
   });
 
   test("a job that ends says how, with the end of its log", () async {
-    jobs = BackgroundJobs();
+    jobs = BackgroundJobs(const LocalFileSystem());
     final tempDir = Directory.systemTemp.createTempSync("background-end");
     addTearDown(() => tempDir.deleteSync(recursive: true));
     File(p.join(tempDir.path, backgroundLog("c1")))

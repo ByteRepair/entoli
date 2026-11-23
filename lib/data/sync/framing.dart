@@ -3,10 +3,10 @@ import "dart:convert";
 import "dart:typed_data";
 
 import "package:cryptography/cryptography.dart";
+import "package:entoli_core/model/log.dart";
 
-import "channel.dart";
+import "package:entoli_core/model/sync/channel.dart";
 import "handshake.dart" show Handshake;
-import "package:entoli_chat/core/log.dart";
 
 /// An encrypted [ByteChannel]: every message on the wire is
 ///

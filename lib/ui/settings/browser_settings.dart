@@ -1,18 +1,17 @@
 import "dart:async";
 
-import "package:file_selector/file_selector.dart" show openFile;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/settings/keys.dart";
+import "package:entoli_core/view/widgets/busy.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
 
 import "../../app/browser_settings.dart";
 import "../../app/downloads/browser_downloads.dart";
 import "../../app/settings/scope.dart";
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/settings/keys.dart";
 import "../../providers.dart";
-import "package:entoli_chat/ui/widgets/busy.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 import "scoped.dart";
@@ -209,9 +208,9 @@ class _BrowserPicker extends ConsumerWidget {
             : (value) => guarded(context, () async {
                 final picker = ref.read(browserPickProvider.notifier);
                 if (value != _chooseBrowser) return picker.pick(value);
-                final file = await openFile(
-                  confirmButtonText: "Use this browser",
-                );
+                final file = await ref
+                    .read(filePickerProvider)
+                    .file(confirmLabel: "Use this browser");
                 if (file != null) await picker.pickFile(file.path);
               }),
       ),

@@ -4,8 +4,8 @@ import "dart:typed_data";
 import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:entoli_chat/domain/chat_share.dart";
-import "package:entoli_chat/domain/link_bytes.dart" show appLinkMaxLength;
+import "package:entoli_core/model/chat_share.dart";
+import "package:entoli_core/model/link_bytes.dart" show appLinkMaxLength;
 
 void main() {
   Uint8List zipOf(Map<String, String> files, {String? comment}) {

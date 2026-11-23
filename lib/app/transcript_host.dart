@@ -2,17 +2,17 @@ import "dart:typed_data";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
+import "package:entoli_core/model/agent_face.dart";
+import "package:entoli_core/model/plan.dart" show PlanSection;
+import "package:entoli_core/model/room/room_state.dart" show ChatViewState;
+import "package:entoli_core/model/shell_job.dart" show ShellJob;
+import "package:entoli_core/transcript/activity.dart" show LiveMessage;
+import "package:entoli_core/transcript/host.dart";
 
-import "package:entoli_chat/domain/agent_face.dart";
-import "package:entoli_chat/domain/plan.dart" show PlanSection;
-import "package:entoli_chat/domain/room/room_state.dart" show ChatViewState;
-import "package:entoli_chat/domain/shell_job.dart" show ShellJob;
 import "../providers.dart";
 import "mirror_controller.dart" show chatViewProvider;
 import "plan.dart" show planProvider;
 import "sub_agent_transcript.dart" show subAgentLiveProvider;
-import "package:entoli_chat/app/transcript/activity.dart" show LiveMessage;
-import "package:entoli_chat/app/transcript/host.dart";
 
 /// The conversation's host in the app: this device's controller or a paired
 /// device's mirror, the store and the backend.

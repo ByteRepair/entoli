@@ -2,14 +2,15 @@ import "dart:convert";
 import "dart:io";
 
 import "package:path/path.dart" as p;
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/agent_face.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/store/prompts/skill_import.dart"
+    show agentFilePath, isFolderName;
 
-import "package:entoli_chat/core/config.dart";
 import "../../core/platform/platform.dart" as platform;
 import "../../data/prompts/agent_pictures.dart";
-import "../../data/prompts/skill_import.dart" show agentFilePath, isFolderName;
-import "package:entoli_chat/domain/agent_face.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
 
 /// A project's own agents on disk: which are there, and every write a page
 /// makes to them, each through the directory's read-only lock.

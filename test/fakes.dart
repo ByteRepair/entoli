@@ -6,73 +6,112 @@ import "package:archive/archive.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/widgets.dart";
 import "package:path/path.dart" as p;
-
-import "package:agent_chat/data/builtin/llm/hosted_models.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/hosted_models.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
     show
         CliProvider,
-        HostCliGuest,
-        CliProcess,
         CliRelease,
         CliSession,
         CliSessionSpec,
         ClaudeCliProvider,
         CodexCliProvider;
-import "package:agent_chat/data/builtin/llm/providers/provider.dart";
+import "package:entoli_core/agent/llm/providers/provider.dart";
+import "package:entoli_shell/entoli_shell.dart" show CliProcess, HostCliGuest;
 import "package:http/http.dart" as http;
 import "package:agent_chat/data/local/local_instance.dart";
 import "package:agent_chat/data/local/local_prefill.dart";
-import "package:agent_chat/data/sync/channel.dart";
+import "package:entoli_core/model/sync/channel.dart";
 import "package:agent_chat/data/sync/peers.dart" show PeerState;
 import "package:agent_chat/data/sync/sync_hub.dart"
     show RemoteChatEntry, RemoteProject;
-import "package:entoli_chat/domain/app_update.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/app_restart.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/attachment_picker.dart";
-import "package:entoli_chat/domain/folder_picker.dart";
-import "package:entoli_chat/domain/clipboard_files.dart";
-import "package:entoli_chat/domain/backup_handoff.dart";
-import "package:entoli_chat/domain/shell_job.dart";
-import "package:entoli_chat/domain/background_work.dart";
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/chat_meta.dart";
-import "package:entoli_chat/domain/chat_store.dart";
-import "package:entoli_chat/domain/assistant_launch.dart";
-import "package:entoli_chat/domain/file_handoff.dart";
-import "package:entoli_chat/domain/link_opener.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/local_model.dart";
-import "package:entoli_chat/domain/local_model_store.dart";
-import "package:entoli_chat/domain/model_capability.dart";
-import "package:entoli_chat/domain/model_registry.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/room/room_state.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/provider_usage.dart";
-import "package:entoli_chat/domain/file_watches.dart";
-import "package:entoli_chat/domain/reminder_alarms.dart";
-import "package:entoli_chat/domain/trigger.dart";
-import "package:entoli_chat/domain/trigger_runner.dart";
-import "package:entoli_chat/domain/turn_sender.dart";
-import "package:entoli_chat/domain/voice.dart";
-import "package:entoli_chat/domain/voice_model.dart";
-import "package:entoli_chat/domain/download.dart";
-import "package:entoli_chat/domain/rootfs.dart";
-import "package:entoli_chat/domain/rootfs_store.dart";
-import "package:entoli_chat/domain/secret_store.dart";
-import "package:entoli_chat/domain/sync/devices.dart";
-import "package:entoli_chat/domain/sync/relay_signaling.dart";
-import "package:entoli_chat/domain/voice_model_store.dart";
-import "package:entoli_chat/domain/project.dart" show ProjectRef;
+import "package:entoli_core/model/app_update.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/app_restart.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/file_picker.dart";
+import "package:entoli_core/model/clipboard_files.dart";
+import "package:entoli_core/model/backup_handoff.dart";
+import "package:entoli_core/model/shell_job.dart";
+import "package:entoli_core/model/background_work.dart";
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/chat_meta.dart";
+import "package:entoli_core/model/chat_store.dart";
+import "package:entoli_core/model/assistant_launch.dart";
+import "package:entoli_core/model/file_handoff.dart";
+import "package:entoli_core/model/link_launcher.dart";
+import "package:entoli_core/model/link_opener.dart";
+import "package:entoli_core/model/share_sheet.dart";
+import "package:entoli_core/view/code_scanner.dart";
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/local_model.dart";
+import "package:entoli_core/model/local_model_store.dart";
+import "package:entoli_core/model/model_capability.dart";
+import "package:entoli_core/model/model_registry.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/room/room_state.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/provider_usage.dart";
+import "package:entoli_core/model/file_watches.dart";
+import "package:entoli_core/model/reminder_alarms.dart";
+import "package:entoli_core/model/trigger.dart";
+import "package:entoli_core/model/trigger_runner.dart";
+import "package:entoli_core/model/turn_sender.dart";
+import "package:entoli_core/model/voice.dart";
+import "package:entoli_core/model/voice_model.dart";
+import "package:entoli_core/model/download.dart";
+import "package:entoli_core/model/rootfs.dart";
+import "package:entoli_core/model/rootfs_store.dart";
+import "package:entoli_core/model/secret_store.dart";
+import "package:entoli_core/model/sync/devices.dart";
+import "package:entoli_core/model/sync/relay_signaling.dart";
+import "package:entoli_core/model/voice_model_store.dart";
+import "package:entoli_core/model/project.dart" show ProjectRef;
 import "package:agent_chat/providers.dart"
     show DeviceProjects, PairedDevices, RemoteChats, RemoteProjectNotifier;
 import "package:agent_chat/app/app_items.dart";
 import "package:agent_chat/app/app_menus.dart";
 import "package:agent_chat/app/mirror_controller.dart";
 import "package:uuid/uuid.dart";
+
+/// A [LinkLauncher] that records what it was handed and opens nothing.
+class FakeLinkLauncher implements LinkLauncher {
+  final List<Uri> external = [];
+  final List<Uri> inAppBrowser = [];
+
+  @override
+  Future<bool> openExternal(Uri url) async {
+    external.add(url);
+    return true;
+  }
+
+  @override
+  Future<bool> openInAppBrowser(Uri url) async {
+    inAppBrowser.add(url);
+    return true;
+  }
+}
+
+/// A [ShareSheet] that records what it was handed and says it took it.
+class FakeShareSheet implements ShareSheet {
+  final List<Uri> shared = [];
+
+  @override
+  Future<bool> shareLink(Uri link, {Rect? origin}) async {
+    shared.add(link);
+    return true;
+  }
+}
+
+/// A [CodeScanner] with no camera: its view is empty and reads nothing.
+class FakeCodeScanner implements CodeScanner {
+  @override
+  Widget view({
+    required bool Function(String code) onCode,
+    required WidgetBuilder refused,
+    required Widget Function(BuildContext context, String reason) failed,
+  }) => const SizedBox.shrink();
+}
 
 /// A [LinkOpener] that records what it was asked to open, for UI tests that
 /// assert on the call rather than on a browser opening.
@@ -314,34 +353,75 @@ Message userMessage(
   references: references,
 );
 
-/// Stands in for the platform's file chooser, which no test can drive.
-class FakeAttachmentPicker implements AttachmentPicker {
-  final List<AttachmentKind> picks = [];
-
-  /// What the next pick returns. Empty is a cancelled dialog.
-  List<Attachment> scripted = const [];
-
-  @override
-  Future<List<Attachment>> pick(AttachmentKind kind) async {
-    picks.add(kind);
-    return scripted;
-  }
-}
-
-/// Stands in for the platform's folder chooser.
-class FakeFolderPicker implements FolderPicker {
-  /// What the next pick returns. Null is a cancelled dialog.
+/// Stands in for the platform's folder and file choosers.
+class FakeFilePicker implements FilePicker {
+  /// What the next folder pick returns. Null is a cancelled dialog.
   String? scripted;
 
   @override
-  Future<String?> pick({required String confirmLabel}) async => scripted;
+  Future<String?> folder({required String confirmLabel}) async => scripted;
 
-  /// What the next file pick returns. Empty is a cancelled dialog.
+  /// What the next file pick returns, by path; the first of them for a single
+  /// file. Empty is a cancelled dialog.
   List<String> scriptedFiles = const [];
 
   @override
-  Future<List<String>> pickFiles({required String confirmLabel}) async =>
-      scriptedFiles;
+  Future<PickedFile?> file({String? confirmLabel, FileTypes? types}) async =>
+      scriptedFiles.map(FakePickedFile.new).firstOrNull;
+
+  /// What the next files pick returns after [scriptedFiles], held in memory
+  /// for a widget test, where a read of the disk would not land.
+  List<Attachment> scriptedAttachments = const [];
+
+  /// The filter each files pick was asked with, in order.
+  final List<FileTypes?> asked = [];
+
+  @override
+  Future<List<PickedFile>> files({
+    String? confirmLabel,
+    FileTypes? types,
+  }) async {
+    asked.add(types);
+    return [
+      for (final path in scriptedFiles) FakePickedFile(path),
+      for (final attachment in scriptedAttachments) _HeldFile(attachment),
+    ];
+  }
+}
+
+class _HeldFile implements PickedFile {
+  const _HeldFile(this._attachment);
+
+  final Attachment _attachment;
+
+  @override
+  String get path => _attachment.filename;
+
+  @override
+  String get name => _attachment.filename;
+
+  @override
+  String? get mimeType => _attachment.mimeType;
+
+  @override
+  Future<Uint8List> readAsBytes() async => _attachment.bytes;
+}
+
+/// A picked file on the real disk, which is where a test's files are.
+class FakePickedFile implements PickedFile {
+  const FakePickedFile(this.path);
+
+  @override
+  final String path;
+
+  @override
+  String get name => p.basename(path);
+
+  @override
+  String? get mimeType => null;
+
+  @override
+  Future<Uint8List> readAsBytes() => File(path).readAsBytes();
 }
 
 /// Stands in for the runner's clipboard channel.
@@ -626,7 +706,7 @@ class _IncomingBytes extends IncomingFile {
   final Uint8List bytes;
 
   @override
-  Future<void> writeTo(String target) => File(target).writeAsBytes(bytes);
+  Future<void> writeTo(File target) => target.writeAsBytes(bytes);
 }
 
 /// A chat's background jobs as a test sets them.

@@ -1,19 +1,19 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/agent_face.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/view/chat/widgets/markdown_text.dart";
+import "package:entoli_core/view/widgets/agent_picture.dart";
+import "package:entoli_core/view/widgets/notice.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
 
 import "../../app/marketplace/install.dart";
 import "../../app/marketplace/marketplace.dart";
 import "../../app/marketplace/preview.dart";
-import "package:entoli_chat/domain/agent_face.dart";
-import "package:entoli_chat/domain/models.dart";
 import "../../providers.dart";
-import "package:entoli_chat/ui/chat/widgets/markdown_text.dart";
-import "package:entoli_chat/ui/widgets/agent_picture.dart";
 import "../widgets/install_bar.dart";
 import "../widgets/install_destination.dart";
 import "../widgets/nothing.dart";
-import "package:entoli_chat/ui/widgets/notice.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "../widgets/section_header.dart";
 import "marketplace_rows.dart";
 import "unreachable.dart";

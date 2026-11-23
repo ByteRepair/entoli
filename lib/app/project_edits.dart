@@ -1,9 +1,9 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/models.dart" show ChatState;
+import "package:entoli_core/model/project.dart";
+import "package:entoli_core/model/work_folders.dart";
 
 import "../data/sync/sync_hub.dart" show RemoteChatEntry;
-import "package:entoli_chat/domain/models.dart" show ChatState;
-import "package:entoli_chat/domain/project.dart";
-import "package:entoli_chat/domain/work_folders.dart";
 import "../providers.dart";
 import "selection.dart";
 
@@ -65,6 +65,7 @@ class ProjectEdits {
   FolderRefusal? refusal(String? project, String dir) {
     final config = _ref.read(appConfigProvider);
     return refuseFolder(
+      config.fs,
       dir,
       dataDir: config.dataDir,
       home: _ref.read(shellProvider).machineHome,
@@ -77,8 +78,8 @@ class ProjectEdits {
   /// or nothing was picked.
   Future<FolderRefusal?> addFolder(String? project) async {
     final picked = await _ref
-        .read(folderPickerProvider)
-        .pick(confirmLabel: "Add");
+        .read(filePickerProvider)
+        .folder(confirmLabel: "Add");
     if (picked == null) return null;
     if (refusal(project, picked) case final refused?) return refused;
     final settings = projectSettingsProvider(project);

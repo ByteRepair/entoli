@@ -8,14 +8,13 @@ library;
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/project.dart";
+import "package:entoli_core/view/workspace/workspace_page.dart";
 
-import "package:entoli_chat/domain/project.dart";
 import "../providers.dart";
-
 export "../app/projects.dart";
 import "memory/memory_page.dart";
 import "sidebar/project_settings_page.dart";
-import "package:entoli_chat/ui/workspace/workspace_page.dart";
 
 void openProjectWorkspace(BuildContext context, WidgetRef ref, ProjectRef at) =>
     openWorkspace(

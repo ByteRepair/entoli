@@ -1,8 +1,7 @@
 import "dart:async";
 
 import "package:flutter/services.dart";
-
-import "package:entoli_chat/core/log.dart";
+import "package:entoli_core/model/log.dart";
 
 /// Android, where the sync device name's default is the name the user set in
 /// system settings — read through `agent_chat/device` from `DeviceChannel.kt`'s

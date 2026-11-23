@@ -1,18 +1,18 @@
 import "package:flutter/foundation.dart" show Listenable;
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/room/room_state.dart" show ChatViewState;
+import "package:entoli_core/model/shell_job.dart" show firstLine;
+import "package:entoli_core/transcript/reader.dart" show SettingReader;
+import "package:entoli_core/transcript/activities/command.dart"
+    show JobActivity;
+import "package:entoli_core/transcript/activities/task.dart"
+    show SubAgentActivity;
+import "package:entoli_core/transcript/activity.dart"
+    show Opens, OpensDetail, Run, TranscriptHandOff, liveMessageOf;
 
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/room/room_state.dart" show ChatViewState;
-import "package:entoli_chat/domain/shell_job.dart" show firstLine;
 import "../providers.dart";
 import "mirror_controller.dart" show chatViewProvider;
-import "package:entoli_chat/app/reader.dart" show SettingReader;
-import "package:entoli_chat/app/transcript/activities/command.dart"
-    show JobActivity;
-import "package:entoli_chat/app/transcript/activities/task.dart"
-    show SubAgentActivity;
-import "package:entoli_chat/app/transcript/activity.dart"
-    show Opens, OpensDetail, Run, TranscriptHandOff, liveMessageOf;
 
 /// What a chat has running beside the reply: the browser's tab, a
 /// background job, a sub-agent.

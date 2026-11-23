@@ -1,32 +1,30 @@
 import "dart:io";
-
 import "dart:async";
 import "dart:typed_data";
 
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/end_turn.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/ask.dart";
-import "package:entoli_chat/domain/chat_meta.dart";
-import "package:entoli_chat/domain/goal.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/room/chat_room.dart" show retryWait;
-import "package:entoli_chat/domain/room/room_state.dart";
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/temp_chat_ttl.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/project_settings.dart"
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/end_turn.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/ask.dart";
+import "package:entoli_core/model/chat_meta.dart";
+import "package:entoli_core/model/goal.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/room/chat_room.dart" show retryWait;
+import "package:entoli_core/model/room/room_state.dart";
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/temp_chat_ttl.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/project_settings.dart"
     show OmadaOrdering, ProjectSettings;
-import "package:entoli_chat/domain/prompt_library.dart"
+import "package:entoli_core/model/prompt_library.dart"
     show PromptDocument, PromptLibrary;
 import "package:agent_chat/providers.dart"
     show appSettingsProvider, projectSettingsProvider, promptLibraryProvider;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:agent_chat/app/chat_controller.dart";
 import "package:agent_chat/app/controller_turn_sender.dart";
-import "package:entoli_chat/app/transcript/transcript.dart"
+import "package:entoli_core/transcript/transcript.dart"
     show Transcript, CompactionRow, MessageRow, ModeRow;
 
 import "../fakes.dart";

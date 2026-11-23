@@ -1,6 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:agent_chat/data/builtin/tools/file_tools.dart";
+import "package:entoli_core/agent/tools/file_tools.dart";
 
 void main() {
   // 500 lines of 409 characters each, numbered: ~51,000 tokens by the

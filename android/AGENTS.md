@@ -258,7 +258,7 @@ that name would silently re-arm it. And both ends read it through
 `projectOrDefault`, since a directory can also go behind the app's back: the
 field shows `Default` and the gesture lands there, rather than the field saying
 one thing while the gesture recreated the directory. One function in
-`domain/project.dart` rather than the same test spelled twice, which is what it
+`model/project.dart` rather than the same test spelled twice, which is what it
 was and which had already drifted — one end searched the list with the default
 project in it and the other the list without.
 
@@ -329,7 +329,7 @@ monochrome layers are shared as they are, being a single colour already — so o
 a launcher with themed icons on, the two installs are the same silhouette again
 and only the name tells them apart. That is the one case this does not fix.
 
-`appTitle` in `ui/theme.dart` is the Dart half, beside `entoliIndigo` for the
+`appTitle` in `view/theme.dart` is the Dart half, beside `entoliIndigo` for the
 same reason: it is the app's identity written where the platform's copy cannot
 be read. It is not a second signal — `MaterialApp.title` *replaces* the launcher
 label in Android's recents, so without it a debug build would name itself
@@ -435,6 +435,6 @@ reminder chat can have been swept), and calls `openChat`.
 **A turn failure posts on the same port, its own channel.** `RemindersChannel`
 posts whatever its `channel` argument names — `reminders` for the reminder
 completions, `turns` for a turn that gave up on its retries with nobody
-watching (see `packages/entoli_chat/lib/domain/room/AGENTS.md`, "Automatic retry
+watching (see `packages/entoli_core/lib/model/room/AGENTS.md`, "Automatic retry
 rounds"). One port and one tap route, two channels, so silencing one half of the
 app's bad news is a channel toggle rather than the feature's off switch.

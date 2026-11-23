@@ -1,0 +1,32 @@
+name: entoli_shell
+description: >
+  Where commands run: this machine's shell under Landlock or Seatbelt, the
+  downloaded Linux under proot, the iSH emulator, and the bundled tools.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  entoli_core:
+    path: ../entoli_core
+  # The iSH bridge's strings and libc's chmod, looked up in the process.
+  ffi: ^2.1.4
+  file: ^7.0.1
+  path: ^1.9.1
+  uuid: ^4.6.0
+  # The emulated guest's `unzip`, `tar`, `wget` and `curl`, run natively.
+  archive: ^4.1.0
+  http: ^1.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  # The iSH shell's session timers, driven on a clock of the test's own.
+  fake_async: ^1.3.1

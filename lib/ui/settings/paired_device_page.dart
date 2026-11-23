@@ -2,15 +2,15 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/date_words.dart";
+import "package:entoli_core/model/sync/devices.dart";
+import "package:entoli_core/view/fonts.dart" show monoFamily;
+import "package:entoli_core/view/widgets/dialogs.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
 
 import "../../data/sync/sync_hub.dart";
-import "package:entoli_chat/domain/date_words.dart";
-import "package:entoli_chat/domain/sync/devices.dart";
 import "../../providers.dart";
-import "package:entoli_chat/ui/fonts.dart" show monoFamily;
-import "package:entoli_chat/ui/widgets/dialogs.dart";
 import "../widgets/section_header.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
 
 /// The verbatim values' face: this page's fingerprints and last address
 /// render in the bundled mono, not the platform alias the rest of the sync

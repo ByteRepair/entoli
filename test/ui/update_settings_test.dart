@@ -1,10 +1,9 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
-import "package:agent_chat/ui/settings/settings_category.dart";
 
 /// General's Update section: the row exists exactly where a platform half
 /// does, and the switch is the setting, written the way an off-by-default

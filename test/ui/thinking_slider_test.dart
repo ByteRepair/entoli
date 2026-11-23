@@ -1,11 +1,10 @@
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_core/model/app_settings.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
-import "package:entoli_chat/ui/widgets/decorative_motion.dart";
+import "package:entoli_core/view/widgets/decorative_motion.dart";
 import "package:agent_chat/ui/widgets/thinking_slider.dart";
 
 import "../harness.dart";

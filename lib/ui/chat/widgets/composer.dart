@@ -3,20 +3,19 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/view/fonts.dart";
+import "package:entoli_core/view/widgets/attachment_chip.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
+import "package:entoli_core/view/chat/widgets/code_block.dart";
+import "package:entoli_core/model/mime.dart" show pastedAttachment;
 
-import "../../../data/mime.dart" show pastedAttachment;
-import "package:entoli_chat/domain/models.dart";
 import "../../../providers.dart";
-import "package:entoli_chat/ui/fonts.dart";
-import "package:entoli_chat/ui/widgets/attachment_chip.dart";
 import "../../widgets/completion_field.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
 import "../../../app/composer.dart";
-import "package:entoli_chat/ui/chat/widgets/code_block.dart";
 import "composer_controller.dart";
 import "composer_embed.dart";
 import "composer_words.dart";
-
 export "../../../app/composer.dart" show SendCallback;
 
 /// Where the composer puts a [ComposerAction]: a button of its own,

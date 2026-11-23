@@ -4,7 +4,7 @@
 import "dart:convert";
 import "dart:io";
 
-import "package:entoli_chat/domain/bundled_prompt_file.dart";
+import "package:entoli_core/model/bundled_prompt_file.dart";
 import "package:crypto/crypto.dart" as crypto;
 
 /// The project directories under `assets/prompts/projects/`, sorted. `default`

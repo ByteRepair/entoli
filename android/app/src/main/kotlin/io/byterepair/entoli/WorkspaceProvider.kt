@@ -249,7 +249,7 @@ class WorkspaceProvider : DocumentsProvider() {
         }
     }
 
-    // `everyProject`, in packages/entoli_chat/lib/domain/project.dart: the default one first, the
+    // `everyProject`, in packages/entoli_core/lib/model/project.dart: the default one first, the
     // rest by name.
     private fun projectDirs(): List<File> =
         File(dataDir, "projects").listFiles()
@@ -265,7 +265,7 @@ class WorkspaceProvider : DocumentsProvider() {
                 when {
                     // The root, which is every project rather than one.
                     project.isEmpty() -> "Workspaces"
-                    // `defaultProjectLabel`, in packages/entoli_chat/lib/domain/project.dart.
+                    // `defaultProjectLabel`, in packages/entoli_core/lib/model/project.dart.
                     project == DEFAULT -> "Default"
                     else -> project
                 },
@@ -315,7 +315,7 @@ class WorkspaceProvider : DocumentsProvider() {
         chatId
     }
 
-    // The shape rule, `isProjectDirName` in packages/entoli_chat/lib/domain/project.dart, bar
+    // The shape rule, `isProjectDirName` in packages/entoli_core/lib/model/project.dart, bar
     // `default`, a name Dart has no need of because `null` is the default
     // project there, and a directory like any other here. And a workspace
     // that is not shared is not in the tree either, `UNBROWSED` below: a
@@ -324,9 +324,10 @@ class WorkspaceProvider : DocumentsProvider() {
     private fun isProjectDir(name: String) =
         name.isNotEmpty() && !name.startsWith(".") && !name.contains('/') && name !in UNBROWSED
 
-    // `viewerMime`, in lib/data/mime.dart: octet-stream throws away the one fact
-    // that decides whether anything opens the file at all, so an unrecognised
-    // one is offered as text, which is what most of a workspace is.
+    // `viewerMime`, in packages/entoli_core/lib/model/mime.dart: octet-stream
+    // throws away the one fact that decides whether anything opens the file at
+    // all, so an unrecognised one is offered as text, which is what most of a
+    // workspace is.
     private fun mimeOf(file: File): String = when {
         file.isDirectory -> Document.MIME_TYPE_DIR
         else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())
@@ -354,11 +355,11 @@ class WorkspaceProvider : DocumentsProvider() {
         // Nothing can be read as both: a real path always starts `projects`.
         const val PROJECT = ":"
 
-        // `defaultProjectDir`, in packages/entoli_chat/lib/domain/project.dart.
+        // `defaultProjectDir`, in packages/entoli_core/lib/model/project.dart.
         const val DEFAULT = "default"
 
         // The built-in projects' directories whose workspace is not shared,
-        // in packages/entoli_chat/lib/domain/builtin_project.dart, restated because no Dart is
+        // in packages/entoli_core/lib/model/builtin_project.dart, restated because no Dart is
         // running when this is queried. Kept in step by hand, like `DEFAULT`.
         // A built-in that shared its workspace would be in the tree like any
         // other project, and would leave this set.
@@ -371,7 +372,7 @@ class WorkspaceProvider : DocumentsProvider() {
         // directory called `workspace`.
         const val WORKSPACE = "Workspace"
 
-        // `listWorkspace`'s order, in packages/entoli_chat/lib/domain/workspace.dart, minus the
+        // `Workspace.list`'s order, in packages/entoli_core/lib/model/workspace.dart, minus the
         // folders-first half: DocumentsUI re-sorts by whatever the user picked,
         // so a second stat per row to group them buys nothing.
         val BY_NAME: Comparator<File> = compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }

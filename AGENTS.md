@@ -21,29 +21,32 @@ The rest of these notes live in the directory they are about, so each one
 loads when that code is being read rather than on every session. A section
 named in a cross-reference is findable from this list.
 
-- `packages/entoli_chat/lib/domain/AGENTS.md` — The conversation log, Threads,
+- `packages/entoli_core/lib/model/AGENTS.md` — The conversation log, Threads,
   The projection, Compaction, Callbacks, and the wired skill, Goals, Carrying on
   an interrupted turn, Starting a chat, and naming it, Skills and agents, Tools
   per agent, Resending a message, Reactions, Attachments, Reminders
-- `packages/entoli_chat/lib/domain/bot_avatar/AGENTS.md` — Bot Avatars: the
+- `packages/entoli_core/lib/model/bot_avatar/AGENTS.md` — Bot Avatars: the
   spec an agent wears, the presets and the user's imports, the engine ported
   from Open Bot Avatar, and the editor
 - `lib/ui/sidebar/AGENTS.md` — The sidebar's list, Pinned chats, A chat's row
   menu
 - `lib/app/marketplace/AGENTS.md` — The marketplace page
-- `lib/data/builtin/AGENTS.md` — The agent loop, Tools, Running the commands, Background
-  jobs, Running a command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
-   Carrying one on, Web search, The browser, Images, Skills, The plan, The task list,
-  Memory
-- `lib/data/builtin/llm/AGENTS.md` — Reaching a provider, How much of an
-  allowance is spent, A program in the model's place (the CLI providers),
-  Errors, and how long the UI waits
+- `packages/entoli_core/lib/agent/AGENTS.md` — The agent loop, Tools,
+  Background jobs, Running a command yourself, Approvals, Questions,
+  Sub-agents, Their own transcripts, Following one while it runs, Carrying one
+  on, Web search, The browser (the tools), Images, Attachments, Skills, The
+  room's roster, Compaction, The plan, The task list, Memory
+- `packages/entoli_core/lib/agent/llm/AGENTS.md` — Reaching a provider, How
+  long a reply may be, How much of an allowance is spent, Errors, and how long
+  the UI waits
+- `lib/data/builtin/llm/AGENTS.md` — A program in the model's place (the CLI
+  providers)
 - `lib/data/sync/AGENTS.md` — The threat model, the handshake, the framing
-  layer, three rendezvous transports, the SyncHub, mirroring a chat, driving a
-  turn from the other end, what the Sync page can do about a
-  peer, secrets at rest
-- `lib/data/local/AGENTS.md` — Bundled tools, A whole Linux under proot,
-  Running a model on the device
+  layer, three rendezvous transports, the peer connection, the SyncHub,
+  mirroring a chat, driving a turn from the other end, what the Sync page can
+  do about a peer, secrets at rest
+- `lib/data/local/AGENTS.md` — Byte Repair's environment, Running a model on
+  the device
 - `android/AGENTS.md` — Staying alive off screen, The workspaces in the Files
   app, Being the assistant, Waking for a trigger, The app icon, The debug
   build's own
@@ -57,29 +60,50 @@ named in a cross-reference is findable from this list.
   the layers, what the build does with them, and the Liquid Glass format notes
 - `windows/AGENTS.md` — The exe and its icon, The MSI, What is absent, and
   honestly so, and nothing Windows runs on this host
-- `packages/entoli_chat/lib/domain/room/AGENTS.md` — The room and its
+- `packages/entoli_core/lib/model/room/AGENTS.md` — The room and its
   participants, The contract between direct and Omada chats, When a turn is
   over, Automatic retry rounds
-- `lib/ui/chat/AGENTS.md` — What the turn's extraction kept, Thinking and tool runs,
-  Activities, on screen (the transcript core),
-  What is running, on screen, The agent's browser, on screen,
-  Selecting a reply, and copying it, Replying to a passage, How a reply
-  is set, Formulas, Code
-  blocks, A command
-  the user ran, Activities, on screen, A goal, on screen, The plan, on screen,
-  The task list, on screen,
-  A chat whose home device is elsewhere, A shared chat, The chat page
+- `lib/ui/chat/AGENTS.md` — What the turn's extraction kept, Replying to a
+  passage, A command the user ran, A goal, on screen, The task list, on screen,
+  A chat whose home device is elsewhere, What is running, on screen, The
+  agent's browser, on screen, A shared chat, The chat page
+- `packages/entoli_core/lib/view/chat/AGENTS.md` — Thinking and tool runs,
+  Selecting a reply, and copying it, How a reply is set, Formulas, Code blocks,
+  A compact turn, and its divider, The plan, on screen, The scrolling list
+- `packages/entoli_core/lib/transcript/AGENTS.md` — Activities, on screen (the
+  transcript core), Background jobs, in the reply
 - `packages/entoli_share_viewer/AGENTS.md` — The shared-chat viewer: the web
   page a share link opens where the app is not installed, the app's code over
   an in-memory disk
-- `lib/data/voice/AGENTS.md` — Voice mode, What listens and what speaks, The
-  Android system engines, Which language it is asked in, Ending the utterance,
+- `packages/entoli_voice/lib/AGENTS.md` — Voice mode, What listens and what
+  speaks, The Android system engines, Which language it is asked in, Ending the utterance,
   What counts as being spoken to, One listener, two engines, Mute is the user,
   not the conversation, Per side, not per session, The Kotlin, Where the models
   live, Hearing and speaking
+- `packages/entoli_files/lib/AGENTS.md` — The choosers, The hand-offs, A
+  backup's way out
+- `packages/entoli_links/lib/AGENTS.md` — Opening links and receiving
+  incoming ones: the launcher, the in-app sign-in browser, the incoming stream
+- `packages/entoli_share/lib/AGENTS.md` — The share sheet a chat's share
+  link leaves through
+- `packages/entoli_scanner/lib/AGENTS.md` — The camera that reads a pairing
+  code
+- `packages/entoli_webview/lib/AGENTS.md` — The in-app web view a link and
+  a phone's artifact open in
+- `packages/entoli_sync_transport/lib/AGENTS.md` — The WebRTC data channel
+  sync runs over
+- `packages/entoli_shell/lib/AGENTS.md` — Running the commands (the local
+  shell), Bundled tools, A whole Linux under proot
+- `packages/entoli_browser/lib/AGENTS.md` — The agent's browser: launching
+  it, Helium, hidden, the view and input, On Android, On iOS, the file
+  chooser, Downloads
+- `packages/entoli_menu/lib/AGENTS.md` — The menu bar on macOS and iPadOS:
+  the core's port, the Pigeon contract, the SwiftUI commands and their traps
+- `packages/entoli_paths/lib/AGENTS.md` — Where the app's data lives: the
+  data and cache directories on each platform, iOS's App Group
 - `lib/ui/voice/AGENTS.md` — Reading one message out, The screen, Touch to
   speak, Taking turns
-- `lib/ui/workspace/AGENTS.md` — The workspace explorer
+- `packages/entoli_core/lib/view/workspace/AGENTS.md` — The workspace explorer
 - `lib/ui/share/AGENTS.md` — Sharing to Entoli
 - `lib/ui/AGENTS.md` — Opening a link, Links into Entoli, The theme, What the settings page can
   change about it, The keyboard and the caret, The app's commands, The menu
@@ -88,6 +112,8 @@ named in a cross-reference is findable from this list.
   Work folders, What the app is, Backing it all up
 - `lib/ui/widgets/AGENTS.md` — Shared UI, A catalog of things to download, The
   model catalog
+- `packages/entoli_core/lib/view/widgets/AGENTS.md` — Shared UI (the core's
+  widgets), Notices
 - `.github/workflows/AGENTS.md` — Releasing
 - `tool/linux/AGENTS.md` — The Linux AppImage
 - `test/AGENTS.md` — how the tests are written and what they fake
@@ -105,7 +131,7 @@ backends and one of them was an OpenCode server; with one backend it contrasts
 with nothing either, which is why nothing user-facing names it at all.
 
 - `conv.jsonl` is the source of truth, and it is a log rather than a document.
-  `ChatRoom` (`packages/entoli_chat/lib/domain/room/`, held by the
+  `ChatRoom` (`packages/entoli_core/lib/model/room/`, held by the
   `ChatController` notifier) appends a turn's events to it as they arrive;
   `ChatRepository` resolves which model runs and owns rewinding. Context is
   re-injected only when a turn is resent — otherwise the agent's own session
@@ -114,31 +140,83 @@ with nothing either, which is why nothing user-facing names it at all.
   resolved where the message is composed and recorded on it, so the model reads
   the same words on every reading of the conversation.
 
-### The chat package
+### The core
 
-`packages/entoli_chat/` is the chat as data and on screen: all of `domain/`,
-the store and config the conversation is read through, and the transcript's
-drawing. The share viewer runs it without the app. That is why it is a
-package: Flutter bundles the assets of every package a build depends on, so a
-viewer depending on the app shipped the speech engine's web wasm. It is one
-layout with `lib/` split in two — `domain/models.dart` in one,
-`data/builtin/` in the other, `ui/chat/` in both — so a path like
-`core/config.dart` names a file in whichever has it. It imports nothing of the
-app, and nothing native: the app's voice, shells and plugins stay in the app,
-binding the package's ports at the root as every other port is bound. The
-fonts are the package's assets, so a family is named
-`packages/entoli_chat/<family>` (`ui/fonts.dart`). The app, the package and
-the viewer are one pub workspace with the one `pubspec.lock`.
+`packages/entoli_core/` is a chat without a platform: what a conversation is,
+how it is kept, how a turn runs, and how it is drawn, for any front end to
+run. The app is one front end and the share viewer another; the core reaches
+neither, no adapter, and no plugin. What a front end alone can do — a disk, a microphone, a shell — the
+core asks for through an interface an adapter implements and the front end
+binds at its root (the filesystem, for one, is handed to `AppConfig`). It is
+a package because Flutter bundles the assets of every package a build depends
+on, so a front end has only what it chose.
 
-What moves into the package is what the viewer reaches. A file the viewer
-newly needs moves there, with whatever it imports.
+Its `lib/` is five layers, each importing only those before it:
+
+- **`model/`** — the terms: the conversation log, chats, projects, settings,
+  the room a turn runs in, `AppConfig` and the migrations, and the interfaces
+  the rest is bound through.
+- **`store/`** — the disk under them: `FileChatStore`, packing and unpacking a
+  shared chat, the zip walk, the skills on disk and the sub-agents' logs.
+- **`agent/`** — the turn: the loop, its tools, the approval gate, memory,
+  and the model calls, which are HTTP (`http.Client()`, so a browser's in a
+  browser; the app runs under `http.runWithClient` with its TLS client). What
+  runs a command is the `Shell` interface in `model/`, and the folders a
+  sandbox grants are its `SandboxFolders`; the shells, the sandboxes and the
+  CLI providers that run a program in the model's place stay with the
+  platform that has processes.
+- **`transcript/`** — what is drawn, as state: messages, activities, chapters,
+  and the ports a host binds (`TranscriptHost`, the hand-offs, storage). No
+  Flutter library but `foundation`.
+- **`view/`** — the drawing: the conversation, its widgets, the workspace
+  explorer, the theme and the fonts. The fonts are the package's assets, so a
+  family is named `packages/entoli_core/<family>` (`view/fonts.dart`).
+
+No path exists in both the core and the app, so a path names one file. The
+app, the core, the adapters and the viewer are one pub workspace with one
+`pubspec.lock`.
+
+### The adapters
+
+`packages/entoli_<capability>/` is one platform capability: the core's
+interfaces for it implemented with the Flutter plugins it takes, and nothing
+else — voice, files, links, share, scanner, webview, sync_transport, shell,
+paths, menu, browser. An adapter depends on the core and its plugins, never
+on a front end, and on another adapter only where it builds on one. It may
+carry a plugin that only registers itself and that no Dart imports:
+`cryptography_flutter` in `entoli_sync_transport`, which puts the platform's
+own ciphers under `cryptography`. Its notes are in its `lib/AGENTS.md`,
+listed above.
+
+### The two front ends
+
+A front end is the composition: it depends on the core and the adapters it
+chose, and binds every interface at its root, in one place.
+
+- **The app** (`lib/`, package `agent_chat`) binds them in `main.dart`, with
+  `providers.dart` declaring the app's own ports and `core/platform/` building
+  each platform's implementations. Beside the binding it is the pages and
+  widgets (`ui/`), their controllers (`app/`), and what only the app runs
+  (`data/`): sync, the secrets, the triggers, the models on the device and
+  the CLI providers. It takes every adapter.
+- **The viewer** (`packages/entoli_share_viewer/`) is the core in a browser,
+  read-only. It takes the one adapter that builds for the web and is worth
+  taking, `entoli_links`, and implements the rest of what it needs itself;
+  see its `AGENTS.md`.
+
+Two tests hold this: `test/core/plugin_boundary_test.dart` walks the
+pubspecs — the core reaches no plugin, and a front end reaches one only
+through an adapter it chose — and `test/core/bindings_test.dart` checks that
+every port the core declares unbound (a provider throwing
+`UnimplementedError`) is bound in each front end's `main` and in the test
+harness, and every port of the app's in the app's `main`.
 
 ### Imports point one way
 
-No file in either `lib/` reaches itself through its imports, `domain/` imports
-nothing of `data/`, `app/` or `ui/`, `data/` and `app/` nothing of `ui/`, and
-the chat package nothing of the app; `test/core/import_graph_test.dart` fails
-on the first file that does.
+No file in either `lib/` reaches itself through its imports, each of the
+core's layers imports nothing of those after it, the app's `data/` nothing of
+`app/` or `ui/` and `app/` nothing of `ui/`, and the core nothing of the app;
+`test/core/import_graph_test.dart` fails on the first file that does.
 `app/` is the core `ui/` renders — the chat controllers, each surface's
 model (state and actions), the app's actions and destinations, the menu
 bar's layout — and imports no Flutter library but `foundation`, so how
@@ -176,7 +254,7 @@ Every project is a directory under `projects/`, the default one included.
 `<dataDir>/projects/<project>/skills/<name>/` is a skill — a directory with a
 `SKILL.md` and the files it runs with, not a single file, the frontmatter held
 to the Agent Skills spec (see "Skills and agents" in
-`packages/entoli_chat/lib/domain/AGENTS.md`; a folder that does not conform is
+`packages/entoli_core/lib/model/AGENTS.md`; a folder that does not conform is
 skipped at load and said on the view page) — and
 `<dataDir>/projects/<project>/agents/*.md` are that project's agents. The
 default project's skills and agents are the base set every other project
@@ -228,21 +306,31 @@ is the reminder's and stayed, a rename being a migration.
 `<dataDir>/instruction_files.json` is the instruction files a desktop user
 linked by path and which projects switched each off — out of backups and sync,
 being this machine's paths; see "Workspace instructions" in
-`lib/data/builtin/AGENTS.md`.
+`packages/entoli_core/lib/agent/AGENTS.md`.
 `<dataDir>/bot_avatars.json` is the Bot Avatar definitions the user imported,
 one JSON list, offered in the avatar editor beside the presets; see
-`packages/entoli_chat/lib/domain/bot_avatar/AGENTS.md`.
+`packages/entoli_core/lib/model/bot_avatar/AGENTS.md`.
 `<dataDir>/models.json` is models.dev trimmed to what the app reads, a cache
 refetched daily — see "The model catalog" in `lib/ui/widgets/AGENTS.md`.
 Data dir: `$ENTOLI_CONFIG` if set, else `~/.config/entoli` (desktop),
-app-private storage (Android), and the App Group's container (iOS).
+app-private storage (Android), and the App Group's container (iOS); see
+`packages/entoli_paths/lib/AGENTS.md`.
 `AppConfig` is not the only thing that knows this layout: `WorkspaceProvider`
 reads the workspace half of it in Kotlin, because Android's Files app asks with
 no engine running. See "The workspaces in the Files app".
 
-The filesystem is `dart:io`'s, with no port over it: every platform the app
-runs on has a disk, and a test runs on a real temp directory (see
-`test/AGENTS.md`). `AppConfig` composes path names: `dataDir` and every helper
+The filesystem is a `FileSystem` from `package:file`, which `AppConfig` holds
+as `fs` and hands to whatever reads or writes under the data directory: the
+disk wherever the app runs, memory in the share viewer, a browser having no
+disk. Inside a widget it is `fileSystemProvider`, and the workspace explorer's
+reads and writes are `Workspace` over it; writing through a rename is
+`RenameWriter`'s. The core imports no `dart:io`. The app's native code
+— the shells, the sandboxes, the guests, a backup's streams — is on the
+machine by definition and passes `LocalFileSystem` where it needs one. A
+missing path is `isNotFound` (`model/file_errors.dart`), since the disk
+raises dart:io's `PathNotFoundException` and memory the plain exception. A
+test runs on a real temp directory (see `test/AGENTS.md`), the viewer's in
+memory. `AppConfig` composes path names: `dataDir` and every helper
 are plain `String`s rather than `File` and `Directory`, joined with
 `package:path`. `exists`, `stat` and their kin are called sync — one metadata
 call each — which `avoid_slow_async_io` holds the code to; the one async
@@ -279,7 +367,7 @@ skills (bundled and the user's), the agents, and a chat's `resources/`, each
 locked at launch or by the write that made it. They are read-only on disk
 between the app's own writes — write bits off, files and
 directories alike, so a command can neither change a file nor add or remove
-one — and every write goes through `ReadOnlyDirs` (`core/read_only_dirs.dart`):
+one — and every write goes through `ReadOnlyDirs` (`model/read_only_dirs.dart`):
 `readOnlyDirs.of(path).write(...)` unlocks, writes and relocks. Which prompt
 directories a project has is declared once, `promptDirsOf` beside the tier
 walk: launch locks every project's, and a turn's shells are kept from its
@@ -288,20 +376,22 @@ path, because that is what serialises a path's writes; two overlapping would
 have the first relock under the second. A skills directory passes
 `executable: true`, since its scripts arrive from embedded data with no
 execute bit. The modes are set through libc's `chmod` and Windows' read-only
-attribute (`data/local/file_modes.dart`), not the `chmod` binary, which iOS
+attribute (`packages/entoli_shell/lib/file_modes.dart`), not the `chmod`
+binary, which iOS
 will not spawn. A tree that holds one is deleted through `deleteTree`, which
 unlocks it first.
 
 What it stops is an accident: on the machine itself the same user can `chmod`
 it back. The guests are the reason it matters — proot's fake root and iSH's
 root would otherwise write straight through — and each is patched to leave
-these modes alone; see "A whole Linux under proot" in `lib/data/local/AGENTS.md`
+these modes alone; see "A whole Linux under proot" in
+`packages/entoli_shell/lib/AGENTS.md`
 and "The workspace inside the guest" in `ios/AGENTS.md`.
 
 ### Migrations
 
 **A release that moves anything under `<dataDir>` carries a migration, in the
-same PR as the move.** `packages/entoli_chat/lib/core/migrations.dart` is where
+same PR as the move.** `packages/entoli_core/lib/model/migrations.dart` is where
 it goes: `migrations` is a chain, oldest first, and each entry is written
 against the layout the entry above it leaves and nothing older. A directory
 several releases behind is brought up by running the entries after it in order —
@@ -340,9 +430,9 @@ on disk is not read rather than migrated — and `memory/`, a directory created
 on first use rather than moved. The first entry is 8.0.0's, which names the
 main agent: every `conv.jsonl` reply with no author became `@athena`'s and
 every say addressed to nobody was addressed to her (see "The room and its
-participants" in `packages/entoli_chat/lib/domain/room/AGENTS.md`), and every
+participants" in `packages/entoli_core/lib/model/room/AGENTS.md`), and every
 message's `documents` map became `references`, its keys in order (see "Skills
-and agents" in `packages/entoli_chat/lib/domain/AGENTS.md`). A change of meaning
+and agents" in `packages/entoli_core/lib/model/AGENTS.md`). A change of meaning
 in the log is a migration as much as a move is, so the reader is never left
 holding a fallback for the old shape. 8.4.0's entry gathered what the readers
 had been holding: settings under the names they had before (`opencodeEnv`,
@@ -358,14 +448,15 @@ reader.
 
 `chats/<id>/artifacts/<artifact-id>/` holds the files the model published,
 copied from its workspace at the moment it called the `artifact` tool, with the
-base stylesheet (`packages/entoli_chat/lib/domain/artifact_style.dart`) injected
+base stylesheet (`packages/entoli_core/lib/model/artifact_style.dart`) injected
 into the entry file **at publish time**. That timing is the one load-bearing
 fact: the desktop opener serves the directory itself over `file://`, so the
 entry file on disk must already be the whole page — the model's `read` tool and
 every future reader see the same styled file, and a temp copy at open time would
 break every relative reference to the files beside it. The phones still layer
-their runtime path (an HTTP server on loopback under an in-app webview) over the
-same injected copy, where the marker makes the second injection a no-op.
+their runtime path (an HTTP server on loopback under the in-app web view,
+`entoli_webview`) over the same injected copy, where the marker makes the second
+injection a no-op.
 Artifacts published before the injection moved open unstyled on desktop until
 the model re-publishes them.
 
@@ -472,7 +563,7 @@ comes from `https://github.com/ByteRepair/entoli/releases/latest` — the page's
 own URL, the tag read out of where its redirect lands, no API and no rate
 limit — and is compared against the running version by
 `versionIsNewer`. Everything is
-`packages/entoli_chat/lib/domain/app_update.dart` and
+`packages/entoli_core/lib/model/app_update.dart` and
 `core/platform/update.dart`: the pure decisions (repo, the three asset names,
 the comparison) in the domain, the platform half — where a download is staged
 and what putting a build in place means here — behind `AppUpdateHost`.
@@ -531,7 +622,7 @@ reasons to drop most of them, is otherwise indistinguishable from nothing
 having happened: sync shipped with nine such places and "it will not pair"
 came with nothing at all to go on, in a log or on screen.
 
-`logFailure` in `packages/entoli_chat/lib/core/log.dart` is how: a `[tag]`
+`logFailure` in `packages/entoli_core/lib/model/log.dart` is how: a `[tag]`
 prefix naming the layer, one line, the reason and enough to say which thing it
 was about. Nothing calls `debugPrint` directly, so a log reads the same whoever
 it is sent to. `syncLog` is a wrapper over it, since nine call sites read better
@@ -609,8 +700,8 @@ is `logDetail`, which is debug-only.
   embedded prompts, and Pigeon for the menu bar's protocol. The generated sources are
   not in the repository, so a fresh clone does not compile until it has run,
   and it wants running again whenever a `@freezed` or `@JsonSerializable` type
-  changes. Every such type is in the chat package, so build_runner runs there:
-  `dart run build_runner watch` from `packages/entoli_chat/` is the answer
+  changes. Every such type is in the core, so build_runner runs there:
+  `dart run build_runner watch` from `packages/entoli_core/` is the answer
   while editing its `domain/`. CI runs the script through
   `.github/actions/flutter-setup`.
 - The Flutter version is the one `.github/actions/flutter-setup` pins, and

@@ -1,25 +1,27 @@
 import "dart:async";
 import "dart:convert";
-import "dart:io";
 import "dart:js_interop";
 
-import "package:entoli_chat/domain/chat_store.dart";
-import "package:entoli_chat/domain/file_handoff.dart";
-import "package:entoli_chat/domain/link_opener.dart";
+import "package:entoli_core/model/chat_store.dart";
+import "package:entoli_core/model/file_handoff.dart";
+import "package:entoli_core/model/link_launcher.dart";
+import "package:entoli_core/model/link_opener.dart";
+import "package:file/file.dart";
 import "package:flutter/widgets.dart";
 import "package:path/path.dart" as p;
-import "package:url_launcher/url_launcher.dart";
 import "package:web/web.dart" as web;
 
 /// A shared workspace's way out of the page: a file is downloaded, the one
 /// thing a browser does with a file it is handed. There is no file manager
 /// and no share sheet, and nothing is shared into a read-only chat.
 class WebFileHandoff implements FileHandoff {
-  const WebFileHandoff();
+  const WebFileHandoff(this.fs);
+
+  final FileSystem fs;
 
   @override
   Future<void> open(String path) async {
-    final bytes = await File(path).readAsBytes();
+    final bytes = await fs.file(path).readAsBytes();
     final url = web.URL.createObjectURL(web.Blob([bytes.toJS].toJS));
     (web.HTMLAnchorElement()
           ..href = url
@@ -57,14 +59,18 @@ class WebFileHandoff implements FileHandoff {
 /// a tab as it was published; a file beside it that the page names does not
 /// come with it, which the app's opener serves.
 class WebLinkOpener implements LinkOpener {
-  const WebLinkOpener(this.store);
+  const WebLinkOpener(this.fs, this.store, this.launcher);
 
+  final FileSystem fs;
   final ChatStore store;
+
+  /// A browser's external application is a new tab.
+  final LinkLauncher launcher;
 
   @override
   Future<void> open(BuildContext context, Uri url) async {
     if (url.scheme != "https" && url.scheme != "http") return;
-    await launchUrl(url, webOnlyWindowName: "_blank");
+    await launcher.openExternal(url);
   }
 
   @override
@@ -79,7 +85,7 @@ class WebLinkOpener implements LinkOpener {
     String? title,
   }) async {
     final dir = await store.artifactPath(chatId, artifactId);
-    final file = File(p.join(dir, entryFile));
+    final file = fs.file(p.join(dir, entryFile));
     if (!file.existsSync()) return;
     final html = utf8.decode(await file.readAsBytes(), allowMalformed: true);
     final tab = web.window.open("", "_blank");

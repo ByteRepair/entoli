@@ -4,16 +4,15 @@ import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:qr_flutter/qr_flutter.dart";
-
 import "package:agent_chat/data/sync/sync_hub.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/sync/devices.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/sync/devices.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/paired_device_page.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
-import "package:agent_chat/ui/settings/settings_category.dart";
 
 /// The Sync category, over a real [SyncHub] with no transport under it. What
 /// it draws is the hub's own — the fingerprint, the peers, the pairing window
@@ -427,10 +426,11 @@ void main() {
 
     // A paired screen for a pasted code is the same `_PairingStageView` the
     // window page's test above proves, over an activity this file has no way
-    // of starting on the wire: `pairWith` on a real code reaches `RtcLink`,
-    // which needs a WebRTC engine the VM has none of. Between the two, one
-    // honest screen each way and the stages shared, the joiner's flows are
-    // covered to the point where only a live channel would add to it.
+    // of starting on the wire: `pairWith` on a real code reaches a
+    // `PeerLink`, which needs a WebRTC engine the VM has none of. Between the
+    // two, one honest screen each way and the stages shared, the joiner's
+    // flows are covered to the point where only a live channel would add to
+    // it.
   });
 
   group("clicking a paired device's row", () {

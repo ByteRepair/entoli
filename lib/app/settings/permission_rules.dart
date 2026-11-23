@@ -1,6 +1,6 @@
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/shell.dart" show bashToolName;
-import "package:entoli_chat/domain/web_search.dart" show webfetchToolName;
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/shell.dart" show bashToolName;
+import "package:entoli_core/model/web_search.dart" show webfetchToolName;
 
 /// Per tool: what it is called, with its own name beside it, and what the
 /// pattern field matches for it — a command, a path or a host.

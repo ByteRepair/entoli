@@ -1,7 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
-
-import "package:entoli_chat/domain/bot_avatar/spec.dart";
+import "package:entoli_core/model/bot_avatar/spec.dart";
 
 /// Any colour for a Bot Avatar's body: hue, saturation and brightness on
 /// sliders, or a hex code typed in. The palette's own swatches sit beside

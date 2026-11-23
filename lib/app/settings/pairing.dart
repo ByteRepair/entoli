@@ -4,7 +4,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../data/sync/pairing.dart" show PairingActivity;
 import "../../data/sync/sync_hub.dart" show SyncHub;
 import "../../providers.dart" show syncHubProvider;
-
 export "../../data/sync/pairing.dart" show PairingActivity, PairingStage;
 
 /// Pairing another device, apart from how it is drawn: a window this

@@ -10,12 +10,12 @@ obvious from reading a test. Everything about the app itself is in the root
 with the backend faked — plus `tempConfig`, `makeState`, the dropdown finders,
 and the pumping helpers below. `writeSkill` writes a skill the library will
 actually offer: since skills are held to the Agent Skills spec (see
-"Skills and agents" in `packages/entoli_chat/lib/domain/AGENTS.md`), its
+"Skills and agents" in `packages/entoli_core/lib/model/AGENTS.md`), its
 `SKILL.md` carries a `name:` matching the folder and a `description`, and its
 `metadata:` argument is the way a test writes the client keys — `{"invocation":
 "callback"}` makes it one the controller dispatches. `test/fakes.dart` holds
 `FakeBackend`, whose `scriptedEvents` and `hold` drive a turn, beside
-`FakeAttachmentPicker`, `FakeBackgroundWork`, `FakeFileHandoff`,
+`FakeFilePicker`, `FakeBackgroundWork`, `FakeFileHandoff`,
 `FakeBackupHandoff`, `FakeAppRestart`, `FakeVoice`, `FakeAssistantLaunch` and
 `testLibrary`.
 
@@ -88,8 +88,8 @@ turns on — how this device would run a Linux (a `LinuxHost`), and which are
 installed — with
 `FakeRootfsStore` behind them. Its `installing` completer holds a download open
 so a test can see the row mid-flight. What a command actually runs under is not
-faked either: `local_shell_test.dart` builds a `ShellDriver` out of
-`/usr/bin/env`, which really runs, and `proot_test.dart` pins the guest driver's
+faked either: `entoli_shell`'s `local_shell_test.dart` builds a `ShellDriver`
+out of `/usr/bin/env`, which really runs, and its `proot_test.dart` pins the guest driver's
 invocation itself as a pure function — between them they are what can be checked
 about proot on a machine with no Android on it. The persistent shell's own
 contract is checked the same
@@ -326,9 +326,10 @@ Sync page's relay test resolved `relay.example.com`, and whether it passed
 depended on how fast that failed.
 
 **The WebRTC data channel itself has no automated coverage**, and cannot have
-any under `flutter test`: `flutter_webrtc` is a native plugin, so a peer
-connection needs an engine with the plugin registered and the Dart VM has
-neither. It is confirmed by hand, between two running instances.
+any under `flutter test`: `flutter_webrtc` (`entoli_sync_transport`) is a
+native plugin, so a peer connection needs an engine with the plugin registered
+and the Dart VM has neither. `testSyncHub` binds a `PeerLinkFactory` that
+throws. It is confirmed by hand, between two running instances.
 
 That gap has already cost two bugs that every loopback test passed — the frame
 header read through `frame.buffer`, and the hello exchange subscribing after
@@ -385,16 +386,13 @@ the words even with `findRichText`, and those tests use `find.textContaining`.
 over for the test the same way `frameworkHandlesBack` does, so a test wanting
 both wants one of them — which is why neither is written out per file.
 
-`link_opener_test.dart` fakes the webview at the platform interface rather than
-through `TestApp`: `webview_flutter` has no implementation on a test host and
-`WebViewController()` throws without one, so the test sets
-`WebViewPlatform.instance` to a fake whose navigation delegate it then fires by
-hand. That is where `webview_flutter_platform_interface` in `dev_dependencies`
-comes from — the app-facing package re-exports the creation params but not the
-classes a fake has to extend. The fake stays in the one file that wants it. Its
-`androidTest` sets `debugDefaultTargetPlatformOverride`, since the in-app
-webview is Android's alone, and undoes it inside the body: flutter_test checks
-that variable before a tear-down runs.
+`link_opener_test.dart` hands the opener a fake `WebView` that loads nothing
+and keeps the page's `onNavigated`, which the test fires by hand. What the
+plugin's view does with a navigation is `entoli_webview`'s own test, which
+fakes `webview_flutter` at its platform interface. The fake stays in the one
+file that wants it. Its `androidTest` sets `debugDefaultTargetPlatformOverride`,
+since the in-app web view is Android's alone, and undoes it inside the body:
+flutter_test checks that variable before a tear-down runs.
 
 A test that writes `settings.json` has to go through `config.documents.write`,
 not the file: the app reads settings from the synchronous copy `Documents`

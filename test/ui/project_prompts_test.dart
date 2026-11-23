@@ -2,14 +2,13 @@ import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:agent_chat/data/prompts/skill_import.dart";
-import "package:entoli_chat/domain/models.dart";
+import "package:entoli_core/store/prompts/skill_import.dart";
+import "package:entoli_core/model/models.dart";
 import "package:agent_chat/ui/settings/agents_settings.dart";
 import "package:agent_chat/ui/widgets/install_destination.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 import "../harness.dart";
-import "package:agent_chat/ui/settings/settings_category.dart";
 
 void main() {
   late TestApp app;

@@ -1,14 +1,14 @@
-import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/file_picker.dart";
+import "package:entoli_core/view/chat/widgets/code_block.dart";
+import "package:entoli_core/view/chat/widgets/shell_run.dart"
+    show LiveShellOutput;
+import "package:entoli_core/view/widgets/busy.dart";
 
 import "../../app/byte_repair.dart";
 import "../../data/local/byte_repair_store.dart";
 import "../../providers.dart";
-import "package:entoli_chat/ui/chat/widgets/code_block.dart";
-import "package:entoli_chat/ui/chat/widgets/shell_run.dart"
-    show LiveShellOutput;
-import "package:entoli_chat/ui/widgets/busy.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/section_header.dart";
 import "../widgets/settings_warning_banner.dart";
@@ -24,8 +24,9 @@ class ByteRepairSettings extends ConsumerWidget {
   const ByteRepairSettings({super.key});
 
   Future<void> _import(WidgetRef ref) async {
-    const type = XTypeGroup(label: "ESBMC binary");
-    final file = await openFile(acceptedTypeGroups: const [type]);
+    final file = await ref
+        .read(filePickerProvider)
+        .file(types: const FileTypes(label: "ESBMC binary"));
     if (file == null) return;
     await ref.read(byteRepairRunProvider.notifier).importEsbmc(file);
   }

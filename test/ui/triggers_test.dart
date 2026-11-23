@@ -2,20 +2,19 @@ import "package:clock/clock.dart";
 import "package:flutter/material.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/date_words.dart" show describeFire;
-import "package:entoli_chat/domain/trigger.dart";
-import "package:entoli_chat/domain/temp_chat_ttl.dart";
+import "package:entoli_core/model/date_words.dart" show describeFire;
+import "package:entoli_core/model/trigger.dart";
+import "package:entoli_core/model/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/triggers/incoming_open.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/prompt_field.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart"
     show LabelledField, defaultOptionLabel;
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
-import "package:agent_chat/ui/settings/settings_category.dart";
 
 /// The field on the prompt page, and not the editor's Name behind it.
 Finder get _promptField => find.descendant(

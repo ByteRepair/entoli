@@ -6,13 +6,12 @@ import "package:flutter/foundation.dart"
 import "package:flutter/services.dart" show rootBundle;
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
-import "package:entoli_chat/core/config.dart";
+import "package:entoli_core/model/config.dart";
 import "package:agent_chat/data/local/byte_repair_store.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/builtin_project.dart";
-import "package:entoli_chat/domain/rootfs.dart" show alpine;
-import "package:entoli_chat/domain/shell.dart" show ShellResult;
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/builtin_project.dart";
+import "package:entoli_core/model/rootfs.dart" show alpine;
+import "package:entoli_core/model/shell.dart" show ShellResult;
 
 import "../builtin/builtin_fakes.dart" show FakeShell;
 import "../../harness.dart";

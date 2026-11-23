@@ -1,0 +1,24 @@
+name: entoli_links
+description: >
+  Opening links and receiving incoming ones: handing a URL to the platform,
+  the system's in-app browser, and the stream of entoli:// links.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  entoli_core:
+    path: ../entoli_core
+  url_launcher: ^6.3.2
+  app_links: ^7.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

@@ -45,9 +45,10 @@ too instead of timing out. Both throw `ProtocolMismatchException`, whose
 message — "Protocol version mismatch, please update Entoli on both devices" —
 is what the pairing page and the device's row show.
 
-That HKDF is asked for `DartHmac` by name. `cryptography_flutter` declares a
-`dartPluginClass`, so on Android it installs itself as `Cryptography.instance`
-with nothing in this app calling it, and a plain `Hmac.sha256()` then runs over
+That HKDF is asked for `DartHmac` by name. `cryptography_flutter`, a
+dependency of `entoli_sync_transport`, declares a `dartPluginClass`, so on
+Android it installs itself as `Cryptography.instance` with nothing in the app
+calling it, and a plain `Hmac.sha256()` then runs over
 a method channel into `javax.crypto`. HKDF's extract step keys its HMAC with
 the salt rather than the secret, this handshake passes no salt, and Java's
 `SecretKeySpec` throws on a zero-length key — so pairing a phone died at the
@@ -77,6 +78,19 @@ caught by the first test to run two hubs against each other.
 The handshake initiator is always the WebRTC *answer* side (`!weOffered`),
 so whichever route brought the two together needs no extra message to decide
 who speaks first.
+
+## The peer connection
+
+Every route ends in the same two calls: a `PeerLink`
+(`entoli_core/model/sync/peer_link.dart`) negotiates SDP and hands over a
+`ByteChannel` (`model/sync/channel.dart`), the whole message, in order and
+reliably, that everything here is written over. The hub never names WebRTC:
+`SyncHub` takes a `PeerLinkFactory`, `main` binds `RtcLink.create` from
+`entoli_sync_transport` (see its `lib/AGENTS.md`), and `testSyncHub` binds
+one that throws. The ICE config is built here, in `SyncPairing.iceServers`:
+the public STUN servers in `defaultStun`, then the TURN server from settings
+with its password read from the secret store per dial, so an edit reaches the
+next connection.
 
 ## The framing layer
 
@@ -437,14 +451,14 @@ stays sync-unaware. Two sources of truth, never merged.
 ### A sub-agent's transcript
 
 A `task` drawer open on a mirror follows the sub-agent's transcript on the
-home device (see "Following one while it runs" in `lib/data/builtin/AGENTS.md`).
-`subAgentOpen{fromLine}` asks for it, from a peer already following the
-chat; the home device puts the follow in before it reads, so an append during
-the read arrives twice rather than not at all, and answers with a
-`subAgentAppend` from that line — memory for a running sub-agent, the file
-for a finished one. Every append after it goes to the peers following that
-transcript, numbered as the feed numbered it, and `growTranscript` on the
-mirror drops what it holds and re-opens on a gap.
+home device (see "Following one while it runs" in
+`packages/entoli_core/lib/agent/AGENTS.md`). `subAgentOpen{fromLine}` asks for
+it, from a peer already following the chat; the home device puts the follow in
+before it reads, so an append during the read arrives twice rather than not at
+all, and answers with a `subAgentAppend` from that line — memory for a running
+sub-agent, the file for a finished one. Every append after it goes to the peers
+following that transcript, numbered as the feed numbered it, and
+`growTranscript` on the mirror drops what it holds and re-opens on a gap.
 
 Unlike a chat, a mirror says when it stops (`subAgentClose`): a running
 sub-agent appends every second, to a drawer nobody has open any more. What
@@ -840,9 +854,11 @@ Going back cancels through a `PopScope` rather than `dispose`: `dispose` runs
 with the widget tree locked, and the activity notifier's
 `ValueListenableBuilder` would otherwise be told to rebuild mid-unmount. The
 paste-a-code field has a camera-scan button on the phones, Android and iOS
-(`mobile_scanner`, `_canScan`): the Android manifest carries `CAMERA` and a
-non-required camera feature for it, and iOS's `Info.plist` the
-`NSCameraUsageDescription` the permission prompt shows.
+(`_canScan`), which opens `ScanQrPage` over the `CodeScanner` that
+`entoli_scanner` binds (see `packages/entoli_scanner/lib/AGENTS.md`): the
+Android manifest carries `CAMERA` and a non-required camera feature for it,
+and iOS's `Info.plist` the `NSCameraUsageDescription` the permission prompt
+shows.
 
 ## Secrets at rest
 
@@ -864,7 +880,7 @@ provider dialog's Advanced key field words its helper text by it, since "OS
 keyring" and "app secret store" are different promises to make.
 
 Sync is not the only tenant. `AppSecrets`
-(`packages/entoli_chat/lib/domain/app_secrets.dart`) holds the provider API keys
+(`packages/entoli_core/lib/model/app_secrets.dart`) holds the provider API keys
 (`provider-keys`, one JSON map under one item — one item per provider would make
 a user browsing their keyring count providers) and the TURN password
 (`turn-password`) in the same store. Its reads are served from a mirror filled

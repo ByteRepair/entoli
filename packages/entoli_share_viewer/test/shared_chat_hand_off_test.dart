@@ -1,10 +1,10 @@
-import "dart:io";
-
-import "package:entoli_chat/app/handoff.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/file_handoff.dart";
-import "package:entoli_chat/ui/widgets/text_file_page.dart";
+import "package:entoli_core/transcript/handoff.dart";
+import "package:entoli_core/transcript/storage.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/file_handoff.dart";
+import "package:entoli_core/view/widgets/text_file_page.dart";
 import "package:entoli_share_viewer/shared_chat_hand_off.dart";
+import "package:file/memory.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -23,13 +23,17 @@ class _Downloads implements FileHandoff {
 
 void main() {
   late _Downloads downloads;
+  final fs = MemoryFileSystem(style: FileSystemStyle.posix);
   late SharedChatHandOff handOff;
 
   Future<void> pump(WidgetTester tester) async {
     downloads = _Downloads();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [fileHandoffProvider.overrideWithValue(downloads)],
+        overrides: [
+          fileHandoffProvider.overrideWithValue(downloads),
+          fileSystemProvider.overrideWithValue(fs),
+        ],
         child: MaterialApp(
           home: Scaffold(
             body: Builder(
@@ -62,17 +66,17 @@ void main() {
     expect(find.text("The agent's browser opens in Entoli."), findsOneWidget);
   });
 
-  /// [bytes] as a file in a directory torn down after the test.
+  /// [bytes] as a file in a workspace of the test's own.
   String written(String name, List<int> bytes) {
-    final dir = Directory.systemTemp.createTempSync("viewer_hand_off_");
-    addTearDown(() => dir.deleteSync(recursive: true));
-    final path = p.join(dir.path, name);
-    File(path).writeAsBytesSync(bytes);
+    final path = p.join("/workspace", name);
+    fs.file(path)
+      ..parent.createSync(recursive: true)
+      ..writeAsBytesSync(bytes);
     return path;
   }
 
-  /// The page's read is real I/O, which a fake clock does not advance, and
-  /// its spinner never settles while it runs.
+  /// The page's read is asynchronous, which a fake clock does not advance,
+  /// and its spinner never settles while it runs.
   Future<void> settle(WidgetTester tester) async {
     for (var i = 0; i < 10; i++) {
       await tester.runAsync(

@@ -1,12 +1,12 @@
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/room/room_state.dart" show ChatViewState;
+import "package:entoli_core/transcript/reader.dart" show WidgetReader;
+import "package:entoli_core/view/chat/activity/card.dart" show handOffOf;
+import "package:entoli_core/model/formatting.dart" show plural;
 
-import "package:entoli_chat/domain/room/room_state.dart" show ChatViewState;
 import "../../../app/running.dart";
-import "package:entoli_chat/app/reader.dart" show WidgetReader;
-import "package:entoli_chat/ui/chat/activity/card.dart" show handOffOf;
-import "package:entoli_chat/core/formatting.dart" show plural;
 import "running_pill.dart";
 
 /// What a pill shows in place of its spinner: the browser's state.

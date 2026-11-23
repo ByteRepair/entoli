@@ -4,13 +4,12 @@ library;
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/chat_meta.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart";
 
 import "../app/selection.dart";
-import "package:entoli_chat/domain/chat_meta.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart";
 import "widgets/nav_drawer.dart";
-
 export "../app/selection.dart";
 
 void openChat(BuildContext context, WidgetRef ref, String chatId) {

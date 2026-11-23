@@ -1,6 +1,5 @@
 import "package:flutter/material.dart";
-
-import "package:entoli_chat/core/formatting.dart";
+import "package:entoli_core/model/formatting.dart";
 
 /// Offered under a turn that never finished. Above the composer rather than in
 /// the list, like the approval banner: scrolling back through the turn should

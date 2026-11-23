@@ -1,6 +1,6 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/rootfs.dart";
 
-import "package:entoli_chat/domain/rootfs.dart";
 import "../../providers.dart";
 import "downloads.dart";
 

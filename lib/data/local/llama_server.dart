@@ -5,13 +5,13 @@ import "dart:math";
 
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
+import "package:entoli_core/model/local_llm.dart";
+import "package:entoli_core/model/local_model.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/openai_client.dart";
 
-import "package:entoli_chat/domain/local_llm.dart";
-import "package:entoli_chat/domain/local_model.dart";
-import "package:entoli_chat/core/log.dart";
-import "../../core/random_token.dart";
-import "../builtin/llm/llm_client.dart";
-import "../builtin/llm/openai_client.dart";
+import "../random_token.dart";
 import "local_instance.dart";
 
 /// What is bundled to run a model with: llama.cpp's server, and the directory
@@ -20,7 +20,7 @@ import "local_instance.dart";
 /// It is the native library directory, and that is not tidiness — it is the
 /// only place an app targeting a modern Android may execute a file from, which
 /// is the same rule that puts git and proot there. See "Bundled tools" in
-/// AGENTS.md. Here the directory is load-bearing twice over:
+/// `packages/entoli_shell/lib/AGENTS.md`. Here the directory is load-bearing twice over:
 /// the CPU-side backends are resolved out of it by the dynamic linker, and the
 /// Hexagon backend's DSP-side skeletons are resolved out of it by fastRPC.
 class LlamaBinaries {

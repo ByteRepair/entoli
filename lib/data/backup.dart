@@ -3,17 +3,17 @@ import "dart:convert";
 import "dart:io";
 import "dart:isolate";
 
+import "package:file/local.dart";
 import "package:archive/archive_io.dart";
 import "package:path/path.dart" as p;
-
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/core/migrations.dart";
-import "package:entoli_chat/domain/documents.dart";
-import "package:entoli_chat/domain/file_handoff.dart";
-import "package:entoli_chat/domain/workspace.dart";
-import "local/tree_ops.dart" show removeTree;
-import "package:entoli_chat/data/zip.dart";
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/migrations.dart";
+import "package:entoli_core/store/zip.dart" show linkTargetOf;
+import "package:entoli_core/model/documents.dart";
+import "package:entoli_core/model/file_handoff.dart";
+import "package:entoli_core/model/workspace.dart";
+import "package:entoli_files/entoli_files.dart" show zipTo;
 
 /// The whole data directory as a zip, and back again. The members are the
 /// files, at the paths they have under the data directory. See AGENTS.md,
@@ -79,6 +79,9 @@ class Backup {
   /// Null where the manifest did not say, which a hand-made one may not.
   final DateTime? createdAt;
 }
+
+const _disk = LocalFileSystem();
+const _workspace = Workspace(_disk);
 
 /// `projects/<name>/chats/<id>/state.json`, which is where `AppConfig` puts one
 /// and nowhere else.
@@ -221,7 +224,7 @@ DateTime? _createdAt(Archive archive) {
 Future<void> restoreBackup(
   AppConfig config,
   Backup backup, {
-  Future<void> Function(String path) deleteTree = _removeTree,
+  required Future<void> Function(String path) deleteTree,
 }) {
   final dataDir = config.dataDir;
   final machineLocal = config.machineLocalFiles;
@@ -251,7 +254,7 @@ Future<void> _restore(
       // A member's name was written by whoever made the zip, and
       // `writeIncoming` is where a path from outside is made safe to join
       // onto a directory.
-      await writeIncoming(staged, [
+      await _workspace.writeIncoming(staged, [
         for (final member in members)
           if (!member.isDirectory && linkTargetOf(member) == null)
             _RestoredFile(member),
@@ -262,7 +265,9 @@ Future<void> _restore(
         }
       }
       for (final member in members) {
-        if (member.isDirectory) await createFolder(staged, member.name);
+        if (member.isDirectory) {
+          await _workspace.createFolder(staged, member.name);
+        }
       }
     } finally {
       await input.close();
@@ -276,8 +281,9 @@ Future<void> _restore(
     // one made by an older build unpacks that build's layout — including the
     // version stamp that says which one it is.
     await runMigrations(
+      _disk,
       staged,
-      fresh: await AppConfig.forDirectory(staged).ensureDirs(),
+      fresh: await AppConfig.forDirectory(_disk, staged).ensureDirs(),
     );
   } catch (_) {
     await _clear(staged, deleteTree);
@@ -313,7 +319,7 @@ Future<void> _restoreLink(String staged, String name, String target) async {
 /// so the app is not held up while a rootfs goes.
 Future<void> recoverRestore(
   String dataDir, {
-  Future<void> Function(String path) deleteTree = _removeTree,
+  required Future<void> Function(String path) deleteTree,
 }) async {
   if (!Directory(dataDir).existsSync()) {
     await _putBack(dataDir);
@@ -346,13 +352,6 @@ Future<void> _clear(
   }
 }
 
-/// The default delete: `removeTree`, which gets past what a plain recursive
-/// delete dies on where `chmod` can run.
-Future<void> _removeTree(String path) async {
-  final err = await removeTree(path);
-  if (err != null) throw FileSystemException(err, path);
-}
-
 /// Where a restore unpacks a backup before swapping it in, beside [dataDir] so
 /// the swap is a rename on one filesystem.
 String restoringDirOf(String dataDir) => "$dataDir.restoring";
@@ -370,10 +369,11 @@ class _RestoredFile extends IncomingFile {
   final ArchiveFile member;
 
   @override
-  Future<void> writeTo(String target) async {
+  Future<void> writeTo(File target) async {
     // Decompressed straight into the file, so the largest member costs a
-    // buffer rather than its whole size.
-    final output = OutputFileStream(target);
+    // buffer rather than its whole size. The restore is on the disk, which
+    // is the only filesystem `OutputFileStream` writes.
+    final output = OutputFileStream(target.path);
     try {
       member.writeContent(output);
     } finally {

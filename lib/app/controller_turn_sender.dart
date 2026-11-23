@@ -1,7 +1,7 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/turn_sender.dart";
 
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/turn_sender.dart";
 import "../providers.dart";
 import "chat_controller.dart";
 

@@ -1,16 +1,16 @@
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
-import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/data/builtin/tools/trigger_tool.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/trigger.dart";
-import "package:entoli_chat/domain/trigger_manager.dart";
+import "package:entoli_core/agent/builtin_agent.dart";
+import "package:entoli_core/agent/tools/trigger_tool.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/trigger.dart";
+import "package:entoli_core/model/trigger_manager.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
@@ -104,6 +104,7 @@ void main() {
     final workspace = p.join(projectWorkspace, "chats", "chat-1");
     Directory(workspace).createSync(recursive: true);
     return BuiltinAgent(
+      fs: const LocalFileSystem(),
       session: BuiltinSession(),
       client: client,
       shell: FakeShell((_) => ok("")),
@@ -284,6 +285,7 @@ void main() {
       [_finish],
     ]);
     final bare = BuiltinAgent(
+      fs: const LocalFileSystem(),
       session: BuiltinSession(),
       client: client,
       shell: FakeShell((_) => ok("")),

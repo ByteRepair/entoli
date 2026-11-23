@@ -1,0 +1,68 @@
+import "dart:io";
+
+import "package:flutter_test/flutter_test.dart";
+import "package:path/path.dart" as p;
+import "package:entoli_shell/bundled_tools.dart";
+import "package:entoli_shell/shell_driver.dart";
+
+import "temp_dir.dart";
+
+void main() {
+  // Laying proot out asks Android for the network's resolvers, and a method
+  // channel needs a binding even to answer that nothing is listening.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late Directory root;
+  late Directory libDir;
+
+  setUp(() {
+    root = tempDir("agent_chat_tools_root_");
+    libDir = tempDir("agent_chat_tools_lib_");
+  });
+
+  void ship(String name) =>
+      File(p.join(libDir.path, name)).writeAsStringSync("elf");
+
+  void shipProot() {
+    ship("libproot.so");
+    ship("libproot-loader.so");
+  }
+
+  Future<Toolset?> install() =>
+      BundledTools.install(root: root.path, libDir: libDir.path);
+
+  test("a build that ships nothing changes nothing", () async {
+    expect(await install(), isNull);
+    expect(root.listSync(), isEmpty);
+  });
+
+  test(
+    "a build with only the loader ships no proot, and so no toolset",
+    () async {
+      ship("libproot-loader.so");
+
+      expect(await install(), isNull);
+    },
+  );
+
+  test(
+    "proot on its own is a toolset, since it is what a command runs inside",
+    () async {
+      shipProot();
+
+      final tools = await install();
+      expect(tools, isNotNull);
+      expect(tools!.proot, isNotNull);
+    },
+  );
+
+  test(
+    "a temporary directory of its own, since the system's is not writable",
+    () async {
+      shipProot();
+
+      final tmp = (await install())!.environment["TMPDIR"]!;
+      expect(Directory(tmp).existsSync(), isTrue);
+    },
+  );
+}

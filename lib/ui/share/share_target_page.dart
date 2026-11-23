@@ -1,14 +1,14 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/file_handoff.dart";
+import "package:entoli_core/model/models.dart" show ChatTitle;
+import "package:entoli_core/model/project.dart";
+import "package:entoli_core/transcript/storage.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
 
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/file_handoff.dart";
-import "package:entoli_chat/domain/models.dart" show ChatTitle;
-import "package:entoli_chat/domain/project.dart";
-import "package:entoli_chat/domain/workspace.dart";
 import "../../providers.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "../widgets/section_header.dart";
 
 /// Offers [files] a workspace over whatever is on screen; done once the page
@@ -49,6 +49,7 @@ class ShareTargetPage extends ConsumerWidget {
               title: projectLabel(project),
               subtitle: "Shared workspace",
               onTap: () => _save(
+                ref,
                 context,
                 config.projectWorkspaceDir(project: project),
                 projectLabel(project),
@@ -63,6 +64,7 @@ class ShareTargetPage extends ConsumerWidget {
                 title: chat.title.orUntitled,
                 subtitle: projectLabel(chat.project),
                 onTap: () => _save(
+                  ref,
                   context,
                   config.workspaceDir(chat.id, project: chat.project),
                   chat.title.orUntitled,
@@ -74,9 +76,14 @@ class ShareTargetPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _save(BuildContext context, String dir, String title) async {
+  Future<void> _save(
+    WidgetRef ref,
+    BuildContext context,
+    String dir,
+    String title,
+  ) async {
     try {
-      await writeIncoming(dir, files);
+      await ref.read(workspaceProvider).writeIncoming(dir, files);
     } catch (e) {
       // Left open so the failure is on screen, not to be tried again: what
       // landed before it has landed, and a second pick would only move the

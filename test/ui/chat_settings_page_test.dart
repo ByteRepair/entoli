@@ -2,11 +2,10 @@ import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/chat_meta.dart";
+import "package:entoli_core/model/chat_meta.dart";
 import "package:agent_chat/ui/chat/chat_settings_page.dart";
 import "package:agent_chat/ui/chat/context_page.dart";
-import "package:entoli_chat/ui/workspace/workspace_page.dart";
+import "package:entoli_core/view/workspace/workspace_page.dart";
 
 import "../fakes.dart";
 import "../harness.dart";

@@ -3,7 +3,7 @@
 # the app packages it: an executable named lib*.so, because the installer only
 # extracts files matching that from an APK, and the native library directory is
 # the one place an app is allowed to exec from. See "Bundled tools" in
-# AGENTS.md.
+# packages/entoli_shell/lib/AGENTS.md.
 #
 #   ANDROID_NDK_ROOT=~/.android/ndk/28.2.13676358 tool/android/build.sh arm64-v8a
 #

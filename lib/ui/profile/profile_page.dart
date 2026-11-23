@@ -1,19 +1,19 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/tone.dart";
+import "package:entoli_core/view/widgets/busy.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
+import "package:entoli_core/view/widgets/discard_guard.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
+import "package:entoli_core/view/widgets/text_file_page.dart";
 
 import "../../app/profile_draft.dart";
-import "package:entoli_chat/core/log.dart";
 import "../../core/platform/form_factor.dart";
-import "package:entoli_chat/domain/tone.dart";
 import "../../providers.dart";
-import "package:entoli_chat/ui/widgets/busy.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
-import "package:entoli_chat/ui/widgets/discard_guard.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "../widgets/prompt_field.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
-import "package:entoli_chat/ui/widgets/text_file_page.dart";
 import "linked_instructions.dart";
 
 /// Open the profile: the app's with no [project] (the sidebar's tile and the
@@ -119,9 +119,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   Future<void> _link() => whileBusy(context, _busy, () async {
     final picked = await ref
-        .read(folderPickerProvider)
-        .pickFiles(confirmLabel: "Add");
-    if (mounted) _edit((d) => d.link(picked));
+        .read(filePickerProvider)
+        .files(confirmLabel: "Add");
+    if (mounted) _edit((d) => d.link([for (final file in picked) file.path]));
   });
 
   void _open(String path) => openTextFile(context, path, _draft!.nameOf(path));

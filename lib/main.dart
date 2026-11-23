@@ -1,42 +1,55 @@
 import "dart:async";
 import "dart:ui" show AppExitResponse;
 
+import "package:file/local.dart";
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:http/http.dart" as http;
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/app_restart.dart";
+import "package:entoli_core/model/app_secrets.dart";
+import "package:entoli_core/model/chat_intents.dart" show ChatIntentAction;
+import "package:entoli_core/model/intent_action.dart" show IntentRegistry;
+import "package:entoli_core/model/app_settings.dart" show AppSettings;
+import "package:entoli_core/model/trigger_manager.dart"
+    show TriggerRegistryFactory;
+import "package:entoli_core/model/project.dart" show everyProject;
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/sync/identity.dart";
+import "package:entoli_core/view/fonts.dart";
+import "package:entoli_core/view/theme.dart";
+import "package:entoli_core/agent/llm/providers/provider.dart" show LlmProvider;
+import "package:entoli_core/store/prompts/prompt_sources.dart"
+    show promptDirsOf;
+import "package:entoli_files/entoli_files.dart"
+    show platformBackupHandoff, platformFileHandoff, platformFilePicker;
+import "package:entoli_links/entoli_links.dart"
+    show InAppSignInPages, PluginLinkLauncher, incomingLinks;
+import "package:entoli_menu/entoli_menu.dart" show nativeMenuBar;
+import "package:entoli_scanner/entoli_scanner.dart" show PluginCodeScanner;
+import "package:entoli_share/entoli_share.dart" show PluginShareSheet;
+import "package:entoli_sync_transport/entoli_sync_transport.dart" show RtcLink;
+import "package:entoli_voice/entoli_voice.dart"
+    show registerVoice, sherpaWorkers;
+import "package:entoli_webview/entoli_webview.dart" show PluginWebView;
 
-import "package:entoli_chat/core/config.dart";
 import "app/app_menus.dart";
-import "core/platform/app_menus.dart";
 import "core/platform/background_work.dart";
 import "core/platform/form_factor.dart" show isApple, isPhone;
 import "core/platform/clipboard_files.dart";
 import "core/platform/platform.dart" as platform;
 import "core/platform/system_palette.dart";
-import "core/tls.dart";
+import "data/tls.dart";
 import "data/backup.dart" show recoverRestore;
 import "data/builtin/llm/providers/cli.dart" show CliProvider;
-import "data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "data/local/mlx_engine.dart" show mlxChannel;
 import "data/local/file_trigger_store.dart";
 import "data/model_host/model_host_server.dart";
-import "data/voice/sherpa_voice.dart" show sherpaWorkers;
 import "data/model_catalog.dart";
-import "data/local/file_selector_picker.dart";
 import "data/prompts/bundled_skills.dart";
-import "data/prompts/prompt_sources.dart" show promptDirsOf;
 import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
-import "package:entoli_chat/domain/app_restart.dart";
-import "package:entoli_chat/domain/app_secrets.dart";
-import "package:entoli_chat/domain/chat_intents.dart" show ChatIntentAction;
-import "package:entoli_chat/domain/intent_action.dart" show IntentRegistry;
-import "package:entoli_chat/domain/app_settings.dart" show AppSettings;
-import "package:entoli_chat/domain/trigger_manager.dart"
-    show TriggerRegistryFactory;
-import "package:entoli_chat/domain/project.dart" show everyProject;
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/sync/identity.dart";
 import "providers.dart";
 import "ui/bot_avatar/licence.dart";
 import "app/remote_turns.dart";
@@ -50,13 +63,11 @@ import "ui/app_shell.dart";
 import "app/controller_turn_sender.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
-import "package:entoli_chat/ui/fonts.dart";
 import "ui/link_opener.dart";
 import "ui/incoming_links.dart";
 import "ui/share/incoming_shares.dart";
 import "ui/triggers/incoming_open.dart";
 import "ui/selection.dart";
-import "package:entoli_chat/ui/theme.dart";
 import "ui/app_look.dart";
 import "ui/app_routes.dart";
 
@@ -72,15 +83,18 @@ void modelHostMain(List<String> arguments) => ModelHostServer.run(
   workers: sherpaWorkers,
 );
 
-void main() async {
+/// Run under [tlsClient], so every `http.Client()` in the core is the one
+/// with the bundled trust behind the system's.
+void main() => http.runWithClient(_main, tlsClient);
+
+Future<void> _main() async {
   WidgetsFlutterBinding.ensureInitialized();
   registerBundledFontLicences();
   registerBotAvatarLicence();
   registerBundledSkillLicences();
   registerAppLicence();
   registerBlinkLicence();
-  platform.registerVoiceLicences();
-  platform.registerRecorder();
+  registerVoice();
   // Built here rather than by the root, so the platform's splash covers the
   // first read of the data directory instead of a blank frame.
   final relaunch = AppRelaunch();
@@ -96,7 +110,7 @@ void main() async {
 var _updateChecked = false;
 
 /// The menu bar's, once per process: it answers the platform's channel.
-NativeAppMenus? _menus;
+HostAppMenus? _menus;
 
 /// Everything the app reads out of the data directory, and the container it is
 /// all reached through. One per run of the app — and a second one when a backup
@@ -133,7 +147,7 @@ class AppSession {
     // Before anything reads the data directory: a restore leaves its swap's
     // last step to the launch after it.
     await recoverRestore(dataDir, deleteTree: platform.deleteTree);
-    final config = await AppConfig.load(dataDir);
+    final config = await AppConfig.load(const LocalFileSystem(), dataDir);
     // Started here and awaited before the identity load below: the keyring
     // probe is decided once, so the identity's own first read must not race
     // this one, and the mirror the registry reads keys through is filled by
@@ -168,7 +182,7 @@ class AppSession {
     // project inherits, and a project's own overrides same-named default
     // entries for that project alone. Built once at startup so nothing
     // downstream waits on disk; see "Skills and agents" in
-    // `packages/entoli_chat/lib/domain/AGENTS.md`. The builds read independent project dirs, so
+    // `packages/entoli_core/lib/model/AGENTS.md`. The builds read independent project dirs, so
     // they overlap rather than serialise.
     final libraries = Map.fromEntries(
       await Future.wait(
@@ -182,7 +196,7 @@ class AppSession {
         ),
       ),
     );
-    final handoff = platform.createFileHandoff();
+    final handoff = platformFileHandoff();
     final cache = await cacheDir;
     final rootfs = platform.createRootfsStore(cache);
     // Started here and awaited below, the way the three above are: it is a
@@ -302,8 +316,10 @@ class AppSession {
       settings: () => settingsHome.read(appSettingsProvider),
       turnPassword: () => secrets.turnPassword,
       lanSignaling: platform.createLanSignaling,
+      createLink: RtcLink.create,
       hostname: await hostname,
     );
+    const launcher = PluginLinkLauncher();
     final container = ProviderContainer(
       overrides: [
         chatStoreProvider.overrideWithValue(store),
@@ -312,10 +328,7 @@ class AppSession {
         shellProvider.overrideWithValue(backend.shell),
         appConfigProvider.overrideWithValue(config),
         appSecretsProvider.overrideWithValue(secrets),
-        attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
-        folderPickerProvider.overrideWithValue(
-          const FileSelectorFolderPicker(),
-        ),
+        filePickerProvider.overrideWithValue(platformFilePicker()),
         clipboardFilesProvider.overrideWithValue(createClipboardFiles()),
         // Seed every project's library at startup: each family member gets its
         // own seeded library, so nothing downstream waits on disk.
@@ -323,9 +336,13 @@ class AppSession {
           (project) => PromptLibraryNotifier(project, libraries[project]),
         ),
         systemAccentProvider.overrideWithValue(await accent),
+        linkLauncherProvider.overrideWithValue(launcher),
         linkOpenerProvider.overrideWithValue(
-          PlatformLinkOpener(store, syncHub),
+          PlatformLinkOpener(store, launcher, const PluginWebView(), syncHub),
         ),
+        appLinksProvider.overrideWithValue(incomingLinks()),
+        shareSheetProvider.overrideWithValue(const PluginShareSheet()),
+        codeScannerProvider.overrideWithValue(const PluginCodeScanner()),
         marketplaceClientProvider.overrideWithValue(tlsClient()),
         backgroundWorkProvider.overrideWithValue(foreground),
         fileHandoffProvider.overrideWithValue(handoff),
@@ -338,9 +355,7 @@ class AppSession {
         chatPresenterProvider.overrideWith(SelectionChatPresenter.new),
         turnControlProvider.overrideWith(ChatControllerTurnControl.new),
         chatEditorProvider.overrideWith((ref) => ref.read(chatEditsProvider)),
-        backupHandoffProvider.overrideWithValue(
-          platform.createBackupHandoff(handoff),
-        ),
+        backupHandoffProvider.overrideWithValue(platformBackupHandoff(handoff)),
         appRestartProvider.overrideWithValue(relaunch),
         voiceModelStoreProvider.overrideWithValue(voiceModels),
         voiceProvider.overrideWithValue(voice),
@@ -364,7 +379,9 @@ class AppSession {
         if (isPhone)
           signInPagesProvider.overrideWithValue(const InAppSignInPages()),
         appMenusProvider.overrideWithValue(
-          isApple ? _menus ??= NativeAppMenus() : const NoAppMenus(),
+          isApple
+              ? _menus ??= HostAppMenus(nativeMenuBar())
+              : const NoAppMenus(),
         ),
         agentBrowserProvider.overrideWithValue(browser),
         localEngineProvider.overrideWithValue(engine),
@@ -489,7 +506,7 @@ class AppRelaunch implements AppRestart {
 
 /// The app, and the ability to build it again. A restart here is a second
 /// [AppSession] swapped in and the first thrown away — which is what a restored
-/// backup needs and nothing else does. See `domain/app_restart.dart` for why
+/// backup needs and nothing else does. See `model/app_restart.dart` for why
 /// that rather than telling each holder to look afresh.
 class AppRoot extends StatefulWidget {
   const AppRoot({super.key, required this.session, required this.relaunch});

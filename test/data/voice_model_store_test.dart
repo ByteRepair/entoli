@@ -1,8 +1,9 @@
 import "dart:async";
 import "dart:io";
 
-import "package:agent_chat/data/voice/file_voice_model_store.dart";
-import "package:entoli_chat/domain/voice_model.dart";
+import "package:agent_chat/data/download.dart" show startDownload;
+import "package:entoli_voice/file_voice_model_store.dart";
+import "package:entoli_core/model/voice_model.dart";
 import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
@@ -25,7 +26,10 @@ void main() {
       "/model.onnx": List.filled(64, 7),
       "/tokens.txt": List.filled(64, 7),
     });
-    store = FileVoiceModelStore(p.join(root.path, "models"), client: net);
+    store = FileVoiceModelStore(
+      p.join(root.path, "models"),
+      download: startDownload(client: net),
+    );
   });
 
   tearDown(() async {
