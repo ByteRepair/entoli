@@ -203,19 +203,17 @@ class MachineSandboxFolders implements SandboxFolders {
 
   final String? home;
 
-  // Looked up once: home, `PATH` and the environment do not move under a run.
-  late final _caches = findToolchainCaches(
+  // Looked up afresh on each ask, which the gate makes once a turn: a folder
+  // a tool made since is there to grant.
+  @override
+  List<String> toolchainCaches() => findToolchainCaches(
     home: home,
     path: Platform.environment["PATH"] ?? "",
     environment: Platform.environment,
   );
-  late final _homes = findToolchainHomes(home: home);
 
   @override
-  List<String> toolchainCaches() => _caches;
-
-  @override
-  List<String> toolchainHomes() => _homes;
+  List<String> toolchainHomes() => findToolchainHomes(home: home);
 
   @override
   Future<List<String>> systemTemps() => _systemTempsOnce();

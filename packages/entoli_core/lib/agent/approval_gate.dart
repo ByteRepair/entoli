@@ -142,6 +142,13 @@ class ApprovalGate {
   /// folders.
   SandboxFolders? get _folders => shell.sandboxFolders;
 
+  /// The toolchain caches and homes, looked up once per turn rather than per
+  /// command: a folder made since the last turn is in the next one's grant.
+  late final List<String> _toolchainCaches =
+      _folders?.toolchainCaches() ?? const [];
+  late final List<String> _toolchainHomes =
+      _folders?.toolchainHomes() ?? const [];
+
   /// Whether a command runs confined under [permissions]: the switch on and
   /// a helper to enforce it. What the turn's context reads before it names
   /// the folders the sandbox grants, so it never names any it does not.
@@ -168,8 +175,8 @@ class ApprovalGate {
       extraWrites: [
         ...granted.skip(1),
         // Denied, each sent ordinary work out of the sandbox altogether.
-        if (on(SandboxGrant.caches)) ...?_folders?.toolchainCaches(),
-        if (on(SandboxGrant.toolchains)) ...?_folders?.toolchainHomes(),
+        if (on(SandboxGrant.caches)) ..._toolchainCaches,
+        if (on(SandboxGrant.toolchains)) ..._toolchainHomes,
         if (on(SandboxGrant.systemTemps)) ...systemTemps,
         if (on(SandboxGrant.git)) ...?_folders?.gitDirs(dirs, granted),
       ],
