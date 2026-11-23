@@ -1,7 +1,6 @@
 import "dart:convert";
 import "dart:io";
 
-import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 import "package:entoli_core/model/migrations.dart";
@@ -70,7 +69,7 @@ void main() {
     );
     final decoyBefore = decoy.readAsStringSync();
 
-    await runMigrations(const LocalFileSystem(), config.dataDir, fresh: false);
+    await runMigrations(config.fs, config.dataDir, fresh: false);
 
     final lines = log.readAsLinesSync();
     final records = [
@@ -116,7 +115,7 @@ void main() {
       }),
     ]);
 
-    await runMigrations(const LocalFileSystem(), config.dataDir, fresh: false);
+    await runMigrations(config.fs, config.dataDir, fresh: false);
 
     final lines = log.readAsLinesSync();
     expect(lines.where((l) => l.contains("documents")), isEmpty);
