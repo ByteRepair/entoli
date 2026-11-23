@@ -4,8 +4,8 @@ import "dart:typed_data";
 import "package:archive/archive.dart";
 
 import "../../data/sync/artifact_bytes.dart" show ArtifactBytes;
-import "package:entoli_chat/domain/workspace.dart";
 import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/data/zip.dart" show extractInto;
 
 /// The mirror-side half of opening a remote artifact: the bytes come off the
 /// sync channel, are written to a temporary directory, and every platform
@@ -13,18 +13,11 @@ import "package:entoli_chat/core/log.dart";
 /// is the one the local artifact already had, which is why this writes a
 /// real directory rather than adding a second viewer over memory.
 ///
-/// Member names came from wherever the zip was made, so each goes through
-/// [safeRelativePath] before joining the temp root — a name like
-/// `../x.html` lands flattened inside the directory instead of outside it.
+/// Member names came from wherever the zip was made, which [extractInto]
+/// holds inside the temp root.
 Future<String> unzipRemoteArtifact(Uint8List bytes) async {
   final dir = await Directory.systemTemp.createTemp("entoli-artifact");
-  for (final member in ZipDecoder().decodeBytes(bytes)) {
-    if (member.isDirectory) continue;
-    final target = "${dir.path}/${safeRelativePath(member.name)}";
-    final file = File(target);
-    await file.create(recursive: true);
-    await file.writeAsBytes(member.readBytes() ?? Uint8List(0));
-  }
+  await extractInto(ZipDecoder().decodeBytes(bytes), dir.path);
   return dir.path;
 }
 

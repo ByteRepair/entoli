@@ -1,7 +1,10 @@
 import "dart:io";
+import "dart:typed_data";
 
 import "package:archive/archive_io.dart";
 import "package:path/path.dart" as p;
+
+import "../domain/workspace.dart" show safeRelativePath;
 
 /// Zip [paths] — files and folders alike — into a new file at [to]. Each
 /// member is read and compressed in turn, straight into the file, so a tree of
@@ -21,7 +24,12 @@ Future<void> zipTo(
 }) async {
   final encoder = ZipFileEncoder()..create(to);
   try {
-    await for (final entry in _entries(paths, base, skip, skipDir)) {
+    await for (final entry in walkTree(
+      paths,
+      base: base,
+      skip: skip,
+      skipDir: skipDir,
+    )) {
       entry.isDirectory
           ? encoder.addArchiveFile(ArchiveFile.directory(entry.name))
           : await _addStreamed(encoder, entry.path, entry.name);
@@ -41,7 +49,12 @@ Future<Archive> archiveOf(
   bool Function(String path)? skipDir,
 }) async {
   final archive = Archive();
-  await for (final entry in _entries(paths, base, skip, skipDir)) {
+  await for (final entry in walkTree(
+    paths,
+    base: base,
+    skip: skip,
+    skipDir: skipDir,
+  )) {
     archive.add(
       entry.isDirectory
           ? ArchiveFile.directory(entry.name)
@@ -79,19 +92,21 @@ String zipNameFor(List<String> paths) {
   return "${p.basename(named)}.zip";
 }
 
+/// One member [walkTree] makes: its [path] on disk, and its [name] in a zip.
+typedef TreeEntry = ({String path, String name, bool isDirectory});
+
 /// Every member [paths] make, in walk order: each folder before what is in
-/// it, named relative to [base] or the path's own parent.
-Stream<({String path, String name, bool isDirectory})> _entries(
-  List<String> paths,
+/// it, named relative to [base] or the path's own parent. A link under a
+/// folder is not followed and not a member: what a tree points at outside
+/// itself is not the tree's to hand over, and a link back up would never end.
+/// [skip] and [skipDir] are as [zipTo]'s.
+Stream<TreeEntry> walkTree(
+  List<String> paths, {
   String? base,
   bool Function(String path)? skip,
   bool Function(String path)? skipDir,
-) async* {
-  Stream<({String path, String name, bool isDirectory})> walk(
-    String from,
-    String path,
-    bool isDirectory,
-  ) async* {
+}) async* {
+  Stream<TreeEntry> walk(String from, String path, bool isDirectory) async* {
     if (!isDirectory) {
       if (skip == null || !skip(path)) {
         yield (path: path, name: _member(path, from), isDirectory: false);
@@ -106,7 +121,8 @@ Stream<({String path, String name, bool isDirectory})> _entries(
     if (name != ".") yield (path: path, name: name, isDirectory: true);
     // On the entity rather than its path: `list` has already answered which
     // each one is, and asking again is a stat per file.
-    await for (final entity in Directory(path).list()) {
+    await for (final entity in Directory(path).list(followLinks: false)) {
+      if (entity is Link) continue;
       yield* walk(from, entity.path, entity is Directory);
     }
   }
@@ -117,6 +133,24 @@ Stream<({String path, String name, bool isDirectory})> _entries(
       path,
       FileSystemEntity.isDirectorySync(path),
     );
+  }
+}
+
+/// [archive]'s files written out under [dir]. Each name goes through
+/// [safeRelativePath] first, so `../x` lands inside [dir] rather than beside
+/// it; [accept] drops a member by the path it would be written to.
+Future<void> extractInto(
+  Archive archive,
+  String dir, {
+  bool Function(String target)? accept,
+}) async {
+  for (final member in archive) {
+    if (member.isDirectory) continue;
+    final target = p.join(dir, safeRelativePath(member.name));
+    if (accept != null && !accept(target)) continue;
+    final file = File(target);
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(member.readBytes() ?? Uint8List(0));
   }
 }
 
