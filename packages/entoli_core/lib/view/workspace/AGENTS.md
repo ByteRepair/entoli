@@ -98,40 +98,13 @@ The cap falls on a byte rather than a
 character, which is the one thing `readTextHead` has to undo before it decodes:
 a rune cut in half is otherwise a file that reads as binary.
 
-Everything else the page can do is `FileHandoff`'s, and every route is gated the
-way `Shell.canRunCommands` gates the agent's commands. Desktop and Android do
-not differ in degree here, they differ in kind — and so there are two
-implementations, chosen at runtime in `createFileHandoff`, because they share
-`dart:io` and agree on nothing else here. Choosing rather than branching is the
-point: a class that answered both would carry an `if (Platform.isAndroid)` in
-every member, and every future member too.
-
-- **Desktop** has a file manager and a registry of viewers, and `url_launcher`
-  reaches both: `reveal` opens the current folder (the bar's button) and
-  `open` opens a file, which is the same call on a different path. It needs no
-  chooser of its own — the file manager is already pointed at the workspace —
-  and it has no share sheet, so an entry there is only ever deleted.
-- **iOS** opens a file as a desktop does, and its file manager is the Files app:
-  `IosFileHandoff` sends `reveal` to the Runner, which opens Files at the folder
-  through a File Provider. `fileManager` names it on the button, and is null on
-  Android, which has no file manager to show a folder in. See "The workspaces in
-  the Files app" in `ios/AGENTS.md`.
-- **Android** has the share sheet, both ways. `export` sends an entry through
-  `Intent.createChooser`, so every app on the device is on offer rather than a
-  default winning silently; `open` is an `ACTION_VIEW`. Files come back in the
-  same way, and only that way: another app shares to Entoli. It is not the only
-  route out any more — a `DocumentsProvider` puts the workspaces in the Files
-  app, for the other app to browse rather than be handed something. Both are
-  below.
+Everything else the page can do is `FileHandoff`'s, and every route is gated
+the way `Shell.canRunCommands` gates the agent's commands. What each platform
+answers is in `packages/entoli_files/lib/AGENTS.md`, "The hand-offs".
 
 `canShare` is false on a platform with no share sheet to hand an entry to,
 which is what takes Share off a desktop's rows — Delete stays, since deleting
 is the filesystem's rather than a route out of the app.
-
-A share sheet does not take a folder, so a folder goes as a single zip,
-written straight to the staging directory by `zipTo`
-(`lib/data/zip.dart`, the walker a backup streams through
-too), which is what lets Android's staging directory stay flat.
 
 Coming the other way, an `IncomingFile` is deliberately **not** its bytes. A
 batch arrives with as many files as its source chose to send and then waits on
@@ -147,13 +120,3 @@ putting it there means. That split is where the traversal boundary lives —
 `safeRelativePath` runs once, before dispatch, so no variant can open a hole in
 it — and it is why the writes stay sequential: doing them at once would put
 every file's bytes in memory together, which is the whole thing being avoided.
-
-That staging directory is the other thing worth knowing about the Android half.
-Everything handed to an intent is a **copy under the app's cache**, never the
-workspace file itself, because a `FileProvider` only mints URIs under the paths
-in `android/app/src/main/res/xml/file_paths.xml` and one `<cache-path>` is the
-whole of that file. The alternative was a `<root-path>` exposing the data
-directory by path for the sake of not copying, which is a worse trade on a
-directory holding `settings.json` and every chat. It costs a copy per open;
-workspace files are the agent's output, and the ones big enough to notice are
-rare.

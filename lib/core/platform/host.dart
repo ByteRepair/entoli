@@ -34,19 +34,18 @@ import "package:entoli_core/model/sync/lan_signaling.dart";
 import "package:entoli_core/model/voice.dart";
 import "package:entoli_core/model/voice_model_store.dart";
 import "package:entoli_core/model/config.dart";
+import "package:entoli_files/entoli_files.dart"
+    show platformBackupHandoff, platformFileHandoff;
 import "package:entoli_voice/entoli_voice.dart"
     show openVoiceModelStore, platformVoice;
 
-import "../../data/backup_handoff.dart";
 import "../../data/download.dart" show startDownload;
 import "../../data/local/android_assistant_launch.dart";
 import "../../data/local/android_device_name.dart";
-import "../../data/local/android_file_handoff.dart";
 import "../../data/local/android_reminder_alarms.dart";
 import "../../data/local/bundled_tools.dart";
 import "../../data/local/byte_repair_store.dart";
 import "../../data/local/file_secret_store.dart";
-import "../../data/local/ios_file_handoff.dart";
 import "../../data/local/ios_reminder_alarms.dart";
 import "../../data/local/file_modes.dart";
 import "../../data/local/file_local_model_store.dart";
@@ -64,9 +63,7 @@ import "../../data/local/proot.dart";
 import "../../data/local/apple_fm.dart";
 import "../../data/local/landlock.dart";
 import "../../data/local/seatbelt.dart";
-import "../../data/local/shared_backup.dart";
 import "../../data/local/tree_ops.dart";
-import "../../data/local/desktop_file_handoff.dart";
 import "../../data/model_host/helper_process.dart";
 import "../../data/model_host/model_process.dart";
 import "../../data/local/intent_channel.dart";
@@ -500,15 +497,10 @@ String bundledLinuxLibDir({String? executablePath}) {
   return p.basename(dir) == "lib" ? dir : p.join(dir, "lib");
 }
 
-FileHandoff createFileHandoff() => Platform.isAndroid
-    ? AndroidFileHandoff()
-    : Platform.isIOS
-    ? const IosFileHandoff()
-    : const DesktopFileHandoff();
+FileHandoff createFileHandoff() => platformFileHandoff();
 
-/// Android has no save dialog; a backup leaves through the share sheet.
 BackupHandoff createBackupHandoff(FileHandoff handoff) =>
-    Platform.isAndroid ? SharedBackup(handoff) : const FileSelectorBackup();
+    platformBackupHandoff(handoff);
 
 /// Shortcuts' App Intents, on the two platforms that have them: the Apple
 /// Runners answer `agent_chat/intents`, and nothing else does.

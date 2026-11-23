@@ -1,9 +1,9 @@
 import "dart:io";
 
-import "package:file_selector/file_selector.dart";
 import "package:flutter/services.dart" show rootBundle;
 import "package:path/path.dart" as p;
 import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/file_picker.dart";
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/rootfs.dart";
@@ -134,7 +134,7 @@ class ByteRepairStore {
   /// Copies a user-picked ESBMC binary next to the tools the setup fetched,
   /// making it executable. The selected shared rootfs must already be
   /// installed. Null on success, an error message on failure.
-  Future<String?> importEsbmc(XFile file) async {
+  Future<String?> importEsbmc(PickedFile file) async {
     // The shared guest rootfs is not host-accessible on iSH, but is a regular
     // tree on Android. Desktop installs use the app's bin directory.
     final destDirPath = isPhone ? _guestEsbmcDir : _hostInstallDir;

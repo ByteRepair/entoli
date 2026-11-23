@@ -28,7 +28,7 @@ import "package:entoli_core/model/app_update.dart";
 import "package:entoli_core/model/app_theme.dart";
 import "package:entoli_core/model/assistant_launch.dart";
 import "package:entoli_core/model/attachment_picker.dart";
-import "package:entoli_core/model/folder_picker.dart";
+import "package:entoli_core/model/file_picker.dart";
 import "package:entoli_core/model/clipboard_files.dart";
 import "package:entoli_core/model/backup_handoff.dart";
 import "package:entoli_core/model/background_work.dart";
@@ -131,7 +131,7 @@ final marketplaceClientProvider = Provider<http.Client>(
 final attachmentPickerProvider = Provider<AttachmentPicker>(
   (ref) => throw UnimplementedError(),
 );
-final folderPickerProvider = Provider<FolderPicker>(
+final filePickerProvider = Provider<FilePicker>(
   (ref) => throw UnimplementedError(),
 );
 final clipboardFilesProvider = Provider<ClipboardFiles>(

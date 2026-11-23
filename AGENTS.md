@@ -81,6 +81,8 @@ named in a cross-reference is findable from this list.
   What counts as being spoken to, One listener, two engines, Mute is the user,
   not the conversation, Per side, not per session, The Kotlin, Where the models
   live, Hearing and speaking
+- `packages/entoli_files/lib/AGENTS.md` — The choosers, The hand-offs, A
+  backup's way out
 - `lib/ui/voice/AGENTS.md` — Reading one message out, The screen, Touch to
   speak, Taking turns
 - `packages/entoli_core/lib/view/workspace/AGENTS.md` — The workspace explorer

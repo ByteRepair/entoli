@@ -17,8 +17,9 @@ Windows machine's own has never been refreshed.
 The chat store and the prompt sources used to vary and do not any more — one
 filesystem means one of each, built in `platform.dart` itself. What is left
 varying is the shell, where the filesystem's root is, `FileHandoff` (see "The
-workspace explorer"), and `AssistantLaunch` (Android's assistant gesture, and a
-stub that never fires anywhere else — see "Being the assistant").
+hand-offs" in `packages/entoli_files/lib/AGENTS.md`), and `AssistantLaunch`
+(Android's assistant gesture, and a stub that never fires anywhere else — see
+"Being the assistant").
 
 `Shell.canRunCommands` is what a machine with no shell changes, and it is not
 one failing command — it is the whole loop. With no shell there is nothing to

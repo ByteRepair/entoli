@@ -2,20 +2,27 @@ import "dart:io";
 
 import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:path/path.dart" as p;
-import "package:agent_chat/data/zip.dart";
 import "package:file/local.dart";
+import "package:path/path.dart" as p;
 import "package:entoli_core/store/zip.dart";
+import "package:entoli_files/zip.dart";
 
-import "../harness.dart";
+Directory _tempDir() {
+  final dir = Directory.systemTemp.createTempSync("entoli_files_test_");
+  addTearDown(() => dir.deleteSync(recursive: true));
+  return dir;
+}
 
 void main() {
   late String dir;
 
-  setUp(() => dir = tempConfig().projectWorkspaceDir());
+  setUp(() {
+    dir = "${_tempDir().path}/workspace";
+    Directory(dir).createSync();
+  });
 
   Future<Archive> unzip(List<String> paths) async {
-    final out = "${tempDir().path}/out.zip";
+    final out = "${_tempDir().path}/out.zip";
     await zipTo(out, paths);
     return ZipDecoder().decodeBytes(File(out).readAsBytesSync());
   }
@@ -71,7 +78,7 @@ void main() {
   });
 
   test("a link is followed, unless the walk is told not to", () async {
-    final outside = tempDir().path;
+    final outside = _tempDir().path;
     File("$outside/target.txt").writeAsStringSync("linked");
     Directory("$dir/tree").createSync();
     Link("$dir/tree/file.txt").createSync("$outside/target.txt");
@@ -98,7 +105,7 @@ void main() {
   test(
     "a link back up its own tree ends, and a second way in does not",
     () async {
-      final shared = tempDir().path;
+      final shared = _tempDir().path;
       File("$shared/s.txt").writeAsStringSync("s");
       Directory("$dir/tree/sub").createSync(recursive: true);
       File("$dir/tree/sub/a.txt").writeAsStringSync("a");
@@ -120,7 +127,7 @@ void main() {
   );
 
   test("unfollowed, a link handed in as a path is no member either", () async {
-    final outside = tempDir().path;
+    final outside = _tempDir().path;
     File("$outside/s.txt").writeAsStringSync("s");
     Link("$dir/folder").createSync(outside);
     Link("$dir/file.txt").createSync("$outside/s.txt");

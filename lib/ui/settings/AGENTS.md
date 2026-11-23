@@ -444,19 +444,18 @@ machine's paths, unlike `instruction_files.json`. The field was already there,
 moving it would cost a migration, and a path that reaches another machine by
 backup or sync names a folder that is not there, which grants nothing (below).
 
-A folder comes from the platform's picker (`FolderPicker`, `file_selector`'s
-`getDirectoryPath` under it) and is never typed. It is refused, with a
-notice, by `refuseFolder` in
-`packages/entoli_core/lib/model/work_folders.dart`, the one test any grant
-takes, `add_directory`'s banner included. It refuses a path that is not a
-directory, the root, the home or anything holding it, the app's own data tree
-(the data directory, anything under it, or anything holding it), and anything
-holding the project's workspace. A row whose folder that test now refuses says
-why under its path (`FolderRefusal.row`). The commonest case is "Missing on this
-device", a folder that has disappeared or arrived by sync from another machine.
-The turn drops such a folder from its policy as well, so it grants nothing and a
-command cannot recreate it under the grant. Rows are the shared `EditableRow`,
-with no tap, since a folder is only added and removed.
+A folder comes from the platform's picker (`FilePicker.folder`, in
+`entoli_files`) and is never typed. It is refused, with a notice, by
+`refuseFolder` in `packages/entoli_core/lib/model/work_folders.dart`, the one
+test any grant takes, `add_directory`'s banner included. It refuses a path that
+is not a directory, the root, the home or anything holding it, the app's own
+data tree (the data directory, anything under it, or anything holding it), and
+anything holding the project's workspace. A row whose folder that test now
+refuses says why under its path (`FolderRefusal.row`). The commonest case is
+"Missing on this device", a folder that has disappeared or arrived by sync from
+another machine. The turn drops such a folder from its policy as well, so it
+grants nothing and a command cannot recreate it under the grant. Rows are the
+shared `EditableRow`, with no tap, since a folder is only added and removed.
 
 The folders the sandbox grants by default — the temp folders, the caches, the
 toolchains' stores, a repository's `.git` — are not rows here. They are the
@@ -720,11 +719,5 @@ who has just asked for their data to be replaced.
 `FileHandoff`: that one is the workspace explorer's, and its per-platform
 capability flags are what the explorer's toolbar draws itself from — a backup
 asks none of those questions, because every platform has somewhere to put a file
-and a chooser to get one back. `FileSelectorBackup` is the whole of it on the
-desktops, `getSaveLocation` being a dialog there. Android is the exception and `SharedBackup` is why: `file_selector`
-implements no save dialog there, so a backup leaves through the share sheet,
-which is `FileHandoff`'s. An intent carries a file rather than bytes, so the zip
-is written to the cache and `FileHandoff` then stages a copy of its own under
-the one path a `FileProvider` will mint URIs from — the archive is written
-twice, which is what reusing that route out costs rather than opening a second
-one.
+and a chooser to get one back. Each platform's answer is "A backup's way out"
+in `packages/entoli_files/lib/AGENTS.md`.

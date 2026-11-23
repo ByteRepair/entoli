@@ -10,7 +10,7 @@ import "package:entoli_core/store/zip.dart" show zipNameFor;
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/mime.dart";
 
-import "../zip.dart";
+import "zip.dart";
 
 /// Android, where every route runs through an intent and `FilesChannel.kt` is
 /// the other end of `agent_chat/files`. There is no file manager to point at a
@@ -20,7 +20,7 @@ import "../zip.dart";
 /// Everything the channel is handed is a copy under the app's cache rather than
 /// the workspace file itself, because a `FileProvider` only mints URIs under
 /// the paths it is configured with and one cache directory is the whole of that
-/// configuration. See AGENTS.md, "The workspace explorer".
+/// configuration. See "The hand-offs" in this package's AGENTS.md.
 class AndroidFileHandoff implements FileHandoff {
   AndroidFileHandoff() {
     _channel.setMethodCallHandler(_onCall);

@@ -256,7 +256,7 @@ void main() {
     ) async {
       await openWith(tester);
       expect(find.text("No folders yet."), findsOneWidget);
-      app.folders.scripted = outside.path;
+      app.chooser.scripted = outside.path;
       await tester.tap(find.text("Add Folder…"));
       await settleIo(tester);
       expect(saved("research").writableDirs, [outside.path]);
@@ -269,7 +269,7 @@ void main() {
 
     testWidgets("the app's own data directory is refused", (tester) async {
       await openWith(tester);
-      app.folders.scripted = app.config.dataDir;
+      app.chooser.scripted = app.config.dataDir;
       await tester.tap(find.text("Add Folder…"));
       await settleIo(tester);
       expect(find.text(FolderRefusal.appData.message), findsOneWidget);

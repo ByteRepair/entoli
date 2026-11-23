@@ -1,9 +1,9 @@
-import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:entoli_core/model/agent_definition.dart";
 import "package:entoli_core/model/agent_face.dart";
 import "package:entoli_core/model/bot_avatar/spec.dart";
+import "package:entoli_core/model/file_picker.dart";
 import "package:entoli_core/model/models.dart";
 import "package:entoli_core/model/project.dart" show promptsDirUserWritable;
 import "package:entoli_core/model/prompt_library.dart";
@@ -29,7 +29,7 @@ import "../widgets/prompt_field.dart";
 import "../widgets/section_header.dart";
 import "copy_install_link.dart";
 
-const _agentFiles = XTypeGroup(
+const _agentFiles = FileTypes(
   label: "Agent",
   extensions: ["md"],
   mimeTypes: ["text/markdown"],
@@ -158,7 +158,7 @@ class _AgentsSettingsState extends ConsumerState<AgentsSettings> {
   Future<void> _import() async {
     ({String name, String source})? read;
     await _guard(() async {
-      final file = await openFile(acceptedTypeGroups: const [_agentFiles]);
+      final file = await ref.read(filePickerProvider).file(types: _agentFiles);
       if (file == null) return;
       read = AgentFiles.import(
         file.name,

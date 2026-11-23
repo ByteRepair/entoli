@@ -119,9 +119,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   Future<void> _link() => whileBusy(context, _busy, () async {
     final picked = await ref
-        .read(folderPickerProvider)
-        .pickFiles(confirmLabel: "Add");
-    if (mounted) _edit((d) => d.link(picked));
+        .read(filePickerProvider)
+        .files(confirmLabel: "Add");
+    if (mounted) _edit((d) => d.link([for (final file in picked) file.path]));
   });
 
   void _open(String path) => openTextFile(context, path, _draft!.nameOf(path));

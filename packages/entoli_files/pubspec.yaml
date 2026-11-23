@@ -1,0 +1,30 @@
+name: entoli_files
+description: >
+  Picking files and handing them off: the platform's choosers, opening and
+  sharing a workspace file with another app, and a backup's save dialog.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  entoli_core:
+    path: ../entoli_core
+  # A share sheet does not take a folder, so a folder leaves as a zip.
+  archive: ^4.1.0
+  file: ^7.0.1
+  path: ^1.9.1
+  # Android's staging directory for what an intent is handed.
+  path_provider: ^2.1.6
+  file_selector: ^1.1.0
+  url_launcher: ^6.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

@@ -176,7 +176,7 @@ void main() {
     final notes = File("${app.config.dataDir}/../linked/NOTES.md")
       ..createSync(recursive: true)
       ..writeAsStringSync("notes");
-    app.folders.scriptedFiles = [notes.absolute.path];
+    app.chooser.scriptedFiles = [notes.absolute.path];
     await open(tester);
     await tester.tap(find.text("Link files…"));
     await settleIo(tester);

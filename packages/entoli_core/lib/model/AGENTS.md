@@ -1030,7 +1030,7 @@ reaction in the room itself: rebuilt from text, it would be lost.
 
 The `+` button offers Image and File. Both open the same chooser and differ only
 in its filter, so they share one path: `AttachmentPicker` (a domain interface,
-`file_selector` behind it, faked in tests) hands back `Attachment`s of filename,
+`entoli_files` behind it, faked in tests) hands back `Attachment`s of filename,
 mime type and bytes.
 
 A paste is the other way in. `ClipboardFiles` answers what the clipboard holds

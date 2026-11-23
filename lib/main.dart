@@ -23,6 +23,8 @@ import "package:entoli_core/view/theme.dart";
 import "package:entoli_core/agent/llm/providers/provider.dart" show LlmProvider;
 import "package:entoli_core/store/prompts/prompt_sources.dart"
     show promptDirsOf;
+import "package:entoli_files/entoli_files.dart"
+    show platformAttachmentPicker, platformFilePicker;
 import "package:entoli_voice/entoli_voice.dart"
     show registerVoice, sherpaWorkers;
 
@@ -40,7 +42,6 @@ import "data/local/mlx_engine.dart" show mlxChannel;
 import "data/local/file_trigger_store.dart";
 import "data/model_host/model_host_server.dart";
 import "data/model_catalog.dart";
-import "data/local/file_selector_picker.dart";
 import "data/prompts/bundled_skills.dart";
 import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
@@ -321,10 +322,8 @@ class AppSession {
         appConfigProvider.overrideWithValue(config),
         fileSystemProvider.overrideWithValue(config.fs),
         appSecretsProvider.overrideWithValue(secrets),
-        attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
-        folderPickerProvider.overrideWithValue(
-          const FileSelectorFolderPicker(),
-        ),
+        attachmentPickerProvider.overrideWithValue(platformAttachmentPicker()),
+        filePickerProvider.overrideWithValue(platformFilePicker()),
         clipboardFilesProvider.overrideWithValue(createClipboardFiles()),
         // Seed every project's library at startup: each family member gets its
         // own seeded library, so nothing downstream waits on disk.

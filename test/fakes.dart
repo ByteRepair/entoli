@@ -31,7 +31,7 @@ import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/app_restart.dart";
 import "package:entoli_core/model/agent_backend.dart";
 import "package:entoli_core/model/attachment_picker.dart";
-import "package:entoli_core/model/folder_picker.dart";
+import "package:entoli_core/model/file_picker.dart";
 import "package:entoli_core/model/clipboard_files.dart";
 import "package:entoli_core/model/backup_handoff.dart";
 import "package:entoli_core/model/shell_job.dart";
@@ -327,20 +327,41 @@ class FakeAttachmentPicker implements AttachmentPicker {
   }
 }
 
-/// Stands in for the platform's folder chooser.
-class FakeFolderPicker implements FolderPicker {
-  /// What the next pick returns. Null is a cancelled dialog.
+/// Stands in for the platform's folder and file choosers.
+class FakeFilePicker implements FilePicker {
+  /// What the next folder pick returns. Null is a cancelled dialog.
   String? scripted;
 
   @override
-  Future<String?> pick({required String confirmLabel}) async => scripted;
+  Future<String?> folder({required String confirmLabel}) async => scripted;
 
-  /// What the next file pick returns. Empty is a cancelled dialog.
+  /// What the next file pick returns, by path; the first of them for a single
+  /// file. Empty is a cancelled dialog.
   List<String> scriptedFiles = const [];
 
   @override
-  Future<List<String>> pickFiles({required String confirmLabel}) async =>
-      scriptedFiles;
+  Future<PickedFile?> file({String? confirmLabel, FileTypes? types}) async =>
+      scriptedFiles.map(FakePickedFile.new).firstOrNull;
+
+  @override
+  Future<List<PickedFile>> files({
+    String? confirmLabel,
+    FileTypes? types,
+  }) async => [for (final path in scriptedFiles) FakePickedFile(path)];
+}
+
+/// A picked file on the real disk, which is where a test's files are.
+class FakePickedFile implements PickedFile {
+  const FakePickedFile(this.path);
+
+  @override
+  final String path;
+
+  @override
+  String get name => p.basename(path);
+
+  @override
+  Future<Uint8List> readAsBytes() => File(path).readAsBytes();
 }
 
 /// Stands in for the runner's clipboard channel.

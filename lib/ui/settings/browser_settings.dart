@@ -1,6 +1,5 @@
 import "dart:async";
 
-import "package:file_selector/file_selector.dart" show openFile;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:entoli_core/model/log.dart";
@@ -209,9 +208,9 @@ class _BrowserPicker extends ConsumerWidget {
             : (value) => guarded(context, () async {
                 final picker = ref.read(browserPickProvider.notifier);
                 if (value != _chooseBrowser) return picker.pick(value);
-                final file = await openFile(
-                  confirmButtonText: "Use this browser",
-                );
+                final file = await ref
+                    .read(filePickerProvider)
+                    .file(confirmLabel: "Use this browser");
                 if (file != null) await picker.pickFile(file.path);
               }),
       ),

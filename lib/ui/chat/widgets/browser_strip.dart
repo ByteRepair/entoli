@@ -1,6 +1,5 @@
 import "dart:async";
 
-import "package:file_selector/file_selector.dart";
 import "package:flutter/foundation.dart"
     show defaultTargetPlatform, TargetPlatform;
 import "package:flutter/gestures.dart";
@@ -10,6 +9,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:entoli_core/view/widgets/anchored_menu.dart";
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/file_picker.dart";
 
 import "../../../providers.dart";
 import "browser_input.dart";
@@ -128,7 +128,7 @@ class BrowserPrompts extends ConsumerWidget {
 /// A file chooser the page opened, waiting on the user: the agent is not
 /// trusted to pick what leaves the machine here, so the user picks with the
 /// system's own file picker, and Upload hands the page what they picked.
-class UploadPanel extends StatefulWidget {
+class UploadPanel extends ConsumerStatefulWidget {
   const UploadPanel({
     super.key,
     required this.request,
@@ -141,16 +141,17 @@ class UploadPanel extends StatefulWidget {
   final VoidCallback onWatch;
 
   @override
-  State<UploadPanel> createState() => _UploadPanelState();
+  ConsumerState<UploadPanel> createState() => _UploadPanelState();
 }
 
-class _UploadPanelState extends State<UploadPanel> {
-  List<XFile> _chosen = const [];
+class _UploadPanelState extends ConsumerState<UploadPanel> {
+  List<PickedFile> _chosen = const [];
 
   Future<void> _choose() async {
+    final picker = ref.read(filePickerProvider);
     final picked = widget.request.multiple
-        ? await openFiles(confirmButtonText: "Choose")
-        : [?await openFile(confirmButtonText: "Choose")];
+        ? await picker.files(confirmLabel: "Choose")
+        : [?await picker.file(confirmLabel: "Choose")];
     if (picked.isEmpty || !mounted) return;
     setState(() => _chosen = picked);
   }

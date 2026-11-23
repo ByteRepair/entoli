@@ -78,8 +78,8 @@ class ProjectEdits {
   /// or nothing was picked.
   Future<FolderRefusal?> addFolder(String? project) async {
     final picked = await _ref
-        .read(folderPickerProvider)
-        .pick(confirmLabel: "Add");
+        .read(filePickerProvider)
+        .folder(confirmLabel: "Add");
     if (picked == null) return null;
     if (refusal(project, picked) case final refused?) return refused;
     final settings = projectSettingsProvider(project);
