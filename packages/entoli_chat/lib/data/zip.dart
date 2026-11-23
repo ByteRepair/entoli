@@ -13,7 +13,8 @@ import "../domain/workspace.dart" show safeRelativePath;
 /// unzipping a folder gives the folder back rather than its contents loose.
 /// [skip] drops a file by its path, and is never asked about a directory;
 /// [skipDir] drops a directory by its path, and is asked before recursing into
-/// it. [extra] goes in last, for a member of the caller's own.
+/// it. [extra] goes in last, for a member of the caller's own. [followLinks]
+/// is [walkTree]'s.
 Future<void> zipTo(
   String to,
   List<String> paths, {
@@ -21,6 +22,7 @@ Future<void> zipTo(
   bool Function(String path)? skip,
   bool Function(String path)? skipDir,
   List<ArchiveFile> extra = const [],
+  bool followLinks = true,
 }) async {
   final encoder = ZipFileEncoder()..create(to);
   try {
@@ -29,6 +31,7 @@ Future<void> zipTo(
       base: base,
       skip: skip,
       skipDir: skipDir,
+      followLinks: followLinks,
     )) {
       entry.isDirectory
           ? encoder.addArchiveFile(ArchiveFile.directory(entry.name))
@@ -47,6 +50,7 @@ Future<Archive> archiveOf(
   String? base,
   bool Function(String path)? skip,
   bool Function(String path)? skipDir,
+  bool followLinks = true,
 }) async {
   final archive = Archive();
   await for (final entry in walkTree(
@@ -54,6 +58,7 @@ Future<Archive> archiveOf(
     base: base,
     skip: skip,
     skipDir: skipDir,
+    followLinks: followLinks,
   )) {
     archive.add(
       entry.isDirectory
@@ -110,12 +115,17 @@ Stream<TreeEntry> walkTree(
   bool Function(String path)? skipDir,
   bool followLinks = true,
 }) async* {
+  // The real paths of the folders the walk is inside, where it follows links:
+  // only those, not every folder seen, since two links to one folder
+  // elsewhere are two copies of it rather than a loop.
+  final inside = <String>{};
+
   Stream<TreeEntry> walk(
     String from,
     String path,
-    bool isDirectory, [
-    Set<String> inside = const {},
-  ]) async* {
+    bool isDirectory,
+    String? real,
+  ) async* {
     if (!isDirectory) {
       if (skip == null || !skip(path)) {
         yield (path: path, name: _member(path, from), isDirectory: false);
@@ -123,24 +133,39 @@ Stream<TreeEntry> walkTree(
       return;
     }
     if (skipDir != null && skipDir(path)) return;
-    // Only the folders above it, not every folder seen: two links to one
-    // folder elsewhere are two copies of it, not a loop.
-    final real = followLinks
-        ? Directory(path).resolveSymbolicLinksSync()
-        : path;
-    if (inside.contains(real)) return;
-    final within = {...inside, real};
+    if (real != null && !inside.add(real)) return;
     // Its own entry as well as its contents': an empty folder is otherwise
     // nothing at all, and a zip of one alone would come out empty. The base
     // itself is not one of its own entries — `.` names nothing to unzip.
     final name = _member(path, from);
     if (name != ".") yield (path: path, name: name, isDirectory: true);
-    // On the entity rather than its path: `list` has already answered which
-    // each one is, and asking again is a stat per file.
-    await for (final entity in Directory(path).list(followLinks: followLinks)) {
-      if (entity is Link) continue;
-      yield* walk(from, entity.path, entity is Directory, within);
+    // Listed without following, so only a link costs a lookup of where it
+    // lands: a folder that is not one is its parent's real path and its name.
+    await for (final entity in Directory(path).list(followLinks: false)) {
+      if (entity is! Link) {
+        final isDir = entity is Directory;
+        yield* walk(
+          from,
+          entity.path,
+          isDir,
+          isDir && real != null ? p.join(real, p.basename(entity.path)) : null,
+        );
+      } else if (followLinks) {
+        switch (FileSystemEntity.typeSync(entity.path)) {
+          case FileSystemEntityType.file:
+            yield* walk(from, entity.path, false, null);
+          case FileSystemEntityType.directory:
+            yield* walk(
+              from,
+              entity.path,
+              true,
+              Directory(entity.path).resolveSymbolicLinksSync(),
+            );
+          default:
+        }
+      }
     }
+    if (real != null) inside.remove(real);
   }
 
   for (final path in paths) {
@@ -148,6 +173,9 @@ Stream<TreeEntry> walkTree(
       base ?? p.dirname(path),
       path,
       FileSystemEntity.isDirectorySync(path),
+      followLinks && FileSystemEntity.isDirectorySync(path)
+          ? Directory(path).resolveSymbolicLinksSync()
+          : null,
     );
   }
 }

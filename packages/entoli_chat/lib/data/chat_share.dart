@@ -97,11 +97,9 @@ class ChatShareSource {
       return true;
     }
 
-    await for (final entry in walkTree(
-      [dir],
-      base: dir,
+    await for (final entry in _shareTree(
+      dir,
       skipDir: workspace ? skipDir : null,
-      followLinks: false,
     )) {
       if (entry.isDirectory) continue;
       files.add(
@@ -267,9 +265,16 @@ String _dir(
 /// A file on disk, and its name in the zip.
 typedef _Member = ({String name, String path});
 
+/// Everything under [dir], named from it. A link is no part of it: a share
+/// goes to someone else, and what a link points at is not the chat's to give.
+Stream<TreeEntry> _shareTree(
+  String dir, {
+  bool Function(String path)? skipDir,
+}) => walkTree([dir], base: dir, skipDir: skipDir, followLinks: false);
+
 /// Every file under [from], named as it would be under [into].
 Future<List<_Member>> _membersUnder(String from, String into) async => [
-  await for (final entry in walkTree([from], base: from, followLinks: false))
+  await for (final entry in _shareTree(from))
     if (!entry.isDirectory)
       (name: _member(p.join(into, entry.name)), path: entry.path),
 ];
@@ -337,7 +342,7 @@ String _under(String dir, String path) =>
 
 Future<int> _sizeOf(String dir) async {
   var size = 0;
-  await for (final entry in walkTree([dir], base: dir, followLinks: false)) {
+  await for (final entry in _shareTree(dir)) {
     if (!entry.isDirectory) size += await File(entry.path).length();
   }
   return size;

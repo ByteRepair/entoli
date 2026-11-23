@@ -100,6 +100,7 @@ void main() {
       Link("$dir/tree/sub/up").createSync("$dir/tree");
       Link("$dir/tree/one").createSync(shared);
       Link("$dir/tree/two").createSync(shared);
+      Link("$shared/self").createSync(shared);
 
       final archive = await unzip(["$dir/tree"]);
 
