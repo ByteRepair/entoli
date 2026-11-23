@@ -28,7 +28,7 @@ The user is not a class: nothing in the room calls them. Their verbs are the
 room's public methods, reached through `TurnDriver`. Sub-agents are not
 rooms either — they share `TurnRecorder` with the room and nothing else, and
 their transcript deliberately leaves the task unlogged (see "Their own
-transcripts" in `lib/data/builtin/AGENTS.md`).
+transcripts" in `packages/entoli_core/lib/agent/AGENTS.md`).
 
 **A room is a list of participants.** A direct chat — Omada off, the
 default — holds one: Athena (`athena`, a bundled agent like any other,

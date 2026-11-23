@@ -1,7 +1,7 @@
 // What a `bash` result says when the work has moved to a folder outside the
 // writable set: that `add_directory` grants it once, where the model was
 // otherwise leaving the sandbox command by command. See "Approvals" in
-// `lib/data/builtin/AGENTS.md`.
+// `packages/entoli_core/lib/agent/AGENTS.md`.
 //
 // The signals are the sandbox's refusals, read off the kernel's own errors
 // (`sandbox_denials.dart`), and the call's own arguments: whether it asked to

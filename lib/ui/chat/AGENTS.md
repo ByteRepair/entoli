@@ -188,9 +188,9 @@ view: a sub-agent's follows the turn through `chatViewProvider`, and a
 job's is the job's (below).
 
 Jobs are not turn-scoped: a pill per job the chat is running (see
-"Background jobs" in `lib/data/builtin/AGENTS.md`), gone when it ends. They
-come from the room's `ChatViewState.runningJobs`, which a mirror never fills,
-so a mirrored chat draws none.
+"Background jobs" in `packages/entoli_core/lib/agent/AGENTS.md`), gone when it
+ends. They come from the room's `ChatViewState.runningJobs`, which a mirror
+never fills, so a mirrored chat draws none.
 
 ## The agent's browser, on screen
 
@@ -239,10 +239,10 @@ page as the user left it. It acts only on an open tab — input never starts a
 browser.
 
 `BrowserPrompts`, the bar across the whole width above the row, draws the two
-private paths of "Signing in" in `lib/data/builtin/AGENTS.md`. A sign-in the
-agent asked for is `CredentialPanel`: the fields, obscured where the agent said
-`secret`, with autocorrect and suggestions off, and Sign in and Decline. What is
-typed lives in the panel's controllers and goes from them to
+private paths of "Signing in" in `packages/entoli_core/lib/agent/AGENTS.md`. A
+sign-in the agent asked for is `CredentialPanel`: the fields, obscured where the
+agent said `secret`, with autocorrect and suggestions off, and Sign in and
+Decline. What is typed lives in the panel's controllers and goes from them to
 `submitCredentials`, cleared when the panel goes. A browser the agent hid is its
 `reason` as a full-width button that opens the card, and the pill reads "hidden
 from the agent" either way; the card has the "Hide from agent" toggle and, while

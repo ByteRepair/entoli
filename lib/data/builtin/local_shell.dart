@@ -1039,7 +1039,7 @@ class _OneShotRun extends ShellRun {
   /// [result] naming the writes the sandbox refused, read where the confined
   /// run ends so every run under one hears it — a foreground command, a
   /// background job, the user's own. See "Approvals" in
-  /// `lib/data/builtin/AGENTS.md`.
+  /// `packages/entoli_core/lib/agent/AGENTS.md`.
   ShellResult _withDenials(ShellResult result) {
     final sandbox = this.sandbox;
     if (sandbox == null) return result;

@@ -706,7 +706,7 @@ abstract class ToolResult with _$ToolResult {
     /// the result as a preview of [output] and this path, while [output]
     /// stays the whole of it for the chat to show. Null where it was worded
     /// in full, or where the save failed. See "Tools" in
-    /// `lib/data/builtin/AGENTS.md`.
+    /// `packages/entoli_core/lib/agent/AGENTS.md`.
     String? outputFile,
 
     /// What happened since the last call that the model should hear — a

@@ -324,9 +324,10 @@ class WorkspaceProvider : DocumentsProvider() {
     private fun isProjectDir(name: String) =
         name.isNotEmpty() && !name.startsWith(".") && !name.contains('/') && name !in UNBROWSED
 
-    // `viewerMime`, in lib/data/mime.dart: octet-stream throws away the one fact
-    // that decides whether anything opens the file at all, so an unrecognised
-    // one is offered as text, which is what most of a workspace is.
+    // `viewerMime`, in packages/entoli_core/lib/model/mime.dart: octet-stream
+    // throws away the one fact that decides whether anything opens the file at
+    // all, so an unrecognised one is offered as text, which is what most of a
+    // workspace is.
     private fun mimeOf(file: File): String = when {
         file.isDirectory -> Document.MIME_TYPE_DIR
         else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())

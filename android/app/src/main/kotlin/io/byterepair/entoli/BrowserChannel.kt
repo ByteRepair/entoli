@@ -20,7 +20,7 @@ import io.flutter.plugin.common.MethodChannel
 // the DevTools Protocol that debugging serves on `@webview_devtools_remote_<pid>`.
 // The WebView cannot open a page of its own over the protocol, so this is
 // where a chat's page is made, its first address naming the chat for Dart to
-// find it by. See "The browser" in lib/data/builtin/AGENTS.md.
+// find it by. See "The browser" in packages/entoli_core/lib/agent/AGENTS.md.
 object BrowserChannel {
     private val views = mutableMapOf<String, WebView>()
 

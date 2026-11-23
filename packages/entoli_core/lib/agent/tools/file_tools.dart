@@ -325,7 +325,7 @@ class ReadTool extends AgentTool {
 /// come to: Claude Code's own 2,000 lines and 25,000 tokens, the tokens
 /// counted the way the rest of the app estimates them, four characters each
 /// ([charsPerToken], beside `estimateTokens`). See "Tools" in
-/// `lib/data/builtin/AGENTS.md`.
+/// `packages/entoli_core/lib/agent/AGENTS.md`.
 const readLineLimit = 2000;
 const readTokenCap = 25000;
 

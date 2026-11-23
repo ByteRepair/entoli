@@ -10,7 +10,7 @@
 // denied"), naming the path. A path outside every write the sandbox granted
 // is a write the sandbox refused. That is the OS's error being read, not the
 // model's words, which is why it can stand where a guess from text cannot.
-// See "Approvals" in `lib/data/builtin/AGENTS.md`.
+// See "Approvals" in `packages/entoli_core/lib/agent/AGENTS.md`.
 
 import "package:file/file.dart";
 import "package:path/path.dart" as p;

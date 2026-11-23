@@ -8,7 +8,7 @@ import "../model/shell_job.dart" show fileStemOf;
 /// Where a chat keeps the results too large to word in full: a directory of
 /// its own workspace, beside the background jobs' logs, so `read` and `tail`
 /// reach it from every shell, a guest's included, and it goes when the chat
-/// does. See "Tools" in `lib/data/builtin/AGENTS.md`.
+/// does. See "Tools" in `packages/entoli_core/lib/agent/AGENTS.md`.
 const savedOutputDir = ".entoli-output";
 
 /// [relative], a path inside the chat's [workspace], as the model is given

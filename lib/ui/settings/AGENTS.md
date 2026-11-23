@@ -406,20 +406,21 @@ consults before any of it — and a **Turns** section — how a turn runs and is
 bounded: the retry rounds, the step limit, the Total Context window, the
 Auto-compact switch and share, and the Maximum response length, a number that is
 a fallback for models of unknown limit or, switched on, a cap on every reply
-(see "How long a reply may be" in `lib/data/builtin/llm/AGENTS.md`). The Agent
-was under General until it moved beside the model it runs. How long the model
-thinks and the image model's Quality are both a `ThinkingSlider` (see
-`lib/ui/widgets/AGENTS.md`). **Memory** is what one conversation leaves the
-others: the two `AGENTS.md` files every turn is read from — the user's own at
-the root of the data directory and the project's in its workspace — and the ways
-a turn may keep what they pull in out: imports and the nested ones found on a
-read, both on by default, and the patterns that keep a file out; the built-in
-projects read a note the app ships instead of any file. Beside them the memories
-the app writes for itself, which the recall, extraction and tools sub-gates and
-the Memory LLM steer; the profile pages edit the files — the global page the
-user's own, the project page the project's, and no built-in project's — and the
-memories themselves are looked at on a page the settings draw. The two halves
-are "Memory" in `lib/data/builtin/AGENTS.md`. **Data** is all of it at once, out
+(see "How long a reply may be" in
+`packages/entoli_core/lib/agent/llm/AGENTS.md`). The Agent was under General
+until it moved beside the model it runs. How long the model thinks and the image
+model's Quality are both a `ThinkingSlider` (see `lib/ui/widgets/AGENTS.md`).
+**Memory** is what one conversation leaves the others: the two `AGENTS.md` files
+every turn is read from — the user's own at the root of the data directory and
+the project's in its workspace — and the ways a turn may keep what they pull in
+out: imports and the nested ones found on a read, both on by default, and the
+patterns that keep a file out; the built-in projects read a note the app ships
+instead of any file. Beside them the memories the app writes for itself, which
+the recall, extraction and tools sub-gates and the Memory LLM steer; the profile
+pages edit the files — the global page the user's own, the project page the
+project's, and no built-in project's — and the memories themselves are looked at
+on a page the settings draw. The two halves are "Memory" in
+`packages/entoli_core/lib/agent/AGENTS.md`. **Data** is all of it at once, out
 as one file and back — see "Backing it all up". **About** is the app rather than
 anything it does, which is why it is last — see "What the app is".
 
@@ -460,8 +461,8 @@ with no tap, since a folder is only added and removed.
 The folders the sandbox grants by default — the temp folders, the caches, the
 toolchains' stores, a repository's `.git` — are not rows here. They are the
 app's, not the user's additions, so each is a toggle beside the Sandbox
-switch (a `SandboxGrant`; see "Approvals" in `lib/data/builtin/AGENTS.md`),
-on unless turned off.
+switch (a `SandboxGrant`; see "Approvals" in
+`packages/entoli_core/lib/agent/AGENTS.md`), on unless turned off.
 
 It is drawn only where the paths are this device's and the sandbox is what
 they open. It is not drawn for a paired device's project, whose folders a
@@ -632,8 +633,9 @@ starts. The sibling is what makes the swap a rename: one filesystem, no copy.
 `AppConfig.machineLocalFiles` are the top-level files a backup skips and a
 restore leaves where they are, one list both read so the two cannot drift.
 Today it is `instruction_files.json`, which holds paths on this machine (see
-"Workspace instructions" in `lib/data/builtin/AGENTS.md`) that name nothing on
-another; restoring an older backup should not unlink what was linked since.
+"Workspace instructions" in `packages/entoli_core/lib/agent/AGENTS.md`) that
+name nothing on another; restoring an older backup should not unlink what was
+linked since.
 
 It was one JSON document holding every file first, and that is worse on every
 count that matters. Text in JSON is escaped inside a string inside an array,

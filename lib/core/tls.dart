@@ -87,8 +87,8 @@ Future<SecurityContext> _loadMozillaRootContext() async {
   );
 }
 
-/// [See "Reaching a provider" in lib/data/builtin/llm/AGENTS.md for the
-/// client this wraps.]
+/// [See "Reaching a provider" in packages/entoli_core/lib/agent/llm/AGENTS.md
+/// for the client this wraps.]
 ///
 /// Sends under the system's trust; where that handshake dies on the
 /// certificate verification alone — and only there, so every other reason a

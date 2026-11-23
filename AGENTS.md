@@ -31,13 +31,17 @@ named in a cross-reference is findable from this list.
 - `lib/ui/sidebar/AGENTS.md` — The sidebar's list, Pinned chats, A chat's row
   menu
 - `lib/app/marketplace/AGENTS.md` — The marketplace page
-- `lib/data/builtin/AGENTS.md` — The agent loop, Tools, Running the commands, Background
-  jobs, Running a command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
-   Carrying one on, Web search, The browser, Images, Skills, The plan, The task list,
-  Memory
-- `lib/data/builtin/llm/AGENTS.md` — Reaching a provider, How much of an
-  allowance is spent, A program in the model's place (the CLI providers),
-  Errors, and how long the UI waits
+- `packages/entoli_core/lib/agent/AGENTS.md` — The agent loop, Tools,
+  Background jobs, Running a command yourself, Approvals, Questions,
+  Sub-agents, Their own transcripts, Following one while it runs, Carrying one
+  on, Web search, The browser, Images, Attachments, Skills, The room's roster,
+  Compaction, The plan, The task list, Memory
+- `lib/data/builtin/AGENTS.md` — Running the commands (the local shell)
+- `packages/entoli_core/lib/agent/llm/AGENTS.md` — Reaching a provider, How
+  long a reply may be, How much of an allowance is spent, Errors, and how long
+  the UI waits
+- `lib/data/builtin/llm/AGENTS.md` — A program in the model's place (the CLI
+  providers)
 - `lib/data/sync/AGENTS.md` — The threat model, the handshake, the framing
   layer, three rendezvous transports, the SyncHub, mirroring a chat, driving a
   turn from the other end, what the Sync page can do about a
@@ -246,7 +250,7 @@ is the reminder's and stayed, a rename being a migration.
 `<dataDir>/instruction_files.json` is the instruction files a desktop user
 linked by path and which projects switched each off — out of backups and sync,
 being this machine's paths; see "Workspace instructions" in
-`lib/data/builtin/AGENTS.md`.
+`packages/entoli_core/lib/agent/AGENTS.md`.
 `<dataDir>/bot_avatars.json` is the Bot Avatar definitions the user imported,
 one JSON list, offered in the avatar editor beside the presets; see
 `packages/entoli_core/lib/model/bot_avatar/AGENTS.md`.

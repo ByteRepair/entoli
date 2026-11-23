@@ -6,7 +6,7 @@ import "settings/setting.dart";
 /// refusal only ever sent the agent out of the sandbox altogether. Each is
 /// on unless the user turns it off, at the default project or a project,
 /// and is drawn as its own toggle rather than as a work folder. See
-/// "Approvals" in `lib/data/builtin/AGENTS.md`.
+/// "Approvals" in `packages/entoli_core/lib/agent/AGENTS.md`.
 enum SandboxGrant {
   systemTemps(
     SettingKeys.sandboxTemps,

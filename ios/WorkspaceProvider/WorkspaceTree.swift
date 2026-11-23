@@ -333,8 +333,9 @@ final class WorkspaceItem: NSObject, NSFileProviderItem {
     return caps
   }
 
-  // `viewerMime`, in lib/data/mime.dart: an unrecognised file is offered as
-  // text, which is what most of a workspace is.
+  // `viewerMime`, in packages/entoli_core/lib/model/mime.dart: an
+  // unrecognised file is offered as text, which is what most of a workspace
+  // is.
   var contentType: UTType {
     if isFolder { return .folder }
     guard let type = UTType(filenameExtension: (filename as NSString).pathExtension),

@@ -111,14 +111,14 @@ being the on-device provider, as every picker already names it —
 `voiceRecognitionProviderId`, `voiceSpeechProviderId`, absent from a file that
 predates them and so read as on-device. A pick resolves to a
 `TranscriptionModel` or a `SynthesisModel` (see "What a model can do is its
-type" in `lib/data/builtin/llm/AGENTS.md`): `OnDeviceProvider` serves the
-installed voice models as those, beside the downloaded text models, and an
-OpenAI-shaped provider serves its audio models. The picker is the same
-`ModelCatalogPage` every model is picked on, offering what each provider
-serves; the downloads themselves are Settings > On-device's, beside the text
-models. Every provider is in one list, `modelProvidersProvider`: the
-readiness gates and pickers resolve picks against it as it changes, and the
-backend's registry runs models from the same list.
+type" in `packages/entoli_core/lib/agent/llm/AGENTS.md`): `OnDeviceProvider`
+serves the installed voice models as those, beside the downloaded text models,
+and an OpenAI-shaped provider serves its audio models. The picker is the same
+`ModelCatalogPage` every model is picked on, offering what each provider serves;
+the downloads themselves are Settings > On-device's, beside the text models.
+Every provider is in one list, `modelProvidersProvider`: the readiness gates and
+pickers resolve picks against it as it changes, and the backend's registry runs
+models from the same list.
 
 **The port knows no HTTP.** `Voice.start` takes one `Hearing` and one
 `Speaking`, each a model on the device or a provider's call (`Transcribe`,

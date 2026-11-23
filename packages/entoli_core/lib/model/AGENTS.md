@@ -465,10 +465,10 @@ marker's summary as the summary turn the conversation opens with, and the
 ask carries merge rules for it — carry forward
 objectives and constraints, conversation wins conflicts, Active moves to
 Completed — so compacting again never loses what the last one kept. The prompt
-is `lib/data/builtin/compact_prompt.dart`, the one file that words it: two
-behaviors hold in it whichever words carry them — a reply shaped like a user's
-turn is still the model's writing and never an approval from them, and the
-summary describes the work rather than the summarizing — and there is no
+is `packages/entoli_core/lib/agent/compact_prompt.dart`, the one file that words
+it: two behaviors hold in it whichever words carry them — a reply shaped like a
+user's turn is still the model's writing and never an approval from them, and
+the summary describes the work rather than the summarizing — and there is no
 `<analysis>` step, the analysis being stripped before anything is stored and
 costing output tokens on the context that is already over budget.
 
@@ -477,7 +477,7 @@ marker is cut into pieces that fit, each summarized with the summary so far
 as the turn it opens with, a step too big alone keeping its ends around a note of
 what was cut. `upToMessageId` is the newest message, every one before it
 having been read; see "Compaction (the `compact` callback)" in
-`lib/data/builtin/AGENTS.md`.
+`packages/entoli_core/lib/agent/AGENTS.md`.
 
 ### Callbacks, and the wired skill
 
@@ -515,7 +515,8 @@ names the chat from the objective. It still addresses nobody and never steers
 split of who decides: the working model never marks its own goal done. Each
 time a reply ends with no tool call, a reviewer reads the conversation and
 answers met, carry on, or blocked; the agent's claim is not evidence. See
-"The agent loop" in `lib/data/builtin/AGENTS.md` for the review itself.
+"The agent loop" in `packages/entoli_core/lib/agent/AGENTS.md` for the review
+itself.
 
 **The goal is the log's.** Every change to it is a `goal` record —
 `set`, `resumed`, `paused`, `cleared`, `met`, `blocked` — naming the message
@@ -807,14 +808,14 @@ top level. Entoli's own keys (`argument-hint`, `user-invocable`,
 `disable-model-invocation`, `invocation`) live under the spec's `metadata:` map, which is
 its extension point for per-client settings — see "The conversation log" in
 this file's parent for what the flags do. `skillProblems`, in
-`lib/data/prompts/skill_validate.dart`, is the one validator, and it runs
-everywhere a skill comes in: a `.skill` import refuses a non-conformant
-package with the reasons, `create_skill` refuses a draft the same way so the
-model can fix it in-process, the loader skips a folder that does not conform
-with a log line, and `tool/gen_bundled_skills.dart` fails the build rather
-than ship a preset the loader would skip. Nothing is migrated: a skill that
-stops loading says so on its settings row and on the skill view page, and the
-fix is to edit and reinstall it.
+`packages/entoli_core/lib/store/prompts/skill_validate.dart`, is the one
+validator, and it runs everywhere a skill comes in: a `.skill` import refuses a
+non-conformant package with the reasons, `create_skill` refuses a draft the same
+way so the model can fix it in-process, the loader skips a folder that does not
+conform with a log line, and `tool/gen_bundled_skills.dart` fails the build
+rather than ship a preset the loader would skip. Nothing is migrated: a skill
+that stops loading says so on its settings row and on the skill view page, and
+the fix is to edit and reinstall it.
 
 The folder is what a `.skill` import lands and what the base directory is, and
 the spec requires it to match the frontmatter `name` — so the two diverging is

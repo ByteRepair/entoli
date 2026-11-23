@@ -5,7 +5,8 @@ import WebKit
 // The agent's browser on iOS: one WKWebView per chat, driven from Dart by
 // webkit_connection.dart, which speaks the slice of the DevTools Protocol the
 // tab sends in terms of these calls. WebKit serves no protocol an app can
-// reach. See "On iOS" under "The browser" in lib/data/builtin/AGENTS.md.
+// reach. See "On iOS" under "The browser" in
+// packages/entoli_core/lib/agent/AGENTS.md.
 final class BrowserChannel: NSObject, WKNavigationDelegate, WKUIDelegate {
   private static var shared: BrowserChannel?
 

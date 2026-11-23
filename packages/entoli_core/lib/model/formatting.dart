@@ -3,7 +3,7 @@
 /// file from a big one, not to be added up.
 ///
 /// Not what a saved result's notice says: that is Claude Code's wording,
-/// `_charSize` in `data/builtin/templates.dart`.
+/// `_charSize` in `agent/templates.dart`.
 String formatSize(int bytes) {
   const units = ["B", "KB", "MB", "GB", "TB"];
   var size = bytes.toDouble();

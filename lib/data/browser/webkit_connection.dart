@@ -13,7 +13,7 @@ import "cdp.dart";
 /// protocol an app can reach, so a script is `evaluateJavaScript`, a picture
 /// `takeSnapshot`, and input is DOM events made in the page — which the page
 /// sees as untrusted, and which cannot reach into a cross-site frame. See
-/// "On iOS" under "The browser" in `lib/data/builtin/AGENTS.md`.
+/// "On iOS" under "The browser" in `packages/entoli_core/lib/agent/AGENTS.md`.
 class WebKitConnection implements CdpConnection {
   WebKitConnection(this._channel) {
     _channel.setMethodCallHandler((call) async {
