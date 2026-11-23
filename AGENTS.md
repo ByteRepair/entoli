@@ -182,8 +182,11 @@ app, the core, the adapters and the viewer are one pub workspace with one
 interfaces for it implemented with the Flutter plugins it takes, and nothing
 else — voice, files, links, share, scanner, webview, sync_transport, shell,
 paths, menu, browser. An adapter depends on the core and its plugins, never
-on a front end, and on another adapter only where it builds on one. Its notes
-are in its `lib/AGENTS.md`, listed above.
+on a front end, and on another adapter only where it builds on one. It may
+carry a plugin that only registers itself and that no Dart imports:
+`cryptography_flutter` in `entoli_sync_transport`, which puts the platform's
+own ciphers under `cryptography`. Its notes are in its `lib/AGENTS.md`,
+listed above.
 
 ### The two front ends
 
