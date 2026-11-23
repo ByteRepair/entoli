@@ -7,9 +7,9 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-import "package:entoli_chat/domain/chat_share.dart";
-import "package:entoli_chat/domain/link_bytes.dart" show appLinkMaxLength;
-import "package:entoli_chat/domain/models.dart";
+import "package:entoli_core/model/chat_share.dart";
+import "package:entoli_core/model/link_bytes.dart" show appLinkMaxLength;
+import "package:entoli_core/model/models.dart";
 import "package:agent_chat/ui/chat/share_chat_dialog.dart";
 
 import "../harness.dart";

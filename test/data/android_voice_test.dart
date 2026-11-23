@@ -1,13 +1,13 @@
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/model_host/model_process.dart";
 import "package:agent_chat/data/voice/android_voice.dart";
 import "package:agent_chat/data/voice/voice_strategies.dart"
     show SpeechFailed, SpeechSignal, SpeechSilent;
-import "package:entoli_chat/domain/voice.dart";
-import "package:entoli_chat/domain/voice_model.dart"
+import "package:entoli_core/model/voice.dart";
+import "package:entoli_core/model/voice_model.dart"
     show nativeSpeech, recognitionModels, speechModels;
+
 import "../fakes.dart";
 
 // The system engines behind a mock `agent_chat/voice`: what Dart asks for and

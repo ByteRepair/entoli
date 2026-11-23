@@ -1,9 +1,10 @@
-import "package:entoli_chat/core/formatting.dart" show nonBlank;
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/model_info.dart";
+import "package:entoli_core/model/formatting.dart" show nonBlank;
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/model_info.dart";
+import "package:entoli_core/transcript/reader.dart";
+
 import "../providers.dart";
 import "model_role.dart";
-import "package:entoli_chat/app/reader.dart";
 
 /// What a model added by hand can be said to do.
 enum ModelCap { toolCall, reasoning, readsImages, readsPdfs, makesImages }

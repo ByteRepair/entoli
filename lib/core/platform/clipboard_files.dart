@@ -5,11 +5,11 @@ import "dart:io";
 
 import "package:flutter/services.dart";
 import "package:path/path.dart" as p;
+import "package:entoli_core/model/clipboard_files.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/log.dart";
 
 import "../../data/mime.dart";
-import "package:entoli_chat/domain/clipboard_files.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/core/log.dart";
 
 const _channel = MethodChannel("agent_chat/clipboard");
 

@@ -1,4 +1,4 @@
-import "package:entoli_chat/domain/availability.dart";
+import "package:entoli_core/model/availability.dart";
 
 /// A key as the menus and the key handlers take it: the chord key (Cmd on
 /// Apple's platforms, Ctrl elsewhere) plus [char], with Shift and Alt

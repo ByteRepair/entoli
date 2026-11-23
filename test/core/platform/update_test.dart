@@ -2,9 +2,8 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 import "package:http/http.dart" as http;
-
 import "package:agent_chat/core/platform/update.dart";
-import "package:entoli_chat/domain/app_update.dart";
+import "package:entoli_core/model/app_update.dart";
 
 import "../../data/fake_network.dart";
 

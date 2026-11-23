@@ -1,5 +1,4 @@
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/core/platform/host.dart";
 
 /// The path the Linux build looks for its model server at is the whole of

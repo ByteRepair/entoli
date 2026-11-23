@@ -45,7 +45,7 @@ sharing where there is a share sheet, are on an entry's own row menu as well as
 on a selection.
 
 A text file is the one thing a tap does not leave the app for.
-`TextFilePage` (`packages/entoli_chat/lib/ui/widgets/text_file_page.dart`;
+`TextFilePage` (`packages/entoli_core/lib/view/widgets/text_file_page.dart`;
 `openTextFile` where the profile opens a linked instruction file or a chat a
 job's log) reads it off the disk the listing came from and holds the draft. It
 opens as a preview: markdown rendered, anything else as code — `re_editor`'s
@@ -130,7 +130,7 @@ is the filesystem's rather than a route out of the app.
 
 A share sheet does not take a folder, so a folder goes as a single zip,
 written straight to the staging directory by `zipTo`
-(`packages/entoli_chat/lib/data/zip.dart`, the walker a backup streams through
+(`packages/entoli_core/lib/store/zip.dart`, the walker a backup streams through
 too), which is what lets Android's staging directory stay flat.
 
 Coming the other way, an `IncomingFile` is deliberately **not** its bytes. A

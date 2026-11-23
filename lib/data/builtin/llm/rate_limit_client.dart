@@ -1,6 +1,6 @@
 import "package:clock/clock.dart";
+import "package:entoli_core/model/provider_usage.dart";
 
-import "package:entoli_chat/domain/provider_usage.dart";
 import "llm_client.dart";
 import "openai_client.dart";
 

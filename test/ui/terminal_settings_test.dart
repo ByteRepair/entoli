@@ -2,17 +2,16 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/builtin/local_shell.dart";
-import "package:entoli_chat/domain/confinement.dart";
+import "package:entoli_core/model/confinement.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/app/settings/scope.dart";
-import "package:entoli_chat/domain/settings/keys.dart";
+import "package:entoli_core/model/settings/keys.dart";
 import "package:agent_chat/ui/settings/terminal_settings.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
+import "package:entoli_core/model/rootfs.dart";
 
 import "../harness.dart";
-import "package:agent_chat/ui/settings/settings_category.dart";
-import "package:entoli_chat/domain/rootfs.dart";
 
 void main() {
   late TestApp app;

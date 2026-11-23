@@ -1,12 +1,12 @@
 import "dart:convert";
 
 import "package:http/http.dart" as http;
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/model_capability.dart";
+import "package:entoli_core/model/model_registry.dart";
+import "package:entoli_core/model/provider_usage.dart";
 
 import "../../../../core/tls.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/model_capability.dart";
-import "package:entoli_chat/domain/model_registry.dart";
-import "package:entoli_chat/domain/provider_usage.dart";
 import "../hosted_models.dart";
 import "../http_stream.dart";
 import "../llm_client.dart";

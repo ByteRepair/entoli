@@ -1,8 +1,7 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/reaction.dart";
-import "package:entoli_chat/app/transcript/transcript.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/reaction.dart";
+import "package:entoli_core/transcript/transcript.dart";
 
 import "../../harness.dart";
 

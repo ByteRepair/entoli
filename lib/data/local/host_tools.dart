@@ -8,8 +8,8 @@ import "package:file/local.dart";
 import "package:archive/archive_io.dart";
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/documents.dart" show RenameWriter;
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/documents.dart" show RenameWriter;
 
 import "../../core/tls.dart";
 import "file_modes.dart";

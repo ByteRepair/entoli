@@ -2,9 +2,8 @@ import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/ui/chat/widgets/reply_style.dart";
-import "package:entoli_chat/ui/fonts.dart";
+import "package:entoli_core/view/chat/widgets/reply_style.dart";
+import "package:entoli_core/view/fonts.dart";
 
 import "../harness.dart";
 

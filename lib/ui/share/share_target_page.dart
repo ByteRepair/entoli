@@ -1,12 +1,12 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/file_handoff.dart";
-import "package:entoli_chat/domain/models.dart" show ChatTitle;
-import "package:entoli_chat/domain/project.dart";
-import "package:entoli_chat/app/storage.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/file_handoff.dart";
+import "package:entoli_core/model/models.dart" show ChatTitle;
+import "package:entoli_core/model/project.dart";
+import "package:entoli_core/transcript/storage.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
 
 import "../../providers.dart";
 import "../widgets/section_header.dart";

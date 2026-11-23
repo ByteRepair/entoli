@@ -1,6 +1,5 @@
 import "package:url_launcher/url_launcher.dart";
-
-import "package:entoli_chat/domain/file_handoff.dart";
+import "package:entoli_core/model/file_handoff.dart";
 
 /// A desktop, which needs almost none of this port. It has a registry of
 /// viewers and a file manager, so opening a file and showing its folder are the

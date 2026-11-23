@@ -1,6 +1,5 @@
 import "package:flutter/material.dart";
-
-import "package:entoli_chat/ui/fonts.dart";
+import "package:entoli_core/view/fonts.dart";
 
 /// One thing the chat has running, as a pill in the row above the composer:
 /// a spinner, or [icon] where there is one, and what it is.

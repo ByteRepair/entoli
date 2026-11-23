@@ -1,17 +1,17 @@
 import "dart:async";
 
 import "package:file/file.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/agent_definition.dart";
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/sub_agent_log.dart";
-import "package:entoli_chat/domain/tone.dart";
-import "package:entoli_chat/domain/turn_recorder.dart";
-import "package:entoli_chat/domain/web_search.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/agent_definition.dart";
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/sub_agent_log.dart";
+import "package:entoli_core/model/tone.dart";
+import "package:entoli_core/model/turn_recorder.dart";
+import "package:entoli_core/model/web_search.dart";
 
 import "builtin_agent.dart";
 import "llm/llm_client.dart";

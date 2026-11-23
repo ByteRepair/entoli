@@ -2,8 +2,8 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/reminder_alarms.dart";
 
-import "package:entoli_chat/domain/reminder_alarms.dart";
 import "../../providers.dart";
 import "../selection.dart";
 

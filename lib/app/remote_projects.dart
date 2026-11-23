@@ -1,7 +1,8 @@
+import "package:entoli_core/model/models.dart" show ChatState;
+import "package:entoli_core/model/project.dart";
+
 import "../data/sync/peers.dart" show PeerState;
 import "../data/sync/sync_hub.dart" show RemoteChatEntry;
-import "package:entoli_chat/domain/models.dart" show ChatState;
-import "package:entoli_chat/domain/project.dart";
 
 /// How a project on a paired device is read out. Its default project is the
 /// device's name alone — the local default has no name either, and inventing

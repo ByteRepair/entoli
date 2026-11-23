@@ -1,6 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/local_model.dart";
+import "package:entoli_core/model/local_model.dart";
 
 /// How much context a model gets when nothing overrides it. It used to be one
 /// number for the whole catalog, which made the smallest model as cramped as

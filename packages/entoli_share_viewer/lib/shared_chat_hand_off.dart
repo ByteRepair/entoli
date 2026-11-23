@@ -1,9 +1,9 @@
-import "package:entoli_chat/app/handoff.dart";
-import "package:entoli_chat/domain/agent_browser.dart"
+import "package:entoli_core/transcript/handoff.dart";
+import "package:entoli_core/model/agent_browser.dart"
     show AgentBrowser, BrowserTab;
-import "package:entoli_chat/ui/chat/activity/page_hand_off.dart";
-import "package:entoli_chat/ui/widgets/notice.dart";
-import "package:entoli_chat/ui/widgets/text_file_page.dart";
+import "package:entoli_core/view/chat/activity/page_hand_off.dart";
+import "package:entoli_core/view/widgets/notice.dart";
+import "package:entoli_core/view/widgets/text_file_page.dart";
 import "package:flutter/material.dart";
 import "package:path/path.dart" as p;
 

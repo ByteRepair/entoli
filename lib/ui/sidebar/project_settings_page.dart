@@ -2,17 +2,21 @@ import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/builtin_project.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart";
+import "package:entoli_core/model/settings/keys.dart";
+import "package:entoli_core/model/shell.dart" show isTildePath;
+import "package:entoli_core/model/temp_chat_ttl.dart";
+import "package:entoli_core/model/tristate.dart";
+import "package:entoli_core/view/widgets/busy.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
+import "package:entoli_core/view/workspace/workspace_page.dart";
 
 import "../../app/project_edits.dart";
 import "../../app/settings/confinement.dart";
 import "../../app/settings/scope.dart";
-import "package:entoli_chat/domain/builtin_project.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart";
-import "package:entoli_chat/domain/settings/keys.dart";
-import "package:entoli_chat/domain/shell.dart" show isTildePath;
-import "package:entoli_chat/domain/temp_chat_ttl.dart";
-import "package:entoli_chat/domain/tristate.dart";
 import "../../providers.dart";
 import "../chat/widgets/view_only_bar.dart" show DeviceNotice;
 import "../memory/memory_page.dart";
@@ -23,14 +27,10 @@ import "../settings/general_settings.dart" show OmadaRows;
 import "../settings/scoped.dart";
 import "../settings/terminal_settings.dart" show SandboxSettings;
 import "../widgets/add_button_row.dart";
-import "package:entoli_chat/ui/widgets/busy.dart";
 import "../widgets/destructive_button.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
 import "../widgets/editable_row.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
-import "package:entoli_chat/ui/workspace/workspace_page.dart";
 
 /// A project's settings: what it is, what its turns are told and may do,
 /// its memory, its rounds and how long its chats live, and deleting it. A

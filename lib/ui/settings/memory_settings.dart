@@ -1,13 +1,13 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/settings/keys.dart";
+import "package:entoli_core/model/settings/setting.dart";
+import "package:entoli_core/view/widgets/busy.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
 
 import "../../app/model_role.dart";
 import "../../app/settings/scope.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/settings/keys.dart";
-import "package:entoli_chat/domain/settings/setting.dart";
-import "package:entoli_chat/ui/widgets/busy.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
 import "../widgets/editable_row.dart";
 import "../widgets/section_header.dart";
 import "scoped.dart";

@@ -1,9 +1,8 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/turn_recorder.dart";
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/turn_recorder.dart";
 
 void main() {
   test("a banner is recorded asked and superseded with the answer", () async {

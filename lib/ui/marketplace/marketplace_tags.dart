@@ -1,8 +1,8 @@
 import "package:flutter/material.dart";
+import "package:entoli_core/model/chat_search.dart" show searchNeedle;
+import "package:entoli_core/view/widgets/page_bar.dart";
 
-import "package:entoli_chat/domain/chat_search.dart" show searchNeedle;
 import "../widgets/nothing.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "../widgets/search_field.dart";
 
 /// A list's tags, ticked to filter it: an entry shows only carrying every

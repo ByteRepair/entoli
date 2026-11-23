@@ -1,7 +1,7 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/settings/keys.dart";
 
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/settings/keys.dart";
 import "../providers.dart";
 
 /// The browsers this machine has, asked once while settings shows them.

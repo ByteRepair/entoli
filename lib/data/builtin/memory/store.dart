@@ -5,7 +5,7 @@ import "package:file/file.dart" show FileSystem;
 import "package:clock/clock.dart";
 import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
-import "package:entoli_chat/domain/documents.dart" show RenameWriter;
+import "package:entoli_core/model/documents.dart" show RenameWriter;
 
 /// A project's auto-memory: small durable facts that accumulate as turns
 /// happen and are recalled into the turns they are relevant to. The store is

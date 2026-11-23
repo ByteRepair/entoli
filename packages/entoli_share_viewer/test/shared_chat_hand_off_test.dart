@@ -1,8 +1,8 @@
-import "package:entoli_chat/app/handoff.dart";
-import "package:entoli_chat/app/storage.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/file_handoff.dart";
-import "package:entoli_chat/ui/widgets/text_file_page.dart";
+import "package:entoli_core/transcript/handoff.dart";
+import "package:entoli_core/transcript/storage.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/file_handoff.dart";
+import "package:entoli_core/view/widgets/text_file_page.dart";
 import "package:entoli_share_viewer/shared_chat_hand_off.dart";
 import "package:file/memory.dart";
 import "package:flutter/material.dart";

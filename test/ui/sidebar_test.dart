@@ -5,13 +5,12 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/builtin_project.dart";
-import "package:entoli_chat/domain/chat_meta.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart";
-import "package:entoli_chat/domain/project_settings.dart";
-import "package:entoli_chat/domain/temp_chat_ttl.dart";
+import "package:entoli_core/model/builtin_project.dart";
+import "package:entoli_core/model/chat_meta.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart";
+import "package:entoli_core/model/project_settings.dart";
+import "package:entoli_core/model/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/app/chat_groups.dart" show pinnedHeading;
@@ -21,7 +20,7 @@ import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/chat/share_chat_dialog.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:agent_chat/ui/widgets/search_field.dart";
-import "package:entoli_chat/ui/workspace/workspace_page.dart";
+import "package:entoli_core/view/workspace/workspace_page.dart";
 
 import "../harness.dart";
 

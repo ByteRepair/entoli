@@ -1,16 +1,16 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/formatting.dart";
+import "package:entoli_core/model/rootfs.dart";
+import "package:entoli_core/model/sandbox_grant.dart";
+import "package:entoli_core/model/settings/keys.dart";
+import "package:entoli_core/model/settings/setting.dart";
+import "package:entoli_core/view/widgets/busy.dart";
 
 import "../../app/downloads/rootfs_downloads.dart";
 import "../../app/settings/confinement.dart";
 import "../../app/settings/scope.dart";
-import "package:entoli_chat/core/formatting.dart";
-import "package:entoli_chat/domain/rootfs.dart";
-import "package:entoli_chat/domain/sandbox_grant.dart";
-import "package:entoli_chat/domain/settings/keys.dart";
-import "package:entoli_chat/domain/settings/setting.dart";
 import "../../providers.dart";
-import "package:entoli_chat/ui/widgets/busy.dart";
 import "../widgets/catalog.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";

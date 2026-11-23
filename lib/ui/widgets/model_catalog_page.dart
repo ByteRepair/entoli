@@ -1,25 +1,24 @@
-import "../../app/custom_model.dart" show customModelDraft, pickerProviders;
-import "package:entoli_chat/app/reader.dart" show WidgetReader;
-import "custom_model_page.dart";
-import "../../app/model_picker.dart";
+import "package:entoli_core/transcript/reader.dart" show WidgetReader;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/model_capability.dart";
+import "package:entoli_core/model/model_registry.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/formatting.dart";
+import "package:entoli_core/view/fonts.dart";
+import "package:entoli_core/view/widgets/dialogs.dart" show confirm;
+import "package:entoli_core/view/widgets/page_bar.dart";
 
+import "../../app/custom_model.dart" show customModelDraft, pickerProviders;
+import "custom_model_page.dart";
+import "../../app/model_picker.dart";
 import "../../data/builtin/llm/hosted_models.dart";
 import "../../data/builtin/llm/providers/provider.dart" show LlmProvider;
 import "../../data/builtin/llm/providers/presets.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/model_capability.dart";
-import "package:entoli_chat/domain/model_registry.dart";
 import "../../app/model_role.dart";
-import "package:entoli_chat/domain/models.dart";
 import "../../providers.dart";
-import "package:entoli_chat/core/formatting.dart";
-import "package:entoli_chat/ui/fonts.dart";
 import "catalog.dart" show InfoTag;
-import "package:entoli_chat/ui/widgets/dialogs.dart" show confirm;
-import "package:entoli_chat/ui/widgets/page_bar.dart";
-
 export "../../app/model_picker.dart" show CatalogEntry, catalogEntries;
 export "../../app/model_role.dart";
 

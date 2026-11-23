@@ -1,11 +1,11 @@
+import "package:flutter/material.dart";
+import "package:entoli_core/model/goal.dart" show ChatGoals;
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/room/room_state.dart";
+import "package:entoli_core/model/todo.dart";
+
 import "../../../app/approvals.dart";
 import "../../../app/turn_surface.dart";
-import "package:flutter/material.dart";
-
-import "package:entoli_chat/domain/goal.dart" show ChatGoals;
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/room/room_state.dart";
-import "package:entoli_chat/domain/todo.dart";
 import "../../../app/chat_controller.dart";
 import "approval_banner.dart";
 import "browser_strip.dart";

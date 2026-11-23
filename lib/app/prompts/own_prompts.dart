@@ -1,7 +1,7 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/models.dart";
 
 import "../../data/prompts/skill_import.dart" show isBundledPromptName;
-import "package:entoli_chat/domain/models.dart";
 import "../../providers.dart";
 import "agent_files.dart";
 import "skill_files.dart";

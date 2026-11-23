@@ -252,7 +252,7 @@ host path whatever it has not bound at a clean one already. Checked on a host bu
 overwrote, deleted, renamed and `chmod`ed a `0444` file in a `0555` directory;
 with it, each was refused and reads still worked.
 
-**The distribution is Alpine, and one version of it.** `domain/rootfs.dart` is
+**The distribution is Alpine, and one version of it.** `model/rootfs.dart` is
 the catalog, const data like the voice models. Alpine is 4 MB against Debian's
 120, it is an official tarball rather than somebody's build of one, it is
 `.tar.gz` where the alternatives are `.tar.xz` — which a phone's `tar` cannot
@@ -585,7 +585,7 @@ bartowski's. LFM3 is why `LLAMA_CPP_VERSION` is at least `b11951`, the first
 release that reads its architecture.
 
 **What a device is offered is measured, not listed.** `ModelBudget`
-(`packages/entoli_chat/lib/domain/model_budget.dart`) holds a model to its
+(`packages/entoli_core/lib/model/model_budget.dart`) holds a model to its
 footprint — its weights and the `kvBudgetBytes` every loaded model may have —
 against what the device says it can give, and the page offers only the entries
 that fit (`LocalEngine.offers`). A list of devices and what each can run would
@@ -770,7 +770,7 @@ export and a deletion on every restore.
 `FileLocalModelStore` is `FileRootfsStore` without the unpacking: a `DownloadRun`
 and, after it, the checksum where there is one, the header read, and the record.
 A text model and a voice model are both an `Installable`
-(`packages/entoli_chat/lib/domain/installable.dart`), bound to its store by
+(`packages/entoli_core/lib/model/installable.dart`), bound to its store by
 `InstallableLocalModel` or `InstallableVoiceModel`, so one `ModelDownloads`
 queue fetches either and one `ModelDownloadTile` draws either — see "A catalog
 of things to download". A text model's facts are the file's own once it is on

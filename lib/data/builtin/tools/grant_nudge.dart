@@ -14,10 +14,10 @@ import "dart:io";
 
 import "package:file/file.dart" show FileSystem;
 import "package:path/path.dart" as p;
-import "package:entoli_chat/domain/permission.dart" show addDirectoryName;
-import "package:entoli_chat/domain/file_tools.dart" show outsideWorkspaces;
-import "package:entoli_chat/domain/shell.dart" show repositoryRootOf;
-import "package:entoli_chat/domain/work_folders.dart" show refuseFolder;
+import "package:entoli_core/model/permission.dart" show addDirectoryName;
+import "package:entoli_core/model/file_tools.dart" show outsideWorkspaces;
+import "package:entoli_core/model/shell.dart" show repositoryRootOf;
+import "package:entoli_core/model/work_folders.dart" show refuseFolder;
 
 /// One turn's account of which folders it has suggested a grant for, and how
 /// often it asked to leave the sandbox in each. A folder is named once a

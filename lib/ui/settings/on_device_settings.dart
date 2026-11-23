@@ -2,24 +2,24 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/formatting.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/installable.dart";
+import "package:entoli_core/model/local_llm.dart";
+import "package:entoli_core/model/local_model.dart";
+import "package:entoli_core/model/local_model_store.dart";
+import "package:entoli_core/model/voice_model.dart";
+import "package:entoli_core/model/voice_model_store.dart";
+import "package:entoli_core/view/widgets/busy.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
 
 import "../../app/downloads/model_downloads.dart";
 import "../../app/settings/on_device.dart";
-import "package:entoli_chat/core/formatting.dart";
 import "../../data/local/local_engine.dart" show LocalControl;
 import "../../data/local/local_instance.dart" show LocalUsage;
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/installable.dart";
-import "package:entoli_chat/domain/local_llm.dart";
-import "package:entoli_chat/domain/local_model.dart";
-import "package:entoli_chat/domain/local_model_store.dart";
-import "package:entoli_chat/domain/voice_model.dart";
-import "package:entoli_chat/domain/voice_model_store.dart";
 import "../../providers.dart";
 import "../widgets/add_button_row.dart";
-import "package:entoli_chat/ui/widgets/busy.dart";
 import "../widgets/catalog.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 

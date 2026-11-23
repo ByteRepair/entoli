@@ -1,13 +1,14 @@
 import "dart:ffi" show Abi;
 import "dart:io" show Platform;
 
-import "package:entoli_chat/domain/file_tools.dart";
-import "package:entoli_chat/domain/rootfs.dart";
-import "package:entoli_chat/domain/rootfs_store.dart";
+import "package:entoli_core/model/file_tools.dart";
+import "package:entoli_core/model/rootfs.dart";
+import "package:entoli_core/model/rootfs_store.dart";
+import "package:entoli_core/model/shell.dart";
+
 import "../builtin/llm/llm_client.dart" show LlmException;
 import "../builtin/llm/providers/cli.dart"
     show CliProcess, LinuxCliGuest, launchProcess;
-import "package:entoli_chat/domain/shell.dart";
 
 /// How a command is run inside a downloaded Linux: the proot invocation, the
 /// environment on both sides of it bar `HOME`, and the sentence the model is

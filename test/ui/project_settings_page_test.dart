@@ -2,12 +2,11 @@ import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/app/selection.dart";
-import "package:entoli_chat/domain/confinement.dart";
-import "package:entoli_chat/domain/project_settings.dart";
-import "package:entoli_chat/domain/tristate.dart";
-import "package:entoli_chat/domain/work_folders.dart";
+import "package:entoli_core/model/confinement.dart";
+import "package:entoli_core/model/project_settings.dart";
+import "package:entoli_core/model/tristate.dart";
+import "package:entoli_core/model/work_folders.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/project_actions.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";

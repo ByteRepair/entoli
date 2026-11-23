@@ -1,6 +1,7 @@
+import "package:entoli_core/model/agent_definition.dart";
+
 import "../../data/builtin/tools/agent_tool.dart";
 import "../../data/builtin/tools/registry.dart";
-import "package:entoli_chat/domain/agent_definition.dart";
 
 /// What an agent may be granted, listed whatever this device can run: the
 /// file means the same on every device it reaches.

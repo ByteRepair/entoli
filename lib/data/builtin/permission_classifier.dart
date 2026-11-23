@@ -1,14 +1,14 @@
 import "dart:math" show min;
 
 import "package:flutter/foundation.dart" show visibleForTesting;
+import "package:entoli_core/model/formatting.dart" show safeCut, safeTail;
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/tool_arg.dart";
+import "package:entoli_core/model/shell.dart" show bashToolName;
+import "package:entoli_core/model/web_search.dart" show webfetchToolName;
 
-import "package:entoli_chat/core/formatting.dart" show safeCut, safeTail;
-import "package:entoli_chat/domain/permission.dart";
 import "compact_prompt.dart" show charsPerToken;
-import "package:entoli_chat/domain/tool_arg.dart";
 import "llm/llm_client.dart";
-import "package:entoli_chat/domain/shell.dart" show bashToolName;
-import "package:entoli_chat/domain/web_search.dart" show webfetchToolName;
 import "tools/browser_tools.dart";
 
 /// One-shot LLM classification of a tool call. Sends the tool name and its

@@ -1,0 +1,237 @@
+import "dart:async";
+
+import "package:flutter/material.dart";
+
+import "../rich_clipboard.dart";
+import "../../model/project.dart";
+import "notice.dart";
+import "text_input.dart";
+export "notice.dart" show notify, say, sayLater;
+
+/// Put [text] on the clipboard and say so. Copying is silent otherwise — the
+/// button that did it looks the same afterwards — so what was copied is
+/// [said] in a notice. With [html], the same entry carries it formatted.
+Future<void> copyToClipboard(
+  BuildContext context,
+  String text, {
+  required String said,
+  String? html,
+}) async {
+  await writeClipboard(ClipboardContent(plain: text, html: html));
+  if (!context.mounted) return;
+  notify(context, said);
+}
+
+/// Run a [work] whose future nobody would await — a sync verb handed to an
+/// `onPressed` — and catch its failure with [say], where dropping it left a
+/// button that did nothing and an unhandled error. Reported only while the
+/// context survives; the work itself runs whatever the tree does.
+void catchAndSay(BuildContext context, Future<void> Function() work) =>
+    unawaited(
+      work().catchError((Object error) {
+        if (context.mounted) say(context, error);
+      }),
+    );
+
+/// Ask which project something belongs under. The answer is wrapped because
+/// the default project is null as well, and a dismissed dialog must not read
+/// as picking it.
+Future<({String? project})?> pickProject(
+  BuildContext context, {
+  required List<String?> projects,
+  String? current,
+}) async {
+  return showDialog<({String? project})>(
+    context: context,
+    builder: (context) => SimpleDialog(
+      title: const Text("Move to project"),
+      children: [
+        for (final project in projects)
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, (project: project)),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.check,
+                  size: 18,
+                  color: project == current ? null : Colors.transparent,
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Text(projectLabel(project))),
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+/// Tab indents where there is more than one line to indent; where the field is
+/// one line it is still how the caret leaves for the buttons.
+Widget _indentable(
+  int maxLines,
+  TextEditingController controller,
+  Widget field,
+) => maxLines == 1 ? field : TabIndents(controller: controller, child: field);
+
+/// Ask for a line (or a few) of text. Returns null if dismissed or, unless
+/// [allowBlank], left blank — a blank answer names nothing. [helper] says
+/// under the field what the text is for, where the title alone does not.
+Future<String?> promptForText(
+  BuildContext context, {
+  required String title,
+  required String initial,
+  required String confirmLabel,
+  String? hint,
+  String? helper,
+  int minLines = 1,
+  int maxLines = 1,
+  bool allowBlank = false,
+}) {
+  final controller = TextEditingController(text: initial);
+  String? submit() {
+    final text = controller.text.trim();
+    return (text.isEmpty && !allowBlank) ? null : text;
+  }
+
+  return showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: _indentable(
+        maxLines,
+        controller,
+        TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: minLines,
+          maxLines: maxLines,
+          decoration: InputDecoration(hintText: hint, helperText: helper),
+          onSubmitted: maxLines == 1
+              ? (_) => Navigator.pop(context, submit())
+              : null,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Cancel"),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, submit()),
+          child: Text(confirmLabel),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Ask for a name and its value. Returns null if dismissed or if the name was
+/// left blank — a value without one names nothing.
+Future<({String name, String value})?> promptForPair(
+  BuildContext context, {
+  required String title,
+  required String nameLabel,
+  required String valueLabel,
+  String name = "",
+  String value = "",
+}) {
+  final nameField = TextEditingController(text: name);
+  final valueField = TextEditingController(text: value);
+  ({String name, String value})? submit() {
+    final key = nameField.text.trim();
+    return key.isEmpty ? null : (name: key, value: valueField.text.trim());
+  }
+
+  return showDialog<({String name, String value})>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: nameField,
+            autofocus: name.isEmpty,
+            decoration: InputDecoration(labelText: nameLabel),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: valueField,
+            autofocus: name.isNotEmpty,
+            decoration: InputDecoration(labelText: valueLabel),
+            onSubmitted: (_) => Navigator.pop(context, submit()),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Cancel"),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, submit()),
+          child: const Text("Save"),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Say something that needs the user to act elsewhere, with nothing here to
+/// choose: one button that closes it.
+Future<void> tell(
+  BuildContext context, {
+  required String title,
+  required String message,
+}) => showDialog<void>(
+  context: context,
+  builder: (context) => AlertDialog(
+    title: Text(title),
+    content: Text(message),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text("OK"),
+      ),
+    ],
+  ),
+);
+
+/// Ask before doing something irreversible. A null [confirmLabel] leaves only
+/// a way out, for when there is nothing to confirm.
+Future<bool> confirm(
+  BuildContext context, {
+  required String title,
+  required String message,
+  String? confirmLabel,
+  String cancelLabel = "Cancel",
+  bool destructive = false,
+  bool dismissible = true,
+}) async {
+  final answer = await showDialog<bool>(
+    context: context,
+    barrierDismissible: dismissible,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: Text(cancelLabel),
+        ),
+        if (confirmLabel != null)
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: destructive
+                ? TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  )
+                : null,
+            child: Text(confirmLabel),
+          ),
+      ],
+    ),
+  );
+  return answer ?? false;
+}

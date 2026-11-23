@@ -1,9 +1,8 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/reaction.dart";
-import "package:entoli_chat/domain/room/roster.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/reaction.dart";
+import "package:entoli_core/model/room/roster.dart";
 
 void main() {
   final library = PromptLibrary([

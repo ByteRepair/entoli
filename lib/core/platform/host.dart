@@ -12,29 +12,29 @@ import "package:record_platform_interface/record_platform_interface.dart"
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
 import "package:path_provider_foundation/path_provider_foundation.dart";
-import "package:entoli_chat/core/read_only_dirs.dart";
-import "package:entoli_chat/domain/model_budget.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/app_update.dart";
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/core/migrations.dart";
-import "package:entoli_chat/domain/assistant_launch.dart";
-import "package:entoli_chat/domain/confinement.dart";
-import "package:entoli_chat/domain/intent_action.dart";
-import "package:entoli_chat/domain/backup_handoff.dart";
-import "package:entoli_chat/domain/builtin_project.dart";
-import "package:entoli_chat/domain/file_handoff.dart";
-import "package:entoli_chat/domain/file_watches.dart";
-import "package:entoli_chat/domain/reminder_alarms.dart";
-import "package:entoli_chat/domain/rootfs.dart";
-import "package:entoli_chat/domain/rootfs_store.dart";
-import "package:entoli_chat/domain/secret_store.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/sync/lan_signaling.dart";
-import "package:entoli_chat/domain/voice.dart";
-import "package:entoli_chat/domain/voice_model_store.dart";
-import "package:entoli_chat/core/config.dart";
+import "package:entoli_core/model/read_only_dirs.dart";
+import "package:entoli_core/model/model_budget.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/app_update.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/migrations.dart";
+import "package:entoli_core/model/assistant_launch.dart";
+import "package:entoli_core/model/confinement.dart";
+import "package:entoli_core/model/intent_action.dart";
+import "package:entoli_core/model/backup_handoff.dart";
+import "package:entoli_core/model/builtin_project.dart";
+import "package:entoli_core/model/file_handoff.dart";
+import "package:entoli_core/model/file_watches.dart";
+import "package:entoli_core/model/reminder_alarms.dart";
+import "package:entoli_core/model/rootfs.dart";
+import "package:entoli_core/model/rootfs_store.dart";
+import "package:entoli_core/model/secret_store.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/sync/lan_signaling.dart";
+import "package:entoli_core/model/voice.dart";
+import "package:entoli_core/model/voice_model_store.dart";
+import "package:entoli_core/model/config.dart";
 
 import "../../data/backup_handoff.dart";
 import "../../data/local/android_assistant_launch.dart";
@@ -780,7 +780,7 @@ Future<ProcessResult> _ishFakefsify(String archive, String into) =>
     });
 
 /// The app's read-only directories, one manager per path. See
-/// `core/read_only_dirs.dart`.
+/// `model/read_only_dirs.dart`.
 final readOnlyDirs = ReadOnlyDirs(setTreeWritable);
 
 /// Deletes a tree that may hold proot's mode-0000 bind stubs, which a plain

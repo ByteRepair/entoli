@@ -162,7 +162,7 @@ On Android the agent can run its commands inside a downloaded rootfs under
 proot, which is where a package manager comes from; nothing downloaded may be
 executed directly, so the bundled tools are otherwise the whole of what a phone
 can run. A distribution Entoli offers is a const entry in
-`packages/entoli_chat/lib/domain/rootfs.dart` and a name in `rootfsCatalog`;
+`packages/entoli_core/lib/model/rootfs.dart` and a name in `rootfsCatalog`;
 nothing else has to be told, because the Terminal settings category lists the
 catalog, downloads what is picked, and the next command runs in it.
 

@@ -1,4 +1,5 @@
-import "package:entoli_chat/domain/provider_usage.dart";
+import "package:entoli_core/model/provider_usage.dart";
+
 import "rate_limit_client.dart";
 
 /// OpenAI's own API. Its documented `x-ratelimit-*` reply headers carry the

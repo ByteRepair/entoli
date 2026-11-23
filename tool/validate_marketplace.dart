@@ -11,7 +11,7 @@
 import "dart:io";
 
 import "package:agent_chat/data/prompts/skill_validate.dart";
-import "package:entoli_chat/domain/frontmatter.dart";
+import "package:entoli_core/model/frontmatter.dart";
 import "package:path/path.dart" as p;
 
 final _semverRe = RegExp(

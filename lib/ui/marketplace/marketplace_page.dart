@@ -1,13 +1,13 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/chat_search.dart" show searchNeedle;
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
 
 import "../../app/marketplace/groups.dart";
 import "../../app/marketplace/marketplace.dart";
 import "../../app/marketplace/preview.dart";
-import "package:entoli_chat/domain/chat_search.dart" show searchNeedle;
-import "package:entoli_chat/domain/models.dart";
 import "../widgets/nothing.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "../widgets/search_field.dart";
 import "../widgets/section_header.dart";
 import "marketplace_entry_preview.dart";

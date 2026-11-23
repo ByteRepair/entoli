@@ -864,7 +864,7 @@ provider dialog's Advanced key field words its helper text by it, since "OS
 keyring" and "app secret store" are different promises to make.
 
 Sync is not the only tenant. `AppSecrets`
-(`packages/entoli_chat/lib/domain/app_secrets.dart`) holds the provider API keys
+(`packages/entoli_core/lib/model/app_secrets.dart`) holds the provider API keys
 (`provider-keys`, one JSON map under one item — one item per provider would make
 a user browsing their keyring count providers) and the TURN password
 (`turn-password`) in the same store. Its reads are served from a mirror filled

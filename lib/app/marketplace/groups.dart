@@ -1,4 +1,5 @@
-import "package:entoli_chat/domain/chat_search.dart" show searchNeedle;
+import "package:entoli_core/model/chat_search.dart" show searchNeedle;
+
 import "marketplace.dart";
 
 // The marketplace's list, grouped and filtered: the pure half of what

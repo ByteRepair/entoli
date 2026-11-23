@@ -1,8 +1,8 @@
 import "dart:async";
 
 import "package:flutter/services.dart";
+import "package:entoli_core/model/log.dart";
 
-import "package:entoli_chat/core/log.dart";
 import "../builtin/llm/llm_client.dart";
 import "../model_host/host_connection.dart";
 import "../model_host/model_process.dart";

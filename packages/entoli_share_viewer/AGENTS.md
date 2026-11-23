@@ -2,8 +2,8 @@
 
 A web page for a chat shared as a link (see "A shared chat" in
 `lib/ui/chat/AGENTS.md`), for where the app is not installed: the conversation
-read-only, as the app draws it. It is the app's own code, the chat package
-(`entoli_chat`, see "The chat package" in the root `AGENTS.md`), with its ports
+read-only, as the app draws it. It is the app's own code, the core
+(`entoli_core`, see "The core" in the root `AGENTS.md`), with its ports
 bound to this page's few — not a second drawing of the conversation. It does
 not depend on the app, so none of the app's plugins or assets are in it.
 

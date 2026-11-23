@@ -1,16 +1,15 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
-
 import "package:uuid/uuid.dart";
+import "package:entoli_core/model/formatting.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/agent_browser.dart" show embeddedBrowserId;
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/download.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart";
+import "package:entoli_core/model/rootfs.dart";
 
-import "package:entoli_chat/core/formatting.dart";
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/agent_browser.dart" show embeddedBrowserId;
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/download.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart";
-import "package:entoli_chat/domain/rootfs.dart";
 import "../providers.dart";
 import "selection.dart";
 import "downloads/browser_downloads.dart";

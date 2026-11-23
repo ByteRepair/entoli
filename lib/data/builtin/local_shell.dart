@@ -6,10 +6,10 @@ import "package:file/local.dart";
 import "package:flutter/foundation.dart";
 import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/file_tools.dart";
-import "package:entoli_chat/domain/sandbox_denials.dart";
-import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/file_tools.dart";
+import "package:entoli_core/model/sandbox_denials.dart";
+import "package:entoli_core/model/shell.dart";
 
 const _appImageVars = {"APPIMAGE", "APPDIR", "ARGV0", "OWD"};
 

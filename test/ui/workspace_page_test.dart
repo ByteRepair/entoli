@@ -2,10 +2,9 @@ import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/core/formatting.dart";
-import "package:entoli_chat/ui/widgets/text_file_page.dart";
-import "package:entoli_chat/ui/workspace/workspace_page.dart";
+import "package:entoli_core/model/formatting.dart";
+import "package:entoli_core/view/widgets/text_file_page.dart";
+import "package:entoli_core/view/workspace/workspace_page.dart";
 
 import "../fakes.dart";
 import "../harness.dart";

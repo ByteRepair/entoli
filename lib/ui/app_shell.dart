@@ -1,8 +1,8 @@
-import "settings/welcome_page.dart" show openFirstRun;
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "settings/welcome_page.dart" show openFirstRun;
 import "chat/chat_page.dart";
 import "app_command.dart";
 import "app_menu.dart";

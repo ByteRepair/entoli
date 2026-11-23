@@ -3,11 +3,11 @@ import "dart:io";
 
 import "package:path/path.dart" as p;
 import "package:http/http.dart" as http;
+import "package:entoli_core/model/download.dart";
+import "package:entoli_core/model/rootfs.dart";
+import "package:entoli_core/model/rootfs_store.dart";
 
 import "../download.dart";
-import "package:entoli_chat/domain/download.dart";
-import "package:entoli_chat/domain/rootfs.dart";
-import "package:entoli_chat/domain/rootfs_store.dart";
 import "tree_ops.dart";
 
 /// A downloaded Linux in a directory of its own, outside the data directory —

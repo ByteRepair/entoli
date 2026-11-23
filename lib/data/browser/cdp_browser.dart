@@ -6,9 +6,9 @@ import "dart:math";
 import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
 import "package:flutter/services.dart" show MethodChannel;
 import "package:path/path.dart" as p;
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/agent_browser.dart";
 
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
 import "../builtin/local_shell.dart" show environmentWithoutAppImage;
 import "cdp.dart";
 import "helium.dart";

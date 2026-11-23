@@ -1,9 +1,9 @@
 import "package:flutter/foundation.dart" show listEquals;
 import "package:entoli_menu/entoli_menu.dart";
+import "package:entoli_core/model/log.dart";
 
 import "../../app/app_items.dart";
 import "../../app/app_menus.dart";
-import "package:entoli_chat/core/log.dart";
 
 /// SF Symbols for the items standing in for one of the platform's own, which
 /// wear its icon: Settings is in the place of the Settings scene's item.

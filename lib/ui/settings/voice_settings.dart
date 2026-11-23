@@ -1,17 +1,17 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/assistant_view.dart";
+import "package:entoli_core/model/models.dart" show ModelChoice;
+import "package:entoli_core/model/project.dart";
+import "package:entoli_core/model/settings/keys.dart";
+import "package:entoli_core/model/voice_model.dart";
+import "package:entoli_core/view/widgets/busy.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
 
 import "../../app/settings/scope.dart";
-import "package:entoli_chat/domain/assistant_view.dart";
-import "package:entoli_chat/domain/models.dart" show ModelChoice;
-import "package:entoli_chat/domain/project.dart";
-import "package:entoli_chat/domain/settings/keys.dart";
-import "package:entoli_chat/domain/voice_model.dart";
 import "../../providers.dart";
 import "../voice/read_aloud.dart";
-import "package:entoli_chat/ui/widgets/busy.dart";
 import "../widgets/catalog.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
 import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";

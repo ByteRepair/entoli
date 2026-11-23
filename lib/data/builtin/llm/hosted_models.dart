@@ -1,6 +1,7 @@
-import "package:entoli_chat/domain/model_capability.dart";
-import "package:entoli_chat/domain/model_info.dart";
-import "package:entoli_chat/domain/voice.dart";
+import "package:entoli_core/model/model_capability.dart";
+import "package:entoli_core/model/model_info.dart";
+import "package:entoli_core/model/voice.dart";
+
 import "llm_client.dart";
 
 typedef ImageGenerator = Future<List<LlmAttachment>> Function(String prompt);

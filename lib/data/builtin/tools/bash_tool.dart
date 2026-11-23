@@ -1,12 +1,12 @@
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/models.dart" show ToolResult;
-import "package:entoli_chat/domain/permission.dart"
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/models.dart" show ToolResult;
+import "package:entoli_core/model/permission.dart"
     show PermissionDecision, PermissionSource;
-import "package:entoli_chat/domain/safe_command.dart" show readsOnly;
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/shell_command_analysis.dart";
-import "package:entoli_chat/domain/shell_job.dart" show backgroundLog;
-import "package:entoli_chat/domain/tool_arg.dart";
+import "package:entoli_core/model/safe_command.dart" show readsOnly;
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/shell_command_analysis.dart";
+import "package:entoli_core/model/shell_job.dart" show backgroundLog;
+import "package:entoli_core/model/tool_arg.dart";
 
 import "../approval_gate.dart";
 import "../background_jobs.dart";

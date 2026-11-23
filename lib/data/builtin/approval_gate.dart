@@ -2,16 +2,16 @@ import "dart:async";
 import "dart:io";
 
 import "package:file/local.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/file_tools.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/sandbox_grant.dart";
-import "package:entoli_chat/domain/safe_command.dart"
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/file_tools.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/sandbox_grant.dart";
+import "package:entoli_core/model/safe_command.dart"
     show SegmentReach, profileSegment;
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/shell_command_analysis.dart";
-import "package:entoli_chat/domain/web_search.dart" show webfetchToolName;
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/shell_command_analysis.dart";
+import "package:entoli_core/model/web_search.dart" show webfetchToolName;
 
 import "llm/llm_client.dart";
 import "sandbox_grants.dart";

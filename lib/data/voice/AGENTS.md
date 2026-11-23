@@ -57,7 +57,7 @@ downloaded model instead.
 
 ## What listens and what speaks
 
-`domain/voice_model.dart` is the catalog, as const data: five recognition models
+`model/voice_model.dart` is the catalog, as const data: five recognition models
 and three speech ones, each naming its files, what it costs to fetch, and which
 sherpa family runs it, and the two Android-system sentinels beside them. A model
 Entoli can run is one someone wired an engine for, so a new entry is a line
@@ -495,7 +495,7 @@ pending relisten so nothing else can stack them either.
 **Both engines are generous about what counts as speech**, in their own ways: a
 system recogniser transcribes a television two rooms away, and Silero calls
 plenty of it voice. Every one of those was a turn. So an utterance is judged
-after the fact by `LoudnessGate` in `domain/loudness.dart` — fed by
+after the fact by `LoudnessGate` in `model/loudness.dart` — fed by
 `MicrophoneListener` from whatever its engine reports, and asked at each result.
 
 **There is not a single absolute number in it, and the first version's bug is

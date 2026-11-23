@@ -1,9 +1,8 @@
 import "dart:async";
 
 import "package:dbus/dbus.dart";
-
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/reminder_alarms.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/reminder_alarms.dart";
 
 /// What a session-bus round trip may take before it is said to have failed:
 /// the probe one shot at launch; a post's patience is the port's.

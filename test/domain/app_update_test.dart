@@ -1,6 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/app_update.dart";
+import "package:entoli_core/model/app_update.dart";
 
 void main() {
   group("versionIsNewer", () {

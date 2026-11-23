@@ -7,15 +7,16 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:share_plus/share_plus.dart";
 
 import "../../app/chat_shares.dart";
-import "package:entoli_chat/core/formatting.dart" show formatSize;
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/data/chat_share.dart"
+import "package:entoli_core/model/formatting.dart" show formatSize;
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/store/chat_share.dart"
     show ChatShareSource, ShareFile;
-import "package:entoli_chat/domain/chat_share.dart";
-import "package:entoli_chat/domain/link_bytes.dart" show appLinkMaxLength;
-import "package:entoli_chat/domain/chat_store.dart" show attachmentFilename;
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart" show copyToClipboard, say;
+import "package:entoli_core/model/chat_share.dart";
+import "package:entoli_core/model/link_bytes.dart" show appLinkMaxLength;
+import "package:entoli_core/model/chat_store.dart" show attachmentFilename;
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/view/widgets/dialogs.dart"
+    show copyToClipboard, say;
 import "../widgets/palette_dialog.dart";
 import "../widgets/search_field.dart";
 

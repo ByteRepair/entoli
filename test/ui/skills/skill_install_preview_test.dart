@@ -5,7 +5,6 @@ import "dart:typed_data";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:agent_chat/data/prompts/skill_import.dart";
 import "package:agent_chat/data/prompts/skill_package.dart";
 import "package:agent_chat/ui/skills/skill_install_preview.dart";

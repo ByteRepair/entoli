@@ -1,7 +1,7 @@
 import "package:http/http.dart" as http;
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/provider_usage.dart";
 
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/provider_usage.dart";
 import "../groq_client.dart";
 import "provider.dart";
 

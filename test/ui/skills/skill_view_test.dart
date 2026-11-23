@@ -1,8 +1,7 @@
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/models.dart";
+import "package:entoli_core/model/models.dart";
 import "package:agent_chat/ui/skills/skill_view.dart";
 
 import "../../harness.dart";

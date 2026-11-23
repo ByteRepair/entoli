@@ -4,19 +4,18 @@ import "dart:io";
 import "package:crypto/crypto.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
-import "package:entoli_chat/domain/agent_face.dart";
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/core/read_only_dirs.dart";
+import "package:entoli_core/model/agent_face.dart";
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/read_only_dirs.dart";
 import "package:agent_chat/data/local/file_modes.dart";
 import "package:agent_chat/data/prompts/agent_pictures.dart";
-import "package:entoli_chat/domain/bundled_prompt_file.dart";
+import "package:entoli_core/model/bundled_prompt_file.dart";
 import "package:agent_chat/data/prompts/bundled_skill_data.dart";
 import "package:agent_chat/data/prompts/bundled_skills.dart";
 import "package:agent_chat/data/prompts/prompt_sources.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/project_settings.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/project_settings.dart";
 
 import "../../harness.dart";
 

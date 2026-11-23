@@ -1,15 +1,15 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/formatting.dart" show safeCut;
+import "package:entoli_core/model/project.dart" show ProjectRef;
+import "package:entoli_core/view/widgets/dialogs.dart";
+import "package:entoli_core/view/widgets/empty_pane.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
 
 import "../../app/memories.dart";
-import "package:entoli_chat/core/formatting.dart" show safeCut;
 import "../../data/builtin/memory/store.dart";
-import "package:entoli_chat/domain/project.dart" show ProjectRef;
 import "../../providers.dart";
 import "../chat/widgets/view_only_bar.dart" show MirrorStrip;
-import "package:entoli_chat/ui/widgets/dialogs.dart";
-import "package:entoli_chat/ui/widgets/empty_pane.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
 
 /// Opens [project]'s memories, the bar saying [title].
 Future<void> openMemories(

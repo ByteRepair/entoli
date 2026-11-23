@@ -1,8 +1,7 @@
 import "dart:typed_data";
 
 import "package:mime/mime.dart";
-
-import "package:entoli_chat/domain/models.dart";
+import "package:entoli_core/model/models.dart";
 
 /// What a viewer is told a workspace file is — an `ACTION_VIEW` intent's type,
 /// a `Blob`'s. `application/octet-stream` throws away the one fact that decides

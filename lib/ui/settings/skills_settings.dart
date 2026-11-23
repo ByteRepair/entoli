@@ -1,19 +1,19 @@
 import "package:file_selector/file_selector.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart" show promptsDirUserWritable;
+import "package:entoli_core/view/widgets/busy.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
 
 import "../../app/marketplace/install.dart" show PromptInstall;
 import "../../app/prompts/own_prompts.dart";
 import "../../app/prompts/skill_files.dart";
 import "../../app/settings/scope.dart";
 import "../../data/prompts/skill_import.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart" show promptsDirUserWritable;
 import "../../providers.dart";
 import "../skills/skill_view.dart";
 import "../widgets/add_button_row.dart";
-import "package:entoli_chat/ui/widgets/busy.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
 import "../widgets/install_destination.dart";
 import "../widgets/section_header.dart";
 import "copy_install_link.dart";

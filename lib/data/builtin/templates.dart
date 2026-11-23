@@ -1,18 +1,18 @@
 import "dart:convert";
 
-import "package:entoli_chat/core/formatting.dart" show safeCut;
-import "package:entoli_chat/domain/agent_backend.dart" show taskToolName;
-import "package:entoli_chat/domain/bundled_prompt_file.dart";
-import "package:entoli_chat/domain/bundled_project_prompts.dart"
+import "package:entoli_core/model/formatting.dart" show safeCut;
+import "package:entoli_core/model/agent_backend.dart" show taskToolName;
+import "package:entoli_core/model/bundled_prompt_file.dart";
+import "package:entoli_core/model/bundled_project_prompts.dart"
     show bundledSystemPrompts;
-import "package:entoli_chat/domain/file_tools.dart";
-import "package:entoli_chat/domain/models.dart"
+import "package:entoli_core/model/file_tools.dart";
+import "package:entoli_core/model/models.dart"
     show CompletionKind, ReactionPart;
-import "package:entoli_chat/domain/quote.dart" show blockquoted;
-import "package:entoli_chat/domain/reaction.dart" show Reaction;
-import "package:entoli_chat/domain/profile.dart";
-import "package:entoli_chat/domain/shell.dart" show CommandSandbox;
-import "package:entoli_chat/domain/tone.dart";
+import "package:entoli_core/model/quote.dart" show blockquoted;
+import "package:entoli_core/model/reaction.dart" show Reaction;
+import "package:entoli_core/model/profile.dart";
+import "package:entoli_core/model/shell.dart" show CommandSandbox;
+import "package:entoli_core/model/tone.dart";
 
 /// The prompt prose, embedded at build time from
 /// `assets/prompts/projects/default/system/` (`tool/gen_prompts.dart`). The
@@ -180,7 +180,7 @@ of this conversation, and answer from what it returns.""";
 /// `conv.jsonl`; wording it twice is what left a reopened or regenerated chat
 /// sending different text from the one that was cached, so [at] is the
 /// message's own `createdAt` rather than the clock. See "The projection" in
-/// `packages/entoli_chat/lib/domain/AGENTS.md`.
+/// `packages/entoli_core/lib/model/AGENTS.md`.
 String userTurnText(String text, {required DateTime at, required bool first}) =>
     _withNow(first ? _firstTask(text) : text, at);
 
@@ -319,7 +319,7 @@ String unknownTool(String name, Iterable<String> available) =>
 /// the one it tracked just before it. Null where there is nothing to say: the
 /// turn's opening move, where nothing is tracked yet, a command that was killed
 /// or never ran, which leaves no directory to read, and one that stayed where
-/// it was. See "The projection" in `packages/entoli_chat/lib/domain/AGENTS.md`.
+/// it was. See "The projection" in `packages/entoli_core/lib/model/AGENTS.md`.
 String? cwdChangedNote(String? before, String? after) =>
     (after == null || before == null || after == before)
     ? null
@@ -345,7 +345,7 @@ String outputPreview(String output) {
 /// A result's length in characters, the way Claude Code's notice says it:
 /// "KB" for each 1,024, to one decimal, a trailing `.0` dropped — Claude Code
 /// counts characters and words them as a size. Kept apart from the app's own
-/// `formatSize` (`core/formatting.dart`), which words bytes, so the notice
+/// `formatSize` (`model/formatting.dart`), which words bytes, so the notice
 /// stays Claude Code's to the letter.
 String _charSize(int chars) {
   String one(double v) =>

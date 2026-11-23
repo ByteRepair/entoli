@@ -1,14 +1,14 @@
 import "dart:async";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/ask.dart";
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/reaction.dart";
+import "package:entoli_core/model/room/roster.dart" show isCommand;
+import "package:entoli_core/model/room/room_state.dart";
 
 import "../data/sync/sync_hub.dart";
-import "package:entoli_chat/domain/ask.dart";
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/reaction.dart";
-import "package:entoli_chat/domain/room/roster.dart" show isCommand;
-import "package:entoli_chat/domain/room/room_state.dart";
 import "../providers.dart";
 import "chat_controller.dart" show TurnDriver, chatControllerProvider;
 

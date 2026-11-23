@@ -1,14 +1,14 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/chat_meta.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
 
-import "package:entoli_chat/domain/chat_meta.dart";
-import "package:entoli_chat/domain/models.dart";
 import "../../providers.dart";
 import "../../app/chat_controller.dart";
 import "../../app/mirror_controller.dart" show chatViewProvider;
 import "../chat/widgets/turn_surface.dart";
 import "../settings/settings_category.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
 import "../widgets/nav_drawer.dart";
 import "transcript.dart";
 import "../../app/turn_surface.dart";

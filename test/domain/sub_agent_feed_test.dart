@@ -1,7 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/sub_agent_log.dart";
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/sub_agent_log.dart";
 
 void main() {
   ChatRecord text(String t, {int index = 0}) =>

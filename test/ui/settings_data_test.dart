@@ -3,14 +3,13 @@ import "dart:typed_data";
 
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/data/local/file_chat_store.dart";
+import "package:entoli_core/store/file_chat_store.dart";
 import "package:agent_chat/data/backup.dart";
-import "package:entoli_chat/domain/models.dart";
+import "package:entoli_core/model/models.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
-import "package:agent_chat/ui/settings/settings_category.dart";
 
 void main() {
   late TestApp app;

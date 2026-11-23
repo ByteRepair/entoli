@@ -1,8 +1,7 @@
 import "dart:convert";
 
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/ask.dart";
+import "package:entoli_core/model/ask.dart";
 
 void main() {
   group("the shape we asked for", () {

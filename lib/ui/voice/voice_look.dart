@@ -1,7 +1,7 @@
 import "package:flutter/material.dart";
+import "package:entoli_core/view/theme.dart";
 
 import "../../app/voice_controller.dart";
-import "package:entoli_chat/ui/theme.dart";
 
 /// How voice mode's state is said and coloured.
 

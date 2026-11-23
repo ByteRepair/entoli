@@ -1,9 +1,9 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
-
-import "package:entoli_chat/domain/installable.dart";
-import "package:entoli_chat/domain/local_model.dart";
-import "package:entoli_chat/domain/local_model_store.dart"
+import "package:entoli_core/model/installable.dart";
+import "package:entoli_core/model/local_model.dart";
+import "package:entoli_core/model/local_model_store.dart"
     show InstallableLocalModel;
+
 import "../../providers.dart";
 import "downloads.dart";
 

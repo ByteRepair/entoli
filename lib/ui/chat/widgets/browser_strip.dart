@@ -7,10 +7,10 @@ import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/view/widgets/anchored_menu.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/agent_browser.dart";
 
-import "package:entoli_chat/ui/widgets/anchored_menu.dart";
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
 import "../../../providers.dart";
 import "browser_input.dart";
 import "../../../app/running.dart" show browserTabOf;

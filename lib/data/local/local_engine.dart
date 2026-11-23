@@ -1,16 +1,15 @@
 import "package:flutter/foundation.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/local_llm.dart";
+import "package:entoli_core/model/local_model.dart";
+import "package:entoli_core/model/model_budget.dart";
+import "package:entoli_core/model/local_model_store.dart";
 
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/local_llm.dart";
-import "package:entoli_chat/domain/local_model.dart";
-import "package:entoli_chat/domain/model_budget.dart";
-import "package:entoli_chat/domain/local_model_store.dart";
 import "../builtin/llm/llm_client.dart";
 import "local_client.dart";
 import "local_instance.dart";
 import "prompt_cache.dart";
 import "residency.dart";
-
 export "local_instance.dart" show LocalControl, LocalOptions;
 
 /// What runs downloaded models on this device: the models it offers, where it

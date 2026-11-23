@@ -1,21 +1,21 @@
 import "package:flutter/foundation.dart" show LicenseParagraph;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/local_model.dart" show isShortAskModel;
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/view/widgets/busy.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
+import "package:entoli_core/view/widgets/scrolling.dart";
 
 import "../../app/first_run.dart";
 import "../../app/settings/cli_account.dart" show connectCli;
 import "../../data/builtin/llm/providers/presets.dart";
-import "package:entoli_chat/domain/local_model.dart" show isShortAskModel;
-import "package:entoli_chat/domain/models.dart";
 import "../../providers.dart";
 import "../app_licence.dart";
 import "../initial_setup_gate.dart";
 import "../marketplace/marketplace_page.dart";
 import "../widgets/app_mark.dart";
-import "package:entoli_chat/ui/widgets/busy.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
-import "package:entoli_chat/ui/widgets/scrolling.dart";
 import "cli_sign_in_dialog.dart" show showCliSignIn;
 import "llm_settings.dart" show newChatModelField, titleModelField;
 import "provider_settings.dart" show editProvider;

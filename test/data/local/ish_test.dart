@@ -1,8 +1,7 @@
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_core/model/shell.dart";
 
 /// What can be pinned on a machine with no iOS on it: the shared dispatcher
 /// script (the wire protocol both LocalShell and IshShell run) and the FFI

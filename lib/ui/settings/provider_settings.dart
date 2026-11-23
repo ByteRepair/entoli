@@ -1,16 +1,16 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:uuid/uuid.dart";
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/provider_usage.dart";
+import "package:entoli_core/view/widgets/busy.dart";
 
 import "../../app/provider_usage_words.dart";
 import "../../app/settings/cli_account.dart" show forgetCliEntry;
 import "../../app/settings/provider_edit.dart";
 import "../../data/builtin/llm/providers/presets.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/provider_usage.dart";
 import "../../providers.dart";
 import "../widgets/add_button_row.dart";
-import "package:entoli_chat/ui/widgets/busy.dart";
 import "../widgets/editable_row.dart";
 import "../widgets/section_header.dart";
 import "provider_dialog.dart";

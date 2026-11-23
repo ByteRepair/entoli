@@ -1,14 +1,14 @@
 import "package:file/file.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/ask.dart";
-import "package:entoli_chat/domain/file_tools.dart";
-import "package:entoli_chat/domain/permission.dart" show ApproveMode;
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/todo.dart";
-import "package:entoli_chat/domain/trigger_manager.dart" show TriggerRegistry;
-import "package:entoli_chat/domain/web_search.dart";
-import "package:entoli_chat/domain/app_settings.dart" show SettingsEditor;
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/ask.dart";
+import "package:entoli_core/model/file_tools.dart";
+import "package:entoli_core/model/permission.dart" show ApproveMode;
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/todo.dart";
+import "package:entoli_core/model/trigger_manager.dart" show TriggerRegistry;
+import "package:entoli_core/model/web_search.dart";
+import "package:entoli_core/model/app_settings.dart" show SettingsEditor;
 
 import "../approval_gate.dart";
 import "../background_jobs.dart";

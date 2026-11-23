@@ -2,8 +2,8 @@ import "dart:async";
 
 import "package:file_selector/file_selector.dart" show XFile;
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/builtin_project.dart";
 
-import "package:entoli_chat/domain/builtin_project.dart";
 import "../providers.dart";
 
 /// Whether setup or an import is running, what went wrong with the last, and

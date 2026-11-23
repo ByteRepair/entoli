@@ -1,9 +1,8 @@
 import "package:flutter/material.dart";
 import "package:flutter_math_fork/flutter_math.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/ui/chat/widgets/code_block.dart";
-import "package:entoli_chat/ui/chat/widgets/markdown_text.dart";
+import "package:entoli_core/view/chat/widgets/code_block.dart";
+import "package:entoli_core/view/chat/widgets/markdown_text.dart";
 
 import "../harness.dart";
 

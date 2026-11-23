@@ -5,10 +5,10 @@ import "dart:math";
 
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
+import "package:entoli_core/model/local_llm.dart";
+import "package:entoli_core/model/local_model.dart";
+import "package:entoli_core/model/log.dart";
 
-import "package:entoli_chat/domain/local_llm.dart";
-import "package:entoli_chat/domain/local_model.dart";
-import "package:entoli_chat/core/log.dart";
 import "../../core/random_token.dart";
 import "../builtin/llm/llm_client.dart";
 import "../builtin/llm/openai_client.dart";

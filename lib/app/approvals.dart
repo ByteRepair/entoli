@@ -1,6 +1,7 @@
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/permission.dart" show addDirectoryName;
-import "package:entoli_chat/domain/tool_arg.dart" show callDescription;
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/permission.dart" show addDirectoryName;
+import "package:entoli_core/model/tool_arg.dart" show callDescription;
+
 import "chat_controller.dart" show TurnDriver;
 
 /// Which answers [approval] is offered beside Deny, which always is: Allow for

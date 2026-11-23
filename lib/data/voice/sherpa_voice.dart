@@ -2,16 +2,17 @@ import "dart:async";
 import "dart:io";
 import "dart:isolate";
 import "dart:math" as math;
+
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart" show rootBundle;
 import "package:path/path.dart" as p;
 import "package:record/record.dart";
 import "package:sherpa_onnx/sherpa_onnx.dart" as sherpa;
+import "package:entoli_core/model/loudness.dart";
+import "package:entoli_core/model/voice.dart";
+import "package:entoli_core/model/voice_model.dart";
+import "package:entoli_core/model/voice_model_store.dart";
 
-import "package:entoli_chat/domain/loudness.dart";
-import "package:entoli_chat/domain/voice.dart";
-import "package:entoli_chat/domain/voice_model.dart";
-import "package:entoli_chat/domain/voice_model_store.dart";
 import "../model_host/model_process.dart";
 import "../model_host/worker.dart";
 import "pcm.dart";

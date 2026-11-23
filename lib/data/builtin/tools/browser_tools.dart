@@ -2,12 +2,13 @@ import "dart:async";
 import "dart:convert";
 import "dart:io";
 
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/tool_arg.dart";
-import "package:entoli_chat/domain/web_search.dart" show webfetchToolName;
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/tool_arg.dart";
+import "package:entoli_core/model/web_search.dart" show webfetchToolName;
+
 import "../approval_gate.dart";
 import "../llm/llm_client.dart";
 import "../templates.dart" show notExecuted, systemProse;

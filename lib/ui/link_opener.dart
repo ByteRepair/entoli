@@ -3,17 +3,17 @@ import "dart:io";
 
 import "package:flutter/material.dart";
 import "package:url_launcher/url_launcher.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/chat_store.dart";
+import "package:entoli_core/model/link_opener.dart";
+import "package:entoli_core/model/sign_in_page.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
 
-import "package:entoli_chat/core/log.dart";
 import "../core/platform/artifact_server.dart";
 import "../core/platform/form_factor.dart";
 import "../core/platform/remote_artifact.dart" show RemoteArtifacts;
 import "../data/sync/sync_hub.dart";
-import "package:entoli_chat/domain/chat_store.dart";
-import "package:entoli_chat/domain/link_opener.dart";
-import "package:entoli_chat/domain/sign_in_page.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "widgets/web_view.dart";
 
 /// Web, mail and phone links alone: anything else, `file:` included, would

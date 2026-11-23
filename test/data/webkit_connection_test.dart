@@ -2,7 +2,6 @@ import "dart:convert";
 
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/browser/cdp.dart";
 import "package:agent_chat/data/browser/webkit_connection.dart";
 

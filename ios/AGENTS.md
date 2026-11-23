@@ -91,7 +91,7 @@ long-lived background isolate so a guest command does not block the UI.
 The dispatcher script `LocalShell` uses — the trap that turns a Ctrl-C into a
 130 while the shell survives, the `EXIT` trap that reports where `exit` left
 it, the base64 line that keeps a multi-line command from stealing the queue —
-is shared, lifted to `packages/entoli_chat/lib/domain/shell.dart` so both shells
+is shared, lifted to `packages/entoli_core/lib/model/shell.dart` so both shells
 read one source of truth. iSH runs it inside the guest's own `/bin/sh`, which is
 what makes a `cd` or an `export` in one command stick for the next, the same
 contract the agent is told on every other platform.
@@ -240,7 +240,7 @@ gap here, for once; this entry is.
 the agent's own prompt and tools — about 6k before the first message — so a
 turn on it opens with a compaction every time, which is a chat that works in
 name only. `isTitleOnlyModel`
-(`packages/entoli_chat/lib/domain/local_model.dart`) is the one gate: the
+(`packages/entoli_core/lib/model/local_model.dart`) is the one gate: the
 backend resolves it for the title's ask alone and refuses a turn on it with a
 line saying so, only the Title LLM picker (`ModelRole.title`) lists it, and the
 welcome tour does not count it as a model connected — so an iOS device sets up a
@@ -296,7 +296,7 @@ the package missing, the engine is `NoLocalEngine` and the page has no text
 section. Requiring 27 is for the feature, not the app.
 
 The catalog is `mlxCatalog`
-(`packages/entoli_chat/lib/domain/local_model.dart`): the GGUF catalog's two
+(`packages/entoli_core/lib/model/local_model.dart`): the GGUF catalog's two
 larger sizes in MLX's 4-bit format, each pinned to a commit with every file's
 size and SHA-256, downloaded and checked by the same `FileLocalModelStore` as a
 GGUF into `<cacheDir>/llm/<id>/`. Only the files loading needs are fetched.

@@ -1,5 +1,5 @@
-import "package:entoli_chat/domain/documents.dart";
-import "package:entoli_chat/domain/file_errors.dart";
+import "package:entoli_core/model/documents.dart";
+import "package:entoli_core/model/file_errors.dart";
 import "package:file/file.dart";
 import "package:file/local.dart";
 import "package:file/memory.dart";

@@ -2,7 +2,7 @@ import "dart:async";
 import "dart:io";
 
 import "package:agent_chat/data/local/file_rootfs_store.dart";
-import "package:entoli_chat/domain/rootfs.dart";
+import "package:entoli_core/model/rootfs.dart";
 import "package:crypto/crypto.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;

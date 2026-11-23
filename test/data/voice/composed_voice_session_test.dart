@@ -2,9 +2,8 @@ import "dart:async";
 
 import "package:flutter/foundation.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/voice/voice_strategies.dart";
-import "package:entoli_chat/domain/voice.dart";
+import "package:entoli_core/model/voice.dart";
 
 class _FakeListener implements Listener {
   _FakeListener();

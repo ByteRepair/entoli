@@ -122,14 +122,14 @@ bridge holds each call until it has heard that, a minute at most. A new
 engine is not ready until its own Dart says so.
 
 The Dart half has two subsystems behind one boundary, and they are kept
-apart on purpose. **`IntentAction` (`domain/intent_action.dart`) is the
+apart on purpose. **`IntentAction` (`model/intent_action.dart`) is the
 boundary's own type**: an id that a saved shortcut names, so never renamed,
 and a `perform` that decodes its own arguments (`IntentArgs`) and encodes its
 own result. `IntentRegistry` looks an id up; `IntentChannel`
 (`data/local/`) is the wire. Neither subsystem knows the boundary exists —
 each is adapted to it:
 
-- **Chats** are `ChatIntents` (`domain/chat_intents.dart`), a typed service
+- **Chats** are `ChatIntents` (`model/chat_intents.dart`), a typed service
   with one `ChatIntentAction` per operation adapting it. It runs with no
   screen, so an action arriving on a background launch still finds it, and
   reaches the UI only through three ports the UI implements: `ChatPresenter`
@@ -151,7 +151,7 @@ A shared base class over the two was weighed and refused: a command takes no
 input, acts on what is on screen and returns nothing, and a chat operation is
 the opposite on all three, so a base would hold an id and nothing else, its
 generics erased at the one place it is used. What they do share is
-`Availability` (`domain/availability.dart`) — whether a thing can be done
+`Availability` (`model/availability.dart`) — whether a thing can be done
 now, and why not — which `Commands` answers for the menus (who read only
 whether) and a refusal carries to Shortcuts as the sentence it shows.
 

@@ -2,10 +2,10 @@ import "dart:io";
 
 import "package:flutter/foundation.dart" show compute;
 import "package:http/http.dart" as http;
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/documents.dart";
-import "package:entoli_chat/domain/model_registry.dart";
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/documents.dart";
+import "package:entoli_core/model/model_registry.dart";
 
 import "builtin_models.dart";
 

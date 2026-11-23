@@ -1,8 +1,8 @@
 import "package:flutter/material.dart";
+import "package:entoli_core/view/chat/widgets/markdown_text.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
 
-import "package:entoli_chat/ui/chat/widgets/markdown_text.dart";
 import "../../data/privacy_policy_data.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
 
 class PrivacyPolicyPage extends StatelessWidget {
   const PrivacyPolicyPage({super.key});

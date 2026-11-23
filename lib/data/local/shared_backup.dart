@@ -1,8 +1,8 @@
 import "dart:io";
 
 import "package:path/path.dart" as p;
+import "package:entoli_core/model/file_handoff.dart";
 
-import "package:entoli_chat/domain/file_handoff.dart";
 import "../backup_handoff.dart";
 
 /// Android, where `file_selector` implements no save dialog: a backup leaves

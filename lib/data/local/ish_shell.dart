@@ -9,10 +9,10 @@ import "package:ffi/ffi.dart";
 import "package:flutter/foundation.dart"
     show ValueListenable, ValueNotifier, visibleForTesting;
 import "package:uuid/uuid.dart";
+import "package:entoli_core/model/file_tools.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/log.dart";
 
-import "package:entoli_chat/domain/file_tools.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/core/log.dart";
 import "guest_mounts.dart";
 import "host_tools.dart";
 import "ish_ffi.dart";
@@ -35,7 +35,7 @@ import "ish_ffi.dart";
 /// bridge from the calling isolate, which the bridge is built for. See
 /// [IshTransport].
 ///
-/// The dispatcher script (`dispatcherScript` in `domain/shell.dart`) is passed
+/// The dispatcher script (`dispatcherScript` in `model/shell.dart`) is passed
 /// to the C bridge and runs inside the guest's own `/bin/sh`, so a `cd` or an
 /// `export` in one emulated command sticks for the next, the same contract the
 /// host shell keeps. The marker the guest writes back is parsed for the exit

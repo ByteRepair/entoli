@@ -6,31 +6,31 @@ import "package:collection/collection.dart";
 import "package:flutter/foundation.dart";
 import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/agent_definition.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/trigger_manager.dart"
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/agent_definition.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/trigger_manager.dart"
     show TriggerRegistryFactory;
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/ask.dart";
-import "package:entoli_chat/domain/shell_job.dart";
-import "package:entoli_chat/domain/chat_log.dart" show replayTree;
-import "package:entoli_chat/domain/chat_store.dart";
-import "package:entoli_chat/domain/file_tools.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/local_model.dart" show isShortAskModel;
-import "package:entoli_chat/domain/model_capability.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/model_registry.dart";
-import "package:entoli_chat/domain/provider_usage.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/sub_agent_log.dart";
-import "package:entoli_chat/domain/tool_arg.dart";
-import "package:entoli_chat/domain/web_search.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/ask.dart";
+import "package:entoli_core/model/shell_job.dart";
+import "package:entoli_core/model/chat_log.dart" show replayTree;
+import "package:entoli_core/model/chat_store.dart";
+import "package:entoli_core/model/file_tools.dart";
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/local_model.dart" show isShortAskModel;
+import "package:entoli_core/model/model_capability.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/model_registry.dart";
+import "package:entoli_core/model/provider_usage.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/sub_agent_log.dart";
+import "package:entoli_core/model/tool_arg.dart";
+import "package:entoli_core/model/web_search.dart";
 
 import "../local/file_sub_agent_log.dart";
 import "../local/linked_instructions_store.dart";
@@ -61,7 +61,7 @@ import "builtin_options.dart";
 /// this is what Entoli talks to: it holds a session per chat, resolves which
 /// endpoint a turn runs against, and hands the agent the message to run. What
 /// the composer's `/` and `@` syntax meant is already on that message — see
-/// "Commands and agents" in `packages/entoli_chat/lib/domain/AGENTS.md`.
+/// "Commands and agents" in `packages/entoli_core/lib/model/AGENTS.md`.
 class BuiltinBackend implements AgentBackend {
   BuiltinBackend({
     required this.config,

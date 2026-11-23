@@ -5,7 +5,7 @@ import "dart:convert";
 import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-import "package:entoli_chat/core/config.dart";
+import "package:entoli_core/model/config.dart";
 import "package:agent_chat/data/builtin/builtin_backend.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
@@ -16,19 +16,19 @@ import "package:agent_chat/data/builtin/memory/instructions.dart"
     show InstructionFile, instructionBudgetChars, renderInstructions;
 import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/data/builtin/tools/participants_tool.dart";
-import "package:entoli_chat/data/local/file_chat_store.dart";
+import "package:entoli_core/store/file_chat_store.dart";
 import "package:agent_chat/data/local/file_sub_agent_log.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/builtin_project.dart";
-import "package:entoli_chat/domain/chat_log.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/local_model.dart"
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/builtin_project.dart";
+import "package:entoli_core/model/chat_log.dart";
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/local_model.dart"
     show appleModelId, appleProviderId;
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/shell.dart";
 import "package:agent_chat/data/builtin/builtin_options.dart";
 
 import "../../fakes.dart";
@@ -1501,7 +1501,7 @@ void main() {
         // turn takes. It is what the on-device KV cache rests on: a chat reopened
         // or regenerated has to send the text that was sent before, or every
         // cached prefix past the system prompt misses and the whole history is
-        // read again. See "The projection" in `packages/entoli_chat/lib/domain/AGENTS.md`.
+        // read again. See "The projection" in `packages/entoli_core/lib/model/AGENTS.md`.
         final live = backendOver([
           [finish],
           [finish],

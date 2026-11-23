@@ -1,7 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/chat_search.dart";
-import "package:entoli_chat/domain/models.dart";
+import "package:entoli_core/model/chat_search.dart";
+import "package:entoli_core/model/models.dart";
 import "package:agent_chat/app/chat_groups.dart";
 
 void main() {

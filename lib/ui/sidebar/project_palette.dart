@@ -3,22 +3,21 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart";
+import "package:entoli_core/model/project_settings.dart";
+import "package:entoli_core/view/widgets/dialogs.dart" show notify;
 
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart";
-import "package:entoli_chat/domain/project_settings.dart";
 import "../../providers.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/palette_dialog.dart";
 import "../widgets/search_field.dart";
 import "../../app/palette.dart";
 import "../../app/remote_projects.dart";
-
 export "../../app/palette.dart";
 import "../app_routes.dart";
 import "../selection.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart" show notify;
 
 /// What picking a row does. Run by whoever opened the palette, with its own
 /// context and ref: the palette's are disposed by the time the pick lands, and

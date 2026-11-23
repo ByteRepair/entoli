@@ -1,5 +1,6 @@
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/model_info.dart";
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/model_info.dart";
+
 import "../gemini_client.dart";
 import "../openai_client.dart";
 import "provider.dart";

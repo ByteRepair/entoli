@@ -3,15 +3,15 @@
 // The room contract names handles (`@name`); this is the model's way of
 // reading the roster, from the project's agent library rather than the room
 // contract's prose.
-import "package:entoli_chat/domain/end_turn.dart";
-import "package:entoli_chat/domain/models.dart" show CompletionKind;
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
+import "package:entoli_core/model/end_turn.dart";
+import "package:entoli_core/model/models.dart" show CompletionKind;
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/agent_backend.dart";
+export "package:entoli_core/model/end_turn.dart" show endTurnToolName;
+
 import "../llm/llm_client.dart";
 import "agent_tool.dart";
 import "turn.dart";
-
-export "package:entoli_chat/domain/end_turn.dart" show endTurnToolName;
 
 /// A participant's way to say nothing: a reply is a message, and a model
 /// given only messages writes one — a thank-you, an "all set" — that hands

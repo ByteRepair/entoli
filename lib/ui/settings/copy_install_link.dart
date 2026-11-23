@@ -1,12 +1,12 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "package:entoli_chat/core/config.dart";
+import "package:entoli_core/model/config.dart";
 import "../../data/prompts/prompt_export.dart";
-import "package:entoli_chat/domain/link_bytes.dart" show appLinkMaxLength;
-import "package:entoli_chat/domain/models.dart";
+import "package:entoli_core/model/link_bytes.dart" show appLinkMaxLength;
+import "package:entoli_core/model/models.dart";
 import "../../providers.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
 
 /// The end of a skills or agents row: Copy install link, then Export, each
 /// run through [guard]. Where not [linkable] the link's place is kept, so

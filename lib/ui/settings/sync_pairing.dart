@@ -6,14 +6,14 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:mobile_scanner/mobile_scanner.dart";
 import "package:qr_flutter/qr_flutter.dart";
 import "package:url_launcher/url_launcher.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
 
-import "package:entoli_chat/core/log.dart";
 import "../../core/platform/form_factor.dart";
 import "../../app/settings/pairing.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
 
 /// Where the paste-a-code field gets a camera button: the phones, the devices
 /// that are pointed at a code another screen shows.

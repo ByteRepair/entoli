@@ -9,61 +9,61 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:http/http.dart" as http;
 import "package:uuid/uuid.dart";
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/domain/settings/keys.dart";
-import "package:entoli_chat/domain/settings/setting.dart";
-import "package:entoli_chat/domain/chat_intents.dart";
-import "package:entoli_chat/domain/file_tools.dart" show resolveWorkspacePath;
-import "package:entoli_chat/domain/agent_face.dart";
-import "package:entoli_chat/domain/bot_avatar/definition.dart";
-import "package:entoli_chat/domain/bot_avatar/spec.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/app_restart.dart";
-import "package:entoli_chat/domain/sign_in_page.dart";
-import "package:entoli_chat/domain/app_secrets.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/confinement.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/app_update.dart";
-import "package:entoli_chat/domain/app_theme.dart";
-import "package:entoli_chat/domain/assistant_launch.dart";
-import "package:entoli_chat/domain/attachment_picker.dart";
-import "package:entoli_chat/domain/folder_picker.dart";
-import "package:entoli_chat/domain/clipboard_files.dart";
-import "package:entoli_chat/domain/backup_handoff.dart";
-import "package:entoli_chat/domain/background_work.dart";
-import "package:entoli_chat/domain/builtin_project.dart";
-import "package:entoli_chat/domain/chat_repository.dart";
-import "package:entoli_chat/domain/chat_store.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/model_capability.dart";
-import "package:entoli_chat/domain/model_registry.dart";
-import "package:entoli_chat/domain/local_llm.dart";
-import "package:entoli_chat/domain/local_model.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/profile.dart";
-import "package:entoli_chat/domain/project_settings.dart";
-import "package:entoli_chat/domain/provider_usage.dart";
-import "package:entoli_chat/domain/project.dart"
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/settings/keys.dart";
+import "package:entoli_core/model/settings/setting.dart";
+import "package:entoli_core/model/chat_intents.dart";
+import "package:entoli_core/model/file_tools.dart" show resolveWorkspacePath;
+import "package:entoli_core/model/agent_face.dart";
+import "package:entoli_core/model/bot_avatar/definition.dart";
+import "package:entoli_core/model/bot_avatar/spec.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/app_restart.dart";
+import "package:entoli_core/model/sign_in_page.dart";
+import "package:entoli_core/model/app_secrets.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/confinement.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/app_update.dart";
+import "package:entoli_core/model/app_theme.dart";
+import "package:entoli_core/model/assistant_launch.dart";
+import "package:entoli_core/model/attachment_picker.dart";
+import "package:entoli_core/model/folder_picker.dart";
+import "package:entoli_core/model/clipboard_files.dart";
+import "package:entoli_core/model/backup_handoff.dart";
+import "package:entoli_core/model/background_work.dart";
+import "package:entoli_core/model/builtin_project.dart";
+import "package:entoli_core/model/chat_repository.dart";
+import "package:entoli_core/model/chat_store.dart";
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/model_capability.dart";
+import "package:entoli_core/model/model_registry.dart";
+import "package:entoli_core/model/local_llm.dart";
+import "package:entoli_core/model/local_model.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/profile.dart";
+import "package:entoli_core/model/project_settings.dart";
+import "package:entoli_core/model/provider_usage.dart";
+import "package:entoli_core/model/project.dart"
     show ProjectRef, emptyChatQuestionFor, everyProject;
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/reminder_alarms.dart";
-import "package:entoli_chat/domain/trigger.dart";
-import "package:entoli_chat/domain/trigger_kinds.dart";
-import "package:entoli_chat/domain/trigger_runner.dart";
-import "package:entoli_chat/domain/turn_sender.dart";
-import "package:entoli_chat/domain/trigger_manager.dart";
-import "package:entoli_chat/domain/rootfs.dart" show LinuxHost, NoLinux;
-import "package:entoli_chat/domain/rootfs_store.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/temp_chat_ttl.dart";
-import "package:entoli_chat/domain/theme_colour.dart";
-import "package:entoli_chat/domain/tone.dart";
-import "package:entoli_chat/domain/tristate.dart";
-import "package:entoli_chat/domain/turn_keep_alive.dart";
-import "package:entoli_chat/domain/voice.dart";
-import "package:entoli_chat/domain/voice_model_store.dart";
-export "package:entoli_chat/app/handoff.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/reminder_alarms.dart";
+import "package:entoli_core/model/trigger.dart";
+import "package:entoli_core/model/trigger_kinds.dart";
+import "package:entoli_core/model/trigger_runner.dart";
+import "package:entoli_core/model/turn_sender.dart";
+import "package:entoli_core/model/trigger_manager.dart";
+import "package:entoli_core/model/rootfs.dart" show LinuxHost, NoLinux;
+import "package:entoli_core/model/rootfs_store.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/temp_chat_ttl.dart";
+import "package:entoli_core/model/theme_colour.dart";
+import "package:entoli_core/model/tone.dart";
+import "package:entoli_core/model/tristate.dart";
+import "package:entoli_core/model/turn_keep_alive.dart";
+import "package:entoli_core/model/voice.dart";
+import "package:entoli_core/model/voice_model_store.dart";
+export "package:entoli_core/transcript/handoff.dart";
 
 import "app/app_menus.dart";
 import "../core/platform/platform.dart"
@@ -570,7 +570,7 @@ final systemVoiceLanguagesProvider = FutureProvider<List<VoiceLanguage>>(
 /// project inherits, and a project's own overrides a same-named default entry
 /// for that project alone. Built once at startup and rebuilt only where
 /// something on screen says the disk changed — the Skills page, importing or
-/// deleting one. See "Skills and agents" in `packages/entoli_chat/lib/domain/AGENTS.md` for why it
+/// deleting one. See "Skills and agents" in `packages/entoli_core/lib/model/AGENTS.md` for why it
 /// is otherwise read once: nothing downstream waits on it, and a file added
 /// behind the app's back reaches the next launch.
 ///
@@ -1594,7 +1594,7 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
     ref.watch(appConfigProvider),
     // The library is resolved per project at compose time: the message is
     // composed against the project's library, not an app-wide one — see
-    // "Skills and agents" in `packages/entoli_chat/lib/domain/AGENTS.md`. Read fresh each time
+    // "Skills and agents" in `packages/entoli_core/lib/model/AGENTS.md`. Read fresh each time
     // rather than captured, so a reload reaches the next message.
     libraryFor: (project) => ref.read(promptLibraryProvider(project)),
   );

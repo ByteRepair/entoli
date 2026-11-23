@@ -1,4 +1,4 @@
-import "package:entoli_chat/domain/sync/devices.dart";
+import "package:entoli_core/model/sync/devices.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {

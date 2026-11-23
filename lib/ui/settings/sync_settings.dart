@@ -1,14 +1,14 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/settings/keys.dart";
+import "package:entoli_core/model/settings/setting.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
 
 import "../../app/settings/pairing.dart";
 import "../../core/platform/form_factor.dart";
 import "../../data/sync/sync_hub.dart";
-import "package:entoli_chat/domain/settings/keys.dart";
-import "package:entoli_chat/domain/settings/setting.dart";
 import "../../providers.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 import "paired_device_page.dart";

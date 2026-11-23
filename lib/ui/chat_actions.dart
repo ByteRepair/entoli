@@ -7,16 +7,16 @@ library;
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart";
+import "package:entoli_core/view/widgets/dialogs.dart";
 
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart";
 import "../providers.dart";
 import "app_command.dart";
 import "../app/chat_edits.dart";
-import "package:entoli_chat/domain/availability.dart";
+import "package:entoli_core/model/availability.dart";
 import "chat/share_chat_dialog.dart";
 import "selection.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart";
 
 /// The commands that act on one chat, in the order a menu offers them.
 const chatCommands = [

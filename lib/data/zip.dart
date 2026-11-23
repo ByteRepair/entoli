@@ -1,7 +1,7 @@
 import "dart:io";
 
 import "package:archive/archive_io.dart";
-import "package:entoli_chat/data/zip.dart";
+import "package:entoli_core/store/zip.dart";
 import "package:file/local.dart";
 
 /// Zip [paths] — files and folders alike — into a new file at [to]. Each

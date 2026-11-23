@@ -1,6 +1,5 @@
 import "package:file_selector/file_selector.dart";
-
-import "package:entoli_chat/domain/backup_handoff.dart";
+import "package:entoli_core/model/backup_handoff.dart";
 
 const _backups = XTypeGroup(
   label: "Entoli backup",

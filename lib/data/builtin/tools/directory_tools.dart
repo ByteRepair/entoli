@@ -7,13 +7,13 @@
 // field. Nothing persists or is granted without the banner: the description
 // is the only thing that tells the model the tool exists.
 
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/file_tools.dart" show outsideWorkspaces;
-import "package:entoli_chat/domain/tool_arg.dart";
-import "package:entoli_chat/domain/work_folders.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/file_tools.dart" show outsideWorkspaces;
+import "package:entoli_core/model/tool_arg.dart";
+import "package:entoli_core/model/work_folders.dart";
 
 import "../llm/llm_client.dart";
 import "agent_tool.dart";

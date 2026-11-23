@@ -2,9 +2,8 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:agent_chat/data/local/bundled_tools.dart";
-import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_core/model/shell.dart";
 
 void main() {
   // Laying proot out asks Android for the network's resolvers, and a method

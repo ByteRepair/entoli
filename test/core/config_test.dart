@@ -1,7 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
-import "package:entoli_chat/core/config.dart";
+import "package:entoli_core/model/config.dart";
 
 import "../harness.dart";
 

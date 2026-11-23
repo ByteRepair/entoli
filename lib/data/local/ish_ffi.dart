@@ -4,7 +4,7 @@ import "dart:io" show Platform;
 // Utf8 moved out of dart:ffi; package:ffi's is the one Dart 3.13 keeps.
 import "package:ffi/ffi.dart";
 
-import "package:entoli_chat/domain/rootfs.dart" show EmulatedLinux, Rootfs;
+import "package:entoli_core/model/rootfs.dart" show EmulatedLinux, Rootfs;
 
 // The dart:ffi bindings to the iSH bridge (tool/ios/ish/ish_bridge.c). The
 // bridge runs the iSH emulator core in-process — see ios/AGENTS.md for why a

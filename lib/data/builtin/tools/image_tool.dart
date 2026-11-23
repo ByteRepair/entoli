@@ -1,5 +1,6 @@
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/tool_arg.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/tool_arg.dart";
+
 import "../llm/llm_client.dart";
 import "agent_tool.dart";
 import "turn.dart";

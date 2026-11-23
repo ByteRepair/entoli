@@ -1,9 +1,8 @@
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/builtin/tools/agent_tool.dart";
 import "package:agent_chat/data/builtin/tools/registry.dart";
-import "package:entoli_chat/app/transcript/activities/catalog.dart";
-import "package:entoli_chat/app/transcript/activity.dart" show Run;
+import "package:entoli_core/transcript/activities/catalog.dart";
+import "package:entoli_core/transcript/activity.dart" show Run;
 
 void main() {
   // A UI is paired with its tool by the name alone, so a rename on either

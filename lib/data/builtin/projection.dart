@@ -2,19 +2,19 @@ import "dart:typed_data";
 
 import "package:collection/collection.dart";
 import "package:path/path.dart" as p;
-
-import "package:entoli_chat/domain/ask.dart";
-import "package:entoli_chat/domain/end_turn.dart";
-import "package:entoli_chat/domain/goal.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/reaction.dart";
-import "package:entoli_chat/domain/shell_command_analysis.dart"
+import "package:entoli_core/model/ask.dart";
+import "package:entoli_core/model/end_turn.dart";
+import "package:entoli_core/model/goal.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/reaction.dart";
+import "package:entoli_core/model/shell_command_analysis.dart"
     show isFileToolWork;
-import "package:entoli_chat/domain/todo.dart";
-import "package:entoli_chat/domain/tool_arg.dart";
-import "package:entoli_chat/domain/wired_skill.dart";
-import "package:entoli_chat/domain/shell.dart" show bashToolName;
+import "package:entoli_core/model/todo.dart";
+import "package:entoli_core/model/tool_arg.dart";
+import "package:entoli_core/model/wired_skill.dart";
+import "package:entoli_core/model/shell.dart" show bashToolName;
+
 import "llm/llm_client.dart";
 import "templates.dart";
 
@@ -74,7 +74,7 @@ TodoList? _carriedTodos(List<Message> messages, int from, String? viewer) {
 /// **This is the only thing that words a conversation for a model**, the turn
 /// being sent included — `BuiltinAgent._openTurn` projects the message it is
 /// about to log rather than wording one of its own. See "The projection" in
-/// `packages/entoli_chat/lib/domain/AGENTS.md` for what that is worth and what it costs.
+/// `packages/entoli_core/lib/model/AGENTS.md` for what that is worth and what it costs.
 ///
 /// [first] says whether a user message in [messages] may be dressed as the
 /// task — the fragment question: false where this is a fragment appended to a
@@ -340,7 +340,7 @@ Future<Map<String, LlmAttachment>> attachmentsOf(
 /// One turn's reply as the provider messages it becomes: one per response, each
 /// followed by the results answering its calls. What a running turn puts in
 /// front of the model, and what a reload rebuilds — the same function, so there
-/// is nothing to keep level. See "One accumulation" in `packages/entoli_chat/lib/domain/AGENTS.md`.
+/// is nothing to keep level. See "One accumulation" in `packages/entoli_core/lib/model/AGENTS.md`.
 ///
 /// [files] are the bytes of the reply's [FilePart]s by resource, which a live
 /// turn holds already and a reload reads first.

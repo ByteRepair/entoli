@@ -1,9 +1,8 @@
 import "package:flutter/gestures.dart" show PointerDeviceKind;
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/ui/chat/widgets/chapter_rail.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/view/chat/widgets/chapter_rail.dart";
 
 import "../harness.dart";
 

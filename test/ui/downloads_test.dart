@@ -2,12 +2,11 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/background_work.dart";
-import "package:entoli_chat/domain/installable.dart";
-import "package:entoli_chat/domain/rootfs.dart";
-import "package:entoli_chat/domain/voice_model.dart";
-import "package:entoli_chat/domain/voice_model_store.dart";
+import "package:entoli_core/model/background_work.dart";
+import "package:entoli_core/model/installable.dart";
+import "package:entoli_core/model/rootfs.dart";
+import "package:entoli_core/model/voice_model.dart";
+import "package:entoli_core/model/voice_model_store.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/app/downloads/model_downloads.dart";
 import "package:agent_chat/app/downloads/rootfs_downloads.dart";

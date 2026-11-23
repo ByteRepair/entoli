@@ -1,6 +1,7 @@
-import "package:entoli_chat/core/log.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/llm_provider.dart";
+
 import "../../data/builtin/llm/providers/presets.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
 import "../../providers.dart" show KeyCheck;
 
 /// What saving a provider makes: the endpoint, and what becomes of its key —

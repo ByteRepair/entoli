@@ -4,13 +4,13 @@ import "dart:typed_data";
 
 import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:path/path.dart" as p;
-import "package:entoli_chat/core/formatting.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/chat_store.dart" show attachmentFilename;
-import "package:entoli_chat/domain/file_tools.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/tool_arg.dart";
-import "package:entoli_chat/domain/workspace.dart" show isUnder;
+import "package:entoli_core/model/formatting.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/chat_store.dart" show attachmentFilename;
+import "package:entoli_core/model/file_tools.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/tool_arg.dart";
+import "package:entoli_core/model/workspace.dart" show isUnder;
 
 import "../../mime.dart";
 import "../approval_gate.dart";

@@ -5,9 +5,9 @@ import "dart:isolate";
 import "package:flutter/services.dart";
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
-import "package:entoli_chat/domain/file_handoff.dart";
-import "package:entoli_chat/data/zip.dart" show zipNameFor;
-import "package:entoli_chat/core/log.dart";
+import "package:entoli_core/model/file_handoff.dart";
+import "package:entoli_core/store/zip.dart" show zipNameFor;
+import "package:entoli_core/model/log.dart";
 
 import "../mime.dart";
 import "../zip.dart";

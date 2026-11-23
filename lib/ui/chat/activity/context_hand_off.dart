@@ -2,10 +2,10 @@ import "dart:async";
 
 import "package:path/path.dart" as p;
 
-import "package:entoli_chat/domain/agent_browser.dart"
+import "package:entoli_core/model/agent_browser.dart"
     show AgentBrowser, BrowserTab;
-import "package:entoli_chat/ui/chat/activity/page_hand_off.dart";
-import "package:entoli_chat/ui/widgets/text_file_page.dart" show openTextFile;
+import "package:entoli_core/view/chat/activity/page_hand_off.dart";
+import "package:entoli_core/view/widgets/text_file_page.dart" show openTextFile;
 import "../../selection.dart" show selectedProjectProvider;
 import "../../skills/skill_install_preview.dart" show openSkillInstall;
 import "../../widgets/prompt_field.dart" show PromptPage;

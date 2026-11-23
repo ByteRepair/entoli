@@ -1,20 +1,20 @@
 import "dart:io";
 
 import "package:path/path.dart" as p;
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/ask.dart";
+import "package:entoli_core/model/plan.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/system_notification.dart";
+import "package:entoli_core/model/tool_arg.dart";
 
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/ask.dart";
-import "package:entoli_chat/domain/plan.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/system_notification.dart";
-import "package:entoli_chat/domain/tool_arg.dart";
 import "../llm/llm_client.dart";
 import "agent_tool.dart";
 import "file_tools.dart" show gatedFileRun;
 import "turn.dart";
 
 /// The plan tools, over a `PLAN.md` in the chat's own workspace. Named in
-/// `packages/entoli_chat/lib/domain/plan.dart` beside the parser, the way `artifactToolName` is.
+/// `packages/entoli_core/lib/model/plan.dart` beside the parser, the way `artifactToolName` is.
 ///
 /// The file is the model's own writing: the tools are line edits over it,
 /// written through `fs` directly rather than `edit` — the tools own the

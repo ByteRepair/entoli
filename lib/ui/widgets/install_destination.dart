@@ -1,7 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/project.dart" show projectLabel;
 
-import "package:entoli_chat/domain/project.dart" show projectLabel;
 import "../../providers.dart";
 
 /// Where a skill being installed goes: the default project's directory, or a

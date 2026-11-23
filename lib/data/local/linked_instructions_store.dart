@@ -1,10 +1,10 @@
 import "dart:convert";
 import "dart:io";
 
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/core/log.dart" show logFailure;
-import "package:entoli_chat/domain/documents.dart" show RenameWriter;
-import "package:entoli_chat/domain/linked_instructions.dart";
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/log.dart" show logFailure;
+import "package:entoli_core/model/documents.dart" show RenameWriter;
+import "package:entoli_core/model/linked_instructions.dart";
 
 /// [LinkedInstructions] at `<dataDir>/instruction_files.json`. Read by every
 /// turn and written by two pages, the profile's list and a project's

@@ -2,10 +2,10 @@ import "dart:io";
 
 import "package:file/file.dart" show FileSystem;
 import "package:path/path.dart" as p;
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/shell.dart"
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/shell.dart"
     show cdTarget, commandPath, repositoryRootOf;
-import "package:entoli_chat/domain/shell_command_analysis.dart"
+import "package:entoli_core/model/shell_command_analysis.dart"
     show plainCommand;
 
 import "local_shell.dart" show LocalShell;

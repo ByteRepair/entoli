@@ -6,11 +6,11 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 import "package:agent_chat/data/builtin/background_jobs.dart";
 import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/shell_job.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/shell_job.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";

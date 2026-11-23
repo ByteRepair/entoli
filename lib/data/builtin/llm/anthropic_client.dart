@@ -3,10 +3,9 @@ import "dart:convert";
 
 import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:http/http.dart" as http;
+import "package:entoli_core/model/log.dart";
 
-import "package:entoli_chat/core/log.dart";
 import "../../../core/tls.dart";
-
 import "http_stream.dart";
 import "llm_client.dart";
 import "openai_client.dart" show inlineText;

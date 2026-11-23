@@ -3,8 +3,8 @@ import "dart:convert";
 import "dart:typed_data";
 
 import "package:flutter/services.dart" show MethodChannel, PlatformException;
+import "package:entoli_core/model/log.dart";
 
-import "package:entoli_chat/core/log.dart";
 import "cdp.dart";
 
 /// iOS's browser, behind the slice of the DevTools Protocol `CdpBrowser`'s

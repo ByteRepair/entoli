@@ -9,11 +9,11 @@ import "package:agent_chat/data/builtin/tools/agent_tool.dart"
     show AgentCapabilities, ToolOffer;
 import "package:agent_chat/data/builtin/tools/bash_tool.dart" show BashTool;
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/sandbox_grant.dart";
-import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/sandbox_grant.dart";
+import "package:entoli_core/model/shell.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";

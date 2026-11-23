@@ -1,8 +1,7 @@
 import "package:flutter/foundation.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/ui/app_licence.dart";
-import "package:entoli_chat/ui/theme.dart" show appTitle;
+import "package:entoli_core/view/theme.dart" show appTitle;
 
 void main() {
   // About's row says "and its licence"; this is the licence it means.

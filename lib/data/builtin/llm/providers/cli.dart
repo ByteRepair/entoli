@@ -7,22 +7,21 @@ import "package:collection/collection.dart";
 import "package:flutter/foundation.dart" show mustCallSuper, protected;
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
-
-import "package:entoli_chat/core/log.dart";
-import "../../../../core/tls.dart";
-import "package:entoli_chat/domain/download.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/model_capability.dart";
-import "package:entoli_chat/domain/model_registry.dart";
-import "package:entoli_chat/domain/shell.dart"
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/download.dart";
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/model_capability.dart";
+import "package:entoli_core/model/model_registry.dart";
+import "package:entoli_core/model/shell.dart"
     show guestHome, guestPath, shellQuoted;
+
+import "../../../../core/tls.dart";
 import "../../../download.dart";
 import "../../../local/file_modes.dart";
 import "../hosted_models.dart";
 import "../llm_client.dart";
 import "cli_release.dart";
 import "provider.dart";
-
 export "cli_release.dart";
 
 /// Another harness's command-line program — Claude CLI, Codex — answering in

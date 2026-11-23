@@ -1,11 +1,11 @@
 import "dart:async";
 
 import "package:flutter/services.dart";
+import "package:entoli_core/model/loudness.dart";
+import "package:entoli_core/model/voice.dart";
+import "package:entoli_core/model/voice_model.dart";
+import "package:entoli_core/model/voice_model_store.dart";
 
-import "package:entoli_chat/domain/loudness.dart";
-import "package:entoli_chat/domain/voice.dart";
-import "package:entoli_chat/domain/voice_model.dart";
-import "package:entoli_chat/domain/voice_model_store.dart";
 import "../model_host/model_process.dart";
 import "remote_speaker.dart";
 import "sherpa_voice.dart";

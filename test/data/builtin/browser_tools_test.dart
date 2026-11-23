@@ -13,12 +13,12 @@ import "package:agent_chat/data/browser/helium.dart";
 import "package:agent_chat/data/builtin/tools/browser_tools.dart";
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/builtin_project.dart" show AgentCapability;
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/builtin_project.dart" show AgentCapability;
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/shell.dart";
 import "package:agent_chat/data/builtin/tools/agent_tool.dart";
 import "package:agent_chat/data/builtin/system_prompt.dart";
 

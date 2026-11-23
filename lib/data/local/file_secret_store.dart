@@ -4,10 +4,10 @@ import "dart:io";
 import "dart:typed_data";
 
 import "package:path/path.dart" as p;
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/documents.dart" show RenameWriter;
-import "package:entoli_chat/domain/secret_store.dart";
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/documents.dart" show RenameWriter;
+import "package:entoli_core/model/secret_store.dart";
 
 /// Secrets in a plain file under the data directory — what a platform gets
 /// where there is no system keyring to hold them: Android before its Keystore

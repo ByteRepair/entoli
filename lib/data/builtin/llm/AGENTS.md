@@ -110,7 +110,7 @@ asks for a model.
 
 **What a model can do is its type.** A provider `serve`s a model id as one
 `Model` per thing it does
-(`packages/entoli_chat/lib/domain/model_capability.dart`): a `ChatModel`, an
+(`packages/entoli_core/lib/model/model_capability.dart`): a `ChatModel`, an
 `ImageModel`, a `TranscriptionModel`, a `SynthesisModel`. `LlmProvider` serves
 chat alone; `OpenAiCompatibleProvider` adds the other three over its client's
 image and audio endpoints, as the model's catalog entry describes it, or all of
@@ -199,7 +199,7 @@ does allow is a reply that runs away, which the switch is for.
 ## How much of an allowance is spent
 
 `LlmProvider.usage` answers it, as a list of `ProviderUsage`s
-(`packages/entoli_chat/lib/domain/provider_usage.dart`), of two kinds. A
+(`packages/entoli_core/lib/model/provider_usage.dart`), of two kinds. A
 `UsageWindow` is an allowance: a label in the provider's own period, what is
 `used` of a `max`, the unit the two are counted in, and when it starts again
 where the provider says. `used` is always what is gone — a provider that reports
@@ -536,7 +536,7 @@ Failures are reported as they happen: a rejected key or a bad request reaches
 that never opened) emits `RetryEvent` the instant it fails. `ErrorEvent` carries
 whether the failure was retryable — read off the exception the query died on —
 and that flag is what the controller's automatic retry rounds ask before
-re-entering `resume` (see `packages/entoli_chat/lib/domain/room/AGENTS.md`,
+re-entering `resume` (see `packages/entoli_core/lib/model/room/AGENTS.md`,
 "Automatic retry rounds"); `_fail`, for a failure the turn never reached a model
 through, leaves it false. A request that died mid-stream is retryable too, and
 safe to resume, because resuming appends to the same reply rather than starting

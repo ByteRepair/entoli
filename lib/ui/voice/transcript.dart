@@ -1,8 +1,8 @@
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/speech_text.dart";
-import "package:entoli_chat/app/transcript/activities/catalog.dart"
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/speech_text.dart";
+import "package:entoli_core/transcript/activities/catalog.dart"
     show toolActivityFor;
-import "package:entoli_chat/app/transcript/activities/command.dart"
+import "package:entoli_core/transcript/activities/command.dart"
     show ranACommand;
 
 /// Who a transcript line belongs to. Three rather than the issue's two: a turn

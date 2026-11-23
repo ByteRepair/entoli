@@ -38,7 +38,7 @@ Entoli registers the `entoli://` scheme on every platform — Android's
 `HKLM\Software\Classes\entoli` in the MSI. `app_links` delivers them, the
 launching one and every one after, on one stream that `IncomingLinks` (wrapped
 in `main` beside `IncomingShares`) reads. What a link means is
-`AppLink.parse` (`packages/entoli_chat/lib/domain/app_link.dart`), and nothing
+`AppLink.parse` (`packages/entoli_core/lib/model/app_link.dart`), and nothing
 else reads one:
 
 - `entoli://new?prompt=…` — the new-chat screen with the prompt in its
@@ -98,7 +98,7 @@ the text theme, and Playfair Display on the display and headline tiers plus
 the reason the artifacts are the best-looking thing in the app. The cut sits
 below `titleMedium`: at 14pt a serif reads as prose, and putting the buttons
 and timestamps of a UI in a display face is a poster rather than a screen.
-Both are bundled in `ui/fonts.dart` beside Roboto Mono, as static instances of
+Both are bundled in `view/fonts.dart` beside Roboto Mono, as static instances of
 the Google Fonts variable fonts — the engine reads no `opsz` axis, and a
 variable `wght` makes every weight request synthetise or clamp. They reach the
 theme through `entoliTheme`'s `fontFamily: bodyFamily` plus a partial
@@ -137,7 +137,7 @@ softening is what makes them pastel; bold and theme seeds go through
 `fidelity`, which keeps the seed's chroma so the app looks like the swatch.
 That is also why there is no pastel brown or slate: `tonalSpot` lands
 them next to amber and a blue. The variant travels with the seed (`Seed` in
-`ui/theme.dart`), since a bold primary can sit beside a pastel secondary.
+`view/theme.dart`), since a bold primary can sit beside a pastel secondary.
 
 `fidelity` also tints every surface with the seed, which the operating systems'
 own themes do not: iOS/macOS, Windows, Adwaita, Breeze and Ubuntu paint their
@@ -195,10 +195,10 @@ The exceptions are the two voice colours beside `entoliIndigo`, and why they
 are not seeded is in "The screen".
 
 `AppTheme` mirrors material's `ThemeMode` rather than holding one. Nothing in
-`domain/` imports material — `core/config.dart` does reach `foundation`, so this
+`domain/` imports material — `model/config.dart` does reach `foundation`, so this
 is about the framework's UI half rather than about Flutter at all — and the name
 in `settings.json` should not be pinned to a framework enum's, which would make
-the file unreadable if that enum were ever renamed. `ui/theme.dart` is the one
+the file unreadable if that enum were ever renamed. `view/theme.dart` is the one
 place that maps between them, and the label the settings page draws is on the
 enum, the arrangement `ApproveMode` already has.
 

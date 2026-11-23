@@ -1,7 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/ui/selection/copied_document.dart";
-import "package:entoli_chat/ui/selection/copy_format.dart";
+import "package:entoli_core/view/selection/copied_document.dart";
+import "package:entoli_core/view/selection/copy_format.dart";
 
 // The two ways a selection is written, over documents built by hand: what
 // is drawn is the reader's business and the widget tests', and these pin

@@ -4,14 +4,14 @@ import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:uuid/uuid.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/background_work.dart";
+import "package:entoli_core/model/download.dart";
+import "package:entoli_core/model/llm_provider.dart";
 
-import "package:entoli_chat/core/log.dart";
 import "../../data/builtin/llm/providers/cli_sign_in.dart";
 import "../../data/builtin/llm/providers/presets.dart" show CliProvider;
-import "package:entoli_chat/domain/background_work.dart";
-import "package:entoli_chat/domain/download.dart";
 import "../downloads/downloads.dart" show DownloadState;
-import "package:entoli_chat/domain/llm_provider.dart";
 import "../../providers.dart";
 import "../downloads/cli_downloads.dart";
 

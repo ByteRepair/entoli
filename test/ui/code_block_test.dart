@@ -3,9 +3,8 @@ import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:re_highlight/styles/github-dark.dart";
 import "package:re_highlight/styles/github.dart";
-
-import "package:entoli_chat/ui/chat/widgets/code_block.dart";
-import "package:entoli_chat/ui/fonts.dart";
+import "package:entoli_core/view/chat/widgets/code_block.dart";
+import "package:entoli_core/view/fonts.dart";
 
 import "../harness.dart";
 

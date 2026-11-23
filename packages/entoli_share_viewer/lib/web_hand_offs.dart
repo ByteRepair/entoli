@@ -2,9 +2,9 @@ import "dart:async";
 import "dart:convert";
 import "dart:js_interop";
 
-import "package:entoli_chat/domain/chat_store.dart";
-import "package:entoli_chat/domain/file_handoff.dart";
-import "package:entoli_chat/domain/link_opener.dart";
+import "package:entoli_core/model/chat_store.dart";
+import "package:entoli_core/model/file_handoff.dart";
+import "package:entoli_core/model/link_opener.dart";
 import "package:file/file.dart";
 import "package:flutter/widgets.dart";
 import "package:path/path.dart" as p;

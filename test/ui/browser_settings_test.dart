@@ -1,15 +1,14 @@
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:agent_chat/data/browser/cdp_browser.dart";
 import "package:agent_chat/data/browser/helium.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/app_settings.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/settings/settings_category.dart";
 
 import "../harness.dart";
-import "package:agent_chat/ui/settings/settings_category.dart";
 
 void main() {
   late TestApp app;

@@ -7,15 +7,14 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/room/room_state.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/room/room_state.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/widgets/browser_input.dart";
 import "package:agent_chat/ui/chat/widgets/browser_strip.dart";
 import "package:agent_chat/ui/chat/widgets/running_strip.dart";
-import "package:entoli_chat/ui/chat/activity/card.dart"
+import "package:entoli_core/view/chat/activity/card.dart"
     show transcriptHandOffProvider;
 import "package:agent_chat/ui/chat/activity/context_hand_off.dart";
 

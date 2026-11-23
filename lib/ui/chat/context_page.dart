@@ -2,13 +2,13 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/mirror_controller.dart";
-import "package:entoli_chat/core/formatting.dart" show tokenCount;
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/prompt_library.dart" show nameOf;
+import "package:entoli_core/model/formatting.dart" show tokenCount;
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/prompt_library.dart" show nameOf;
 import "../../providers.dart";
-import "package:entoli_chat/ui/widgets/agent_picture.dart";
-import "package:entoli_chat/ui/widgets/empty_pane.dart";
-import "package:entoli_chat/ui/widgets/page_bar.dart";
+import "package:entoli_core/view/widgets/agent_picture.dart";
+import "package:entoli_core/view/widgets/empty_pane.dart";
+import "package:entoli_core/view/widgets/page_bar.dart";
 import "../widgets/section_header.dart" show mutedParagraph;
 import "../widgets/segmented_meter.dart";
 

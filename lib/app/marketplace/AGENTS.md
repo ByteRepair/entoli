@@ -28,7 +28,7 @@ entry of a list carries narrows nothing and is not offered (`tagsOf`), which
 is what keeps `external` off a collection of remote entries; a list no tag
 narrows has no filter icon in its bar. The search box searches — name and description alike, over the entries the fetch already
 holds, nothing re-read off disk; the needle is the sidebar's
-`searchNeedle` (`domain/chat_search.dart`), the one shared rule for what a typed query compares as, and
+`searchNeedle` (`model/chat_search.dart`), the one shared rule for what a typed query compares as, and
 the lowercased name and description the match reads are `late final` on the
 entry, once per entry rather than once per keystroke — and the filter icon
 opens the tab's tag picker. Both filter the list in the order it is drawn

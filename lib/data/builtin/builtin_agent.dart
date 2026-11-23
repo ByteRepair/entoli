@@ -5,28 +5,28 @@ import "dart:typed_data";
 import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:file/file.dart";
 import "package:uuid/uuid.dart";
-import "package:entoli_chat/core/log.dart" show logFailure;
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/agent_definition.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/ask.dart";
-import "package:entoli_chat/domain/file_tools.dart";
-import "package:entoli_chat/domain/goal.dart";
-import "package:entoli_chat/domain/todo.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/plan.dart" show planInProgress, writesPlan;
-import "package:entoli_chat/domain/profile.dart";
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/system_notification.dart";
-import "package:entoli_chat/domain/tone.dart";
-import "package:entoli_chat/domain/tool_arg.dart";
-import "package:entoli_chat/domain/work_folders.dart" show grantsNow;
-import "package:entoli_chat/domain/trigger_manager.dart" show TriggerRegistry;
-import "package:entoli_chat/domain/turn_recorder.dart";
-import "package:entoli_chat/domain/web_search.dart";
-import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_core/model/log.dart" show logFailure;
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/agent_definition.dart";
+import "package:entoli_core/model/agent_browser.dart";
+import "package:entoli_core/model/ask.dart";
+import "package:entoli_core/model/file_tools.dart";
+import "package:entoli_core/model/goal.dart";
+import "package:entoli_core/model/todo.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/plan.dart" show planInProgress, writesPlan;
+import "package:entoli_core/model/profile.dart";
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/system_notification.dart";
+import "package:entoli_core/model/tone.dart";
+import "package:entoli_core/model/tool_arg.dart";
+import "package:entoli_core/model/work_folders.dart" show grantsNow;
+import "package:entoli_core/model/trigger_manager.dart" show TriggerRegistry;
+import "package:entoli_core/model/turn_recorder.dart";
+import "package:entoli_core/model/web_search.dart";
+import "package:entoli_core/model/app_settings.dart";
 
 import "approval_gate.dart";
 import "background_jobs.dart";
@@ -260,7 +260,7 @@ class BuiltinAgent implements Turn {
   /// The chat's goal, read at each stop; null for a turn that keeps none — a
   /// sub-agent's, or a test's. The turn never writes it: what a review finds
   /// goes out as a [GoalEvent], which the room puts on the log the goal is
-  /// folded from. See "Goals" in `packages/entoli_chat/lib/domain/AGENTS.md`.
+  /// folded from. See "Goals" in `packages/entoli_core/lib/model/AGENTS.md`.
   final GoalReader? goal;
 
   /// Who decides, at a stop, whether [goal] is met. Without one the goal is
@@ -897,7 +897,7 @@ class BuiltinAgent implements Turn {
   /// and is gone when the turn ends — the way the system prompt is rewritten
   /// rather than added to. Nothing logs it, so a session that kept it would
   /// hold a message no reload could rebuild; see "The projection" in
-  /// `packages/entoli_chat/lib/domain/AGENTS.md` for what that cost.
+  /// `packages/entoli_core/lib/model/AGENTS.md` for what that cost.
   Stream<AgentEvent> resume({List<String> mentions = const []}) async* {
     await _setSystemPrompt(mentions);
     final turn = _recorded(_loop);

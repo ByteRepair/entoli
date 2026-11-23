@@ -1,7 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/app/app_items.dart";
-import "package:entoli_chat/domain/availability.dart";
+import "package:entoli_core/model/availability.dart";
 
 void main() {
   const facts = (

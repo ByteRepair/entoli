@@ -1,4 +1,5 @@
-import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_core/model/llm_provider.dart";
+
 import "../http_stream.dart";
 import "provider.dart";
 

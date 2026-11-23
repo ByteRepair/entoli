@@ -4,14 +4,14 @@ import "dart:io";
 import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-import "package:entoli_chat/core/migrations.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/chat_meta.dart";
-import "package:entoli_chat/domain/permission.dart";
-import "package:entoli_chat/domain/project_settings.dart";
-import "package:entoli_chat/domain/temp_chat_ttl.dart";
-import "package:entoli_chat/domain/trigger.dart";
-import "package:entoli_chat/domain/tristate.dart";
+import "package:entoli_core/model/migrations.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/chat_meta.dart";
+import "package:entoli_core/model/permission.dart";
+import "package:entoli_core/model/project_settings.dart";
+import "package:entoli_core/model/temp_chat_ttl.dart";
+import "package:entoli_core/model/trigger.dart";
+import "package:entoli_core/model/tristate.dart";
 
 import "../harness.dart";
 

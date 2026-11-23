@@ -1,6 +1,7 @@
-import "package:entoli_chat/domain/chat_search.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart";
+import "package:entoli_core/model/chat_search.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart";
+
 import "remote_projects.dart";
 
 /// Running chats first, then the rest; most recently touched first in each.

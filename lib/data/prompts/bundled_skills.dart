@@ -13,10 +13,10 @@ import "dart:io";
 import "package:path/path.dart" as p;
 import "package:crypto/crypto.dart";
 import "package:flutter/foundation.dart";
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/read_only_dirs.dart";
+import "package:entoli_core/model/log.dart";
 
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/core/read_only_dirs.dart";
-import "package:entoli_chat/core/log.dart";
 import "bundled_skill_data.dart";
 
 /// Writes every bundled skill file from [bundledSkillFiles] into the project

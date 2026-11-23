@@ -1,10 +1,10 @@
 import "package:flutter/services.dart";
 import "package:http/http.dart" as http;
 
-import "package:entoli_chat/domain/local_model.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/model_budget.dart";
-import "package:entoli_chat/domain/models.dart" show ModelChoice;
+import "package:entoli_core/model/local_model.dart";
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/model_budget.dart";
+import "package:entoli_core/model/models.dart" show ModelChoice;
 import "../builtin/llm/llm_client.dart";
 import "../builtin/llm/providers/provider.dart";
 import "channel_generation.dart";
@@ -12,7 +12,7 @@ import "../model_host/model_process.dart";
 
 // The ids live in the domain beside `localProviderId`, exported here for the
 // tests and the pages that name the model.
-export "package:entoli_chat/domain/local_model.dart"
+export "package:entoli_core/model/local_model.dart"
     show appleProviderId, appleModelId;
 
 /// The Apple on-device model, reached through its own framework as an

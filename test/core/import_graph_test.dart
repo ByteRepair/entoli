@@ -7,10 +7,10 @@ import "package:path/path.dart" as p;
 /// two are one layout split in two, so a layer is a layer in either.
 final _roots = {
   "agent_chat": p.normalize(p.absolute("lib")),
-  "entoli_chat": p.normalize(p.absolute("packages", "entoli_chat", "lib")),
+  "entoli_core": p.normalize(p.absolute("packages", "entoli_core", "lib")),
 };
 
-/// [file] from the `lib/` it is in, so `domain/models.dart` in either.
+/// [file] from the `lib/` it is in, so `model/models.dart` in either.
 String _relative(String file) => p.relative(
   file,
   from: _roots.values.firstWhere((root) => p.isWithin(root, file)),
@@ -108,54 +108,67 @@ void main() {
     ], isEmpty);
   });
 
-  // Between the layers, `domain/` is the app's own terms and knows nothing of
-  // how it is stored or drawn, `data/` stores and runs without knowing how it
-  // is drawn, and `app/` is the core `ui/` renders, so it knows
-  // none of them. `core/` and `main.dart` assemble the app and may reach
-  // anything.
+  // In the core, `model/` is the terms, `store/` the disk under them and
+  // `transcript/` what `view/` draws. In the app, `data/` runs without knowing
+  // how it is drawn and `app/` is what `ui/` renders; `core/` and `main.dart`
+  // assemble it and may reach anything.
+  const above = {
+    "agent_chat": {
+      "data": {"app", "ui"},
+      "app": {"ui"},
+    },
+    "entoli_core": {
+      "model": {"store", "transcript", "view"},
+      "store": {"transcript", "view"},
+      "transcript": {"view"},
+    },
+  };
+  String? packageOf(String file) =>
+      _roots.entries.where((e) => p.isWithin(e.value, file)).firstOrNull?.key;
+
+  test("each layer imports nothing of the layers above it", () {
+    String layer(String file) => p.split(_relative(file)).first;
+    expect([
+      for (final MapEntry(key: file, value: imports) in _graph().entries)
+        for (final target in imports)
+          if (packageOf(file) == packageOf(target) &&
+              (above[packageOf(file)]?[layer(file)]?.contains(layer(target)) ??
+                  false))
+            "${_relative(file)} -> ${_relative(target)}",
+    ], isEmpty);
+  });
+
+  // The graph above sees only the app's own files, so a widget library is
+  // checked by name. `foundation` is the listenables a model is made of.
   test(
-    "domain imports nothing of data, app or ui; data and app nothing of ui",
+    "the app's core and the transcript import no Flutter but foundation",
     () {
-      const above = {
-        "domain": {"data", "app", "ui"},
-        "data": {"app", "ui"},
-        "app": {"ui"},
-      };
-      String layer(String file) => p.split(_relative(file)).first;
+      final flutter = RegExp(
+        r'^(?:import|export)\s+"package:flutter/(\w+)\.dart"',
+        multiLine: true,
+      );
       expect([
-        for (final MapEntry(key: file, value: imports) in _graph().entries)
-          for (final target in imports)
-            if (above[layer(file)]?.contains(layer(target)) ?? false)
-              "${_relative(file)} -> ${_relative(target)}",
+        for (final dir in [
+          p.join(_roots["agent_chat"]!, "app"),
+          p.join(_roots["entoli_core"]!, "transcript"),
+        ])
+          for (final file in Directory(
+            dir,
+          ).listSync(recursive: true).whereType<File>())
+            if (file.path.endsWith(".dart"))
+              for (final m in flutter.allMatches(file.readAsStringSync()))
+                if (m.group(1) != "foundation")
+                  "${_relative(file.path)} -> flutter/${m.group(1)}",
       ], isEmpty);
     },
   );
 
-  // The graph above sees only the app's own files, so a widget library is
-  // checked by name. `foundation` is the listenables a model is made of.
-  test("app imports no Flutter library but foundation", () {
-    final flutter = RegExp(
-      r'^(?:import|export)\s+"package:flutter/(\w+)\.dart"',
-      multiLine: true,
-    );
-    expect([
-      for (final lib in _roots.values)
-        for (final file in Directory(
-          p.join(lib, "app"),
-        ).listSync(recursive: true).whereType<File>())
-          if (file.path.endsWith(".dart"))
-            for (final m in flutter.allMatches(file.readAsStringSync()))
-              if (m.group(1) != "foundation")
-                "${_relative(file.path)} -> flutter/${m.group(1)}",
-    ], isEmpty);
-  });
-
-  // The share viewer runs the chat package without the app, which is what
+  // The share viewer runs the core without the app, which is what
   // keeps voice and the native plugins out of it.
-  test("the chat package imports nothing of the app", () {
+  test("the core imports nothing of the app", () {
     final graph = _graph();
     final app = _roots["agent_chat"]!;
-    final chat = _roots["entoli_chat"]!;
+    final chat = _roots["entoli_core"]!;
     expect([
       for (final MapEntry(key: file, value: imports) in graph.entries)
         if (p.isWithin(chat, file))

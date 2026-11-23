@@ -1,4 +1,5 @@
-import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_core/model/llm_provider.dart";
+
 import "anthropic.dart";
 import "claude_cli.dart";
 import "cli.dart";
@@ -9,7 +10,6 @@ import "local_servers.dart";
 import "openai.dart";
 import "openrouter.dart";
 import "provider.dart";
-
 export "anthropic.dart";
 export "claude_cli.dart";
 export "cli.dart";

@@ -2,7 +2,7 @@ import "dart:async";
 import "dart:convert";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:entoli_chat/domain/documents.dart";
+import "package:entoli_core/model/documents.dart";
 
 /// A writer whose writes are [write] of the text, with no filesystem.
 RenameWriter _writer(Future<void> Function(String path, String text) write) =>

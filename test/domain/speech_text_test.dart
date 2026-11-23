@@ -1,4 +1,4 @@
-import "package:entoli_chat/domain/speech_text.dart";
+import "package:entoli_core/model/speech_text.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {

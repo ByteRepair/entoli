@@ -1,8 +1,8 @@
 import "dart:async";
 
 import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
+import "package:entoli_core/model/log.dart";
 
-import "package:entoli_chat/core/log.dart";
 import "cli.dart";
 
 /// One sign-in of a CLI's program, run the way the program runs its own: it

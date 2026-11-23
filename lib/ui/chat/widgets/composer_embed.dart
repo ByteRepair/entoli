@@ -1,10 +1,9 @@
 import "package:flutter/material.dart";
+import "package:entoli_core/model/formatted_text.dart";
+import "package:entoli_core/model/quote.dart";
+import "package:entoli_core/view/widgets/action_icon.dart";
 
 import "../../../app/embed_text.dart";
-
-import "package:entoli_chat/domain/formatted_text.dart";
-import "package:entoli_chat/domain/quote.dart";
-import "package:entoli_chat/ui/widgets/action_icon.dart";
 
 /// Something in the composer that is not typed text: drawn in the field as a
 /// widget, sent as the markdown it stands for. The field holds one character

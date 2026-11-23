@@ -3,9 +3,8 @@ import "dart:math" as math;
 
 import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
 import "package:record/record.dart";
-
-import "package:entoli_chat/domain/loudness.dart";
-import "package:entoli_chat/domain/voice.dart";
+import "package:entoli_core/model/loudness.dart";
+import "package:entoli_core/model/voice.dart";
 
 /// The microphone, once the user has allowed it. `AudioRecorder` is the only
 /// thing here that can ask for the grant, so both kinds of listener ask through

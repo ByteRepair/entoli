@@ -306,7 +306,7 @@ the one trap both pickers had spelled out separately: a value no item carries is
 what `DropdownButton` asserts on, so a setting naming something since deleted
 has to fall back to null.
 
-`DownloadProgress` in `domain/download.dart` is what a store reports, and it is
+`DownloadProgress` in `model/download.dart` is what a store reports, and it is
 one type because it was the same three fields twice — a bar reading one of them
 cannot tell which store filled it in.
 
@@ -328,7 +328,7 @@ roles alone, since nothing says one of its models is anything else.
 the built-in snapshot are trimmed to those. Structured output went for that
 reason: nothing sends a schema, the background roles parse their JSON from text.
 
-The models come from `ModelCatalog` (`domain/model_registry.dart`), which is
+The models come from `ModelCatalog` (`model/model_registry.dart`), which is
 models.dev's own shape: a provider
 is matched to its models.dev entry by its Provider ID
 (`LlmProviderConfig.catalogId`), then by base URL, and the model by its exact

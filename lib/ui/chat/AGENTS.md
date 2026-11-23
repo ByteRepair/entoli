@@ -2,7 +2,7 @@
 
 What the page draws is a fact about the room; the room itself — its turns,
 its schedule, Omada's routing, retry rounds — is
-`packages/entoli_chat/lib/domain/room/AGENTS.md`.
+`packages/entoli_core/lib/model/room/AGENTS.md`.
 
 ## What the turn's extraction kept
 
@@ -166,7 +166,7 @@ Where there is no transcript the drawer shows what the call returned instead.
 ### Selecting a reply, and copying it
 
 The **message** is one `RichSelectionArea`
-(`packages/entoli_chat/lib/ui/selection/`): a `SelectionArea` with one
+(`packages/entoli_core/lib/view/selection/`): a `SelectionArea` with one
 `SelectionContainer` under it and nothing between that and the fragments —
 heading, paragraph, list item, code line, formula — so a drag runs from the
 first paragraph to the last, and copy answers from the same fragments the
@@ -190,7 +190,7 @@ must not put "Thought for 12 seconds" on the clipboard. The `SelectableText` in
 a label's drawer is on its own route, so nothing nests.
 
 **Everything a copy of a selection is lives in
-`packages/entoli_chat/lib/ui/selection/`**, behind interfaces, so the bubble
+`packages/entoli_core/lib/view/selection/`**, behind interfaces, so the bubble
 says only which markdown it drew. The pieces, in the order a copy passes through
 them:
 
@@ -224,7 +224,7 @@ them:
   itself, since none of them can typeset TeX — see below).
 - `writeClipboard` is where it goes. Flutter cannot do this alone:
   `Clipboard.setData` sends one string to an embedder that writes it as
-  `text/plain`, so it (`core/platform/rich_clipboard.dart`) writes both through a channel,
+  `text/plain`, so it (`view/rich_clipboard.dart`) writes both through a channel,
   `agent_chat/clipboard`, answered by a few lines in each runner (GTK targets,
   `NSPasteboard`, `UIPasteboard`, `ClipData.newHtmlText`, `CF_HTML`); a runner
   that does not answer gets the plain text. The Apple runners write RTFD and
@@ -283,7 +283,7 @@ What can be done to a message is a row under it rather than a menu, uncovered by
 hovering the message or, where there is no pointer to hover with, by touching
 it. Left to right: which thread this is and the arrows between them, copy,
 raw copy, delete, then Edit and Regenerate. **Copy takes the formatted text**
-(`formattedTextOf`, in `packages/entoli_chat/lib/domain/formatted_text.dart`,
+(`formattedTextOf`, in `packages/entoli_core/lib/model/formatted_text.dart`,
 parsed with the same grammar the renderer reads, so the two cannot disagree
 about what a fence is) — what a reader would paste into another document, with
 its HTML beside it. A selection's plain half is markdown instead, since a range
@@ -318,8 +318,8 @@ of it, because markdown reads a line straight after a `>` line as more of the
 quote. A reply is quoted under its author's handle, `> @scout` and an empty
 `>` line above the passage: the handle is an ordinary mention, which is what
 routes the answer to them (see "The contract between direct and Omada chats"
-in `packages/entoli_chat/lib/domain/room/AGENTS.md`); the user's own message
-carries none. `Quote` (`domain/quote.dart`) is that blockquote both ways.
+in `packages/entoli_core/lib/model/room/AGENTS.md`); the user's own message
+carries none. `Quote` (`model/quote.dart`) is that blockquote both ways.
 
 **A card is one character of the field.** The encoding is the core's,
 `EmbedText` (`lib/app/embed_text.dart`), which knows an embed only as its
@@ -402,7 +402,7 @@ column where the line you want next is the one below. That goes to `p`,
 is about the reply, not about the `<p>` element, and `fromTheme` hands all four
 the same plain `bodyMedium`. A list is the shape a reply most often takes.
 
-**Code is set in a bundled face**, and `ui/fonts.dart` is the whole of what
+**Code is set in a bundled face**, and `view/fonts.dart` is the whole of what
 Dart knows about it. `monospace` is an alias the platform resolves, so the same
 reply was Roboto Mono on one Android, Droid Sans Mono on another and DejaVu on
 this desktop — and the five things
@@ -411,7 +411,7 @@ config value) are shown that way precisely because their characters line up.
 Roboto Mono is the mono companion to the face Material already uses.
 
 `monoFamily` and `registerBundledFontLicences` are in a file of their own
-rather than in `ui/theme.dart`, which owns the palette and could not read an
+rather than in `view/theme.dart`, which owns the palette and could not read an
 asset if it wanted to. Five facts have to move together — the `family` and the
 two `.ttf` entries in pubspec's `fonts:` block, the `OFL.txt` asset, and those
 two — so they are one file and one section here rather than scattered by
@@ -447,7 +447,7 @@ its fonts bundled, nothing native. `$…$` and `\(…\)` set a formula in the
 sentence; `$$…$$` and `\[…\]` set it on a line of its own, centred and
 scrolling sideways when wider than the column, as a code block does.
 
-The delimiters are read in `domain/math_syntax.dart`, as markdown syntaxes
+The delimiters are read in `model/math_syntax.dart`, as markdown syntaxes
 rather than a pass over the finished text, so nothing inside a formula is
 taken for markdown first: `a_b_c` is not italics, and a line of a multi-line
 formula starting `- ` is not a list. The block rule is there for that last
@@ -463,7 +463,7 @@ is shown as it was written. A formula is selected whole and copies as its
 TeX; see "Selecting a reply, and copying it".
 
 The renderer and the copy read one grammar, `replyExtensionSet`, beside
-`parseReply` in `domain/formatted_text.dart`. Parsed TeX is kept the way a code
+`parseReply` in `model/formatted_text.dart`. Parsed TeX is kept the way a code
 block's spans are, and for the same re-parse on every frame of a cross-fade —
 keyed on the TeX, since the tree carries no style, so a theme change keeps
 every entry. **But a tree is drawn in one place at a time**:
@@ -617,7 +617,7 @@ opening clears it, and so does a marker landing.
 ## Activities, on screen
 
 What a reply is made of is the core's:
-`packages/entoli_chat/lib/app/transcript/`, which imports no widget. The UI
+`packages/entoli_core/lib/transcript/`, which imports no widget. The UI
 draws what it returns and decides nothing of what a row is. The layers, each
 knowing only the one below:
 
@@ -626,7 +626,7 @@ knowing only the one below:
   an artifact or skill card. It answers `important` (does it stand on its
   own row), `node` (what it is on screen) and `detail` (what is behind it),
   as data, read through a `SettingReader`
-  (`packages/entoli_chat/lib/app/reader.dart`) — the drawing widget's ref — so
+  (`packages/entoli_core/lib/transcript/reader.dart`) — the drawing widget's ref — so
   what changes while a turn runs, a job's state or the plan, is watched by
   whoever draws it. `follow` is how an open detail re-reads its message as the
   turn runs: a tool run by its call, a thinking block by where it sits. **How a
@@ -670,7 +670,7 @@ knowing only the one below:
   `MessageActions` is what can be done to a message and does it: the
   threads and the steps between them, delete and its question, edit,
   regenerate, react — every rule of when each is on offer.
-- **Ports**, bound at the root. `core/transcript_bindings.dart` is the
+- **Ports**, bound at the root. `view/transcript_bindings.dart` is the
   drawing's own: `ActivityCatalog`, which `TranscriptActivities` implements
   over every kind. The catalogue is bound rather than imported because a
   sub-agent's detail holds a transcript that is made of activities: the
@@ -831,7 +831,7 @@ or lost. Running, the label says "Running in the background" and the drawer
 has the command, "Running · pid" under the title, Stop beside the close
 button, and the end of the log as it grows (re-read every half second while
 the file changes). Ended, it says how, from the log's `jobEnded` call event
-(see "The conversation log" in `packages/entoli_chat/lib/domain/AGENTS.md`),
+(see "The conversation log" in `packages/entoli_core/lib/model/AGENTS.md`),
 with the last lines the chat kept and an Open log button to the whole log in
 `TextFilePage`, disabled once the workspace no longer has the file and absent on
 a mirror, whose workspace is elsewhere. Lost, it ended with the app, or on a
@@ -911,7 +911,7 @@ the fragment, which a browser never sends to the server. The zip is a data
 directory of that one chat — the stamp, `share.json` naming it, and the chat
 under the default project — so unpacking it is `AppConfig.load` over a
 directory like any other, and a link from an older build is brought up by
-the migration chain (`packages/entoli_chat/lib/data/chat_share.dart`).
+the migration chain (`packages/entoli_core/lib/store/chat_share.dart`).
 
 **What goes is the conversation, never the setup.** `conv.jsonl` and the
 sub-agents' transcripts always go; the state goes stripped to id, title and
@@ -935,7 +935,7 @@ after: the sections that would go are drawn in red, and
 every tick moves it. A zip compresses each member alone, so the link's length
 is the conversation's cost plus each ticked piece's, exactly — what is ticked
 together is compressed together, once (`ChatShareSource.measure`, one
-`compute`), and `shareFit` (`packages/entoli_chat/lib/domain/chat_share.dart`)
+`compute`), and `shareFit` (`packages/entoli_core/lib/model/chat_share.dart`)
 sums them. Share joins those compressed members as they are rather than
 compressing again. A piece whose size alone is past what deflate could bring
 under the cap is answered a bound past it, never read.

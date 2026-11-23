@@ -1,7 +1,8 @@
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/plan.dart" show planDoneToolName;
-import "package:entoli_chat/domain/system_notification.dart";
-import "package:entoli_chat/domain/todo.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/plan.dart" show planDoneToolName;
+import "package:entoli_core/model/system_notification.dart";
+import "package:entoli_core/model/todo.dart";
+
 import "../llm/llm_client.dart";
 import "agent_tool.dart";
 import "turn.dart";

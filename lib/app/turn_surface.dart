@@ -1,6 +1,6 @@
-import "package:entoli_chat/domain/ask.dart" show AskRequest;
-import "package:entoli_chat/domain/models.dart" show ToolApproval;
-import "package:entoli_chat/domain/room/room_state.dart";
+import "package:entoli_core/model/ask.dart" show AskRequest;
+import "package:entoli_core/model/models.dart" show ToolApproval;
+import "package:entoli_core/model/room/room_state.dart";
 
 /// What a running turn puts on screen above whatever answers it — the
 /// offer to carry on, the question, the approvals — and when each shows: the

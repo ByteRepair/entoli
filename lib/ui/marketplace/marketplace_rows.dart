@@ -1,13 +1,13 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/formatting.dart" show plural, safeCut;
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/view/bot_avatar/bot_avatar_view.dart";
 
 import "../../app/marketplace/face.dart";
 import "../../app/marketplace/groups.dart";
 import "../../app/marketplace/marketplace.dart";
-import "package:entoli_chat/core/formatting.dart" show plural, safeCut;
-import "package:entoli_chat/domain/models.dart";
 import "../../providers.dart";
-import "package:entoli_chat/ui/bot_avatar/bot_avatar_view.dart";
 
 /// What an entry or a collection of another repository's says it is.
 const externalBadge = "External";

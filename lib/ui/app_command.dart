@@ -4,7 +4,6 @@ import "package:flutter/widgets.dart";
 
 import "../app/app_items.dart";
 import "../core/platform/form_factor.dart";
-
 export "../app/app_items.dart";
 
 /// Whether the platform's chord key is Cmd rather than Ctrl.

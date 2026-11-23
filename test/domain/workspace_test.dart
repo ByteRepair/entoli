@@ -3,11 +3,11 @@ import "dart:io";
 
 import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/domain/file_handoff.dart";
-import "package:entoli_chat/domain/file_tools.dart"
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/file_handoff.dart";
+import "package:entoli_core/model/file_tools.dart"
     show outsideWorkspaces, resolveWorkspacePath;
-import "package:entoli_chat/domain/workspace.dart";
+import "package:entoli_core/model/workspace.dart";
 import "package:path/path.dart" as p;
 
 import "../fakes.dart";

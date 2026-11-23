@@ -5,20 +5,20 @@ import "package:file/local.dart";
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:entoli_chat/app/storage.dart";
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/domain/app_restart.dart";
-import "package:entoli_chat/domain/app_secrets.dart";
-import "package:entoli_chat/domain/chat_intents.dart" show ChatIntentAction;
-import "package:entoli_chat/domain/intent_action.dart" show IntentRegistry;
-import "package:entoli_chat/domain/app_settings.dart" show AppSettings;
-import "package:entoli_chat/domain/trigger_manager.dart"
+import "package:entoli_core/transcript/storage.dart";
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/app_restart.dart";
+import "package:entoli_core/model/app_secrets.dart";
+import "package:entoli_core/model/chat_intents.dart" show ChatIntentAction;
+import "package:entoli_core/model/intent_action.dart" show IntentRegistry;
+import "package:entoli_core/model/app_settings.dart" show AppSettings;
+import "package:entoli_core/model/trigger_manager.dart"
     show TriggerRegistryFactory;
-import "package:entoli_chat/domain/project.dart" show everyProject;
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/sync/identity.dart";
-import "package:entoli_chat/ui/fonts.dart";
-import "package:entoli_chat/ui/theme.dart";
+import "package:entoli_core/model/project.dart" show everyProject;
+import "package:entoli_core/model/prompt_library.dart";
+import "package:entoli_core/model/sync/identity.dart";
+import "package:entoli_core/view/fonts.dart";
+import "package:entoli_core/view/theme.dart";
 
 import "app/app_menus.dart";
 import "core/platform/app_menus.dart";
@@ -170,7 +170,7 @@ class AppSession {
     // project inherits, and a project's own overrides same-named default
     // entries for that project alone. Built once at startup so nothing
     // downstream waits on disk; see "Skills and agents" in
-    // `packages/entoli_chat/lib/domain/AGENTS.md`. The builds read independent project dirs, so
+    // `packages/entoli_core/lib/model/AGENTS.md`. The builds read independent project dirs, so
     // they overlap rather than serialise.
     final libraries = Map.fromEntries(
       await Future.wait(
@@ -492,7 +492,7 @@ class AppRelaunch implements AppRestart {
 
 /// The app, and the ability to build it again. A restart here is a second
 /// [AppSession] swapped in and the first thrown away — which is what a restored
-/// backup needs and nothing else does. See `domain/app_restart.dart` for why
+/// backup needs and nothing else does. See `model/app_restart.dart` for why
 /// that rather than telling each holder to look afresh.
 class AppRoot extends StatefulWidget {
   const AppRoot({super.key, required this.session, required this.relaunch});

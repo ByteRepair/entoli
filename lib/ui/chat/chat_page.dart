@@ -4,24 +4,24 @@ import "dart:math" as math;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/room/room_state.dart";
-import "package:entoli_chat/domain/project.dart";
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/room/room_state.dart";
+import "package:entoli_core/model/project.dart";
 import "../../providers.dart";
-import "package:entoli_chat/ui/fonts.dart";
-import "package:entoli_chat/ui/theme.dart";
+import "package:entoli_core/view/fonts.dart";
+import "package:entoli_core/view/theme.dart";
 import "../selection.dart";
 import "../voice/read_aloud.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/chip_row.dart";
 import "../widgets/completion_field.dart";
 import "../widgets/side_panel_frame.dart";
-import "package:entoli_chat/ui/widgets/scrolling.dart";
+import "package:entoli_core/view/widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "../../app/chat_controller.dart";
 import "../../app/chat_session.dart";
-import "package:entoli_chat/app/reader.dart" show WidgetReader;
+import "package:entoli_core/transcript/reader.dart" show WidgetReader;
 import "../../app/new_chat_session.dart";
 import "chat_expiry.dart";
 import "../../app/composer.dart"
@@ -34,21 +34,21 @@ import "../../app/composer.dart"
         ComposerStarting,
         ComposerViewOnly;
 import "../../app/mirror_controller.dart";
-import "package:entoli_chat/ui/chat/plan_page.dart" show PlanButton;
-import "package:entoli_chat/app/transcript/transcript.dart";
-import "package:entoli_chat/core/formatting.dart" show formatRemaining;
+import "package:entoli_core/view/chat/plan_page.dart" show PlanButton;
+import "package:entoli_core/transcript/transcript.dart";
+import "package:entoli_core/model/formatting.dart" show formatRemaining;
 import "widgets/composer.dart";
 import "widgets/turn_surface.dart";
 import "widgets/composer_controller.dart";
 import "widgets/composer_embed.dart";
 import "widgets/paired_project_badges.dart";
-import "package:entoli_chat/ui/chat/widgets/message_bubble.dart";
-import "package:entoli_chat/ui/chat/widgets/conversation_view.dart";
+import "package:entoli_core/view/chat/widgets/message_bubble.dart";
+import "package:entoli_core/view/chat/widgets/conversation_view.dart";
 import "widgets/imported_bar.dart";
 import "widgets/needs_setup_bar.dart";
 import "widgets/view_only_bar.dart";
 import "../voice/voice_page.dart" show openVoice, startVoiceChat;
-import "package:entoli_chat/ui/widgets/dialogs.dart" show notify, sayLater;
+import "package:entoli_core/view/widgets/dialogs.dart" show notify, sayLater;
 
 class ChatPage extends ConsumerWidget {
   const ChatPage({super.key});

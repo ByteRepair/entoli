@@ -1,6 +1,5 @@
 import "package:fake_async/fake_async.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/builtin/llm/rate_limit_gate.dart";
 
 /// The cooldown and the retry budget are measured against `clock`, which

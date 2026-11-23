@@ -1,10 +1,10 @@
 import "dart:io";
 
 import "package:path/path.dart" as p;
+import "package:entoli_core/model/agent_backend.dart";
+import "package:entoli_core/model/shell.dart";
+import "package:entoli_core/model/tool_arg.dart";
 
-import "package:entoli_chat/domain/agent_backend.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/tool_arg.dart";
 import "../../prompts/skill_import.dart" show SkillImportException;
 import "../../prompts/skill_validate.dart"
     show skillDescriptionMax, skillNameMax, skillSpecKeys;

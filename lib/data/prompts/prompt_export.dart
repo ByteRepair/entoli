@@ -5,14 +5,14 @@
 import "dart:io";
 import "dart:typed_data";
 
-import "package:entoli_chat/core/config.dart";
-import "package:entoli_chat/data/zip.dart" show archiveOf;
-import "package:entoli_chat/domain/app_link.dart" show AppLink;
-import "package:entoli_chat/domain/backup_handoff.dart";
-import "package:entoli_chat/domain/bundled_prompt_file.dart"
+import "package:entoli_core/model/config.dart";
+import "package:entoli_core/store/zip.dart" show archiveOf;
+import "package:entoli_core/model/app_link.dart" show AppLink;
+import "package:entoli_core/model/backup_handoff.dart";
+import "package:entoli_core/model/bundled_prompt_file.dart"
     show bundledPromptFileOf, bundledPromptFilesOf;
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/project.dart" show defaultProjectDir;
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/project.dart" show defaultProjectDir;
 
 import "bundled_skill_data.dart" show bundledSkillFiles, bundledAgentFiles;
 import "skill_import.dart"

@@ -4,10 +4,9 @@ import "dart:typed_data" show Uint8List;
 
 import "package:fake_async/fake_async.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/local/ish_ffi.dart" show IshCore;
 import "package:agent_chat/data/local/ish_shell.dart";
-import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_core/model/shell.dart";
 
 /// The session logic of the iSH shell, over [FakeIshTransport] — the seam the
 /// tests run through, since `ishLinked` is false everywhere the suite runs and

@@ -1,4 +1,4 @@
-import "package:entoli_chat/domain/formatted_text.dart";
+import "package:entoli_core/model/formatted_text.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {

@@ -1,11 +1,10 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/goal.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/app/transcript/transcript.dart";
-import "package:entoli_chat/ui/chat/widgets/goal_mark_row.dart";
+import "package:entoli_core/model/goal.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/transcript/transcript.dart";
+import "package:entoli_core/view/chat/widgets/goal_mark_row.dart";
 
 import "../harness.dart" show makeState;
 

@@ -1,5 +1,5 @@
-import "package:entoli_chat/domain/bot_avatar/pose.dart" show hashString;
-import "package:entoli_chat/domain/bot_avatar/spec.dart";
+import "package:entoli_core/model/bot_avatar/pose.dart" show hashString;
+import "package:entoli_core/model/bot_avatar/spec.dart";
 
 /// A marketplace row's face, picked from [key] alone so it is the same on
 /// every device: a preset by hash, coloured as an uncoloured avatar of the

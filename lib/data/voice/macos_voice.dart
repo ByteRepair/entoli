@@ -1,5 +1,6 @@
-import "package:entoli_chat/domain/voice.dart";
-import "package:entoli_chat/domain/voice_model.dart";
+import "package:entoli_core/model/voice.dart";
+import "package:entoli_core/model/voice_model.dart";
+
 import "android_voice.dart";
 
 /// Voice mode on macOS: Apple's own engines — on-device `SFSpeechRecognizer`

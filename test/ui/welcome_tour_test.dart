@@ -5,18 +5,17 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:agent_chat/app/first_run.dart";
 import "package:agent_chat/data/browser/cdp_browser.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
     show CliProvider, HostCliGuest;
-import "package:entoli_chat/domain/agent_browser.dart"
+import "package:entoli_core/model/agent_browser.dart"
     show EmbeddedBrowser, embeddedBrowserId;
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/download.dart";
-import "package:entoli_chat/domain/llm_provider.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/domain/rootfs.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/download.dart";
+import "package:entoli_core/model/llm_provider.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/model/rootfs.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/initial_setup_gate.dart";
 import "package:agent_chat/ui/selection.dart";

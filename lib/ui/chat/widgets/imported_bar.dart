@@ -2,9 +2,9 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../app/chat_edits.dart";
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/models.dart";
-import "package:entoli_chat/ui/widgets/dialogs.dart" show say;
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/models.dart";
+import "package:entoli_core/view/widgets/dialogs.dart" show say;
 import "../../../providers.dart" show isMirroredChatProvider;
 import "stand_in_bar.dart";
 

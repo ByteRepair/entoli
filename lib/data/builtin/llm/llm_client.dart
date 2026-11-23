@@ -2,9 +2,8 @@ import "dart:convert";
 import "dart:typed_data";
 
 import "package:collection/collection.dart";
-
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/provider_usage.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/provider_usage.dart";
 
 /// The conversation as a provider sees it. Deliberately not `Message` from the
 /// domain: that is what Entoli persists, this is what goes over the wire,

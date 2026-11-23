@@ -2,16 +2,15 @@ import "dart:async";
 
 import "package:flutter/foundation.dart";
 import "package:http/http.dart" as http;
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/sync/devices.dart";
+import "package:entoli_core/model/sync/identity.dart";
+import "package:entoli_core/model/sync/lan_signaling.dart";
+import "package:entoli_core/model/sync/protocol.dart";
+import "package:entoli_core/model/sync/relay_signaling.dart";
 
 import "../../core/tls.dart";
-
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/sync/devices.dart";
-import "package:entoli_chat/domain/sync/identity.dart";
-import "package:entoli_chat/domain/sync/lan_signaling.dart";
-import "package:entoli_chat/domain/sync/protocol.dart";
-import "package:entoli_chat/domain/sync/relay_signaling.dart";
 import "channel.dart";
 import "framing.dart";
 import "handshake.dart";

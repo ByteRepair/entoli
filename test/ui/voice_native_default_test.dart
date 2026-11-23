@@ -1,8 +1,7 @@
 import "package:flutter_test/flutter_test.dart";
-
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/voice.dart";
-import "package:entoli_chat/domain/voice_model.dart";
+import "package:entoli_core/model/app_settings.dart";
+import "package:entoli_core/model/voice.dart";
+import "package:entoli_core/model/voice_model.dart";
 import "package:agent_chat/providers.dart";
 
 import "../harness.dart";

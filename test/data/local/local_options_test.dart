@@ -1,5 +1,5 @@
 import "package:agent_chat/data/local/local_instance.dart";
-import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_core/model/app_settings.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {

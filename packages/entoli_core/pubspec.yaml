@@ -1,0 +1,81 @@
+name: entoli_core
+description: >
+  A chat as data and on screen: the domain, the conversation log and its
+  store, and the transcript drawing. What the app and the shared-chat viewer
+  both run; nothing native.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  archive: ^4.1.0
+  clock: ^1.1.2
+  collection: ^1.19.1
+  crypto: ^3.0.7
+  cryptography: ^2.9.0
+  # The filesystem the core is handed: the disk, or memory in a browser.
+  file: ^7.0.1
+  flutter_markdown_plus: ^1.0.12
+  flutter_math_fork: ^0.7.4
+  flutter_riverpod: ^3.4.2
+  freezed_annotation: ^3.1.0
+  json_annotation: ^4.12.0
+  markdown: ^7.3.1
+  path: ^1.9.1
+  re_editor: ^0.10.0
+  re_highlight: ^0.0.3
+  super_sliver_list: ^0.4.1
+  uuid: ^4.6.0
+  yaml: ^3.1.4
+
+dev_dependencies:
+  build_runner: ^2.15.1
+  flutter_lints: ^6.0.0
+  freezed: ^3.2.5
+  json_serializable: ^6.14.1
+
+flutter:
+  assets:
+    # The fonts' licences, read into `LicenseRegistry` at startup. An asset
+    # rather than only a file in the repo, since the OFL asks for it to travel
+    # with the font.
+    - assets/fonts/OFL.txt
+    - assets/fonts/PlayfairDisplay-OFL.txt
+    - assets/fonts/SourceSerif4-OFL.txt
+
+  # The faces the artifact stylesheet names, bundled so the whole app wears
+  # them and not only its artifacts. A dependency's font is registered under
+  # `packages/entoli_core/`, which is why `fonts.dart` names them so. Static
+  # instances rather than the variable fonts: the engine does not read
+  # `opsz`, and a 400-to-900 `wght` axis makes every weight request synthetise
+  # or clamp.
+  fonts:
+    - family: RobotoMono
+      fonts:
+        - asset: assets/fonts/RobotoMono-Regular.ttf
+        - asset: assets/fonts/RobotoMono-Bold.ttf
+          weight: 700
+    - family: PlayfairDisplay
+      fonts:
+        - asset: assets/fonts/PlayfairDisplay-Regular.ttf
+        - asset: assets/fonts/PlayfairDisplay-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/PlayfairDisplay-Bold.ttf
+          weight: 700
+    - family: SourceSerif4
+      fonts:
+        - asset: assets/fonts/SourceSerif4-Regular.ttf
+        - asset: assets/fonts/SourceSerif4-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/SourceSerif4-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/SourceSerif4-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/SourceSerif4-Italic.ttf
+          style: italic

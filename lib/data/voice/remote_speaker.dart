@@ -1,6 +1,7 @@
 import "dart:async";
 
-import "package:entoli_chat/domain/voice.dart";
+import "package:entoli_core/model/voice.dart";
+
 import "played_speaker.dart";
 
 /// The speaking half for a provider's speech model: each sentence a request,

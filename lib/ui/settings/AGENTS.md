@@ -4,7 +4,7 @@
 
 Every settings page is a plain widget. The layers under them:
 
-- **The store** (`packages/entoli_chat/lib/domain/settings/`). `settings.json`,
+- **The store** (`packages/entoli_core/lib/model/settings/`). `settings.json`,
   `project.json` and a chat's `meta.json` are each a `SettingsDocument`: the
   JSON as the source of truth, read and written through a `Setting` declaration
   per key in `SettingKeys` — the key, a codec, the levels it may be set at, and
@@ -29,7 +29,7 @@ Every settings page is a plain widget. The layers under them:
   the control its value wants: `ScopedSwitch`, `ScopedChoice`,
   `ScopedLevels`, `ScopedCount`, `ScopedModel` and `ScopedEnvironment`. Each
   reads its level through `scopeOf` — `scopeAt` over the widget's ref
-  (`WidgetReader`, `packages/entoli_chat/lib/app/reader.dart`), so it rebuilds
+  (`WidgetReader`, `packages/entoli_core/lib/transcript/reader.dart`), so it rebuilds
   as the documents change — and writes back through it. What a change sets off
   beyond the key — a restart to say, a re-anchor of every chat's TTL — is a
   `write` handed to the widget, through the notifier setter that does it.
@@ -283,7 +283,7 @@ a skill the user picks can land in any project. The skill-install preview page
 asks the same, so a model-drafted skill is aimed the same way. A project's
 agents page is the same page with `@name` prose: add, edit and delete against
 the project's directory, inherited rows badged. See "Skills and agents" in
-`packages/entoli_chat/lib/domain/AGENTS.md`. **Agents** is the list of what a
+`packages/entoli_core/lib/model/AGENTS.md`. **Agents** is the list of what a
 message can address by name — the bundled ones, which ship with the app and are
 read-only, and the user's own, written in-app and editable or removable. An
 agent is one flat `.md` file (a system prompt with `description` frontmatter),
@@ -320,7 +320,7 @@ every project's where the page is the global one (the default directory is a
 rung of every project's tier walk, so an inherited agent and an inherited
 picture go stale everywhere if only `promptLibraryProvider(null)` is rebuilt;
 skills keep the same branch), the project's own where it is a project's page.
-See "Skills and agents" in `packages/entoli_chat/lib/domain/AGENTS.md`. **Byte
+See "Skills and agents" in `packages/entoli_core/lib/model/AGENTS.md`. **Byte
 Repair** is the tooling for the built-in project of the same name: a banner
 saying whether the configured terminal env can run it, a button that runs a
 bundled install script through that env to put `make`, `github-cli` and ESBMC
@@ -446,7 +446,7 @@ backup or sync names a folder that is not there, which grants nothing (below).
 A folder comes from the platform's picker (`FolderPicker`, `file_selector`'s
 `getDirectoryPath` under it) and is never typed. It is refused, with a
 notice, by `refuseFolder` in
-`packages/entoli_chat/lib/domain/work_folders.dart`, the one test any grant
+`packages/entoli_core/lib/model/work_folders.dart`, the one test any grant
 takes, `add_directory`'s banner included. It refuses a path that is not a
 directory, the root, the home or anything holding it, the app's own data tree
 (the data directory, anything under it, or anything holding it), and anything
