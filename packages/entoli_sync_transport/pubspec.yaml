@@ -1,0 +1,29 @@
+name: entoli_sync_transport
+description: >
+  The WebRTC data channel sync runs over.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  entoli_core:
+    path: ../entoli_core
+  # Held below 1.6.2: its Linux plugin segfaults on registration (SEGV in
+  # FlutterMediaStream's constructor) whether or not libpulse was found at
+  # build time. Unpin when a release fixes it.
+  flutter_webrtc: ">=1.6.0 <1.6.2"
+  # Nothing calls it: its `dartPluginClass` installs it as
+  # `Cryptography.instance` on Android, where it speeds up sync's ChaCha20.
+  # See "The handshake" in lib/data/sync/AGENTS.md.
+  cryptography_flutter: ^2.3.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

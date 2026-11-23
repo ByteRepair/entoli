@@ -426,10 +426,11 @@ void main() {
 
     // A paired screen for a pasted code is the same `_PairingStageView` the
     // window page's test above proves, over an activity this file has no way
-    // of starting on the wire: `pairWith` on a real code reaches `RtcLink`,
-    // which needs a WebRTC engine the VM has none of. Between the two, one
-    // honest screen each way and the stages shared, the joiner's flows are
-    // covered to the point where only a live channel would add to it.
+    // of starting on the wire: `pairWith` on a real code reaches a
+    // `PeerLink`, which needs a WebRTC engine the VM has none of. Between the
+    // two, one honest screen each way and the stages shared, the joiner's
+    // flows are covered to the point where only a live channel would add to
+    // it.
   });
 
   group("clicking a paired device's row", () {

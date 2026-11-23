@@ -2,7 +2,7 @@ import "dart:async";
 import "dart:convert";
 import "dart:typed_data";
 
-import "package:agent_chat/data/sync/channel.dart";
+import "package:entoli_core/model/sync/channel.dart";
 import "package:agent_chat/data/sync/framing.dart";
 import "package:agent_chat/data/sync/handshake.dart";
 import "package:entoli_core/model/sync/identity.dart";

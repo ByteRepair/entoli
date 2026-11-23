@@ -23,10 +23,11 @@ import "package:entoli_core/model/sub_agent_log.dart"
 import "package:entoli_core/model/sync/devices.dart";
 import "package:entoli_core/model/sync/identity.dart";
 import "package:entoli_core/model/sync/lan_signaling.dart";
+import "package:entoli_core/model/sync/peer_link.dart";
 import "package:entoli_core/model/sync/protocol.dart";
 import "package:entoli_core/model/sync/relay_signaling.dart";
 import "artifact_bytes.dart" show ArtifactBytes;
-import "channel.dart";
+import "package:entoli_core/model/sync/channel.dart";
 import "pairing.dart";
 import "peers.dart";
 import "sync_byte_cache.dart";
@@ -209,6 +210,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     required AppSettings Function() settings,
     String? Function()? turnPassword,
     required LanSignaling? Function() lanSignaling,
+    required PeerLinkFactory createLink,
     String? hostname,
     http.Client? client,
     RelayDial? relayDial,
@@ -220,6 +222,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
       turnPassword: turnPassword,
       peers: _peers,
       lanSignaling: lanSignaling,
+      createLink: createLink,
       onMessage: _dispatch,
       onPeerGone: _peerGone,
       onReady: _greet,

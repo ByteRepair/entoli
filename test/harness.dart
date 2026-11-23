@@ -575,6 +575,10 @@ Future<SyncHub> testSyncHub({
   registry: devices ?? FakeDeviceRegistry(),
   settings: settings ?? AppSettings.new,
   lanSignaling: () => null,
+  // The VM has no WebRTC engine, so a route that gets as far as a peer
+  // connection fails here the way it would without the plugin.
+  createLink: ({required iceServers}) =>
+      throw UnsupportedError("no peer connection under test"),
   hostname: hostname,
   // Nothing to dial by default, so a test that forgets one fails rather
   // than reaching the network from whatever URL it configured.

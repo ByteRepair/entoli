@@ -1,9 +1,9 @@
 import "dart:async";
 import "dart:typed_data";
 
+import "package:entoli_core/model/sync/channel.dart";
+import "package:entoli_core/model/sync/peer_link.dart";
 import "package:flutter_webrtc/flutter_webrtc.dart" as webrtc;
-
-import "channel.dart";
 
 /// A WebRTC peer connection reduced to what a data channel needs: negotiate
 /// SDP out-of-band (the signaling layer's business), wait for the channel,
@@ -12,35 +12,26 @@ import "channel.dart";
 /// Negotiation is trickle-less — the local description is only handed over
 /// once gathering has finished — which costs a second or two and buys a
 /// single blob per side, the thing manual pairing pastes through a human.
-class RtcLink {
+class RtcLink implements PeerLink {
   RtcLink._(this._pc);
 
   final webrtc.RTCPeerConnection _pc;
   final _ready = Completer<ByteRtcChannel>();
   var _closed = false;
 
-  static const defaultStun = [
-    "stun:stun.l.google.com:19302",
-    "stun:stun1.l.google.com:19302",
-  ];
-
-  /// Creates the connection. [iceServers] is STUN/TURN as the settings page
-  /// holds them; empty means the public defaults, which is right for most
-  /// networks and wrong for none that works without them anyway.
-  static Future<RtcLink> create({List<Map<String, Object>>? iceServers}) async {
+  /// Creates the connection over [iceServers], STUN and TURN as pairing
+  /// builds them. A [PeerLinkFactory].
+  static Future<PeerLink> create({
+    required List<Map<String, Object>> iceServers,
+  }) async {
     final pc = await webrtc.createPeerConnection({
-      "iceServers":
-          iceServers ??
-          [
-            for (final url in defaultStun) {"urls": url},
-          ],
+      "iceServers": iceServers,
       "sdpSemantics": "unified-plan",
     });
     return RtcLink._(pc);
   }
 
-  /// The initiator's half: owns the data channel, produces the offer to send
-  /// through whatever rendezvous brought these two together.
+  @override
   Future<String> offer() async {
     final channel = await _pc.createDataChannel(
       "entoli",
@@ -52,8 +43,7 @@ class RtcLink {
     return _localDescription(() => _pc.createOffer({}));
   }
 
-  /// The joiner's half: no channel of its own; [answer] carries back the
-  /// remote offer and this returns the answer to send.
+  @override
   Future<String> answer(String remoteSdp) async {
     await _pc.setRemoteDescription(
       webrtc.RTCSessionDescription(remoteSdp, "offer"),
@@ -62,7 +52,7 @@ class RtcLink {
     return _localDescription(() => _pc.createAnswer({}));
   }
 
-  /// Completes the joiner once the initiator's answer arrives.
+  @override
   Future<void> acceptAnswer(String remoteSdp) async {
     await _pc.setRemoteDescription(
       webrtc.RTCSessionDescription(remoteSdp, "answer"),
@@ -101,10 +91,11 @@ class RtcLink {
     }
   }
 
-  /// The channel once it is open. Throws when the peer goes away instead.
+  @override
   Future<ByteChannel> open({Duration timeout = const Duration(seconds: 30)}) =>
       _ready.future.timeout(timeout);
 
+  @override
   Future<void> close() => _dispose();
 
   Future<void> _dispose() async {

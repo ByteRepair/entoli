@@ -22,7 +22,7 @@ import "package:entoli_core/agent/llm/providers/provider.dart";
 import "package:http/http.dart" as http;
 import "package:agent_chat/data/local/local_instance.dart";
 import "package:agent_chat/data/local/local_prefill.dart";
-import "package:agent_chat/data/sync/channel.dart";
+import "package:entoli_core/model/sync/channel.dart";
 import "package:agent_chat/data/sync/peers.dart" show PeerState;
 import "package:agent_chat/data/sync/sync_hub.dart"
     show RemoteChatEntry, RemoteProject;

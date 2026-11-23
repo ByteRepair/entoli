@@ -20,6 +20,7 @@ workspace:
   - packages/entoli_share
   - packages/entoli_scanner
   - packages/entoli_webview
+  - packages/entoli_sync_transport
 
 dependencies:
   flutter:
@@ -48,6 +49,9 @@ dependencies:
   # The in-app web view a link and a phone's artifact open in.
   entoli_webview:
     path: packages/entoli_webview
+  # The WebRTC data channel sync runs over.
+  entoli_sync_transport:
+    path: packages/entoli_sync_transport
 
   # State management
   flutter_riverpod: ^3.4.2
@@ -100,12 +104,7 @@ dependencies:
   # A swappable clock so tests pin "now" rather than rotting against the
   # calendar. The reminder feature reads it; see "Reminders" in AGENTS.md.
   clock: ^1.1.2
-  # Held below 1.6.2: its Linux plugin segfaults on registration (SEGV in
-  # FlutterMediaStream's constructor) whether or not libpulse was found at
-  # build time. Unpin when a release fixes it.
-  flutter_webrtc: ">=1.6.0 <1.6.2"
   cryptography: ^2.9.0
-  cryptography_flutter: ^2.3.4
   web_socket_channel: ^3.0.3
   qr_flutter: ^4.1.0
   freedesktop_secret: ^0.1.2

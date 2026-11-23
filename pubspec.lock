@@ -266,7 +266,7 @@ packages:
     source: hosted
     version: "2.9.0"
   cryptography_flutter:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: cryptography_flutter
       sha256: d1c7e7a31a072d63b27ce0537b89868f9bda9188f2b1651ae728a295762921d4
@@ -480,7 +480,7 @@ packages:
     source: sdk
     version: "0.0.0"
   flutter_webrtc:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: flutter_webrtc
       sha256: a2eb4a45bf741c4e3fb6731dbbe35daef5f366c3783645e091d03f205b70b733

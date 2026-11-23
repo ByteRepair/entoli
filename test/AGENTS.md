@@ -326,9 +326,10 @@ Sync page's relay test resolved `relay.example.com`, and whether it passed
 depended on how fast that failed.
 
 **The WebRTC data channel itself has no automated coverage**, and cannot have
-any under `flutter test`: `flutter_webrtc` is a native plugin, so a peer
-connection needs an engine with the plugin registered and the Dart VM has
-neither. It is confirmed by hand, between two running instances.
+any under `flutter test`: `flutter_webrtc` (`entoli_sync_transport`) is a
+native plugin, so a peer connection needs an engine with the plugin registered
+and the Dart VM has neither. `testSyncHub` binds a `PeerLinkFactory` that
+throws. It is confirmed by hand, between two running instances.
 
 That gap has already cost two bugs that every loopback test passed — the frame
 header read through `frame.buffer`, and the hello exchange subscribing after

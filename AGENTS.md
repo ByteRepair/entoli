@@ -43,9 +43,9 @@ named in a cross-reference is findable from this list.
 - `lib/data/builtin/llm/AGENTS.md` — A program in the model's place (the CLI
   providers)
 - `lib/data/sync/AGENTS.md` — The threat model, the handshake, the framing
-  layer, three rendezvous transports, the SyncHub, mirroring a chat, driving a
-  turn from the other end, what the Sync page can do about a
-  peer, secrets at rest
+  layer, three rendezvous transports, the peer connection, the SyncHub,
+  mirroring a chat, driving a turn from the other end, what the Sync page can
+  do about a peer, secrets at rest
 - `lib/data/local/AGENTS.md` — Bundled tools, A whole Linux under proot,
   Running a model on the device
 - `android/AGENTS.md` — Staying alive off screen, The workspaces in the Files
@@ -91,6 +91,8 @@ named in a cross-reference is findable from this list.
   code
 - `packages/entoli_webview/lib/AGENTS.md` — The in-app web view a link and
   a phone's artifact open in
+- `packages/entoli_sync_transport/lib/AGENTS.md` — The WebRTC data channel
+  sync runs over
 - `lib/ui/voice/AGENTS.md` — Reading one message out, The screen, Touch to
   speak, Taking turns
 - `packages/entoli_core/lib/view/workspace/AGENTS.md` — The workspace explorer

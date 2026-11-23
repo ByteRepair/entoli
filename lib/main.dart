@@ -29,6 +29,7 @@ import "package:entoli_links/entoli_links.dart"
     show InAppSignInPages, PluginLinkLauncher, incomingLinks;
 import "package:entoli_scanner/entoli_scanner.dart" show PluginCodeScanner;
 import "package:entoli_share/entoli_share.dart" show PluginShareSheet;
+import "package:entoli_sync_transport/entoli_sync_transport.dart" show RtcLink;
 import "package:entoli_voice/entoli_voice.dart"
     show registerVoice, sherpaWorkers;
 import "package:entoli_webview/entoli_webview.dart" show PluginWebView;
@@ -316,6 +317,7 @@ class AppSession {
       settings: () => settingsHome.read(appSettingsProvider),
       turnPassword: () => secrets.turnPassword,
       lanSignaling: platform.createLanSignaling,
+      createLink: RtcLink.create,
       hostname: await hostname,
     );
     final container = ProviderContainer(

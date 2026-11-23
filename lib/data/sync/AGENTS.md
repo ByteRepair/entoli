@@ -45,9 +45,10 @@ too instead of timing out. Both throw `ProtocolMismatchException`, whose
 message — "Protocol version mismatch, please update Entoli on both devices" —
 is what the pairing page and the device's row show.
 
-That HKDF is asked for `DartHmac` by name. `cryptography_flutter` declares a
-`dartPluginClass`, so on Android it installs itself as `Cryptography.instance`
-with nothing in this app calling it, and a plain `Hmac.sha256()` then runs over
+That HKDF is asked for `DartHmac` by name. `cryptography_flutter`, a
+dependency of `entoli_sync_transport`, declares a `dartPluginClass`, so on
+Android it installs itself as `Cryptography.instance` with nothing in the app
+calling it, and a plain `Hmac.sha256()` then runs over
 a method channel into `javax.crypto`. HKDF's extract step keys its HMAC with
 the salt rather than the secret, this handshake passes no salt, and Java's
 `SecretKeySpec` throws on a zero-length key — so pairing a phone died at the
@@ -77,6 +78,19 @@ caught by the first test to run two hubs against each other.
 The handshake initiator is always the WebRTC *answer* side (`!weOffered`),
 so whichever route brought the two together needs no extra message to decide
 who speaks first.
+
+## The peer connection
+
+Every route ends in the same two calls: a `PeerLink`
+(`entoli_core/model/sync/peer_link.dart`) negotiates SDP and hands over a
+`ByteChannel` (`model/sync/channel.dart`), the whole message, in order and
+reliably, that everything here is written over. The hub never names WebRTC:
+`SyncHub` takes a `PeerLinkFactory`, `main` binds `RtcLink.create` from
+`entoli_sync_transport` (see its `lib/AGENTS.md`), and `testSyncHub` binds
+one that throws. The ICE config is built here, in `SyncPairing.iceServers`:
+the public STUN servers in `defaultStun`, then the TURN server from settings
+with its password read from the secret store per dial, so an edit reaches the
+next connection.
 
 ## The framing layer
 

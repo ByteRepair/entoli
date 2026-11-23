@@ -6,7 +6,7 @@ import "package:cryptography/cryptography.dart";
 import "package:cryptography/dart.dart";
 import "package:entoli_core/model/sync/identity.dart";
 
-import "channel.dart";
+import "package:entoli_core/model/sync/channel.dart";
 
 /// The authenticated key exchange two devices run over a fresh [ByteChannel]
 /// before any application message moves.
