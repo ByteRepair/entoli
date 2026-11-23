@@ -60,15 +60,15 @@ named in a cross-reference is findable from this list.
 - `packages/entoli_core/lib/model/room/AGENTS.md` — The room and its
   participants, The contract between direct and Omada chats, When a turn is
   over, Automatic retry rounds
-- `lib/ui/chat/AGENTS.md` — What the turn's extraction kept, Thinking and tool runs,
-  Activities, on screen (the transcript core),
-  What is running, on screen, The agent's browser, on screen,
-  Selecting a reply, and copying it, Replying to a passage, How a reply
-  is set, Formulas, Code
-  blocks, A command
-  the user ran, Activities, on screen, A goal, on screen, The plan, on screen,
-  The task list, on screen,
-  A chat whose home device is elsewhere, A shared chat, The chat page
+- `lib/ui/chat/AGENTS.md` — What the turn's extraction kept, Replying to a
+  passage, A command the user ran, A goal, on screen, The task list, on screen,
+  A chat whose home device is elsewhere, What is running, on screen, The
+  agent's browser, on screen, A shared chat, The chat page
+- `packages/entoli_core/lib/view/chat/AGENTS.md` — Thinking and tool runs,
+  Selecting a reply, and copying it, How a reply is set, Formulas, Code blocks,
+  A compact turn, and its divider, The plan, on screen, The scrolling list
+- `packages/entoli_core/lib/transcript/AGENTS.md` — Activities, on screen (the
+  transcript core), Background jobs, in the reply
 - `packages/entoli_share_viewer/AGENTS.md` — The shared-chat viewer: the web
   page a share link opens where the app is not installed, the app's code over
   an in-memory disk
@@ -79,7 +79,7 @@ named in a cross-reference is findable from this list.
   live, Hearing and speaking
 - `lib/ui/voice/AGENTS.md` — Reading one message out, The screen, Touch to
   speak, Taking turns
-- `lib/ui/workspace/AGENTS.md` — The workspace explorer
+- `packages/entoli_core/lib/view/workspace/AGENTS.md` — The workspace explorer
 - `lib/ui/share/AGENTS.md` — Sharing to Entoli
 - `lib/ui/AGENTS.md` — Opening a link, Links into Entoli, The theme, What the settings page can
   change about it, The keyboard and the caret, The app's commands, The menu
@@ -88,6 +88,8 @@ named in a cross-reference is findable from this list.
   Work folders, What the app is, Backing it all up
 - `lib/ui/widgets/AGENTS.md` — Shared UI, A catalog of things to download, The
   model catalog
+- `packages/entoli_core/lib/view/widgets/AGENTS.md` — Shared UI (the core's
+  widgets), Notices
 - `.github/workflows/AGENTS.md` — Releasing
 - `tool/linux/AGENTS.md` — The Linux AppImage
 - `test/AGENTS.md` — how the tests are written and what they fake

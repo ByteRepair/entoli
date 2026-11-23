@@ -7,17 +7,11 @@ sharing the loading and failure states every page would otherwise spell out),
 the `Default`-plus-reset pairing,
 `LabelledField` (a field under its caption) and
 `InheritableDropdown` over both (whose first entry stores null and names what
-null resolves to), the `promptForText` / `promptForPair` / `confirm` /
-`pickProject` dialogs and `copyToClipboard` beside them, `notify` and `say`
-(notices, below), `showAnchoredMenu`
-and `showMenuAt`, `Choice` (a swatch, corner or icon to pick, with the one
-selected ring),
-`NavDrawer` and `navBreakpoint`, `SidePanelFrame` (below), `ActionIcon`, `AttachmentChip` /
-`AttachmentStrip`, `Nothing`,
-`CompletionField`, `PromptField` (below), `DiscardGuard`, `SearchField`,
-`ListHeading`, `PageBar` and its `PageAction`s — every pushed page's bar,
-said as data and drawn as an `AppBar` —
-`text_input.dart` — the sections below — and `catalog.dart`.
+null resolves to), `Choice` (a swatch, corner or icon to pick, with the one
+selected ring), `NavDrawer` and `navBreakpoint`, `SidePanelFrame` (below),
+`Nothing`, `CompletionField`, `PromptField` (below), `SearchField`,
+`ListHeading` and `catalog.dart`. What the conversation draws with as well is
+the core's, in `packages/entoli_core/lib/view/widgets/` (see its `AGENTS.md`).
 
 `PromptField` is prose the model reads — a trigger's prompt, an agent's system
 prompt, the profile's and a project's instructions — shown as markdown the way
@@ -29,15 +23,6 @@ and often long. The page is `CompletionField` where `/skills` and `@agents`
 mean something (a prompt, which is dispatched through the library) and a plain
 field where they do not (instructions, where `@` pulls in a file). A message
 edited in the chat opens the same page, its Save called Send.
-
-`DiscardGuard` is every editor page's way out: a pop with something to lose
-asks, one with nothing leaves, and Save leaves by `Navigator.pop`, which the
-guard does not stop. It asks for `edited` when the pop comes rather than at
-build, since most of what a page edits sits in controllers that change with no
-rebuild. Four pages had written it out, two the same way, one differently, and
-two not at all — the trigger editor and the profile page, where back threw the
-edits away. `DiscardButton` is the close in the bar of a page whose way out is
-discarding.
 
 `SearchField` is the rounded search box over a list — the sidebar's, the
 marketplace's and the project palette's — and `ListHeading` the caption a list's
@@ -77,66 +62,33 @@ editors with `Navigator.of`, and they belong over the whole window, not inside
 the frame. Docked, a pick switches the content at once, and a resize across
 the breakpoint jumps to where the pages are rather than sliding there.
 
-`scrolling.dart` is the shared scroll rule, and it is two things. `nearBottom`
-asks whether the view is close enough to the end to count as reading the
-latest — the slack is the caller's, since a conversation and a five-line
-transcript disagree about how close that is. `ScrollFollow` is whether a list
-keeps itself at the end while new content lands on it, and the answer is the
-user's, not the position's: a gesture toward the older messages detaches,
-reaching the end again by any means attaches, and the caller's
-`NotificationListener` is what tells it which happened. The chat page and the
-voice transcript window both run one; the chat page's jump button and the
-`_settleAtBottom` that lands a chat at its end are its callers' halves, not
-parts of the class.
+`CompletionField` is the field a prompt is written in: the menu of `/skills` and
+`@agents` that matches what has been typed, the arrows and tab and return that
+take one, and escape. It was the composer's, and it is here because the trigger
+editor writes a prompt too — one that is dispatched through the same library, so
+being offered them in a chat and not there was the tell. Where the menu goes is
+the caller's, through `layout`: the composer's spans the whole composer rather
+than the field, since the `+` and Send are either side of it, and the trigger's
+prompt page puts it under a box that is the whole page. Where a trigger is typed
+from a menu is the core's (`triggerOpened` in `lib/app/composer.dart`), and
+`reopen` shows the menu for it. What a caller must not do is write its own
+trigger handling: `activeCompletionToken` has to keep agreeing with
+`prompt_library.dart`, and one copy of it can.
 
-`CompletionField` is the field a prompt is written in: the menu of `/skills`
-and `@agents` that matches what has been typed, the arrows and tab and return
-that take one, and escape. It was the composer's, and it is here because the
-trigger editor writes a prompt too — one that is dispatched through the same
-library, so being offered them in a chat and not there was the tell. Where the
-menu goes is the caller's, through `layout`: the composer's spans the whole
-composer rather than the field, since the `+` and Send are either side of it,
-and the trigger's prompt page puts it under a box that is the whole page.
-Where a trigger is typed from a menu is the core's (`triggerOpened` in
-`lib/app/composer.dart`), and `reopen` shows the menu for it. What a caller must not
-do is write its own trigger handling: `activeCompletionToken` has to keep
-agreeing with `prompt_library.dart`, and one copy of it can.
-
-`text_input.dart` is the pair of things a field wants and Material does not
-give it. `replaceIn` writes over a range and leaves the caret after it —
-`CompletionField` types a completion with it and `TabIndents` an indent, and
-they were the same four lines twice. `TabIndents` makes Tab type two spaces
-rather than move the focus on, which every `CompletionField` of more than one
-line has — the composer and a trigger's prompt — and so does any
-`promptForText` of more than one line; the one-line fields are left alone,
-since there Tab is how the caret reaches the buttons.
-
-It wraps a field instead of being one, because `CompletionField`'s own
-bindings are already on it: **the wrapper has to stay strictly outside them**.
-Key events run from the focused node outwards, so the completion `Shortcuts`
-sees Tab first and takes it while the menu has a match, and only what it
-ignores reaches the indent. That is why `CompletionField` wraps the field it
-has already built rather than anything nearer the `TextField`: moving the
-wrapper inward kills tab-completion with nothing to say so, and a widget test
-is what holds it. Merging the two into one shortcuts map is not the same thing
-and does not work: `SingleActivator` has no `==`, so a second Tab entry does
-not replace the first, it queues behind it. Shift+Tab is left unbound, so there
-is always a key that leaves the field.
-
-`ThinkingSlider` is a choice of how hard something thinks: a bar of points,
-the least thought on the left and the most on the right, the labels under them
-the caller's (`stops`, in order). The bar is a halftone of contour lines
-through a noise field warped by itself — `ValueNoise` in `core/noise.dart` —
-with more layers of noise and more lines the further right a dot is, so the
-left is a few slow curves and the right a dense web; it is lit up to the point
-picked. It moves for as long as it is on screen — it was once only while
-hovered and for a moment after a pick, which on a phone, with no hover, left it
-still nearly always — and not at all where the platform asks for no animation.
-Its ticker is muted with its route's `TickerMode`, so a page covered by another
-costs nothing; a page showing one never settles, so a test of it pumps rather
-than `pumpAndSettle`s, as a page with a spinner does. A tap or a drag anywhere over the bar or the labels picks the
-nearest point, the arrow keys step through them, and it is a slider to
-assistive technology.
+`ThinkingSlider` is a choice of how hard something thinks: a bar of points, the
+least thought on the left and the most on the right, the labels under them the
+caller's (`stops`, in order). The bar is a halftone of contour lines through a
+noise field warped by itself — `ValueNoise` in `core/noise.dart` — with more
+layers of noise and more lines the further right a dot is, so the left is a few
+slow curves and the right a dense web; it is lit up to the point picked. It
+moves for as long as it is on screen — it was once only while hovered and for a
+moment after a pick, which on a phone, with no hover, left it still nearly
+always — and not at all where the platform asks for no animation. Its ticker is
+muted with its route's `TickerMode`, so a page covered by another costs nothing;
+a page showing one never settles, so a test of it pumps rather than
+`pumpAndSettle`s, as a page with a spinner does. A tap or a drag anywhere over
+the bar or the labels picks the nearest point, the arrow keys step through them,
+and it is a slider to assistive technology.
 
 `Nothing` is one muted line where a strip of a page would otherwise be
 blank: a project with no chats in it, a search nothing answered,
@@ -144,14 +96,6 @@ a paired device's list with nothing picked out of it. It is here rather than in
 the sidebar it started in because two of them are on screen at once — the
 sidebar's list beside the chat pane — and they had already drifted a text style
 apart.
-
-`ActionIcon` is the small icon button, and it carries the height the actions
-row keeps whether or not anything is in it — the row and the buttons in it have
-to agree on that, and a code block's bar now uses the same button. Its null
-`onPressed` is the dead form, which is a thread arrow at either end of the
-list. `copyToClipboard` is the other half of the same pairing: copying looks
-identical afterwards whatever did it, so what was taken is said in a notice
-from one place rather than each caller's own.
 
 `floating_position.dart` and `chip_row.dart` are the empty-chat screen's two
 animation mechanisms, and anything else that wants the same motion reaches for
@@ -185,27 +129,6 @@ motion: an `AnimatedSize` over the `Wrap` glides a change of line count — a
 badge pushed onto a new line, or a line collapsing — where the column below
 used to snap with it.
 
-`showAnchoredMenu` is a menu under a button, as a **route**. A `MenuAnchor`
-draws into an overlay instead, and an overlay is not popped by anything: the
-back key passes through it to whatever is behind, which beside the chat is the
-app leaving and inside the drawer is the whole sidebar closing. Neither is what
-back means over a menu. `PopupMenuButton` gets this right by pushing a route, and
-this is the same push without having to be the button — the project switcher and
-the add-provider row keep the buttons they had. It takes the button's own
-context, so both callers reach for a `Builder`: their build context is the whole
-section, and a menu anchored to that hangs off the wrong edge. `showMenuAt` is
-the same route at a point — where a right click or a held finger landed.
-
-Streamed deltas are coalesced into one state update per frame: per-token updates
-made the reply's text quadratic and rebuilt every visible bubble thousands of
-times per turn. One buffer carries both kinds of delta, so switching between
-thinking and reply flushes what it held — otherwise the two would fold into each
-other's part.
-
-`lib/ui/chat/activity/` owns the activities above a reply and the drawer
-behind them; the bubble walks the parts and asks the `ActivityCatalog` which each one
-is (see "Activities, on screen" in `lib/ui/chat/AGENTS.md`).
-
 `Composer` opens a menu above the field when the caret sits in a `/` or `@`
 token, over a library that is already loaded — so it takes no chat id, has no
 loading state, and starts nothing. Enter, Tab and the arrows are bound only
@@ -230,13 +153,13 @@ changed. So it is a `ValueNotifier<bool>`, set from the listener the field
 already has for the completion token, and the button redraws when the answer
 flips rather than when the field is touched.
 
-It never asks for the field's focus, and that is the whole rule. On Android focus
-is the keyboard, so a composer that reaches for it is a keyboard rising over a
-conversation nobody was typing in — which is what attaching a file did, and what
-the `+` menu's own entries did. Neither has anything to type at: the file is
-already on the strip, and the menu the trigger character opens is tapped. The
-field has no `FocusNode` of its own any more, since nothing was left to point one
-at.
+It never asks for the field's focus, and that is the whole rule. On Android
+focus is the keyboard, so a composer that reaches for it is a keyboard rising
+over a conversation nobody was typing in — which is what attaching a file did,
+and what the `+` menu's own entries did. Neither has anything to type at: the
+file is already on the strip, and the menu the trigger character opens is
+tapped. The field has no `FocusNode` of its own any more, since nothing was left
+to point one at.
 
 Giving focus away is the composer's rule; taking it back when the keyboard goes
 is the app's, and is the next section.
@@ -292,13 +215,13 @@ isolate, the rootfs one hashes the tarball on the way past and hands it to
 `tar`. The hash rides on `fetch`'s `watch` sink so that checking a download
 costs no second read of the file.
 
-`CatalogTile`, `CatalogAction` and `InstalledPicker` in `ui/widgets/catalog.dart`
-are the same again for what is drawn: a row with its optional note, failure and
-bar; the one button that is download *or* cancel *or* delete and never two; and
-the field over what is installed. `CatalogAction` owns the confirmation as well
-as the button: *that* deleting asks is the same for both, while what is being
-agreed to is not, so each catalog passes the two strings and nothing else.
-`InstalledPicker` is deliberately **not**
+`CatalogTile`, `CatalogAction` and `InstalledPicker` in
+`ui/widgets/catalog.dart` are the same again for what is drawn: a row with its
+optional note, failure and bar; the one button that is download *or* cancel *or*
+delete and never two; and the field over what is installed. `CatalogAction` owns
+the confirmation as well as the button: *that* deleting asks is the same for
+both, while what is being agreed to is not, so each catalog passes the two
+strings and nothing else. `InstalledPicker` is deliberately **not**
 `InheritableDropdown`, which looks identical and means something else — there
 null is "inherit what the level above says" and comes with a reset button, here
 it is either an answer of its own (Android) or nothing picked yet. It also owns
@@ -312,37 +235,37 @@ cannot tell which store filled it in.
 
 ## The model catalog
 
-Every model picker is a field that opens `ModelCatalogPage`: a search over
-every model the configured providers offer, with what each costs and can do,
-under the entries that store less than a model — the null entry and each
-provider's Default. What a picker is offered is its `ModelRole`'s: the chat
-LLM only models that talk (text in, text out) and call tools, since the agent
-works through tools; title, classifier and memory any model that talks, being
-plain completions; the image model only models that make images; the transcription and speech
-models only what models.dev says transcribes or speaks, beside the installed
-on-device voice models under `localProviderId` — see "A provider's models" in
-`lib/data/voice/AGENTS.md`. An endpoint's own listing is offered to the chat
-roles alone, since nothing says one of its models is anything else.
+Every model picker is a field that opens `ModelCatalogPage`: a search over every
+model the configured providers offer, with what each costs and can do, under the
+entries that store less than a model — the null entry and each provider's
+Default. What a picker is offered is its `ModelRole`'s: the chat LLM only models
+that talk (text in, text out) and call tools, since the agent works through
+tools; title, classifier and memory any model that talks, being plain
+completions; the image model only models that make images; the transcription and
+speech models only what models.dev says transcribes or speaks, beside the
+installed on-device voice models under `localProviderId` — see "A provider's
+models" in `lib/data/voice/AGENTS.md`. An endpoint's own listing is offered to
+the chat roles alone, since nothing says one of its models is anything else.
 
 `ModelInfo` holds only the models.dev fields something reads, and the cache and
 the built-in snapshot are trimmed to those. Structured output went for that
 reason: nothing sends a schema, the background roles parse their JSON from text.
 
 The models come from `ModelCatalog` (`model/model_registry.dart`), which is
-models.dev's own shape: a provider
-is matched to its models.dev entry by its Provider ID
-(`LlmProviderConfig.catalogId`), then by base URL, and the model by its exact
-id inside it. Never by its name. The id (`LlmProviderConfig.id`) is a UUID
-given when it is added, what the settings, the secret store and every chat
-point at, so a rename moves nothing; the name is what the user calls it,
-unique among the providers, so a second account at one service is a second
-entry under a name of its own; the Provider ID is its models.dev key. An entry
-in `settings.json` with no `name` reads its id as all three. `data/model_catalog.dart` loads it at startup — the
-presets' default models built in (`lib/data/builtin_models.dart`, written by
-`tool/gen_builtin_models.dart` and committed, since it fetches), then the
-cached copy in `<dataDir>/models.json`, then a fetch when that is a day old,
-or when the first provider is added. So with no network and no cache the
-Defaults are still pickable. Run the generator when a preset's defaults change.
+models.dev's own shape: a provider is matched to its models.dev entry by its
+Provider ID (`LlmProviderConfig.catalogId`), then by base URL, and the model by
+its exact id inside it. Never by its name. The id (`LlmProviderConfig.id`) is a
+UUID given when it is added, what the settings, the secret store and every chat
+point at, so a rename moves nothing; the name is what the user calls it, unique
+among the providers, so a second account at one service is a second entry under
+a name of its own; the Provider ID is its models.dev key. An entry in
+`settings.json` with no `name` reads its id as all three.
+`data/model_catalog.dart` loads it at startup — the presets' default models
+built in (`lib/data/builtin_models.dart`, written by
+`tool/gen_builtin_models.dart` and committed, since it fetches), then the cached
+copy in `<dataDir>/models.json`, then a fetch when that is a day old, or when
+the first provider is added. So with no network and no cache the Defaults are
+still pickable. Run the generator when a preset's defaults change.
 
 A card's star puts its model in `AppSettings.favouriteModels`, one app-level
 list of (provider, model) pairs, and the Favourites section under Quick picks
@@ -352,29 +275,18 @@ does not turn up among the chat models. A starred model whose provider has gone
 is simply not listed; the pair stays until it is unstarred, should the provider
 come back.
 
-A model the catalog does not list is added through `ModelForm`, the core's
-form, onto the provider it is reached through (`LlmProviderConfig.customModels`, in the same
-shape), where it comes before the catalog's own entry of the same id.
+A model the catalog does not list is added through `ModelForm`, the core's form,
+onto the provider it is reached through (`LlmProviderConfig.customModels`, in
+the same shape), where it comes before the catalog's own entry of the same id.
 
 A provider's own list is asked only where the user names one: the dialog's
 Models endpoint (`LlmProviderConfig.modelsEndpoint`), empty by default. The
 hosted providers' `/models` add nothing to models.dev's entry — ids alone, plus
 retired and non-chat ones — so an empty field lists the catalog's entry, a
-filled one lists the endpoint's instead, and a provider models.dev does not
-know offers nothing until one is named. Listing is
-the provider's (`LlmProvider.listModels`), not the chat client's: a local
-server asks its own `/models` unless another is named, and the on-device
-providers list what is installed. What such a list has and the catalog does not know is
-offered as a chat model with nothing known of it; one the catalog does know is
-offered by what the catalog says.
-
-## Notices
-
-`notify` and `say` show a notice, not a snack bar: a pill at the top of the
-root overlay, under the status bar. A snack bar sits on the bottom edge, over
-the composer, and swiping it away on a phone starts the system's home and
-reach gestures. The notice hit-tests only itself, so the page under it stays
-usable; it goes on a tap, an upward swipe or its timer, which a pointer over it
-holds. One per overlay, the newest replacing the last rather than queueing
-behind it. An error's waits longer and copies its text, which a snack bar did by
-being selectable.
+filled one lists the endpoint's instead, and a provider models.dev does not know
+offers nothing until one is named. Listing is the provider's
+(`LlmProvider.listModels`), not the chat client's: a local server asks its own
+`/models` unless another is named, and the on-device providers list what is
+installed. What such a list has and the catalog does not know is offered as a
+chat model with nothing known of it; one the catalog does know is offered by
+what the catalog says.

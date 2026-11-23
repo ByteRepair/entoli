@@ -2,7 +2,8 @@
 /// runs, each knowing what it was on screen. A `CopyFormat` writes it out —
 /// HTML for a word processor, markdown for a plain-text target — so the two
 /// halves of a copy are two readings of one thing rather than two guesses.
-/// See "Selecting a reply, and copying it" in `lib/ui/chat/AGENTS.md`.
+/// See "Selecting a reply, and copying it" in
+/// `packages/entoli_core/lib/view/chat/AGENTS.md`.
 library;
 
 import "dart:typed_data";

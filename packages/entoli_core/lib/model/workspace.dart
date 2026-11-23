@@ -129,7 +129,7 @@ class Workspace {
 
 /// The most of a file the viewer reads. A workspace holds the agent's logs, so
 /// there is no upper bound on what a tap can land on; what drawing that much
-/// costs is in `lib/ui/workspace/AGENTS.md`.
+/// costs is in `packages/entoli_core/lib/view/workspace/AGENTS.md`.
 const textViewLimit = 256 * 1024;
 
 class WorkspaceText {

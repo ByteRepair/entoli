@@ -26,7 +26,8 @@ Future<void> openTextFile(BuildContext context, String path, String name) =>
 
 /// A text file, read and edited in the app rather than handed to another —
 /// a workspace file, or an instruction file the user linked. See
-/// `lib/ui/workspace/AGENTS.md`, "The workspace explorer".
+/// `packages/entoli_core/lib/view/workspace/AGENTS.md`, "The workspace
+/// explorer".
 class TextFilePage extends ConsumerStatefulWidget {
   const TextFilePage({
     super.key,

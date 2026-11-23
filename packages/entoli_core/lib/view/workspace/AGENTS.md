@@ -44,12 +44,12 @@ up rather than trusting what the listing said it was, and asks first; it, and
 sharing where there is a share sheet, are on an entry's own row menu as well as
 on a selection.
 
-A text file is the one thing a tap does not leave the app for.
-`TextFilePage` (`packages/entoli_core/lib/view/widgets/text_file_page.dart`;
-`openTextFile` where the profile opens a linked instruction file or a chat a
-job's log) reads it off the disk the listing came from and holds the draft. It
-opens as a preview: markdown rendered, anything else as code — `re_editor`'s
-`CodeEditor` in `DocumentEditor` (`document_view.dart`, the core shared with
+A text file is the one thing a tap does not leave the app for. `TextFilePage`
+(`packages/entoli_core/lib/view/widgets/text_file_page.dart`; `openTextFile`
+where the profile opens a linked instruction file or a chat a job's log) reads
+it off the disk the listing came from and holds the draft. It opens as a
+preview: markdown rendered, anything else as code — `re_editor`'s `CodeEditor`
+in `DocumentEditor` (`view/widgets/document_view.dart`, the core shared with
 every other document page), read-only and highlighted by the grammar
 `grammarOfFile` picks from the name — the same thirty-one `CodeBlockBuilder`
 registers, found by a grammar's alias the way a fence names one. Edit turns the
@@ -102,20 +102,20 @@ Everything else the page can do is `FileHandoff`'s, and every route is gated the
 way `Shell.canRunCommands` gates the agent's commands. Desktop and Android do
 not differ in degree here, they differ in kind — and so there are two
 implementations, chosen at runtime in `createFileHandoff`, because they share
-`dart:io` and agree on nothing else here. Choosing rather than branching is the point: a class that
-answered both would carry an `if (Platform.isAndroid)` in every member, and
-every future member too.
+`dart:io` and agree on nothing else here. Choosing rather than branching is the
+point: a class that answered both would carry an `if (Platform.isAndroid)` in
+every member, and every future member too.
 
 - **Desktop** has a file manager and a registry of viewers, and `url_launcher`
   reaches both: `reveal` opens the current folder (the bar's button) and
   `open` opens a file, which is the same call on a different path. It needs no
   chooser of its own — the file manager is already pointed at the workspace —
   and it has no share sheet, so an entry there is only ever deleted.
-- **iOS** opens a file as a desktop does, and its file manager is the Files
-  app: `IosFileHandoff` sends `reveal` to the Runner, which opens Files at the
-  folder through a File Provider. `fileManager` names it on the button, and is
-  null on Android, which has no file manager to show a folder in. See "The workspaces in the Files app" in
-  `ios/AGENTS.md`.
+- **iOS** opens a file as a desktop does, and its file manager is the Files app:
+  `IosFileHandoff` sends `reveal` to the Runner, which opens Files at the folder
+  through a File Provider. `fileManager` names it on the button, and is null on
+  Android, which has no file manager to show a folder in. See "The workspaces in
+  the Files app" in `ios/AGENTS.md`.
 - **Android** has the share sheet, both ways. `export` sends an entry through
   `Intent.createChooser`, so every app on the device is on offer rather than a
   default winning silently; `open` is an `ACTION_VIEW`. Files come back in the
@@ -130,7 +130,7 @@ is the filesystem's rather than a route out of the app.
 
 A share sheet does not take a folder, so a folder goes as a single zip,
 written straight to the staging directory by `zipTo`
-(`packages/entoli_core/lib/store/zip.dart`, the walker a backup streams through
+(`lib/data/zip.dart`, the walker a backup streams through
 too), which is what lets Android's staging directory stay flat.
 
 Coming the other way, an `IncomingFile` is deliberately **not** its bytes. A
@@ -151,8 +151,9 @@ every file's bytes in memory together, which is the whole thing being avoided.
 That staging directory is the other thing worth knowing about the Android half.
 Everything handed to an intent is a **copy under the app's cache**, never the
 workspace file itself, because a `FileProvider` only mints URIs under the paths
-in `res/xml/file_paths.xml` and one `<cache-path>` is the whole of that file.
-The alternative was a `<root-path>` exposing the data directory by path for the
-sake of not copying, which is a worse trade on a directory holding `settings.json`
-and every chat. It costs a copy per open; workspace files are the agent's output,
-and the ones big enough to notice are rare.
+in `android/app/src/main/res/xml/file_paths.xml` and one `<cache-path>` is the
+whole of that file. The alternative was a `<root-path>` exposing the data
+directory by path for the sake of not copying, which is a worse trade on a
+directory holding `settings.json` and every chat. It costs a copy per open;
+workspace files are the agent's output, and the ones big enough to notice are
+rare.

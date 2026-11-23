@@ -166,8 +166,8 @@ rather than on state any other call could read. What a rule is matched against i
 
 Adding a tool is a class beside its kin and a line in the registry; where the
 chat should show it differently, a `ToolUI` too (see "Activities, on screen" in
-`lib/ui/chat/AGENTS.md`). A name the chat draws lives in
-`packages/entoli_core/lib/domain`, beside what it is about, since the log
+`packages/entoli_core/lib/transcript/AGENTS.md`). A name the chat draws lives
+in `packages/entoli_core/lib/domain`, beside what it is about, since the log
 records it and the UI reads it.
 
 One thing the prompt has to say explicitly, learned from watching a real model
@@ -1750,7 +1750,8 @@ reply, the red an error part is drawn in, since a `done` with nothing after
 it is the compact that seemed never to run. An automatic one has no turn, so
 the reason is `ChatViewState.compactFailure`, which the chat draws as a
 divider with the reason in red where the marker would have been; see "A
-compact turn, and its divider" in `lib/ui/chat/AGENTS.md`.
+compact turn, and its divider" in
+`packages/entoli_core/lib/view/chat/AGENTS.md`.
 
 **Usage is parsed, not estimated, where the provider says anything.**
 `LlmUsage` rides `LlmCompletion` — Anthropic's `message_start` and
@@ -1816,7 +1817,8 @@ question: it raises `QuestionRequestEvent` with Go, or changes typed into the
 panel's own answer field (see "Questions"), on the
 `answer` completer. It publishes nothing. The chat draws the call itself as
 the plan (`PresentPlanUI`, read off the file — see "The plan, on screen" in
-`lib/ui/chat/AGENTS.md`), so the plan is on screen above the panel without a
+`packages/entoli_core/lib/view/chat/AGENTS.md`), so the plan is on screen
+above the panel without a
 page to open. It used to render the plan into an artifact, which made a card
 of every plan whether a page helped or not; a diagram is now the model's call,
 made with `artifact`. The panel takes the composer's place exactly as for
