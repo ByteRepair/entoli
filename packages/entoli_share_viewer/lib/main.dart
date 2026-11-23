@@ -6,6 +6,7 @@ import "package:entoli_chat/core/transcript_bindings.dart";
 import "package:entoli_chat/data/chat_share.dart";
 import "package:entoli_chat/data/local/file_chat_store.dart";
 import "package:entoli_chat/domain/chat_share.dart";
+import "package:entoli_chat/domain/models.dart" show Chat;
 import "package:entoli_chat/ui/chat/activity/card.dart";
 import "package:entoli_chat/ui/theme.dart";
 import "package:flutter/material.dart";
@@ -33,7 +34,14 @@ Future<void> main() async {
   var overrides = transcriptOverrides;
   if (unpacked case (:final config, :final chatId)) {
     final store = FileChatStore(config);
-    final chat = await store.load(chatId);
+    final Chat chat;
+    try {
+      chat = await store.load(chatId);
+    } catch (_) {
+      // The page says so; nothing else here would.
+      runApp(const MaterialApp(home: _NotAShare()));
+      return;
+    }
     // A chat shared without its workspace has none to unpack; an empty one
     // is what the explorer says that of.
     Directory(config.workspaceDir(chatId)).createSync(recursive: true);

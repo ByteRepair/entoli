@@ -359,18 +359,45 @@ Future<UnpackedShare?> unpackShare(Uint8List zip, String dataDir) async {
   final manifest = archive.findFile(_manifest)?.readBytes();
   final stamp = archive.findFile("version")?.readBytes();
   if (manifest == null || stamp == null) return null;
-  final chatId = (jsonDecode(utf8.decode(manifest)) as Map)["chat"];
+  final Object? chatId;
+  try {
+    chatId = (jsonDecode(utf8.decode(manifest)) as Map)["chat"];
+  } catch (_) {
+    return null;
+  }
   if (chatId is! String || safeRelativePath(chatId) != chatId) return null;
   final shared = AppConfig.forDirectory(dataDir);
-  final roots = [shared.chatDir(chatId), shared.workspaceDir(chatId)];
+  // What a share packs and nothing else: a `meta.json`, which the sharer
+  // never sends, would set the imported chat's approvals and sandbox.
+  final files = {shared.convFile(chatId), shared.stateFile(chatId)};
+  final roots = [
+    shared.resourcesDir(chatId),
+    shared.artifactsDir(chatId),
+    shared.subAgentsDir(chatId),
+    shared.workspaceDir(chatId),
+  ];
   await extractInto(
     archive,
     dataDir,
-    accept: (target) => roots.any((root) => p.isWithin(root, target)),
+    accept: (target) =>
+        files.contains(target) || roots.any((root) => p.isWithin(root, target)),
   );
-  if (!File(shared.convFile(chatId)).existsSync()) return null;
+  if (!files.every((file) => File(file).existsSync())) return null;
   await File(migrationStamp(dataDir)).writeAsBytes(stamp);
-  return (config: await AppConfig.load(dataDir), chatId: chatId);
+  final AppConfig config;
+  try {
+    config = await AppConfig.load(dataDir);
+    // After the migrations, which bring an older state to today's shape; a
+    // newer build's may still be one this cannot read.
+    ChatState.fromJson(
+      jsonDecode(await File(shared.stateFile(chatId)).readAsString())
+          as Map<String, dynamic>,
+    );
+  } catch (e) {
+    logFailure("share", "a shared chat could not be read", e);
+    return null;
+  }
+  return (config: config, chatId: chatId);
 }
 
 /// [zip] as a new chat in [project] of [store]: see [ChatStore.importChat].

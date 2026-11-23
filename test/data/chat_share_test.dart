@@ -329,12 +329,25 @@ void main() {
       expect(await unpackShare(shared, dir.path), isNull);
     });
 
+    final state = "projects/default/chats/c1/state.json";
+    final stateBytes = utf8.encode(
+      jsonEncode(
+        ChatState(
+          id: "c1",
+          title: "t",
+          createdAt: DateTime.utc(2026),
+          updatedAt: DateTime.utc(2026),
+        ).toJson(),
+      ),
+    );
+
     test("writes nothing outside the chat's own folders", () async {
       final dir = tempDir();
       final shared = zip({
         "version": utf8.encode(migrations.last.version),
         "share.json": utf8.encode(jsonEncode({"chat": "c1"})),
         conv: [],
+        state: stateBytes,
         "settings.json": utf8.encode("{}"),
         "projects/default/chats/c2/conv.jsonl": [],
       });
@@ -345,6 +358,50 @@ void main() {
         Directory(p.join(dir.path, "projects/default/chats/c2")).existsSync(),
         isFalse,
       );
+    });
+
+    test("leaves out a chat's settings, which a share never carries", () async {
+      final dir = tempDir();
+      final shared = zip({
+        "version": utf8.encode(migrations.last.version),
+        "share.json": utf8.encode(jsonEncode({"chat": "c1"})),
+        conv: [],
+        state: stateBytes,
+        "projects/default/chats/c1/meta.json": utf8.encode(
+          jsonEncode({"sandbox": false}),
+        ),
+      });
+
+      final unpacked = await unpackShare(shared, dir.path);
+
+      expect(unpacked?.chatId, "c1");
+      expect(File(unpacked!.config.metaFile("c1")).existsSync(), isFalse);
+    });
+
+    test("without a state, or one that is not JSON, is refused", () async {
+      Uint8List withState(List<int>? bytes) => zip({
+        "version": utf8.encode(migrations.last.version),
+        "share.json": utf8.encode(jsonEncode({"chat": "c1"})),
+        conv: [],
+        if (bytes != null) state: bytes,
+      });
+
+      expect(await unpackShare(withState(null), tempDir().path), isNull);
+      expect(
+        await unpackShare(withState(utf8.encode("{")), tempDir().path),
+        isNull,
+      );
+    });
+
+    test("with a manifest that is not JSON is refused", () async {
+      final shared = zip({
+        "version": utf8.encode(migrations.last.version),
+        "share.json": utf8.encode("not json"),
+        conv: [],
+        state: stateBytes,
+      });
+
+      expect(await unpackShare(shared, tempDir().path), isNull);
     });
   });
 

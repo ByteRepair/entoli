@@ -80,7 +80,14 @@ class _IncomingLinksState extends ConsumerState<IncomingLinks> {
           return;
         }
         navigator.popUntil((r) => r.isFirst);
-        final id = await ref.read(chatSharesProvider).import(zip);
+        final String? id;
+        try {
+          id = await ref.read(chatSharesProvider).import(zip);
+        } catch (e) {
+          logFailure("links", "importing a shared chat failed", e);
+          if (mounted) say(context, "Could not import this chat: $e");
+          return;
+        }
         if (id == null && mounted) {
           logFailure("links", "a shared chat link held no chat");
           say(context, "This link does not hold a shared chat.");
