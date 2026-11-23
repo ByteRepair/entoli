@@ -4,11 +4,11 @@ import "dart:js_interop";
 
 import "package:entoli_core/model/chat_store.dart";
 import "package:entoli_core/model/file_handoff.dart";
+import "package:entoli_core/model/link_launcher.dart";
 import "package:entoli_core/model/link_opener.dart";
 import "package:file/file.dart";
 import "package:flutter/widgets.dart";
 import "package:path/path.dart" as p;
-import "package:url_launcher/url_launcher.dart";
 import "package:web/web.dart" as web;
 
 /// A shared workspace's way out of the page: a file is downloaded, the one
@@ -59,15 +59,18 @@ class WebFileHandoff implements FileHandoff {
 /// a tab as it was published; a file beside it that the page names does not
 /// come with it, which the app's opener serves.
 class WebLinkOpener implements LinkOpener {
-  const WebLinkOpener(this.fs, this.store);
+  const WebLinkOpener(this.fs, this.store, this.launcher);
 
   final FileSystem fs;
   final ChatStore store;
 
+  /// A browser's external application is a new tab.
+  final LinkLauncher launcher;
+
   @override
   Future<void> open(BuildContext context, Uri url) async {
     if (url.scheme != "https" && url.scheme != "http") return;
-    await launchUrl(url, webOnlyWindowName: "_blank");
+    await launcher.openExternal(url);
   }
 
   @override

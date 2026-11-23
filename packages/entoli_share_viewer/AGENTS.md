@@ -41,6 +41,26 @@ from Flutter's CDN, so `build/web/canvaskit/` is never fetched.
     blob: a blob URL runs as the viewer's origin, with the viewer as its
     opener, and the page is a stranger's.
 
+## The core plus its web adapters
+
+`main.dart` binds every port the page needs, in one list, as the app's `main`
+does. One adapter is among them: `entoli_links`, whose `PluginLinkLauncher`
+is `url_launcher`, which opens a tab on the web; `WebLinkOpener` and the
+bar's two buttons leave the page through it. The rest the viewer implements itself, because the adapter
+for it does not build for a browser or brings what a page cannot use:
+
+- **Files.** `entoli_files` is the platform's choosers and `dart:io` paths,
+  with `path_provider`, which has no web implementation. A browser does one
+  thing with a file, download it, and `WebFileHandoff` is that.
+- **The filesystem.** The core's own port, bound to a `MemoryFileSystem`.
+- **The host and the hand-off.** What a read-only chat is, which no adapter
+  knows.
+
+Every other adapter is a capability the page has no use for, and depending on
+one is not free: Flutter bundles every dependency's assets, so voice alone
+would ship its models. `test/core/plugin_boundary_test.dart` at the root holds
+the viewer to the core and the adapters its pubspec names.
+
 `SharedChatPage` is the bar and a `ConversationView` with nothing under it:
 the chapter rail and jump to latest as in the app. The bar has the plan, the
 workspace (the host's `workspaceDir`) in the explorer's `readOnly` mode, **Open in Entoli**

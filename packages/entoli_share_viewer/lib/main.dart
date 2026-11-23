@@ -8,6 +8,7 @@ import "package:entoli_core/model/chat_share.dart";
 import "package:entoli_core/model/models.dart" show Chat;
 import "package:entoli_core/view/chat/activity/card.dart";
 import "package:entoli_core/view/theme.dart";
+import "package:entoli_links/entoli_links.dart";
 import "package:file/memory.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -35,6 +36,8 @@ Future<void> main() async {
   Widget home = const _NotAShare();
   var overrides = transcriptOverrides;
   if (unpacked case (:final config, :final chatId)) {
+    // A browser's way out of the page is a new tab, which url_launcher opens.
+    const launcher = PluginLinkLauncher();
     final store = FileChatStore(config);
     final Chat chat;
     try {
@@ -55,9 +58,9 @@ Future<void> main() async {
       ),
       transcriptHandOffProvider.overrideWithValue(SharedChatHandOff.new),
       fileHandoffProvider.overrideWithValue(WebFileHandoff(fs)),
-      linkOpenerProvider.overrideWithValue(WebLinkOpener(fs, store)),
+      linkOpenerProvider.overrideWithValue(WebLinkOpener(fs, store, launcher)),
     ];
-    home = SharedChatPage(chat: chat, payload: payload);
+    home = SharedChatPage(chat: chat, payload: payload, launcher: launcher);
   }
   runApp(
     ProviderScope(
