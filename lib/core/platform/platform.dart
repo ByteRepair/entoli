@@ -38,12 +38,10 @@ export "host.dart"
         createAgentBrowser,
         createAppleFm,
         createAppUpdateHost,
-        createBackupHandoff,
         createByteRepairStore,
         cliCacheRoot,
         cliGuestOf,
         createAssistantLaunch,
-        createFileHandoff,
         createFileWatches,
         createLanSignaling,
         createLocalEngine,
@@ -63,8 +61,9 @@ export "host.dart"
         readOnlyDirs,
         setupComplete;
 
-// The app's platform seam: everything platform-varying is resolved here or
-// re-exported from `host.dart`, which answers it.
+// The app's platform seam: what the app builds per platform is resolved here
+// or in `host.dart`, re-exported. An adapter's own factories are called from
+// `main` directly.
 
 /// The agent, wired to what this platform can reach and to whatever the
 /// settings page last wrote. [libraries] is Entoli's commands and agents per

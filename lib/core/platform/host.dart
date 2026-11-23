@@ -13,9 +13,7 @@ import "package:entoli_core/model/app_update.dart";
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/assistant_launch.dart";
 import "package:entoli_core/model/intent_action.dart";
-import "package:entoli_core/model/backup_handoff.dart";
 import "package:entoli_core/model/builtin_project.dart";
-import "package:entoli_core/model/file_handoff.dart";
 import "package:entoli_core/model/file_watches.dart";
 import "package:entoli_core/model/reminder_alarms.dart";
 import "package:entoli_core/model/rootfs_store.dart";
@@ -25,8 +23,6 @@ import "package:entoli_core/model/sync/lan_signaling.dart";
 import "package:entoli_core/model/voice.dart";
 import "package:entoli_core/model/voice_model_store.dart";
 import "package:entoli_core/model/config.dart";
-import "package:entoli_files/entoli_files.dart"
-    show platformBackupHandoff, platformFileHandoff;
 import "package:entoli_paths/entoli_paths.dart" show appDirectories;
 import "package:entoli_voice/entoli_voice.dart"
     show openVoiceModelStore, platformVoice;
@@ -294,11 +290,6 @@ String bundledLinuxLibDir({String? executablePath}) {
   final dir = p.dirname(path);
   return p.basename(dir) == "lib" ? dir : p.join(dir, "lib");
 }
-
-FileHandoff createFileHandoff() => platformFileHandoff();
-
-BackupHandoff createBackupHandoff(FileHandoff handoff) =>
-    platformBackupHandoff(handoff);
 
 /// Shortcuts' App Intents, on the two platforms that have them: the Apple
 /// Runners answer `agent_chat/intents`, and nothing else does.

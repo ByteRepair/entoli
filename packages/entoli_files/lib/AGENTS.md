@@ -3,9 +3,8 @@
 `entoli_files` is the adapter for what a page does with a file outside
 Entoli: the platform's choosers, and the routes a file takes to another app.
 `entoli_files.dart` is the whole of what the app reaches —
-`platformFilePicker`, `platformFileHandoff` and
-`platformBackupHandoff`, bound in `main` and `lib/core/platform/host.dart` —
-plus `zipTo`, which the backup streams through too.
+`platformFilePicker`, `platformFileHandoff` and `platformBackupHandoff`,
+bound in `main` — plus `zipTo`, which the backup streams through too.
 
 ## The choosers
 

@@ -6,7 +6,6 @@ import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:http/http.dart" as http;
-import "package:entoli_core/transcript/storage.dart";
 import "package:entoli_core/model/config.dart";
 import "package:entoli_core/model/app_restart.dart";
 import "package:entoli_core/model/app_secrets.dart";
@@ -23,7 +22,8 @@ import "package:entoli_core/view/theme.dart";
 import "package:entoli_core/agent/llm/providers/provider.dart" show LlmProvider;
 import "package:entoli_core/store/prompts/prompt_sources.dart"
     show promptDirsOf;
-import "package:entoli_files/entoli_files.dart" show platformFilePicker;
+import "package:entoli_files/entoli_files.dart"
+    show platformBackupHandoff, platformFileHandoff, platformFilePicker;
 import "package:entoli_links/entoli_links.dart"
     show InAppSignInPages, PluginLinkLauncher, incomingLinks;
 import "package:entoli_menu/entoli_menu.dart" show nativeMenuBar;
@@ -196,7 +196,7 @@ class AppSession {
         ),
       ),
     );
-    final handoff = platform.createFileHandoff();
+    final handoff = platformFileHandoff();
     final cache = await cacheDir;
     final rootfs = platform.createRootfsStore(cache);
     // Started here and awaited below, the way the three above are: it is a
@@ -319,6 +319,7 @@ class AppSession {
       createLink: RtcLink.create,
       hostname: await hostname,
     );
+    const launcher = PluginLinkLauncher();
     final container = ProviderContainer(
       overrides: [
         chatStoreProvider.overrideWithValue(store),
@@ -326,7 +327,6 @@ class AppSession {
         ...appTranscriptOverrides,
         shellProvider.overrideWithValue(backend.shell),
         appConfigProvider.overrideWithValue(config),
-        fileSystemProvider.overrideWithValue(config.fs),
         appSecretsProvider.overrideWithValue(secrets),
         filePickerProvider.overrideWithValue(platformFilePicker()),
         clipboardFilesProvider.overrideWithValue(createClipboardFiles()),
@@ -336,14 +336,9 @@ class AppSession {
           (project) => PromptLibraryNotifier(project, libraries[project]),
         ),
         systemAccentProvider.overrideWithValue(await accent),
-        linkLauncherProvider.overrideWithValue(const PluginLinkLauncher()),
+        linkLauncherProvider.overrideWithValue(launcher),
         linkOpenerProvider.overrideWithValue(
-          PlatformLinkOpener(
-            store,
-            const PluginLinkLauncher(),
-            const PluginWebView(),
-            syncHub,
-          ),
+          PlatformLinkOpener(store, launcher, const PluginWebView(), syncHub),
         ),
         appLinksProvider.overrideWithValue(incomingLinks()),
         shareSheetProvider.overrideWithValue(const PluginShareSheet()),
@@ -360,9 +355,7 @@ class AppSession {
         chatPresenterProvider.overrideWith(SelectionChatPresenter.new),
         turnControlProvider.overrideWith(ChatControllerTurnControl.new),
         chatEditorProvider.overrideWith((ref) => ref.read(chatEditsProvider)),
-        backupHandoffProvider.overrideWithValue(
-          platform.createBackupHandoff(handoff),
-        ),
+        backupHandoffProvider.overrideWithValue(platformBackupHandoff(handoff)),
         appRestartProvider.overrideWithValue(relaunch),
         voiceModelStoreProvider.overrideWithValue(voiceModels),
         voiceProvider.overrideWithValue(voice),

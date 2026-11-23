@@ -10,7 +10,6 @@ import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:http/http.dart" as http;
-import "package:entoli_core/transcript/storage.dart";
 import "package:entoli_core/model/config.dart";
 import "package:agent_chat/data/local/local_instance.dart";
 import "package:agent_chat/data/local/local_prefill.dart";
@@ -266,7 +265,6 @@ class TestApp {
           ...appTranscriptOverrides,
           shellProvider.overrideWithValue(shell ?? _defaultShell(linuxHost)),
           appConfigProvider.overrideWithValue(config),
-          fileSystemProvider.overrideWithValue(config.fs),
           if (appleFm != null) appleFmProvider.overrideWithValue(appleFm),
           // Installed and signed in unless a test says otherwise, and running
           // nothing either way.
