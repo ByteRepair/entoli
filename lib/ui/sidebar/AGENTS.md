@@ -104,7 +104,9 @@ a turn starting or ending never moves the title; the docked sidebar is
 
 The switcher at the top of the sidebar opens `project_palette.dart`, and so does
 Ctrl+K (Cmd+K on Apple's platforms). It is the whole screen below
-`compactWidth` and a box in the middle above it. The default project and the
+`compactWidth` and a box in the middle above it — `showPaletteDialog`
+(`lib/ui/widgets/palette_dialog.dart`), which the share dialog is framed in
+too. The default project and the
 built-ins sit above a rule, the user's projects below it, other devices'
 projects under their own heading; each row is a spinner slot, the icon, the
 name and its chat count. Below another rule are the chats of every project,

@@ -16,29 +16,19 @@ import "package:entoli_chat/domain/link_bytes.dart" show appLinkMaxLength;
 import "package:entoli_chat/domain/chat_store.dart" show attachmentFilename;
 import "package:entoli_chat/domain/models.dart";
 import "package:entoli_chat/ui/widgets/dialogs.dart" show copyToClipboard, say;
-import "../widgets/nav_drawer.dart" show compactWidth;
+import "../widgets/palette_dialog.dart";
 import "../widgets/search_field.dart";
 
 /// Share on a chat: which of its files go with it, then the system's share
-/// sheet with the link. Framed as the project palette is — the whole screen on
-/// a phone, a box in the middle of anything wider.
+/// sheet with the link. Framed as the project palette is.
 Future<void> showShareChat(
   BuildContext context,
   ChatState chat, {
   Rect? origin,
 }) async {
-  final compact = MediaQuery.sizeOf(context).width < compactWidth;
-  final link = await showDialog<String>(
-    context: context,
-    builder: (_) => compact
-        ? Dialog.fullscreen(child: ShareChatDialog(chat: chat, compact: true))
-        : Dialog(
-            clipBehavior: Clip.antiAlias,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560, maxHeight: 560),
-              child: ShareChatDialog(chat: chat),
-            ),
-          ),
+  final link = await showPaletteDialog<String>(
+    context,
+    (compact) => ShareChatDialog(chat: chat, compact: compact),
   );
   if (link == null || !context.mounted) return;
   await _shareLink(context, link, origin: origin);
@@ -72,24 +62,33 @@ class ShareChatDialog extends ConsumerStatefulWidget {
   ConsumerState<ShareChatDialog> createState() => _ShareChatDialogState();
 }
 
-class _Row {
+/// One entry of the list: a line, or what parts the sections.
+sealed class _Item {
+  const _Item();
+}
+
+final class _Divider extends _Item {
+  const _Divider();
+}
+
+final class _Heading extends _Item {
+  const _Heading(this.text);
+
+  final String text;
+}
+
+/// One line of the list, the one the arrow keys move between: a file, or
+/// the line ticking every chat attachment at once.
+sealed class _Line extends _Item {
+  const _Line();
+}
+
+final class _Row extends _Line {
   const _Row(this.file, {required this.section, required this.label});
 
   final ShareFile file;
   final ShareSection section;
   final String label;
-}
-
-/// One line of the list, the one the arrow keys move between: a file, or
-/// the line ticking every chat attachment at once.
-sealed class _Line {
-  const _Line();
-}
-
-final class _FileLine extends _Line {
-  const _FileLine(this.row);
-
-  final _Row row;
 }
 
 final class _AllAttachmentsLine extends _Line {
@@ -99,7 +98,7 @@ final class _AllAttachmentsLine extends _Line {
 class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
   final _search = TextEditingController();
   ChatShareSource? _source;
-  List<_Row>? _rows;
+  Map<ShareSection, List<_Row>>? _rows;
   final SharePicks _picked = {
     for (final section in ShareSection.values) section: <String>{},
   };
@@ -132,37 +131,35 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
   Future<void> _load() async {
     final shares = ref.read(chatSharesProvider);
     final ChatShareSource source;
-    final List<_Row> rows;
+    final Map<ShareSection, List<_Row>> rows;
     try {
       source = await shares.source(widget.chat);
       final candidates = await source.candidates();
       final titles = await shares.artifactTitles(widget.chat);
-      rows = [
-        for (final file in candidates[ShareSection.attachments]!)
-          _Row(
-            file,
-            section: ShareSection.attachments,
-            label: attachmentFilename(file.path),
-          ),
-        for (final file in candidates[ShareSection.artifacts]!)
-          _Row(
-            file,
-            section: ShareSection.artifacts,
-            label: titles[file.path] ?? file.path,
-          ),
-        for (final file in candidates[ShareSection.workspace]!)
-          _Row(file, section: ShareSection.workspace, label: file.path),
-      ];
+      String label(ShareSection section, ShareFile file) => switch (section) {
+        ShareSection.attachments => attachmentFilename(file.path),
+        ShareSection.artifacts => titles[file.path] ?? file.path,
+        ShareSection.workspace => file.folder ? "${file.path}/" : file.path,
+      };
+      rows = {
+        for (final MapEntry(key: section, value: files) in candidates.entries)
+          section: [
+            for (final file in files)
+              _Row(file, section: section, label: label(section, file)),
+          ],
+      };
     } catch (e) {
       logFailure("share", "listing a chat's files failed", e);
-      if (mounted) setState(() => _rows = const []);
+      if (mounted) {
+        setState(() => _rows = {for (final s in ShareSection.values) s: []});
+      }
       return;
     }
     if (!mounted) return;
     setState(() {
       _source = source;
       _rows = rows;
-      for (final row in rows) {
+      for (final row in rows.values.expand((r) => r)) {
         if (row.file.suggested) _pick(row);
       }
     });
@@ -223,8 +220,7 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
     _isPicked(row) ? _picked[row.section]!.remove(row.file.path) : _pick(row);
   });
 
-  List<_Row> _rowsIn(ShareSection section) =>
-      (_rows ?? const []).where((r) => r.section == section).toList();
+  List<_Row> _rowsIn(ShareSection section) => _rows?[section] ?? const [];
 
   /// Every attachment ticked, none, or some: the all-attachments line's box.
   bool? get _attachmentsTicked {
@@ -262,21 +258,38 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
       .where((r) => _query.isEmpty || r.label.toLowerCase().contains(_query))
       .toList();
 
-  /// The lines on screen, in order. A search opens the attachments to show
-  /// which of them match.
-  List<_Line> get _lines {
-    final attachments = _matching(ShareSection.attachments);
-    return [
-      if (attachments.isNotEmpty) const _AllAttachmentsLine(),
-      if (_attachmentsOpen || _query.isNotEmpty)
-        for (final row in attachments) _FileLine(row),
-      for (final row in _matching(ShareSection.artifacts)) _FileLine(row),
-      for (final row in _matching(ShareSection.workspace)) _FileLine(row),
-    ];
+  /// What the list draws, in order, and the lines among it. A search opens
+  /// the attachments to show which of them match; a divider parts them from
+  /// the rest.
+  (List<_Item>, List<_Line>) get _entries {
+    final items = <_Item>[];
+    final lines = <_Line>[];
+    for (final section in ShareSection.values) {
+      final rows = _matching(section);
+      if (rows.isEmpty) continue;
+      if (section == ShareSection.attachments) {
+        items.add(const _AllAttachmentsLine());
+        lines.add(const _AllAttachmentsLine());
+        if (!_attachmentsOpen && _query.isEmpty) continue;
+      } else {
+        if (lines.firstOrNull is _AllAttachmentsLine &&
+            !items.any((i) => i is _Heading)) {
+          items.add(const _Divider());
+        }
+        items.add(
+          _Heading(
+            section == ShareSection.artifacts ? "Artifacts" : "Workspace",
+          ),
+        );
+      }
+      items.addAll(rows);
+      lines.addAll(rows);
+    }
+    return (items, lines);
   }
 
   void _toggleLine(_Line line) => switch (line) {
-    _FileLine(:final row) => _toggle(row),
+    _Row() => _toggle(line),
     _AllAttachmentsLine() => _toggleAttachments(),
   };
 
@@ -312,7 +325,7 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
   }
 
   void _move(int by) {
-    final count = _lines.length;
+    final count = _entries.$2.length;
     if (count == 0) return;
     setState(() => _active = (_active + by).clamp(0, count - 1));
   }
@@ -321,8 +334,9 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final rows = _rows;
-    final lines = _lines;
+    final (items, lines) = _entries;
     final active = lines.isEmpty ? 0 : _active.clamp(0, lines.length - 1);
+    final activeLine = lines.elementAtOrNull(active);
     final fit = _fit;
     final dropped = fit?.dropped ?? const <ShareSection>{};
     final ready = fit != null && fit.fits && !_packing;
@@ -402,24 +416,16 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
       child: Text(text, style: theme.textTheme.labelLarge),
     );
 
-    Widget line(int index) {
-      final selected = index == active;
-      return switch (lines[index]) {
-        _FileLine(:final row) => fileLine(row, selected: selected),
-        _AllAttachmentsLine() => allAttachmentsLine(selected: selected),
-      };
-    }
-
-    final firstArtifact = lines.indexWhere(
-      (l) => l is _FileLine && l.row.section == ShareSection.artifacts,
-    );
-    final firstWorkspace = lines.indexWhere(
-      (l) => l is _FileLine && l.row.section == ShareSection.workspace,
-    );
-    final hasAttachments = lines.firstOrNull is _AllAttachmentsLine;
-    final firstFile = [firstArtifact, firstWorkspace]
-        .where((i) => i >= 0)
-        .fold<int?>(null, (a, b) => a == null || b < a ? b : a);
+    Widget item(_Item item) => switch (item) {
+      _Divider() => const Divider(height: 24),
+      _Heading(:final text) => heading(text),
+      _Row() => fileLine(item, selected: identical(item, activeLine)),
+      _AllAttachmentsLine() => allAttachmentsLine(
+        selected: identical(item, activeLine),
+      ),
+    };
+    final noMatch =
+        (rows?.values.any((r) => r.isNotEmpty) ?? false) && lines.isEmpty;
 
     final (String status, bool alarming) = switch (fit) {
       _ when _error != null => (_error!, true),
@@ -446,7 +452,7 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
         const SingleActivator(LogicalKeyboardKey.arrowDown): () => _move(1),
         const SingleActivator(LogicalKeyboardKey.arrowUp): () => _move(-1),
         const SingleActivator(LogicalKeyboardKey.space, control: true): () {
-          if (lines.isNotEmpty) _toggleLine(lines[active]);
+          if (activeLine != null) _toggleLine(activeLine);
         },
       },
       child: Column(
@@ -481,29 +487,23 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
           Expanded(
             child: rows == null
                 ? const Center(child: CircularProgressIndicator())
-                : ListView(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                        child: Text(
-                          "The conversation and its sub-agents always go. "
-                          "Anyone with the link can read all of it.",
-                          style: theme.textTheme.bodySmall,
-                        ),
-                      ),
-                      for (var i = 0; i < lines.length; i++) ...[
-                        if (hasAttachments && i == firstFile)
-                          const Divider(height: 24),
-                        if (i == firstArtifact) heading("Artifacts"),
-                        if (i == firstWorkspace) heading("Workspace"),
-                        line(i),
-                      ],
-                      if (rows.isNotEmpty && lines.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Center(child: Text("No file matches")),
-                        ),
-                    ],
+                : ListView.builder(
+                    itemCount: items.length + (noMatch ? 2 : 1),
+                    itemBuilder: (context, i) => i == 0
+                        ? Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                            child: Text(
+                              "The conversation and its sub-agents always go. "
+                              "Anyone with the link can read all of it.",
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          )
+                        : i <= items.length
+                        ? item(items[i - 1])
+                        : const Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Center(child: Text("No file matches")),
+                          ),
                   ),
           ),
           const Divider(height: 1),

@@ -10,6 +10,7 @@ import "package:entoli_chat/domain/project.dart";
 import "package:entoli_chat/domain/project_settings.dart";
 import "../../providers.dart";
 import "../widgets/nav_drawer.dart";
+import "../widgets/palette_dialog.dart";
 import "../widgets/search_field.dart";
 import "../../app/palette.dart";
 import "../../app/remote_projects.dart";
@@ -28,18 +29,9 @@ typedef PaletteAction =
 /// The project switcher: the whole screen on a phone, a box in the middle of
 /// anything wider.
 Future<void> showProjectPalette(BuildContext context, WidgetRef ref) async {
-  final compact = MediaQuery.sizeOf(context).width < compactWidth;
-  final action = await showDialog<PaletteAction>(
-    context: context,
-    builder: (_) => compact
-        ? const Dialog.fullscreen(child: ProjectPalette(compact: true))
-        : Dialog(
-            clipBehavior: Clip.antiAlias,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560, maxHeight: 560),
-              child: const ProjectPalette(),
-            ),
-          ),
+  final action = await showPaletteDialog<PaletteAction>(
+    context,
+    (compact) => ProjectPalette(compact: compact),
   );
   if (action == null || !context.mounted) return;
   // A pick changes what the pane shows, so the pages over it close first —
