@@ -96,15 +96,17 @@ String zipNameFor(List<String> paths) {
 typedef TreeEntry = ({String path, String name, bool isDirectory});
 
 /// Every member [paths] make, in walk order: each folder before what is in
-/// it, named relative to [base] or the path's own parent. A link under a
-/// folder is not followed and not a member: what a tree points at outside
-/// itself is not the tree's to hand over, and a link back up would never end.
+/// it, named relative to [base] or the path's own parent. A link is followed,
+/// so a member is what the link points at; with [followLinks] false it is no
+/// member at all, for a tree handed to someone else, where what it points at
+/// outside itself is not the tree's to give. A broken link is never a member.
 /// [skip] and [skipDir] are as [zipTo]'s.
 Stream<TreeEntry> walkTree(
   List<String> paths, {
   String? base,
   bool Function(String path)? skip,
   bool Function(String path)? skipDir,
+  bool followLinks = true,
 }) async* {
   Stream<TreeEntry> walk(String from, String path, bool isDirectory) async* {
     if (!isDirectory) {
@@ -121,7 +123,7 @@ Stream<TreeEntry> walkTree(
     if (name != ".") yield (path: path, name: name, isDirectory: true);
     // On the entity rather than its path: `list` has already answered which
     // each one is, and asking again is a stat per file.
-    await for (final entity in Directory(path).list(followLinks: false)) {
+    await for (final entity in Directory(path).list(followLinks: followLinks)) {
       if (entity is Link) continue;
       yield* walk(from, entity.path, entity is Directory);
     }

@@ -269,6 +269,18 @@ void main() {
       );
     });
 
+    test("leave a link out: what it points at is not the chat's", () async {
+      await chat("c1");
+      final outside = tempDir().path;
+      File(p.join(outside, "id_ed25519")).writeAsStringSync("secret");
+      put(p.join(config.workspaceDir("c1"), "main.js"), [1]);
+      Link(p.join(config.workspaceDir("c1"), "keys")).createSync(outside);
+
+      final workspace = (await source().candidates())[ShareSection.workspace]!;
+
+      expect(workspace.map((f) => f.path), ["main.js"]);
+    });
+
     test("a ticked folder carries everything under it", () async {
       await chat("c1");
       put(p.join(config.workspaceDir("c1"), ".git/HEAD"), utf8.encode("ref"));

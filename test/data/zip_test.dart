@@ -67,4 +67,26 @@ void main() {
       {"a.txt", "sub/b.txt"},
     );
   });
+
+  test("a link is followed, unless the walk is told not to", () async {
+    final outside = tempDir().path;
+    File("$outside/target.txt").writeAsStringSync("linked");
+    Directory("$dir/tree").createSync();
+    Link("$dir/tree/file.txt").createSync("$outside/target.txt");
+    Link("$dir/tree/folder").createSync(outside);
+    Link("$dir/tree/broken").createSync("$outside/missing");
+
+    final archive = await unzip(["$dir/tree"]);
+    expect(
+      String.fromCharCodes(archive.findFile("tree/file.txt")!.content),
+      "linked",
+    );
+    expect(archive.findFile("tree/folder/target.txt"), isNotNull);
+    expect(archive.findFile("tree/broken"), isNull);
+
+    final unfollowed = [
+      await for (final e in walkTree(["$dir/tree"], followLinks: false)) e.name,
+    ];
+    expect(unfollowed, ["tree"]);
+  });
 }

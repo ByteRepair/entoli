@@ -101,6 +101,7 @@ class ChatShareSource {
       [dir],
       base: dir,
       skipDir: workspace ? skipDir : null,
+      followLinks: false,
     )) {
       if (entry.isDirectory) continue;
       files.add(
@@ -268,7 +269,7 @@ typedef _Member = ({String name, String path});
 
 /// Every file under [from], named as it would be under [into].
 Future<List<_Member>> _membersUnder(String from, String into) async => [
-  await for (final entry in walkTree([from], base: from))
+  await for (final entry in walkTree([from], base: from, followLinks: false))
     if (!entry.isDirectory)
       (name: _member(p.join(into, entry.name)), path: entry.path),
 ];
@@ -336,7 +337,7 @@ String _under(String dir, String path) =>
 
 Future<int> _sizeOf(String dir) async {
   var size = 0;
-  await for (final entry in walkTree([dir], base: dir)) {
+  await for (final entry in walkTree([dir], base: dir, followLinks: false)) {
     if (!entry.isDirectory) size += await File(entry.path).length();
   }
   return size;
