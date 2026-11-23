@@ -3,15 +3,15 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../core/log.dart";
-import "../domain/app_link.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/app_link.dart";
 import "../providers.dart";
 import "../app/chat_shares.dart";
 import "../app/marketplace/preview.dart";
 import "bot_avatar/bot_avatar_install.dart";
 import "marketplace/marketplace_entry_preview.dart";
 import "selection.dart";
-import "widgets/dialogs.dart";
+import "package:entoli_chat/ui/widgets/dialogs.dart";
 
 /// Wraps the app so an `entoli://` link opens what it names over whatever is
 /// on screen. [appLinksProvider] delivers the link that launched the app and

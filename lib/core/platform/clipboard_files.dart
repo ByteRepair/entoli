@@ -7,9 +7,9 @@ import "package:flutter/services.dart";
 import "package:path/path.dart" as p;
 
 import "../../data/mime.dart";
-import "../../domain/clipboard_files.dart";
-import "../../domain/models.dart";
-import "../log.dart";
+import "package:entoli_chat/domain/clipboard_files.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/core/log.dart";
 
 const _channel = MethodChannel("agent_chat/clipboard");
 

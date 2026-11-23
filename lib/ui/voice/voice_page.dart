@@ -1,13 +1,13 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/chat_meta.dart";
-import "../../domain/models.dart";
+import "package:entoli_chat/domain/chat_meta.dart";
+import "package:entoli_chat/domain/models.dart";
 import "../../providers.dart";
 import "../../app/chat_controller.dart";
 import "../chat/widgets/turn_surface.dart";
 import "../settings/settings_category.dart";
-import "../widgets/dialogs.dart";
+import "package:entoli_chat/ui/widgets/dialogs.dart";
 import "../widgets/nav_drawer.dart";
 import "transcript.dart";
 import "../../app/turn_surface.dart";

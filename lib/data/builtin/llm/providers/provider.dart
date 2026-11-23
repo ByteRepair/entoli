@@ -3,10 +3,10 @@ import "dart:convert";
 import "package:http/http.dart" as http;
 
 import "../../../../core/tls.dart";
-import "../../../../domain/llm_provider.dart";
-import "../../../../domain/model_capability.dart";
-import "../../../../domain/model_registry.dart";
-import "../../../../domain/provider_usage.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_chat/domain/model_capability.dart";
+import "package:entoli_chat/domain/model_registry.dart";
+import "package:entoli_chat/domain/provider_usage.dart";
 import "../hosted_models.dart";
 import "../http_stream.dart";
 import "../llm_client.dart";

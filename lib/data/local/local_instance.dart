@@ -2,9 +2,9 @@ import "dart:async";
 
 import "package:flutter/foundation.dart" show protected;
 
-import "../../domain/app_settings.dart";
-import "../../domain/local_llm.dart";
-import "../../domain/local_model.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/local_llm.dart";
+import "package:entoli_chat/domain/local_model.dart";
 import "../builtin/llm/llm_client.dart";
 
 /// How a model is to be loaded, as a turn asks for it. Read from the settings

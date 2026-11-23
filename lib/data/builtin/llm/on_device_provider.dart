@@ -1,12 +1,12 @@
 import "package:http/http.dart" as http;
 
-import "../../../domain/app_settings.dart";
-import "../../../domain/local_llm.dart" show onDeviceConfig;
-import "../../../domain/local_model.dart" show localProviderId;
-import "../../../domain/model_capability.dart";
-import "../../../domain/model_registry.dart";
-import "../../../domain/voice.dart";
-import "../../../domain/voice_model.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/local_llm.dart" show onDeviceConfig;
+import "package:entoli_chat/domain/local_model.dart" show localProviderId;
+import "package:entoli_chat/domain/model_capability.dart";
+import "package:entoli_chat/domain/model_registry.dart";
+import "package:entoli_chat/domain/voice.dart";
+import "package:entoli_chat/domain/voice_model.dart";
 import "../../local/local_engine.dart";
 import "hosted_models.dart";
 import "llm_client.dart";

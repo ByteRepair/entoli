@@ -15,7 +15,7 @@ const athena = "athena";
 ///
 /// [tools] is the `tools:` frontmatter as tool ids: exactly what the agent is
 /// offered among the tools that can be granted, or null for each tool's own
-/// default. See "Tools per agent" in `lib/domain/AGENTS.md`.
+/// default. See "Tools per agent" in `packages/entoli_chat/lib/domain/AGENTS.md`.
 class AgentDefinition {
   const AgentDefinition._(this.document, this.tools);
 

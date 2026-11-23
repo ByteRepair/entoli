@@ -5,7 +5,7 @@ import "dart:typed_data";
 import "package:flutter/foundation.dart" show protected;
 import "package:http/http.dart" as http;
 
-import "../../../core/log.dart";
+import "package:entoli_chat/core/log.dart";
 import "../../../core/tls.dart";
 
 import "http_stream.dart";

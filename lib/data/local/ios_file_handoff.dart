@@ -1,8 +1,8 @@
 import "package:flutter/services.dart";
 import "package:url_launcher/url_launcher.dart";
 
-import "../../core/log.dart";
-import "../../domain/file_handoff.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/file_handoff.dart";
 
 /// iOS, whose file manager is the Files app: the workspaces are there through
 /// the Runner's File Provider extension, and `FilesChannel.swift` opens Files

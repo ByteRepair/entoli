@@ -3,8 +3,8 @@ import "dart:async";
 import "package:flutter/foundation.dart" show mustCallSuper, protected;
 import "package:flutter/services.dart";
 
-import "../../core/log.dart";
-import "../../domain/reminder_alarms.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/reminder_alarms.dart";
 
 /// What every port behind `agent_chat/reminders` shares: the tap route, the
 /// notification permission, and calls that never throw.

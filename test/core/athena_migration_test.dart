@@ -4,9 +4,9 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-import "package:agent_chat/core/migrations.dart";
-import "package:agent_chat/domain/chat_log.dart";
-import "package:agent_chat/domain/models.dart";
+import "package:entoli_chat/core/migrations.dart";
+import "package:entoli_chat/domain/chat_log.dart";
+import "package:entoli_chat/domain/models.dart";
 
 import "../harness.dart";
 

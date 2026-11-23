@@ -5,12 +5,12 @@ import "package:flutter/foundation.dart"
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-import "package:agent_chat/core/config.dart";
+import "package:entoli_chat/core/config.dart";
 import "package:agent_chat/core/platform/host.dart"
     show byteRepairBinDir, platformDriver, setupComplete;
-import "package:agent_chat/domain/builtin_project.dart";
-import "package:agent_chat/domain/models.dart" show CompletionKind;
-import "package:agent_chat/domain/shell.dart";
+import "package:entoli_chat/domain/builtin_project.dart";
+import "package:entoli_chat/domain/models.dart" show CompletionKind;
+import "package:entoli_chat/domain/shell.dart";
 
 import "../fakes.dart";
 import "../harness.dart";

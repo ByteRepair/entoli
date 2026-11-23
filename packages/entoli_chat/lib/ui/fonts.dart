@@ -9,7 +9,10 @@ import "package:flutter/services.dart" show rootBundle;
 /// on this desktop. Those things are shown verbatim
 /// because their exact characters line up, which is a poor thing to leave to
 /// the platform.
-const monoFamily = "RobotoMono";
+const monoFamily = "$_fonts/RobotoMono";
+
+/// A font a package declares is registered under its name, not the app's.
+const _fonts = "packages/entoli_chat";
 
 /// The two faces the artifact stylesheet names — Playfair Display headings
 /// over a Source Serif 4 body — worn by the whole app through `entoliTheme`,
@@ -17,9 +20,9 @@ const monoFamily = "RobotoMono";
 /// stylesheet does it, because a Flutter view has no Google Fonts `<link>`:
 /// the engine reads only what pubspec declares, and what ships is subset
 /// small.
-const displayFamily = "PlayfairDisplay";
+const displayFamily = "$_fonts/PlayfairDisplay";
 
-const bodyFamily = "SourceSerif4";
+const bodyFamily = "$_fonts/SourceSerif4";
 
 /// All three families are under the SIL Open Font Licence, which asks for the
 /// licence to travel with the font. This puts them in front of a reader rather
@@ -31,9 +34,9 @@ const bodyFamily = "SourceSerif4";
 void registerBundledFontLicences() {
   LicenseRegistry.addLicense(() async* {
     for (final (family, file) in const [
-      (monoFamily, "assets/fonts/OFL.txt"),
-      (displayFamily, "assets/fonts/PlayfairDisplay-OFL.txt"),
-      (bodyFamily, "assets/fonts/SourceSerif4-OFL.txt"),
+      ("RobotoMono", "$_fonts/assets/fonts/OFL.txt"),
+      ("PlayfairDisplay", "$_fonts/assets/fonts/PlayfairDisplay-OFL.txt"),
+      ("SourceSerif4", "$_fonts/assets/fonts/SourceSerif4-OFL.txt"),
     ]) {
       yield LicenseEntryWithLineBreaks([
         family,

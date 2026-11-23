@@ -4,15 +4,16 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:path/path.dart" as p;
 
-import "../../../app/transcript/activity.dart";
-import "../../../domain/agent_browser.dart" show AgentBrowser, BrowserTab;
+import "package:entoli_chat/app/transcript/activity.dart";
+import "package:entoli_chat/domain/agent_browser.dart"
+    show AgentBrowser, BrowserTab;
 import "../../../providers.dart";
 import "../../skills/skill_install_preview.dart" show openSkillInstall;
-import "../../widgets/dialogs.dart" show say;
-import "../../widgets/text_file_page.dart" show openTextFile;
-import "../plan_page.dart" as plan_page;
+import "package:entoli_chat/ui/widgets/dialogs.dart" show say;
+import "package:entoli_chat/ui/widgets/text_file_page.dart" show openTextFile;
+import "package:entoli_chat/ui/chat/plan_page.dart" as plan_page;
 import "../widgets/browser_strip.dart" show openBrowserTab;
-import "card.dart" show showActivityDetail;
+import "package:entoli_chat/ui/chat/activity/card.dart" show showActivityDetail;
 
 /// The app's hand-off: a page pushed over the [context] of what was tapped.
 class ContextHandOff implements TranscriptHandOff {

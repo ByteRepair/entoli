@@ -162,7 +162,7 @@ final _mention = RegExp(r"(?<![\w.-])@([\w.-]+)");
 /// The skill and agents [text] names that the library knows, as written — sigil
 /// on, `/review` and `@researcher` — ready to be recorded on the message as
 /// [Message.references] and read back by [expandedPrompt] and
-/// [mentionedAgents]. See "Skills and agents" in `lib/domain/AGENTS.md`.
+/// [mentionedAgents]. See "Skills and agents" in `packages/entoli_chat/lib/domain/AGENTS.md`.
 ///
 /// The names alone, not what they meant: a skill is a directory of files, so a
 /// copy of its `SKILL.md` would be a part of it out of step with the rest, and

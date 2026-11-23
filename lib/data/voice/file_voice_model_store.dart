@@ -7,10 +7,10 @@ import "package:path/path.dart" as p;
 import "package:http/http.dart" as http;
 
 import "../download.dart";
-import "../../domain/download.dart";
-import "../../domain/voice_model.dart";
-import "../../domain/voice_model_store.dart";
-import "../../domain/workspace.dart";
+import "package:entoli_chat/domain/download.dart";
+import "package:entoli_chat/domain/voice_model.dart";
+import "package:entoli_chat/domain/voice_model_store.dart";
+import "package:entoli_chat/domain/workspace.dart";
 
 /// Voice models in a directory of their own, outside the data directory — see
 /// [VoiceModelStore] for why that matters.

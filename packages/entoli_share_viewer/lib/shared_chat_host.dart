@@ -1,15 +1,15 @@
 import "dart:typed_data";
 
-import "package:agent_chat/app/transcript/activity.dart" show LiveMessage;
-import "package:agent_chat/app/transcript/host.dart";
-import "package:agent_chat/core/config.dart";
-import "package:agent_chat/domain/agent_face.dart";
-import "package:agent_chat/domain/chat_log.dart" show replay;
-import "package:agent_chat/domain/chat_store.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/plan.dart";
-import "package:agent_chat/domain/room/room_state.dart" show ChatViewState;
-import "package:agent_chat/domain/shell_job.dart" show ShellJob;
+import "package:entoli_chat/app/transcript/activity.dart" show LiveMessage;
+import "package:entoli_chat/app/transcript/host.dart";
+import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/domain/agent_face.dart";
+import "package:entoli_chat/domain/chat_log.dart" show replay;
+import "package:entoli_chat/domain/chat_store.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/plan.dart";
+import "package:entoli_chat/domain/room/room_state.dart" show ChatViewState;
+import "package:entoli_chat/domain/shell_job.dart" show ShellJob;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 

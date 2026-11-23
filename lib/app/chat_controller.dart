@@ -2,21 +2,21 @@ import "dart:async";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../core/log.dart";
-import "../domain/chat_log.dart";
-import "../domain/chat_repository.dart";
-import "../domain/reminder_alarms.dart";
-import "../domain/models.dart";
-import "../domain/reaction.dart";
-import "../domain/project_settings.dart"
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/chat_log.dart";
+import "package:entoli_chat/domain/chat_repository.dart";
+import "package:entoli_chat/domain/reminder_alarms.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/reaction.dart";
+import "package:entoli_chat/domain/project_settings.dart"
     show OmadaOrdering, defaultOmadaOrdering;
-import "../domain/room/chat_room.dart";
-import "../domain/room/room_state.dart";
-import "../domain/room/roster.dart";
+import "package:entoli_chat/domain/room/chat_room.dart";
+import "package:entoli_chat/domain/room/room_state.dart";
+import "package:entoli_chat/domain/room/roster.dart";
 import "../providers.dart";
-import "turn_driver.dart";
+import "package:entoli_chat/app/turn_driver.dart";
 
-export "turn_driver.dart";
+export "package:entoli_chat/app/turn_driver.dart";
 
 /// A chat on this device: the [ChatRoom] that drives it, held by Riverpod.
 /// What is here is what the room is not — the settings it reads, and the

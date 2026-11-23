@@ -4,13 +4,13 @@ import "dart:typed_data";
 
 import "package:path/path.dart" as p;
 
-import "../../core/config.dart";
+import "package:entoli_chat/core/config.dart";
 import "../../core/platform/platform.dart" as platform;
 import "../../data/prompts/prompt_export.dart" show skillSourceEntries;
 import "../../data/prompts/skill_import.dart";
 import "../../data/prompts/skill_validate.dart";
-import "../../domain/frontmatter.dart";
-import "../../domain/models.dart";
+import "package:entoli_chat/domain/frontmatter.dart";
+import "package:entoli_chat/domain/models.dart";
 
 /// A project's own skills on disk: what each folder is wrong about, and
 /// every write a page makes to them, each through the directory's lock.

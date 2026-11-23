@@ -486,10 +486,10 @@ expanding its body as a prompt template — the same one `/` namespace the
 opencode-era offered commands under, where frontmatter decided what a send
 meant, restored under the built-in backend with the key the spec's `metadata:`
 map carries. What the callback does is the closed set in
-`lib/domain/wired_skill.dart` (`WiredSkill`), and the bundled `compact` and
-`goal` skills are the ones that ship. The body of a wired skill is the user's documentation,
-never sent to a model — `promptReferences` does not record one and
-`expandedPrompt` refuses to expand one, so the
+`packages/entoli_chat/lib/domain/wired_skill.dart` (`WiredSkill`), and the
+bundled `compact` and `goal` skills are the ones that ship. The body of a wired
+skill is the user's documentation, never sent to a model — `promptReferences`
+does not record one and `expandedPrompt` refuses to expand one, so the
 conversation never gains prose pretending the model read it.
 
 **The check is the `shellBypassCommand` pattern**: one function read by every
@@ -765,7 +765,8 @@ routed away from a model, in a chat that may have no provider at all.
 
 `ask` is the capability, not the feature: the backend is the only route to a
 provider, so a one-shot question belongs on it, while the prompt and the
-clean-up are `lib/domain/chat_title.dart` and the repository composes them.
+clean-up are `packages/entoli_chat/lib/domain/chat_title.dart` and the
+repository composes them.
 
 `cleanTitle` exists because the reply names the chat verbatim. Every rule in it
 is one of the prompt's instructions being ignored — a quoted title, a `Title:`
@@ -824,16 +825,17 @@ run beside it.
 
 Beside the `.md` an agent may carry a face: a profile picture, `<name>.png`
 in the same directory — a PNG, picked in the editor — or a Bot Avatar,
-`<name>.avatar.json` (see `lib/domain/bot_avatar/AGENTS.md`), one or the
-other, written and removed with the agent. It is no part of the document: nothing parses it, nothing back-ups it
-specially (a directory that grows a picture is still carried by the
-members-are-files rule), and the model is never told of it. The picture a
-project shows is read over the same tier walk the library answers mentions
-with — a project's own answering over an inherited one — by
-`readAgentPicture`, which answers an `AgentFace` and the
-`agentPictureProvider` serves and the agents
-list, the editor and the Omada reply's avatar read. A bundled agent has no
-picture until the user's own agent of the same name carries one.
+`<name>.avatar.json` (see
+`packages/entoli_chat/lib/domain/bot_avatar/AGENTS.md`), one or the other,
+written and removed with the agent. It is no part of the document: nothing
+parses it, nothing back-ups it specially (a directory that grows a picture is
+still carried by the members-are-files rule), and the model is never told of it.
+The picture a project shows is read over the same tier walk the library answers
+mentions with — a project's own answering over an inherited one — by
+`readAgentPicture`, which answers an `AgentFace` and the `agentPictureProvider`
+serves and the agents list, the editor and the Omada reply's avatar read. A
+bundled agent has no picture until the user's own agent of the same name carries
+one.
 
 A skill has two halves to being reachable, and they are separate. **User
 invocation** is a `/name` in the composer, offered while the skill is
@@ -905,7 +907,7 @@ what a user types to ask for a sub-agent. A turn with no `task` (a built-in
 project that takes it away, a device with no shell, an Omada room) is told
 nothing, and the mention is prose. Who is in the room, and so who a mention
 promotes rather than delegates to, is the room's `Roster` (see "The room and
-its participants" in `lib/domain/room/AGENTS.md`).
+its participants" in `packages/entoli_chat/lib/domain/room/AGENTS.md`).
 
 `completions` is therefore **not** on `AgentBackend`: `completionsProvider`
 is a family keyed by project, reading the project's library directly and
@@ -966,13 +968,13 @@ interrupted turn".
 ## Reactions
 
 Any message can be reacted to — a reply, a member's, the user's own — with
-one of six emoji (`Reaction`, `lib/domain/reaction.dart`), from the smiley on
-its action row. **A reaction is something said, not a mark on the message.**
-It goes on the log as a user message whose one part is a `ReactionPart`, and
-from there it is a say like any other: the room schedules it, the turn it
-starts answers it, a mirror sends it home (`SyncMessage.react`), and the
-projection words it. No record type was added: a message is already what the
-room routes, and a record beside the thread would need its own walk to say
+one of six emoji (`Reaction`, `packages/entoli_chat/lib/domain/reaction.dart`),
+from the smiley on its action row. **A reaction is something said, not a mark on
+the message.** It goes on the log as a user message whose one part is a
+`ReactionPart`, and from there it is a say like any other: the room schedules
+it, the turn it starts answers it, a mirror sends it home (`SyncMessage.react`),
+and the projection words it. No record type was added: a message is already what
+the room routes, and a record beside the thread would need its own walk to say
 where in the conversation it was made.
 
 It is addressed to whoever wrote the message: the part carries that

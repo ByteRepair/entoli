@@ -1,7 +1,7 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/agent_browser.dart";
-import "../../domain/download.dart";
+import "package:entoli_chat/domain/agent_browser.dart";
+import "package:entoli_chat/domain/download.dart";
 import "../../providers.dart";
 import "downloads.dart";
 

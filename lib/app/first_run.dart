@@ -3,14 +3,14 @@ import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "package:uuid/uuid.dart";
 
-import "../core/formatting.dart";
-import "../core/log.dart";
-import "../domain/agent_browser.dart" show embeddedBrowserId;
-import "../domain/chat_log.dart";
-import "../domain/download.dart";
-import "../domain/models.dart";
-import "../domain/project.dart";
-import "../domain/rootfs.dart";
+import "package:entoli_chat/core/formatting.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/agent_browser.dart" show embeddedBrowserId;
+import "package:entoli_chat/domain/chat_log.dart";
+import "package:entoli_chat/domain/download.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/project.dart";
+import "package:entoli_chat/domain/rootfs.dart";
 import "../providers.dart";
 import "selection.dart";
 import "downloads/browser_downloads.dart";

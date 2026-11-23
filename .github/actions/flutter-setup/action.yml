@@ -44,7 +44,7 @@ runs:
       id: codegen-cache
       uses: actions/cache/restore@v6.1.0
       with:
-        path: .dart_tool/build
+        path: packages/entoli_chat/.dart_tool/build
         key: codegen-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
         restore-keys: codegen-${{ runner.os }}-
 
@@ -71,5 +71,5 @@ runs:
       if: github.ref_type != 'tag' && steps.codegen-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6.1.0
       with:
-        path: .dart_tool/build
+        path: packages/entoli_chat/.dart_tool/build
         key: ${{ steps.codegen-cache.outputs.cache-primary-key }}

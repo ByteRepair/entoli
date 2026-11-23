@@ -2,13 +2,15 @@
 
 A web page for a chat shared as a link (see "A shared chat" in
 `lib/ui/chat/AGENTS.md`), for where the app is not installed: the conversation
-read-only, as the app draws it. It is the app's own code, `agent_chat` as a
-path dependency, with the app's providers swapped for this page's few — not a
-second drawing of the conversation.
+read-only, as the app draws it. It is the app's own code, the chat package
+(`entoli_chat`, see "The chat package" in the root `AGENTS.md`), with its ports
+bound to this page's few — not a second drawing of the conversation. It does
+not depend on the app, so none of the app's plugins or assets are in it.
 
 Build it in the `flutter-dev` toolbox from this directory with
 `flutter build web --release`; `build/web/` is static files. Nothing deploys
-it yet. Open it with a share link's fragment on the URL.
+it yet. Open it with a share link's fragment on the URL. The renderer loads
+from Flutter's CDN, so `build/web/canvaskit/` is never fetched.
 
 ## How a link becomes a page
 

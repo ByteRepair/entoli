@@ -3,9 +3,9 @@ import "dart:typed_data";
 import "package:flutter/material.dart";
 
 import "../../app/marketplace/install.dart" show ReplaceQuestion;
-import "busy.dart";
-import "dialogs.dart" show confirm;
-import "notice.dart";
+import "package:entoli_chat/ui/widgets/busy.dart";
+import "package:entoli_chat/ui/widgets/dialogs.dart" show confirm;
+import "package:entoli_chat/ui/widgets/notice.dart";
 
 /// Install pressed: [replacing], where there is one, asked first, then
 /// [install] run with [busy] up, and the page closed saying what landed.

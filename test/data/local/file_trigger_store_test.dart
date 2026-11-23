@@ -1,6 +1,6 @@
 import "dart:io";
 
-import "package:agent_chat/core/config.dart";
+import "package:entoli_chat/core/config.dart";
 import "package:agent_chat/data/local/file_trigger_store.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter_test/flutter_test.dart";

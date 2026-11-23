@@ -1,10 +1,10 @@
-import "package:agent_chat/app/handoff.dart";
-import "package:agent_chat/app/transcript/activity.dart";
-import "package:agent_chat/domain/agent_browser.dart"
+import "package:entoli_chat/app/handoff.dart";
+import "package:entoli_chat/app/transcript/activity.dart";
+import "package:entoli_chat/domain/agent_browser.dart"
     show AgentBrowser, BrowserTab;
-import "package:agent_chat/ui/chat/activity/card.dart";
-import "package:agent_chat/ui/chat/plan_page.dart" as plan_page;
-import "package:agent_chat/ui/widgets/text_file_page.dart";
+import "package:entoli_chat/ui/chat/activity/card.dart";
+import "package:entoli_chat/ui/chat/plan_page.dart" as plan_page;
+import "package:entoli_chat/ui/widgets/text_file_page.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:path/path.dart" as p;

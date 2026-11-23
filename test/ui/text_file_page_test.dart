@@ -4,11 +4,11 @@ import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:re_editor/re_editor.dart";
 
-import "package:agent_chat/domain/workspace.dart";
-import "package:agent_chat/ui/chat/widgets/markdown_text.dart";
-import "package:agent_chat/ui/widgets/document_view.dart";
-import "package:agent_chat/ui/widgets/text_file_page.dart";
-import "package:agent_chat/ui/workspace/workspace_page.dart";
+import "package:entoli_chat/domain/workspace.dart";
+import "package:entoli_chat/ui/chat/widgets/markdown_text.dart";
+import "package:entoli_chat/ui/widgets/document_view.dart";
+import "package:entoli_chat/ui/widgets/text_file_page.dart";
+import "package:entoli_chat/ui/workspace/workspace_page.dart";
 
 import "../fakes.dart";
 import "../harness.dart";

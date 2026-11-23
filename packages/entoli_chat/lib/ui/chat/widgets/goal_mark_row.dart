@@ -9,7 +9,7 @@ import "../activity/label.dart";
 /// label in the conversation that opens the goal's detail — both the core's
 /// ([GoalRow]). Drawn off a `GoalMark`, which `replayTree` keeps from the
 /// `goal` records, so a restart draws the same rows. See "Goals" in
-/// `lib/domain/AGENTS.md`.
+/// `packages/entoli_chat/lib/domain/AGENTS.md`.
 class GoalMarkRow extends StatelessWidget {
   const GoalMarkRow({super.key, required this.row});
 

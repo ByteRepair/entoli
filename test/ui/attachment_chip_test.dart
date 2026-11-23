@@ -4,8 +4,8 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/ui/widgets/attachment_chip.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/ui/widgets/attachment_chip.dart";
 
 import "../fakes.dart" show onePixelPng;
 import "../harness.dart";

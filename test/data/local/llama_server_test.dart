@@ -7,12 +7,12 @@ import "package:agent_chat/data/builtin/llm/on_device_provider.dart";
 import "package:agent_chat/data/local/llama_engine.dart";
 import "package:agent_chat/data/local/llama_server.dart";
 import "package:agent_chat/data/local/local_instance.dart";
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/local_llm.dart";
-import "package:agent_chat/domain/model_registry.dart";
-import "package:agent_chat/domain/local_model.dart";
-import "package:agent_chat/domain/download.dart";
-import "package:agent_chat/domain/local_model_store.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/local_llm.dart";
+import "package:entoli_chat/domain/model_registry.dart";
+import "package:entoli_chat/domain/local_model.dart";
+import "package:entoli_chat/domain/download.dart";
+import "package:entoli_chat/domain/local_model_store.dart";
 
 import "../../fakes.dart" show downloadedAs, testLocalOptions;
 

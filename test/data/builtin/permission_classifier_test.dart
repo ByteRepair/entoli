@@ -4,7 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/permission_classifier.dart";
-import "package:agent_chat/domain/permission.dart";
+import "package:entoli_chat/domain/permission.dart";
 
 import "builtin_fakes.dart";
 

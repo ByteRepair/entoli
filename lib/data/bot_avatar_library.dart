@@ -7,10 +7,10 @@ import "dart:io";
 
 import "package:flutter/services.dart" show AssetBundle;
 
-import "../core/log.dart";
-import "../domain/bot_avatar/definition.dart";
-import "../domain/bot_avatar/spec.dart";
-import "../domain/documents.dart" show RenameWriter;
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/bot_avatar/definition.dart";
+import "package:entoli_chat/domain/bot_avatar/spec.dart";
+import "package:entoli_chat/domain/documents.dart" show RenameWriter;
 
 /// Where the presets are bundled, in the order the editor offers them:
 /// Entoli's own first, then the ones taken from Open Bot Avatar, which keep

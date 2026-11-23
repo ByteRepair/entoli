@@ -1,10 +1,10 @@
 import "dart:convert";
 import "dart:typed_data";
 
-import "package:agent_chat/domain/app_link.dart";
+import "package:entoli_chat/domain/app_link.dart";
 import "package:archive/archive.dart";
-import "package:agent_chat/domain/bot_avatar/import.dart";
-import "package:agent_chat/domain/models.dart";
+import "package:entoli_chat/domain/bot_avatar/import.dart";
+import "package:entoli_chat/domain/models.dart";
 import "package:flutter_test/flutter_test.dart";
 
 const _box =

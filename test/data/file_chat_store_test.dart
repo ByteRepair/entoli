@@ -6,13 +6,13 @@ import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-import "package:agent_chat/core/config.dart";
+import "package:entoli_chat/core/config.dart";
 import "package:agent_chat/core/platform/host.dart" show deleteTree;
 import "package:agent_chat/data/local/file_modes.dart";
-import "package:agent_chat/core/read_only_dirs.dart";
-import "package:agent_chat/data/local/file_chat_store.dart";
-import "package:agent_chat/domain/chat_log.dart";
-import "package:agent_chat/domain/models.dart";
+import "package:entoli_chat/core/read_only_dirs.dart";
+import "package:entoli_chat/data/local/file_chat_store.dart";
+import "package:entoli_chat/domain/chat_log.dart";
+import "package:entoli_chat/domain/models.dart";
 
 import "../harness.dart";
 

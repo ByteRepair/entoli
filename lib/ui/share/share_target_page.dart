@@ -1,14 +1,14 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../core/log.dart";
-import "../../domain/file_handoff.dart";
-import "../../domain/models.dart" show ChatTitle;
-import "../../domain/project.dart";
-import "../../domain/workspace.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/file_handoff.dart";
+import "package:entoli_chat/domain/models.dart" show ChatTitle;
+import "package:entoli_chat/domain/project.dart";
+import "package:entoli_chat/domain/workspace.dart";
 import "../../providers.dart";
-import "../widgets/dialogs.dart";
-import "../widgets/page_bar.dart";
+import "package:entoli_chat/ui/widgets/dialogs.dart";
+import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "../widgets/section_header.dart";
 
 /// Offers [files] a workspace over whatever is on screen; done once the page

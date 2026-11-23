@@ -1,6 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/turn_keep_alive.dart";
+import "package:entoli_chat/domain/turn_keep_alive.dart";
 
 import "../fakes.dart";
 

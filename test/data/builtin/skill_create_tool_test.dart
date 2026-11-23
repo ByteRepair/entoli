@@ -8,9 +8,9 @@ import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/tools/skill_create_tool.dart";
 import "package:agent_chat/data/prompts/skill_import.dart"
     show SkillImportException;
-import "package:agent_chat/domain/agent_backend.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/permission.dart";
+import "package:entoli_chat/domain/agent_backend.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/permission.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";

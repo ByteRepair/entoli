@@ -1,8 +1,8 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/agent_backend.dart";
-import "package:agent_chat/domain/models.dart";
+import "package:entoli_chat/domain/agent_backend.dart";
+import "package:entoli_chat/domain/models.dart";
 import "package:agent_chat/ui/chat/widgets/approval_banner.dart";
 
 import "../harness.dart";

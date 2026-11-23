@@ -10,9 +10,9 @@ import "package:flutter/foundation.dart"
     show ValueListenable, ValueNotifier, visibleForTesting;
 import "package:uuid/uuid.dart";
 
-import "../../domain/file_tools.dart";
-import "../../domain/shell.dart";
-import "../../core/log.dart";
+import "package:entoli_chat/domain/file_tools.dart";
+import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_chat/core/log.dart";
 import "guest_mounts.dart";
 import "host_tools.dart";
 import "ish_ffi.dart";

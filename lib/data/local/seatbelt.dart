@@ -1,6 +1,6 @@
 import "dart:io";
 
-import "../../domain/shell.dart";
+import "package:entoli_chat/domain/shell.dart";
 
 /// Seatbelt confinement for one command, on a Mac.
 ///

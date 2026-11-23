@@ -1,7 +1,7 @@
-import "../../../domain/profile.dart";
-import "../../../domain/tone.dart";
-import "../../../domain/tool_arg.dart";
-import "../../../domain/agent_backend.dart";
+import "package:entoli_chat/domain/profile.dart";
+import "package:entoli_chat/domain/tone.dart";
+import "package:entoli_chat/domain/tool_arg.dart";
+import "package:entoli_chat/domain/agent_backend.dart";
 import "../llm/llm_client.dart";
 import "agent_tool.dart";
 import "turn.dart";

@@ -3,11 +3,11 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/marketplace/install.dart";
 import "../../data/prompts/skill_import.dart";
-import "../chat/widgets/markdown_text.dart";
+import "package:entoli_chat/ui/chat/widgets/markdown_text.dart";
 import "../widgets/install_bar.dart";
 import "../widgets/install_destination.dart";
 import "../widgets/nothing.dart";
-import "../widgets/page_bar.dart";
+import "package:entoli_chat/ui/widgets/page_bar.dart";
 
 /// Opens the skill a turn drafted and packaged, to install it.
 Future<void> openSkillInstall(

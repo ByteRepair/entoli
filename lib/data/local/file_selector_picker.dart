@@ -1,8 +1,8 @@
 import "package:file_selector/file_selector.dart";
 
-import "../../domain/attachment_picker.dart";
-import "../../domain/folder_picker.dart";
-import "../../domain/models.dart";
+import "package:entoli_chat/domain/attachment_picker.dart";
+import "package:entoli_chat/domain/folder_picker.dart";
+import "package:entoli_chat/domain/models.dart";
 import "../mime.dart";
 
 /// The platform's own file chooser, through `file_selector` — one plugin

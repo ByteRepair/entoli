@@ -8,21 +8,21 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
     show CodexCliProvider;
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/llm_provider.dart";
-import "package:agent_chat/domain/provider_usage.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_chat/domain/provider_usage.dart";
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/chat/widgets/code_block.dart" show CodeBlock;
+import "package:entoli_chat/ui/chat/widgets/code_block.dart" show CodeBlock;
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
-import "package:agent_chat/domain/shell.dart" show ShellResult;
+import "package:entoli_chat/domain/shell.dart" show ShellResult;
 
 import "../data/builtin/builtin_fakes.dart" show FakeShell;
 import "../fakes.dart";
 import "../harness.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
-import "package:agent_chat/domain/rootfs.dart";
+import "package:entoli_chat/domain/rootfs.dart";
 
 void main() {
   late TestApp app;

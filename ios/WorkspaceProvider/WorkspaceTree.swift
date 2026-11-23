@@ -39,11 +39,11 @@ enum WorkspaceNode: Equatable {
   // the other.
   private static let project = ":"
 
-  /// `defaultProjectDir`, in lib/domain/project.dart.
+  /// `defaultProjectDir`, in packages/entoli_chat/lib/domain/project.dart.
   static let defaultProject = "default"
 
   /// The built-in projects whose workspace is not shared
-  /// (lib/domain/builtin_project.dart), kept in step by hand as Android's
+  /// (packages/entoli_chat/lib/domain/builtin_project.dart), kept in step by hand as Android's
   /// `UNBROWSED` is: a chat that must not reach past itself is not one whose
   /// scratch the Files app browses.
   static let unbrowsed: Set<String> = ["anonymous"]
@@ -144,7 +144,7 @@ enum WorkspaceNode: Equatable {
     }
   }
 
-  // The shape rule, `isProjectDirName` in lib/domain/project.dart, bar
+  // The shape rule, `isProjectDirName` in packages/entoli_chat/lib/domain/project.dart, bar
   // `default`, which is a directory like any other here.
   static func isProjectDir(_ name: String) -> Bool {
     !name.isEmpty && !name.hasPrefix(".") && !name.contains("/") && !unbrowsed.contains(name)
@@ -214,7 +214,7 @@ struct WorkspaceTree {
     }
   }
 
-  // `everyProject`, in lib/domain/project.dart: the default one first, the
+  // `everyProject`, in packages/entoli_chat/lib/domain/project.dart: the default one first, the
   // rest by name.
   private func projectDirs() -> [String] {
     list(dataDir.appendingPathComponent("projects", isDirectory: true))
@@ -228,7 +228,7 @@ struct WorkspaceTree {
       }
   }
 
-  // `defaultProjectLabel`, in lib/domain/project.dart.
+  // `defaultProjectLabel`, in packages/entoli_chat/lib/domain/project.dart.
   private func projectLabel(_ name: String) -> String {
     name == WorkspaceNode.defaultProject ? "Default" : name
   }

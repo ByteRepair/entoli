@@ -4,10 +4,10 @@ import "dart:io";
 import "package:path/path.dart" as p;
 import "package:http/http.dart" as http;
 
-import "../../core/log.dart";
-import "../../domain/local_model.dart";
-import "../../domain/local_model_store.dart";
-import "../../domain/download.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/local_model.dart";
+import "package:entoli_chat/domain/local_model_store.dart";
+import "package:entoli_chat/domain/download.dart";
 import "../download.dart";
 import "model_format.dart";
 

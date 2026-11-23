@@ -24,8 +24,9 @@ An agent's spec is `<name>.avatar.json` beside its `.md`, the photo's
 sibling (`agentAvatarPath`). The two are one face held two ways: a save
 writes one and takes the other away, a rename moves both, a delete removes
 both, and where a rung somehow holds both the avatar wins. `AgentFace`
-(`lib/domain/agent_face.dart`) is the sealed answer the reader gives —
-`AgentPhoto` or `AgentBot` — and `AgentPictureImage` draws either.
+(`packages/entoli_chat/lib/domain/agent_face.dart`) is the sealed answer the
+reader gives — `AgentPhoto` or `AgentBot` — and `AgentPictureImage` draws
+either.
 
 The app's own agents wear faces the same way: `<name>.avatar.json` beside
 the bundled `<name>.md` under `assets/prompts/projects/<project>/agents/`
@@ -124,12 +125,12 @@ which an avatar glances at for 2.5 s on its own clock. A thinking avatar
 does not follow; its look is its own.
 
 **The animation is the core's, the drawing the UI's.** `BotActor`
-(`lib/app/bot_avatar/actor.dart`) is one avatar on screen — its mood eased
-from the last, a tap's reaction, the frame for a moment on its own clock —
-and `BotAvatarView` runs one, keeping only the ticker, the pointer and the
-drag. The Bot Avatars page under Settings > Agents is the editor's, with
-what it offers (`botAvatarEntries`) and what an import makes of its text
-the core's.
+(`packages/entoli_chat/lib/app/bot_avatar/actor.dart`) is one avatar on screen —
+its mood eased from the last, a tap's reaction, the frame for a moment on its
+own clock — and `BotAvatarView` runs one, keeping only the ticker, the pointer
+and the drag. The Bot Avatars page under Settings > Agents is the editor's, with
+what it offers (`botAvatarEntries`) and what an import makes of its text the
+core's.
 
 On top of the mood, a live avatar plays a `BotAnimation`
 (`animation.dart`): a mood held for a while, optionally with one eased full

@@ -8,14 +8,14 @@ library;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../domain/models.dart";
-import "../domain/project.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/project.dart";
 import "../providers.dart";
 import "app_command.dart";
 import "../app/chat_edits.dart";
 import "chat/share_chat_dialog.dart";
 import "selection.dart";
-import "widgets/dialogs.dart";
+import "package:entoli_chat/ui/widgets/dialogs.dart";
 
 /// The commands that act on one chat, in the order a menu offers them.
 const chatCommands = [

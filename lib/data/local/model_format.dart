@@ -3,7 +3,7 @@ import "dart:io";
 
 import "package:path/path.dart" as p;
 
-import "../../domain/local_model.dart";
+import "package:entoli_chat/domain/local_model.dart";
 import "gguf.dart";
 
 /// What a model's files mean once they are on disk: where its runtime is

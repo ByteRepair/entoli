@@ -2,16 +2,17 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/settings/triggers.dart";
-import "../../domain/date_words.dart" show shortDate, timeOfDay;
-import "../../domain/models.dart" show CompletionKind;
-import "../../domain/project.dart";
-import "../../domain/trigger.dart";
+import "package:entoli_chat/domain/date_words.dart" show shortDate, timeOfDay;
+import "package:entoli_chat/domain/models.dart" show CompletionKind;
+import "package:entoli_chat/domain/project.dart";
+import "package:entoli_chat/domain/trigger.dart";
 import "../../providers.dart";
-import "../widgets/busy.dart";
-import "../widgets/dialogs.dart" show confirm, promptForText;
-import "../widgets/discard_guard.dart";
-import "../widgets/notice.dart";
-import "../widgets/page_bar.dart";
+import "package:entoli_chat/ui/widgets/busy.dart";
+import "package:entoli_chat/ui/widgets/dialogs.dart"
+    show confirm, promptForText;
+import "package:entoli_chat/ui/widgets/discard_guard.dart";
+import "package:entoli_chat/ui/widgets/notice.dart";
+import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "../widgets/prompt_field.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";

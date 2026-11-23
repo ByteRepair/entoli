@@ -38,7 +38,8 @@ Entoli registers the `entoli://` scheme on every platform — Android's
 `HKLM\Software\Classes\entoli` in the MSI. `app_links` delivers them, the
 launching one and every one after, on one stream that `IncomingLinks` (wrapped
 in `main` beside `IncomingShares`) reads. What a link means is
-`AppLink.parse` (`lib/domain/app_link.dart`), and nothing else reads one:
+`AppLink.parse` (`packages/entoli_chat/lib/domain/app_link.dart`), and nothing
+else reads one:
 
 - `entoli://new?prompt=…` — the new-chat screen with the prompt in its
   composer, **unsent**: a web page wrote it, so the user sends it. This is the

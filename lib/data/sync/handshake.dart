@@ -5,7 +5,7 @@ import "dart:typed_data";
 import "package:cryptography/cryptography.dart";
 import "package:cryptography/dart.dart";
 
-import "../../domain/sync/identity.dart";
+import "package:entoli_chat/domain/sync/identity.dart";
 import "channel.dart";
 
 /// The authenticated key exchange two devices run over a fresh [ByteChannel]

@@ -2,7 +2,7 @@ import "dart:async";
 
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/documents.dart";
+import "package:entoli_chat/domain/documents.dart";
 
 void main() {
   test("overlapping writes run one at a time, in the order asked", () async {

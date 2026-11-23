@@ -3,9 +3,9 @@ import "dart:typed_data";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../data/chat_share.dart";
-import "../domain/models.dart";
-import "../domain/project.dart" show localProject;
+import "package:entoli_chat/data/chat_share.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/project.dart" show localProject;
 import "../providers.dart";
 import "chat_controller.dart";
 import "selection.dart";

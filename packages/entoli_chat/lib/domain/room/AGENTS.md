@@ -55,7 +55,8 @@ file in a session of its own, and every reply names its author.
   being a participant, and `task` is dropped.
 - **What a participant may use is its own.** A participant's turn and a
   sub-agent's both run as the agent's `AgentDefinition`, so its `tools:` list
-  holds in either role; see "Tools per agent" in `lib/domain/AGENTS.md`.
+  holds in either role; see "Tools per agent" in
+  `packages/entoli_chat/lib/domain/AGENTS.md`.
 
 ### The contract between direct and Omada chats
 
@@ -90,18 +91,18 @@ and @me" was every member rescheduling itself. It is room data, not text:
 `references` say what the text *named*, this says who the room sent it
 to, and a member deleted from the library after the fact does not rewrite
 the room's past. The wording half of it is the projection's, per viewer —
-see "The room's mail is worded per viewer too" in `lib/domain/AGENTS.md` —
-and what makes each participant's session current with it is the
-dispatch-time sync, **`_syncSession`** (see "The agent loop":
-`BuiltinBackend._syncSession`): every dispatch's history is the room's
-whole thread, and a participant's session words what it has never heard,
+see "The room's mail is worded per viewer too" in
+`packages/entoli_chat/lib/domain/AGENTS.md` — and what makes each participant's
+session current with it is the dispatch-time sync, **`_syncSession`** (see "The
+agent loop": `BuiltinBackend._syncSession`): every dispatch's history is the
+room's whole thread, and a participant's session words what it has never heard,
 confirmed against the log before a word is appended.
 
 **Logs from before Athena had a name** were brought forward by the 8.0.0
-migration (`lib/core/migrations.dart`): every reply with no author became
-hers, every say with no addressees was addressed to her. The sync protocol
-moved to 6 in the same release, so no older build's records reach a newer
-one. Nothing reads the older shape.
+migration (`packages/entoli_chat/lib/core/migrations.dart`): every reply with no
+author became hers, every say with no addressees was addressed to her. The sync
+protocol moved to 6 in the same release, so no older build's records reach a
+newer one. Nothing reads the older shape.
 
 **The room contract is My Team's note, not a per-turn overlay.** Every Omada
 turn runs under `MyTeamProject`'s bundled note (`assets/prompts/projects/

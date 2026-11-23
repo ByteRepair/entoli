@@ -2,7 +2,7 @@ import "package:flutter/foundation.dart";
 import "package:flutter/services.dart" show rootBundle;
 
 import "../data/licence_data.dart";
-import "theme.dart" show appTitle;
+import "package:entoli_chat/ui/theme.dart" show appTitle;
 
 /// Entoli's own licence, as the welcome tour shows it and the licence page
 /// lists it.

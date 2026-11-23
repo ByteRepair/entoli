@@ -3,9 +3,9 @@ import "dart:async";
 import "package:fake_async/fake_async.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/agent_backend.dart";
-import "package:agent_chat/domain/chat_log.dart";
-import "package:agent_chat/domain/models.dart"
+import "package:entoli_chat/domain/agent_backend.dart";
+import "package:entoli_chat/domain/chat_log.dart";
+import "package:entoli_chat/domain/models.dart"
     show
         CallEvents,
         JobEnd,
@@ -13,13 +13,13 @@ import "package:agent_chat/domain/models.dart"
         MessageRole,
         Retraction,
         jobEndedEvent;
-import "package:agent_chat/domain/reaction.dart";
-import "package:agent_chat/domain/shell_job.dart";
-import "package:agent_chat/domain/system_notification.dart";
-import "package:agent_chat/domain/project_settings.dart" show OmadaOrdering;
-import "package:agent_chat/domain/room/chat_room.dart";
-import "package:agent_chat/domain/room/room_state.dart";
-import "package:agent_chat/domain/room/roster.dart";
+import "package:entoli_chat/domain/reaction.dart";
+import "package:entoli_chat/domain/shell_job.dart";
+import "package:entoli_chat/domain/system_notification.dart";
+import "package:entoli_chat/domain/project_settings.dart" show OmadaOrdering;
+import "package:entoli_chat/domain/room/chat_room.dart";
+import "package:entoli_chat/domain/room/room_state.dart";
+import "package:entoli_chat/domain/room/roster.dart";
 
 import "../../fakes.dart";
 import "../../harness.dart";

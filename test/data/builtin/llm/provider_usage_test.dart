@@ -10,7 +10,7 @@ import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/openai_platform_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:agent_chat/data/builtin/llm/rate_limit_client.dart";
-import "package:agent_chat/domain/provider_usage.dart";
+import "package:entoli_chat/domain/provider_usage.dart";
 import "package:agent_chat/app/provider_usage_words.dart";
 
 import "sse.dart";

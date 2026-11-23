@@ -3,8 +3,8 @@ import "dart:async";
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart";
 
-import "../../../core/log.dart";
-import "../../../domain/agent_browser.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/agent_browser.dart";
 
 /// The keys that insert nothing, or something other than their label, by the
 /// DOM's names for them and the legacy code pages still read.

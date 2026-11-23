@@ -75,7 +75,7 @@ abstract interface class RoomHost {
 /// Omada on every agent of the project's library. This owns everything about it that is not
 /// Riverpod's: the turns in flight, what was said while they ran, the order
 /// of speaking, and the log they all append to. See "The room and its
-/// participants" in `lib/domain/room/AGENTS.md`.
+/// participants" in `packages/entoli_chat/lib/domain/room/AGENTS.md`.
 ///
 /// Invariants:
 /// - An agent has at most one turn in flight.
@@ -623,7 +623,7 @@ class ChatRoom {
   /// instead, so the answer reads where every other change is read. A set or
   /// resume refused because a turn is running is not one of those: it is not
   /// answerable yet, only too early, and it still writes `status`. See "Goals"
-  /// in `lib/domain/AGENTS.md`.
+  /// in `packages/entoli_chat/lib/domain/AGENTS.md`.
   Future<void> _goalCommand(GoalCommand command) async {
     final chat = state.chat;
     if (chat == null) return;

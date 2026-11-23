@@ -3,30 +3,52 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-/// `lib/`'s files and what each imports or exports of the others, every
+/// The app's `lib/` and the chat package's, each under its package name. The
+/// two are one layout split in two, so a layer is a layer in either.
+final _roots = {
+  "agent_chat": p.normalize(p.absolute("lib")),
+  "entoli_chat": p.normalize(p.absolute("packages", "entoli_chat", "lib")),
+};
+
+/// [file] from the `lib/` it is in, so `domain/models.dart` in either.
+String _relative(String file) => p.relative(
+  file,
+  from: _roots.values.firstWhere((root) => p.isWithin(root, file)),
+);
+
+/// Both `lib/`s' files and what each imports or exports of the others, every
 /// branch of a conditional one included.
 Map<String, Set<String>> _graph() {
-  final lib = p.normalize(p.absolute("lib"));
   final directive = RegExp(r"^(?:import|export)\s[^;]*;", multiLine: true);
   final uri = RegExp(r'"([^"]+\.dart)"');
   final graph = <String, Set<String>>{};
-  for (final file in Directory(
-    lib,
-  ).listSync(recursive: true).whereType<File>()) {
-    final path = file.path;
-    if (!path.endsWith(".dart") ||
-        path.endsWith(".g.dart") ||
-        path.endsWith(".freezed.dart")) {
-      continue;
-    }
-    final edges = graph[path] = {};
-    for (final match in directive.allMatches(file.readAsStringSync())) {
-      for (final target in uri.allMatches(match.group(0)!)) {
-        final name = target.group(1)!;
-        if (name.startsWith("package:agent_chat/")) {
-          edges.add(p.join(lib, name.substring("package:agent_chat/".length)));
-        } else if (!name.contains(":")) {
-          edges.add(p.normalize(p.join(p.dirname(path), name)));
+  for (final lib in _roots.values) {
+    for (final file in Directory(
+      lib,
+    ).listSync(recursive: true).whereType<File>()) {
+      final path = file.path;
+      if (!path.endsWith(".dart") ||
+          path.endsWith(".g.dart") ||
+          path.endsWith(".freezed.dart")) {
+        continue;
+      }
+      final edges = graph[path] = {};
+      for (final match in directive.allMatches(file.readAsStringSync())) {
+        for (final target in uri.allMatches(match.group(0)!)) {
+          final name = target.group(1)!;
+          final package = _roots.entries
+              .where((root) => name.startsWith("package:${root.key}/"))
+              .firstOrNull;
+          if (package != null) {
+            edges.add(
+              p.join(
+                package.value,
+                name.substring("package:${package.key}/".length),
+              ),
+            );
+          } else if (!name.contains(":")) {
+            edges.add(p.normalize(p.join(p.dirname(path), name)));
+          }
         }
       }
     }
@@ -81,10 +103,8 @@ void main() {
   test("no file in lib/ reaches itself through its imports", () {
     final graph = _graph();
     expect(graph, isNotEmpty);
-    final lib = p.absolute("lib");
     expect([
-      for (final group in _cycles(graph))
-        [for (final file in group) p.relative(file, from: lib)],
+      for (final group in _cycles(graph)) [for (final f in group) _relative(f)],
     ], isEmpty);
   });
 
@@ -96,18 +116,17 @@ void main() {
   test(
     "domain imports nothing of data, app or ui; data and app nothing of ui",
     () {
-      final lib = p.absolute("lib");
       const above = {
         "domain": {"data", "app", "ui"},
         "data": {"app", "ui"},
         "app": {"ui"},
       };
-      String layer(String file) => p.split(p.relative(file, from: lib)).first;
+      String layer(String file) => p.split(_relative(file)).first;
       expect([
         for (final MapEntry(key: file, value: imports) in _graph().entries)
           for (final target in imports)
             if (above[layer(file)]?.contains(layer(target)) ?? false)
-              "${p.relative(file, from: lib)} -> ${p.relative(target, from: lib)}",
+              "${_relative(file)} -> ${_relative(target)}",
       ], isEmpty);
     },
   );
@@ -115,19 +134,33 @@ void main() {
   // The graph above sees only the app's own files, so a widget library is
   // checked by name. `foundation` is the listenables a model is made of.
   test("app imports no Flutter library but foundation", () {
-    final app = p.absolute("lib", "app");
     final flutter = RegExp(
       r'^(?:import|export)\s+"package:flutter/(\w+)\.dart"',
       multiLine: true,
     );
     expect([
-      for (final file in Directory(
-        app,
-      ).listSync(recursive: true).whereType<File>())
-        if (file.path.endsWith(".dart"))
-          for (final m in flutter.allMatches(file.readAsStringSync()))
-            if (m.group(1) != "foundation")
-              "${p.relative(file.path, from: app)} -> flutter/${m.group(1)}",
+      for (final lib in _roots.values)
+        for (final file in Directory(
+          p.join(lib, "app"),
+        ).listSync(recursive: true).whereType<File>())
+          if (file.path.endsWith(".dart"))
+            for (final m in flutter.allMatches(file.readAsStringSync()))
+              if (m.group(1) != "foundation")
+                "${_relative(file.path)} -> flutter/${m.group(1)}",
+    ], isEmpty);
+  });
+
+  // The share viewer runs the chat package without the app, which is what
+  // keeps voice and the native plugins out of it.
+  test("the chat package imports nothing of the app", () {
+    final graph = _graph();
+    final app = _roots["agent_chat"]!;
+    final chat = _roots["entoli_chat"]!;
+    expect([
+      for (final MapEntry(key: file, value: imports) in graph.entries)
+        if (p.isWithin(chat, file))
+          for (final target in imports)
+            if (p.isWithin(app, target)) "${_relative(file)} -> $target",
     ], isEmpty);
   });
 

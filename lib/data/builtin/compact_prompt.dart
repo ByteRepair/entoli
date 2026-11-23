@@ -1,6 +1,6 @@
 import "dart:convert";
 
-import "../../core/formatting.dart" show safeCut, safeTail;
+import "package:entoli_chat/core/formatting.dart" show safeCut, safeTail;
 import "llm/llm_client.dart";
 
 final _summaryTags = RegExp(r"<summary>\s*([\s\S]*?)\s*</summary>");

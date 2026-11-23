@@ -13,7 +13,7 @@ import "../wired_skill.dart";
 /// an
 /// agent who is not in the room is the speaker's to delegate to, not an
 /// address. **The one place routing is decided.** See "The room and its
-/// participants" in `lib/domain/room/AGENTS.md`.
+/// participants" in `packages/entoli_chat/lib/domain/room/AGENTS.md`.
 ///
 /// Read fresh at each use rather than held, so a toggle or a library edit
 /// reaches the next dispatch and never rewrites what is already stamped.

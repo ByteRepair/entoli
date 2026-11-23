@@ -1,10 +1,10 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../core/brand.dart" show madeBy;
+import "package:entoli_chat/core/brand.dart" show madeBy;
 import "../../providers.dart";
 import "../app_command.dart";
-import "../theme.dart" show appTitle;
+import "package:entoli_chat/ui/theme.dart" show appTitle;
 import "../widgets/app_mark.dart";
 import "../widgets/section_header.dart";
 import "privacy_policy_page.dart";

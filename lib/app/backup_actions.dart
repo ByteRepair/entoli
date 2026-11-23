@@ -2,7 +2,7 @@ import "dart:io";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../core/formatting.dart";
+import "package:entoli_chat/core/formatting.dart";
 import "../core/platform/platform.dart" as platform;
 import "../data/backup.dart";
 import "../providers.dart";

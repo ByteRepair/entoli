@@ -3,8 +3,8 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/assistant_view.dart";
-import "../../domain/project.dart";
+import "package:entoli_chat/domain/assistant_view.dart";
+import "package:entoli_chat/domain/project.dart";
 import "../../providers.dart";
 import "../selection.dart";
 import "../voice/voice_page.dart";

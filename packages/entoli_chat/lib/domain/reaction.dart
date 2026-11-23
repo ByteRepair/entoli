@@ -5,7 +5,7 @@ import "shell_job.dart" show firstLine;
 /// included. A reaction is something said: it goes on the log as a user
 /// message holding a [ReactionPart], and the room routes it to whoever wrote
 /// the message, as it would a message mentioning them.
-/// See "Reactions" in `lib/domain/AGENTS.md`.
+/// See "Reactions" in `packages/entoli_chat/lib/domain/AGENTS.md`.
 enum Reaction {
   thumbsUp("👍", "thumbs up"),
   thumbsDown("👎", "thumbs down"),

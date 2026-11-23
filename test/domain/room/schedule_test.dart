@@ -2,9 +2,9 @@ import "dart:async";
 
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/project_settings.dart" show OmadaOrdering;
-import "package:agent_chat/domain/room/schedule.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/project_settings.dart" show OmadaOrdering;
+import "package:entoli_chat/domain/room/schedule.dart";
 
 Message _msg(String id, {MessageRole role = MessageRole.user}) =>
     Message(id: id, role: role, createdAt: DateTime(2026));

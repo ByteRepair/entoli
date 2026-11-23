@@ -1,7 +1,7 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/shell.dart" show pathInside;
-import "package:agent_chat/domain/shell_command_analysis.dart";
+import "package:entoli_chat/domain/shell.dart" show pathInside;
+import "package:entoli_chat/domain/shell_command_analysis.dart";
 
 void main() {
   ShellCommandAnalysis parse(String command) =>

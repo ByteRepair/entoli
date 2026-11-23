@@ -1,5 +1,5 @@
-import "../domain/models.dart";
-import "../domain/shell.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/shell.dart";
 
 /// Space, tab, newline — every break a typed message can hold.
 bool isCompletionSpace(int codeUnit) =>

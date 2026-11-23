@@ -1,4 +1,4 @@
-import "../../../../domain/llm_provider.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
 import "../openai_platform_client.dart";
 import "provider.dart";
 

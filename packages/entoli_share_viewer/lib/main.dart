@@ -1,14 +1,14 @@
 import "dart:io";
 
-import "package:agent_chat/app/handoff.dart";
-import "package:agent_chat/app/transcript/host.dart";
-import "package:agent_chat/core/config.dart";
-import "package:agent_chat/core/transcript_bindings.dart";
-import "package:agent_chat/data/chat_share.dart";
-import "package:agent_chat/data/local/file_chat_store.dart";
-import "package:agent_chat/domain/chat_share.dart";
-import "package:agent_chat/ui/chat/activity/card.dart";
-import "package:agent_chat/ui/theme.dart";
+import "package:entoli_chat/app/handoff.dart";
+import "package:entoli_chat/app/transcript/host.dart";
+import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/core/transcript_bindings.dart";
+import "package:entoli_chat/data/chat_share.dart";
+import "package:entoli_chat/data/local/file_chat_store.dart";
+import "package:entoli_chat/domain/chat_share.dart";
+import "package:entoli_chat/ui/chat/activity/card.dart";
+import "package:entoli_chat/ui/theme.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_web_plugins/url_strategy.dart";

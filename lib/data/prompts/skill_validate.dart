@@ -6,8 +6,8 @@
 // `disable-model-invocation`) live under the spec's `metadata:` map, which is
 // the spec's own extension point, so conforming skills carry them and nothing
 // here reads a key the spec does not name.
-import "../../domain/frontmatter.dart";
-import "../../domain/prompt_library.dart";
+import "package:entoli_chat/domain/frontmatter.dart";
+import "package:entoli_chat/domain/prompt_library.dart";
 
 /// The frontmatter keys the Agent Skills spec names, which is also the whole
 /// whitelist: any other top-level key is a problem.

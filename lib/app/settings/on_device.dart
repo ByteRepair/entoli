@@ -4,14 +4,14 @@ import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
-import "../../core/formatting.dart" show nonBlank;
-import "../../core/log.dart";
+import "package:entoli_chat/core/formatting.dart" show nonBlank;
+import "package:entoli_chat/core/log.dart";
 import "../../data/local/local_engine.dart" show LocalEngine;
 import "../../data/local/local_instance.dart" show LocalUsage;
-import "../../domain/installable.dart";
-import "../../domain/local_llm.dart";
-import "../../domain/local_model.dart";
-import "../../domain/local_model_store.dart";
+import "package:entoli_chat/domain/installable.dart";
+import "package:entoli_chat/domain/local_llm.dart";
+import "package:entoli_chat/domain/local_model.dart";
+import "package:entoli_chat/domain/local_model_store.dart";
 import "../../providers.dart";
 import "../downloads/model_downloads.dart";
 

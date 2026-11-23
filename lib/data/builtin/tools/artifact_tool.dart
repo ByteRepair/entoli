@@ -1,6 +1,6 @@
-import "../../../domain/agent_backend.dart";
-import "../../../domain/artifact.dart";
-import "../../../domain/shell.dart";
+import "package:entoli_chat/domain/agent_backend.dart";
+import "package:entoli_chat/domain/artifact.dart";
+import "package:entoli_chat/domain/shell.dart";
 import "../approval_gate.dart";
 import "../llm/llm_client.dart";
 import "../templates.dart" show systemProse;

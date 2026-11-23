@@ -4,7 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:freedesktop_secret/freedesktop_secret.dart";
 
 import "package:agent_chat/core/platform/keyring_secret_store.dart";
-import "package:agent_chat/domain/secret_store.dart";
+import "package:entoli_chat/domain/secret_store.dart";
 
 void main() {
   final bytes = Uint8List.fromList([1, 2, 3]);

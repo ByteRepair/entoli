@@ -1,10 +1,10 @@
 import "package:flutter/material.dart";
 
-import "../chat/widgets/markdown_text.dart";
+import "package:entoli_chat/ui/chat/widgets/markdown_text.dart";
 import "completion_field.dart";
-import "discard_guard.dart";
+import "package:entoli_chat/ui/widgets/discard_guard.dart";
 import "resettable_field.dart";
-import "page_bar.dart";
+import "package:entoli_chat/ui/widgets/page_bar.dart";
 
 /// Prose the model reads — a trigger's prompt, an agent's system prompt, a
 /// set of instructions — shown as the chat will render it, the preview itself

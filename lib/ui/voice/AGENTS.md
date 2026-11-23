@@ -245,10 +245,10 @@ whatever is on screen, a running session included, and the two are not
 necessarily on the same key: over a chat it is `openVoice(X)`, and the gesture's
 is null. Two keys are two controllers, and before this they were two
 `VoiceSession`s — two microphones and two worker isolates, where
-`lib/domain/voice.dart` says there is one of each. `BackgroundWork.listening` is
-a flag rather than a count, so the first of them to end released the foreground
-hold the other was still relying on. It predates deferring the chat; two keys
-were reachable before that too.
+`packages/entoli_chat/lib/domain/voice.dart` says there is one of each.
+`BackgroundWork.listening` is a flag rather than a count, so the first of them
+to end released the foreground hold the other was still relying on. It predates
+deferring the chat; two keys were reachable before that too.
 
 `release` only clears its own claim, and only while there is something to
 release to: a session is shut from `onDispose`, and on the way out of the app

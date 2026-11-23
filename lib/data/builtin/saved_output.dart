@@ -2,9 +2,9 @@ import "dart:io";
 
 import "package:path/path.dart" as p;
 
-import "../../core/log.dart";
-import "../../domain/file_tools.dart" show guestWorkspacePath;
-import "../../domain/shell_job.dart" show fileStemOf;
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/file_tools.dart" show guestWorkspacePath;
+import "package:entoli_chat/domain/shell_job.dart" show fileStemOf;
 
 /// Where a chat keeps the results too large to word in full: a directory of
 /// its own workspace, beside the background jobs' logs, so `read` and `tail`

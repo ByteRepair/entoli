@@ -1,8 +1,8 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/builtin_project.dart";
-import "../../domain/temp_chat_ttl.dart";
+import "package:entoli_chat/domain/builtin_project.dart";
+import "package:entoli_chat/domain/temp_chat_ttl.dart";
 import "../../providers.dart";
 import "resettable_field.dart";
 

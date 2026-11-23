@@ -1,7 +1,7 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../domain/chat_intents.dart" show ChatEditor;
-import "../domain/models.dart";
+import "package:entoli_chat/domain/chat_intents.dart" show ChatEditor;
+import "package:entoli_chat/domain/models.dart";
 import "../providers.dart";
 import "chat_controller.dart";
 import "selection.dart";

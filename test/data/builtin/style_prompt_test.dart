@@ -2,7 +2,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/templates.dart";
-import "package:agent_chat/domain/tone.dart";
+import "package:entoli_chat/domain/tone.dart";
 import "package:agent_chat/data/builtin/tools/agent_tool.dart";
 import "package:agent_chat/data/builtin/system_prompt.dart";
 

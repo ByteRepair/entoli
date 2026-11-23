@@ -1,8 +1,8 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/assistant_view.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/assistant_view.dart";
 import "package:agent_chat/ui/settings/voice_settings.dart";
 
 import "../harness.dart";

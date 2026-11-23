@@ -1,6 +1,6 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../domain/plan.dart";
+import "package:entoli_chat/domain/plan.dart";
 import "../providers.dart";
 import "mirror_controller.dart" show chatViewProvider;
 

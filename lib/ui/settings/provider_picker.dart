@@ -2,7 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../data/builtin/llm/providers/presets.dart";
-import "../../domain/llm_provider.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
 import "../../providers.dart";
 import "../widgets/catalog.dart" show InfoTag, InfoTone;
 

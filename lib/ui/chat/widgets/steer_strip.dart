@@ -1,7 +1,7 @@
 import "package:flutter/material.dart";
 
-import "../../../domain/models.dart";
-import "../../widgets/action_icon.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/ui/widgets/action_icon.dart";
 
 /// What the user has said to the running turn that it has not read yet, one
 /// row each, above the composer. A row goes when the turn reads it, landing

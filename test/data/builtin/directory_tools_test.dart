@@ -4,11 +4,11 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
-import "package:agent_chat/domain/agent_backend.dart";
-import "package:agent_chat/domain/builtin_project.dart" show AgentCapability;
-import "package:agent_chat/domain/file_tools.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/permission.dart";
+import "package:entoli_chat/domain/agent_backend.dart";
+import "package:entoli_chat/domain/builtin_project.dart" show AgentCapability;
+import "package:entoli_chat/domain/file_tools.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/permission.dart";
 import "package:agent_chat/data/builtin/tools/agent_tool.dart";
 import "package:agent_chat/data/builtin/tools/registry.dart";
 

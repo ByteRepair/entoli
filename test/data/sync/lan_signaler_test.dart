@@ -3,7 +3,7 @@ import "dart:convert";
 
 import "package:agent_chat/data/sync/handshake.dart";
 import "package:agent_chat/data/sync/signaling/lan_signaler.dart";
-import "package:agent_chat/domain/sync/signaling_routes.dart";
+import "package:entoli_chat/domain/sync/signaling_routes.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:http/http.dart" as http;
 import "package:http/testing.dart";

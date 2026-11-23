@@ -5,8 +5,8 @@ import "package:agent_chat/data/model_host/model_process.dart";
 import "package:agent_chat/data/voice/android_voice.dart";
 import "package:agent_chat/data/voice/voice_strategies.dart"
     show SpeechFailed, SpeechSignal, SpeechSilent;
-import "package:agent_chat/domain/voice.dart";
-import "package:agent_chat/domain/voice_model.dart"
+import "package:entoli_chat/domain/voice.dart";
+import "package:entoli_chat/domain/voice_model.dart"
     show nativeSpeech, recognitionModels, speechModels;
 import "../fakes.dart";
 

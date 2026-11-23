@@ -2,11 +2,11 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/app_theme.dart";
-import "package:agent_chat/domain/corner_radius.dart";
-import "package:agent_chat/domain/theme_colour.dart";
-import "package:agent_chat/ui/theme.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/app_theme.dart";
+import "package:entoli_chat/domain/corner_radius.dart";
+import "package:entoli_chat/domain/theme_colour.dart";
+import "package:entoli_chat/ui/theme.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 // Named, since the library's own `main` would otherwise be in scope beside the
 // test's.

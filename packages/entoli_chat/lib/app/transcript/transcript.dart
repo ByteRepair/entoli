@@ -160,7 +160,7 @@ final class CompactionFailedRow extends TranscriptRow {
 
 /// A change to the chat's goal, where the log says it happened: one label —
 /// "Goal set", "Goal paused", "Goal met" — opening the goal's prompt and
-/// where the goal stood after it. See "Goals" in `lib/domain/AGENTS.md`.
+/// where the goal stood after it. See "Goals" in `packages/entoli_chat/lib/domain/AGENTS.md`.
 final class GoalRow extends TranscriptRow {
   const GoalRow(this.mark, {required this.key});
 

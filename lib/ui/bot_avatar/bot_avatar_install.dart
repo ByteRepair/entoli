@@ -1,13 +1,13 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/bot_avatar/import.dart";
-import "../../domain/bot_avatar/spec.dart";
+import "package:entoli_chat/domain/bot_avatar/import.dart";
+import "package:entoli_chat/domain/bot_avatar/spec.dart";
 import "../../providers.dart";
 import "../widgets/install_bar.dart";
-import "../widgets/page_bar.dart";
+import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "bot_avatar_editor.dart";
-import "bot_avatar_view.dart";
+import "package:entoli_chat/ui/bot_avatar/bot_avatar_view.dart";
 
 /// Opens what an `entoli://install/avatar` link carried.
 Future<void> openBotAvatarInstall(

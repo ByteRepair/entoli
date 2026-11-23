@@ -1,4 +1,4 @@
-// Generates lib/domain/bundled_project_prompts.dart from the source tree
+// Generates packages/entoli_chat/lib/domain/bundled_project_prompts.dart from the source tree
 // under assets/prompts/. Run by tool/prepare.sh before build_runner.
 //
 // The built-in projects' prompt files — today the instruction notes that stand
@@ -8,10 +8,10 @@
 // authored in markdown; this collects it, tagged with the project it belongs
 // to. `default` is the base set every project inherits; another project's
 // files override a same-named default one for that project alone. The lookup
-// with that fallback is `bundledPromptFileOf` (lib/domain/bundled_prompt_file.dart).
+// with that fallback is `bundledPromptFileOf` (packages/entoli_chat/lib/domain/bundled_prompt_file.dart).
 import "dart:io";
 
-import "package:agent_chat/domain/bundled_prompt_file.dart";
+import "package:entoli_chat/domain/bundled_prompt_file.dart";
 
 import "gen_common.dart";
 
@@ -40,7 +40,10 @@ void main() {
 
   emitPromptFileList(buf, "bundledSystemPrompts", entries);
 
-  writeGenerated("lib/domain/bundled_project_prompts.dart", buf);
+  writeGenerated(
+    "packages/entoli_chat/lib/domain/bundled_project_prompts.dart",
+    buf,
+  );
   stdout.writeln("(${entries.length} prompt files).");
 }
 

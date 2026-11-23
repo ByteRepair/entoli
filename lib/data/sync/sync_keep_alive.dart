@@ -1,6 +1,6 @@
 import "dart:async";
 
-import "../../domain/background_work.dart";
+import "package:entoli_chat/domain/background_work.dart";
 import "sync_hub.dart";
 
 /// Holds the platform's background permission for as long as a paired device

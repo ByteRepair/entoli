@@ -2,13 +2,13 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/chat_log.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/shell_job.dart";
-import "package:agent_chat/app/reader.dart" show WidgetReader;
-import "package:agent_chat/app/transcript/activities/command.dart";
-import "package:agent_chat/app/transcript/activity.dart";
-import "package:agent_chat/ui/chat/activity/activity.dart";
+import "package:entoli_chat/domain/chat_log.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/shell_job.dart";
+import "package:entoli_chat/app/reader.dart" show WidgetReader;
+import "package:entoli_chat/app/transcript/activities/command.dart";
+import "package:entoli_chat/app/transcript/activity.dart";
+import "package:entoli_chat/ui/chat/activity/activity.dart";
 
 import "../harness.dart";
 

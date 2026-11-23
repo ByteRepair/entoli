@@ -299,7 +299,7 @@ enum GoalChange {
 /// the `/goal` that set it, the reply whose review found it met, the last
 /// message when the user paused it. [objective] is the goal it was about;
 /// [reason] why it stands where it does now, where there is one. See "Goals"
-/// in `lib/domain/AGENTS.md`.
+/// in `packages/entoli_chat/lib/domain/AGENTS.md`.
 @freezed
 abstract class GoalMark with _$GoalMark {
   const factory GoalMark({
@@ -453,7 +453,7 @@ abstract class Message with _$Message {
     /// The `/skill` and `@agent` this message named that the library knew
     /// when it was sent, as written — `/review`, `@researcher`. Names, not
     /// what they meant: a reader looks each up in the library as it is. See
-    /// "Skills and agents" in `lib/domain/AGENTS.md`.
+    /// "Skills and agents" in `packages/entoli_chat/lib/domain/AGENTS.md`.
     @Default([]) List<String> references,
 
     /// The participant who wrote this reply, sigil on, as spelled in
@@ -632,7 +632,7 @@ sealed class MessagePart with _$MessagePart {
   /// of its own: the turn it steered is one reply, and a message between its
   /// halves would split it in the log. The projection words it as a user
   /// message after the results above it. See "Steering a turn" in
-  /// `lib/domain/room/AGENTS.md`.
+  /// `packages/entoli_chat/lib/domain/room/AGENTS.md`.
   const factory MessagePart.steer({required Message message}) = SteerPart;
 
   /// The user reacting to the message [messageId] with [emoji]: the whole of
@@ -643,7 +643,7 @@ sealed class MessagePart with _$MessagePart {
   /// [excerpt] is the start of what it said: the model is never shown
   /// [messageId], so the excerpt is how it knows which message was reacted
   /// to — any of the thread's, and one a compaction summarized away too.
-  /// See "Reactions" in `lib/domain/AGENTS.md`.
+  /// See "Reactions" in `packages/entoli_chat/lib/domain/AGENTS.md`.
   const factory MessagePart.reaction({
     required String messageId,
     required String emoji,

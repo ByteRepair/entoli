@@ -4,7 +4,7 @@ import "dart:typed_data";
 import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/chat_share.dart";
+import "package:entoli_chat/domain/chat_share.dart";
 
 void main() {
   Uint8List zipOf(Map<String, String> files, {String? comment}) {

@@ -1,9 +1,9 @@
 import "dart:io";
 import "dart:js_interop";
 
-import "package:agent_chat/domain/chat_store.dart";
-import "package:agent_chat/domain/file_handoff.dart";
-import "package:agent_chat/domain/link_opener.dart";
+import "package:entoli_chat/domain/chat_store.dart";
+import "package:entoli_chat/domain/file_handoff.dart";
+import "package:entoli_chat/domain/link_opener.dart";
 import "package:flutter/widgets.dart";
 import "package:path/path.dart" as p;
 import "package:url_launcher/url_launcher.dart";

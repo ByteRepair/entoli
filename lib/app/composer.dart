@@ -1,10 +1,10 @@
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../domain/file_tools.dart" show guestWorkspacePath;
-import "../domain/models.dart";
-import "../domain/shell.dart";
-import "../domain/wired_skill.dart";
+import "package:entoli_chat/domain/file_tools.dart" show guestWorkspacePath;
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_chat/domain/wired_skill.dart";
 import "completion.dart";
 
 typedef SendCallback = void Function(String text, List<Attachment> attachments);

@@ -7,8 +7,8 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-import "package:agent_chat/domain/chat_share.dart";
-import "package:agent_chat/domain/models.dart";
+import "package:entoli_chat/domain/chat_share.dart";
+import "package:entoli_chat/domain/models.dart";
 import "package:agent_chat/ui/chat/share_chat_dialog.dart";
 
 import "../harness.dart";

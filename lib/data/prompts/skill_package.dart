@@ -7,9 +7,9 @@ import "dart:typed_data";
 import "package:archive/archive.dart";
 import "package:path/path.dart" as p;
 
-import "../../domain/models.dart";
-import "../../domain/prompt_library.dart";
-import "../zip.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/prompt_library.dart";
+import "package:entoli_chat/data/zip.dart";
 import "skill_import.dart";
 import "skill_validate.dart";
 

@@ -4,12 +4,12 @@ import "dart:io";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:path/path.dart" as p;
 
-import "../core/formatting.dart" show nonBlank;
-import "../core/log.dart";
+import "package:entoli_chat/core/formatting.dart" show nonBlank;
+import "package:entoli_chat/core/log.dart";
 import "../core/platform/form_factor.dart";
-import "../domain/documents.dart" show RenameWriter;
-import "../domain/profile.dart";
-import "../domain/tone.dart";
+import "package:entoli_chat/domain/documents.dart" show RenameWriter;
+import "package:entoli_chat/domain/profile.dart";
+import "package:entoli_chat/domain/tone.dart";
 import "../providers.dart";
 
 /// What a turn knows about the user, as the profile page edits it. With no

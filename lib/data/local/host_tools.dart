@@ -8,9 +8,9 @@ import "package:archive/archive_io.dart";
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
-import "../../core/log.dart";
+import "package:entoli_chat/core/log.dart";
 import "../../core/tls.dart";
-import "../../domain/documents.dart" show writeBytesThroughRename;
+import "package:entoli_chat/domain/documents.dart" show writeBytesThroughRename;
 import "file_modes.dart";
 import "guest_mounts.dart";
 import "host_grep.dart";

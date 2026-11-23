@@ -6,12 +6,12 @@ import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/tools/customization_tools.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/tools/skill_tool.dart";
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/permission.dart";
-import "package:agent_chat/domain/profile.dart";
-import "package:agent_chat/domain/prompt_library.dart";
-import "package:agent_chat/domain/tone.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/permission.dart";
+import "package:entoli_chat/domain/profile.dart";
+import "package:entoli_chat/domain/prompt_library.dart";
+import "package:entoli_chat/domain/tone.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";

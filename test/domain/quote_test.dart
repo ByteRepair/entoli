@@ -1,6 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/quote.dart";
+import "package:entoli_chat/domain/quote.dart";
 
 void main() {
   test("a quote sends as a blockquote, its handle a paragraph of its own", () {

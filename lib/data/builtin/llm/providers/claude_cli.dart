@@ -7,10 +7,10 @@ import "package:collection/collection.dart";
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
-import "../../../../core/log.dart";
-import "../../../../domain/llm_provider.dart";
-import "../../../../domain/model_info.dart";
-import "../../../../domain/tool_arg.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_chat/domain/model_info.dart";
+import "package:entoli_chat/domain/tool_arg.dart";
 import "../anthropic_client.dart";
 import "../llm_client.dart";
 import "../mcp_tool_bridge.dart";

@@ -2,13 +2,13 @@ import "package:flutter/foundation.dart" show ChangeNotifier;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
-import "../domain/models.dart";
-import "../domain/room/room_state.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/room/room_state.dart";
 import "../providers.dart";
 import "chat_controller.dart";
 import "composer.dart";
 import "mirror_controller.dart";
-import "reader.dart" show SettingReader;
+import "package:entoli_chat/app/reader.dart" show SettingReader;
 
 /// One chat apart from how it is drawn: where its turns are read from and
 /// driven through — this device's controller, or a paired device's mirror —

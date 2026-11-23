@@ -1,7 +1,7 @@
 import "package:flutter/services.dart";
 
-import "../../core/log.dart";
-import "../../domain/intent_action.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/intent_action.dart";
 
 /// `agent_chat/intents`: where the Apple Runners' App Intents reach an
 /// [IntentRegistry]. Swift calls `perform` with an action's id and its

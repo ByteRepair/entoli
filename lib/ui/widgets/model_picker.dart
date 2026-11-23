@@ -2,11 +2,11 @@ import "package:collection/collection.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/llm_provider.dart";
-import "../../domain/models.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_chat/domain/models.dart";
 import "../../providers.dart";
 import "../../app/model_picker.dart" show ModelField;
-import "../../app/reader.dart" show WidgetReader;
+import "package:entoli_chat/app/reader.dart" show WidgetReader;
 import "model_catalog_page.dart";
 import "resettable_field.dart";
 

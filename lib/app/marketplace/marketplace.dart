@@ -5,7 +5,7 @@ import "package:http/http.dart" as http;
 
 import "../../data/prompts/skill_import.dart" show SkillPackage;
 import "../../data/prompts/skill_package.dart";
-import "../../domain/models.dart";
+import "package:entoli_chat/domain/models.dart";
 
 /// What the marketplace site lives at. A const until there is a reason to
 /// move it; the section path is [CompletionKind.folder], the site's own.

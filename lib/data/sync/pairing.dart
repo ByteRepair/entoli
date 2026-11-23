@@ -5,13 +5,13 @@ import "package:http/http.dart" as http;
 
 import "../../core/tls.dart";
 
-import "../../core/log.dart";
-import "../../domain/app_settings.dart";
-import "../../domain/sync/devices.dart";
-import "../../domain/sync/identity.dart";
-import "../../domain/sync/lan_signaling.dart";
-import "../../domain/sync/protocol.dart";
-import "../../domain/sync/relay_signaling.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/sync/devices.dart";
+import "package:entoli_chat/domain/sync/identity.dart";
+import "package:entoli_chat/domain/sync/lan_signaling.dart";
+import "package:entoli_chat/domain/sync/protocol.dart";
+import "package:entoli_chat/domain/sync/relay_signaling.dart";
 import "channel.dart";
 import "framing.dart";
 import "handshake.dart";

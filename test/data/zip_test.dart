@@ -3,7 +3,7 @@ import "dart:io";
 import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/data/zip.dart";
+import "package:entoli_chat/data/zip.dart";
 
 import "../harness.dart";
 

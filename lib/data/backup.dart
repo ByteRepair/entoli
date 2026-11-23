@@ -6,14 +6,14 @@ import "dart:isolate";
 import "package:archive/archive_io.dart";
 import "package:path/path.dart" as p;
 
-import "../core/config.dart";
-import "../core/log.dart";
-import "../core/migrations.dart";
-import "../domain/documents.dart";
-import "../domain/file_handoff.dart";
-import "../domain/workspace.dart";
+import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/core/migrations.dart";
+import "package:entoli_chat/domain/documents.dart";
+import "package:entoli_chat/domain/file_handoff.dart";
+import "package:entoli_chat/domain/workspace.dart";
 import "local/tree_ops.dart" show removeTree;
-import "zip.dart";
+import "package:entoli_chat/data/zip.dart";
 
 /// The whole data directory as a zip, and back again. The members are the
 /// files, at the paths they have under the data directory. See AGENTS.md,

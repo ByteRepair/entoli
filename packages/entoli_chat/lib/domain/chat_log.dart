@@ -202,7 +202,7 @@ sealed class ChatRecord with _$ChatRecord {
   /// [CompactionRecord]'s boundary, so a rewind past that message un-applies
   /// it; the goal as it stands is the fold of the live ones, which is how a
   /// restart reloads it. Written by the room alone, through its append queue.
-  /// See "Goals" in `lib/domain/AGENTS.md`.
+  /// See "Goals" in `packages/entoli_chat/lib/domain/AGENTS.md`.
   const factory ChatRecord.goal({
     required String afterMessageId,
     required GoalChange change,

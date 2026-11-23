@@ -1,6 +1,6 @@
 import "package:flutter/foundation.dart" show protected;
 
-import "../../core/log.dart";
+import "package:entoli_chat/core/log.dart";
 import "channel_reminder_alarms.dart";
 
 /// iOS's local notifications, behind `agent_chat/reminders` and

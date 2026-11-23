@@ -9,7 +9,7 @@ import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/builtin/sandbox_grants.dart" show systemTemps;
 import "package:agent_chat/data/local/landlock.dart";
 import "package:agent_chat/data/local/seatbelt.dart";
-import "package:agent_chat/domain/shell.dart";
+import "package:entoli_chat/domain/shell.dart";
 
 List<String> _hostCommand(
   String _,

@@ -3,7 +3,7 @@ import "dart:io";
 
 import "package:flutter/services.dart";
 
-import "../../core/log.dart";
+import "package:entoli_chat/core/log.dart";
 import "host_frame.dart";
 
 /// One end of the socket between the app and its model host, the same class

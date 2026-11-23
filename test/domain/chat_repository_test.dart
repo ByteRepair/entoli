@@ -4,20 +4,20 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/core/config.dart";
-import "package:agent_chat/data/local/file_chat_store.dart";
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/chat_meta.dart";
-import "package:agent_chat/domain/chat_log.dart";
-import "package:agent_chat/domain/chat_repository.dart";
-import "package:agent_chat/domain/builtin_project.dart"
+import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/data/local/file_chat_store.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/chat_meta.dart";
+import "package:entoli_chat/domain/chat_log.dart";
+import "package:entoli_chat/domain/chat_repository.dart";
+import "package:entoli_chat/domain/builtin_project.dart"
     show AgentCapability, myTeamNote;
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/profile.dart";
-import "package:agent_chat/domain/permission.dart";
-import "package:agent_chat/domain/prompt_library.dart";
-import "package:agent_chat/domain/project_settings.dart";
-import "package:agent_chat/domain/temp_chat_ttl.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/profile.dart";
+import "package:entoli_chat/domain/permission.dart";
+import "package:entoli_chat/domain/prompt_library.dart";
+import "package:entoli_chat/domain/project_settings.dart";
+import "package:entoli_chat/domain/temp_chat_ttl.dart";
 import "package:path/path.dart" as p;
 
 import "../fakes.dart";

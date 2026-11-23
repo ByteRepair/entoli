@@ -1,6 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/app_update.dart";
+import "package:entoli_chat/domain/app_update.dart";
 
 void main() {
   group("versionIsNewer", () {

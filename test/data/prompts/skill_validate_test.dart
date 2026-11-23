@@ -1,5 +1,5 @@
 import "package:agent_chat/data/prompts/skill_validate.dart";
-import "package:agent_chat/domain/frontmatter.dart";
+import "package:entoli_chat/domain/frontmatter.dart";
 import "package:flutter_test/flutter_test.dart";
 
 Frontmatter _parse(String source) => Frontmatter.parse(source);

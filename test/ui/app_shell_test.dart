@@ -2,14 +2,14 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/builtin_project.dart";
-import "package:agent_chat/domain/project.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/builtin_project.dart";
+import "package:entoli_chat/domain/project.dart";
 import "package:agent_chat/ui/app_shell.dart";
 import "package:agent_chat/app/chat_groups.dart" show pinnedHeading;
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/selection.dart";
-import "package:agent_chat/ui/theme.dart";
+import "package:entoli_chat/ui/theme.dart";
 
 import "../fakes.dart";
 import "../harness.dart";

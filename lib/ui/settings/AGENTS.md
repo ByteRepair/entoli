@@ -4,16 +4,16 @@
 
 Every settings page is a plain widget. The layers under them:
 
-- **The store** (`lib/domain/settings/`). `settings.json`, `project.json` and
-  a chat's `meta.json` are each a `SettingsDocument`: the JSON as the source
-  of truth, read and written through a `Setting` declaration per key in
-  `SettingKeys` — the key, a codec, the levels it may be set at, and for the
-  app's level a fallback. A value equal to its fallback is not written at the
-  app's level, so a file that predates a default gets it; a key this build
-  does not know is kept through a save; a key that once had another name was
-  moved by `migrations.dart`, so the reader knows only today's. `AppSettings`,
-  `ProjectSettings` and `ChatMeta` are typed views over their documents, a
-  getter and a setter a key.
+- **The store** (`packages/entoli_chat/lib/domain/settings/`). `settings.json`,
+  `project.json` and a chat's `meta.json` are each a `SettingsDocument`: the
+  JSON as the source of truth, read and written through a `Setting` declaration
+  per key in `SettingKeys` — the key, a codec, the levels it may be set at, and
+  for the app's level a fallback. A value equal to its fallback is not written
+  at the app's level, so a file that predates a default gets it; a key this
+  build does not know is kept through a save; a key that once had another name
+  was moved by `migrations.dart`, so the reader knows only today's.
+  `AppSettings`, `ProjectSettings` and `ChatMeta` are typed views over their
+  documents, a getter and a setter a key.
 - **Scopes** (`lib/app/settings/scope.dart`). `AppScope`, `ProjectScope` and
   `ChatScope` are the objects that read and write a level: what this level
   holds (`own`), what it would take from above (`inherited`), and `write`. A
@@ -29,10 +29,10 @@ Every settings page is a plain widget. The layers under them:
   the control its value wants: `ScopedSwitch`, `ScopedChoice`,
   `ScopedLevels`, `ScopedCount`, `ScopedModel` and `ScopedEnvironment`. Each
   reads its level through `scopeOf` — `scopeAt` over the widget's ref
-  (`WidgetReader`, `lib/app/reader.dart`), so it rebuilds as the documents
-  change — and writes back through it. What a change sets off beyond the key
-  — a restart to say, a re-anchor of every chat's TTL — is a `write` handed
-  to the widget, through the notifier setter that does it.
+  (`WidgetReader`, `packages/entoli_chat/lib/app/reader.dart`), so it rebuilds
+  as the documents change — and writes back through it. What a change sets off
+  beyond the key — a restart to say, a re-anchor of every chat's TTL — is a
+  `write` handed to the widget, through the notifier setter that does it.
 - **Categories** (`settings_category.dart`, `settings_pages.dart`).
   `SettingsCategory` is the list: its order, label, icon, the group a
   `dividerAbove` starts, and `offered`, whether this platform can do
@@ -242,117 +242,186 @@ for a missing device would. The permission rows re-read on the way
 back to the app, since their answers can only change while it is behind in the
 system settings the rows open. The editor page is a route of its own;
 see "The trigger editor" below, and "Waking for a reminder" in
-`android/AGENTS.md`. **Skills** is the list of what the agent can be told to do by name — the bundled ones, which ship with the app, and the user's own, imported from a `.skill` file or removed with their files. The user's skills live in their own directory beside the extracted presets, so a bundled one is not deletable and a user's is; import and delete are the two things that change it, and they reload the library the moment they are done, the one way a change to it lands without a restart, where a skill dropped into the directory by hand still waits for one. **Every row opens the skill view page** (`lib/ui/skills/skill_view.dart`) — the description, the SKILL.md body rendered the way a reply is, the files, and the conformance problems where there are any, since the loader skips a skill that does not conform to the Agent Skills spec and this page is where the skip says why. The page's scan validates every folder in the project's own directory, each time the page is shown, so a skipped skill is a row of its own (`Not loaded`, a warning mark, removable) rather than an absence with only a log line behind it, and a loaded row with a badged folder carries the warning mark too; what is wrong is the view page's to say. **Export rides every row** — bundled and inherited included, since what the library serves is what the user is reading — through `prompt_export.dart`, which resolves the bytes the way the library does (the page's own directory, then a bundled preset, then the default project's) and zips a skill under its own folder, because that folder is what a `.skill` import names a skill by. The file leaves through `BackupHandoff`, the ungated port the backup rides, so a save dialog on the desktops and the share sheet on Android are the same call. Beside Export each row has **Copy install link**, the entry as an `entoli://` link (see "Links into Entoli" in `lib/ui/AGENTS.md`). The import and the install-to choice are the footer, pinned under the list so they do not scroll with it. Both pages are widgets (`skills_settings.dart`, `agents_settings.dart`) taking the level they show: the app's page is the default project's, and `openProjectPrompts` (`project_prompts_page.dart`) pushes either at a project's `ProjectAddress`, a paired device's included, whose entries are shown and not changed. A project's page reads that project's library and scans that project's directory, so an entry it holds is editable there and everything else is a row that says where it came from — `Inherited` from the default project, or `Bundled`. A built-in's page is the read-only version of the same thing: no import, no remove, the badges and the export only, since what a turn in it may have is the spec's to say. A user project's page imports without the destination combobox — it is in that project — and the global page's import carries one, `Global` default, where a skill the user picks can land in any project. The skill-install preview page asks the same, so a model-drafted skill is aimed the same way. A project's agents page is the same page with `@name` prose: add, edit and delete against the project's directory, inherited rows badged. See "Skills and agents" in `lib/domain/AGENTS.md`.
-**Agents** is the list of what a message can address by name — the bundled ones, which ship with the app and are read-only, and the user's own, written in-app and editable or removable. An agent is one flat `.md` file (a system prompt with `description` frontmatter), so it is written on `AgentEditorPage` rather than imported the way a skill's directory is; the name is the file name, and editing it on an existing agent renames the file — the new `.md` is written before the old one is taken away, a rename onto a name another agent holds is refused in the editor, an add onto one asks to replace it, an agent with no system prompt is not saved, and the only thing a rename loses is a new mention of the old name, since a mention already written into a conversation keeps the meaning it was recorded with. **Import agent** is the one way an outside `.md` comes in: it lands under its file's own name, with a replace-confirm where the name is taken and a refusal for an empty body, rather than through the editor — an editor pass before the write would be a second way to make the name and the file name diverge. Export and Copy install link ride every row, the same `BackupHandoff` route the skills page takes, the `.md` itself the file — the picture is the device's own convenience and stays. Every row leads with the agent's face (`AgentPicture`) — a person mark until one is set, a still where it is a Bot Avatar, resolved over the library's tier walk by `agentPictureProvider`. An agent's face is chosen in its editor, the circle at the top being the button: Upload photo (PNG only, a non-PNG pick refused with a line saying so), a Bot Avatar from the avatar editor, and Remove where there is one; it is held there and written with the rest of the agent on Save. The editor shows this project's own face, so one inherited from the default project shows on the rows but not there. Add, Import and View Bot Avatars are the page's footer, pinned under the list. The face is `<name>.png` or `<name>.avatar.json` beside the `.md` — writing one takes the other away — written through `writeAgentFace` (`data/prompts/agent_pictures.dart`, beside the readers): an edit keeps the face the agent has, a rename moves it, an import or a replace leaves the new agent no face of the one it replaced, and a delete takes it with the agent. The rows re-read it because `agentPictureProvider` watches the library each write reloads. Add, edit, delete and import reload the library the moment they are done, the same one way a change to it lands without a restart — every project's where the page is the global one (the default directory is a rung of every project's tier walk, so an inherited agent and an inherited picture go stale everywhere if only `promptLibraryProvider(null)` is rebuilt; skills keep the same branch), the project's own where it is a project's page. See "Skills and agents" in `lib/domain/AGENTS.md`.
-**Byte Repair** is the tooling for the built-in project of the same name: a
-banner saying whether the configured terminal env can run it, a button that
-runs a bundled install script through that env to put `make`,
-`github-cli` and ESBMC into the selected shared rootfs, a button to import a
-local ESBMC binary into that rootfs, a button to delete the workspace and all
-chats in the project, and the versions found afterwards. "Run Setup" runs the
-install script and writes a `.setup-complete` marker — packages stay in the
-shared rootfs when project data is deleted. The chat page gates the composer on that marker, showing a "setup
+`android/AGENTS.md`. **Skills** is the list of what the agent can be told to do
+by name — the bundled ones, which ship with the app, and the user's own,
+imported from a `.skill` file or removed with their files. The user's skills
+live in their own directory beside the extracted presets, so a bundled one is
+not deletable and a user's is; import and delete are the two things that change
+it, and they reload the library the moment they are done, the one way a change
+to it lands without a restart, where a skill dropped into the directory by hand
+still waits for one. **Every row opens the skill view page**
+(`lib/ui/skills/skill_view.dart`) — the description, the SKILL.md body rendered
+the way a reply is, the files, and the conformance problems where there are any,
+since the loader skips a skill that does not conform to the Agent Skills spec
+and this page is where the skip says why. The page's scan validates every folder
+in the project's own directory, each time the page is shown, so a skipped skill
+is a row of its own (`Not loaded`, a warning mark, removable) rather than an
+absence with only a log line behind it, and a loaded row with a badged folder
+carries the warning mark too; what is wrong is the view page's to say. **Export
+rides every row** — bundled and inherited included, since what the library
+serves is what the user is reading — through `prompt_export.dart`, which
+resolves the bytes the way the library does (the page's own directory, then a
+bundled preset, then the default project's) and zips a skill under its own
+folder, because that folder is what a `.skill` import names a skill by. The file
+leaves through `BackupHandoff`, the ungated port the backup rides, so a save
+dialog on the desktops and the share sheet on Android are the same call. Beside
+Export each row has **Copy install link**, the entry as an `entoli://` link (see
+"Links into Entoli" in `lib/ui/AGENTS.md`). The import and the install-to choice
+are the footer, pinned under the list so they do not scroll with it. Both pages
+are widgets (`skills_settings.dart`, `agents_settings.dart`) taking the level
+they show: the app's page is the default project's, and `openProjectPrompts`
+(`project_prompts_page.dart`) pushes either at a project's `ProjectAddress`, a
+paired device's included, whose entries are shown and not changed. A project's
+page reads that project's library and scans that project's directory, so an
+entry it holds is editable there and everything else is a row that says where it
+came from — `Inherited` from the default project, or `Bundled`. A built-in's
+page is the read-only version of the same thing: no import, no remove, the
+badges and the export only, since what a turn in it may have is the spec's to
+say. A user project's page imports without the destination combobox — it is in
+that project — and the global page's import carries one, `Global` default, where
+a skill the user picks can land in any project. The skill-install preview page
+asks the same, so a model-drafted skill is aimed the same way. A project's
+agents page is the same page with `@name` prose: add, edit and delete against
+the project's directory, inherited rows badged. See "Skills and agents" in
+`packages/entoli_chat/lib/domain/AGENTS.md`. **Agents** is the list of what a
+message can address by name — the bundled ones, which ship with the app and are
+read-only, and the user's own, written in-app and editable or removable. An
+agent is one flat `.md` file (a system prompt with `description` frontmatter),
+so it is written on `AgentEditorPage` rather than imported the way a skill's
+directory is; the name is the file name, and editing it on an existing agent
+renames the file — the new `.md` is written before the old one is taken away, a
+rename onto a name another agent holds is refused in the editor, an add onto one
+asks to replace it, an agent with no system prompt is not saved, and the only
+thing a rename loses is a new mention of the old name, since a mention already
+written into a conversation keeps the meaning it was recorded with. **Import
+agent** is the one way an outside `.md` comes in: it lands under its file's own
+name, with a replace-confirm where the name is taken and a refusal for an empty
+body, rather than through the editor — an editor pass before the write would be
+a second way to make the name and the file name diverge. Export and Copy install
+link ride every row, the same `BackupHandoff` route the skills page takes, the
+`.md` itself the file — the picture is the device's own convenience and stays.
+Every row leads with the agent's face (`AgentPicture`) — a person mark until one
+is set, a still where it is a Bot Avatar, resolved over the library's tier walk
+by `agentPictureProvider`. An agent's face is chosen in its editor, the circle
+at the top being the button: Upload photo (PNG only, a non-PNG pick refused with
+a line saying so), a Bot Avatar from the avatar editor, and Remove where there
+is one; it is held there and written with the rest of the agent on Save. The
+editor shows this project's own face, so one inherited from the default project
+shows on the rows but not there. Add, Import and View Bot Avatars are the page's
+footer, pinned under the list. The face is `<name>.png` or `<name>.avatar.json`
+beside the `.md` — writing one takes the other away — written through
+`writeAgentFace` (`data/prompts/agent_pictures.dart`, beside the readers): an
+edit keeps the face the agent has, a rename moves it, an import or a replace
+leaves the new agent no face of the one it replaced, and a delete takes it with
+the agent. The rows re-read it because `agentPictureProvider` watches the
+library each write reloads. Add, edit, delete and import reload the library the
+moment they are done, the same one way a change to it lands without a restart —
+every project's where the page is the global one (the default directory is a
+rung of every project's tier walk, so an inherited agent and an inherited
+picture go stale everywhere if only `promptLibraryProvider(null)` is rebuilt;
+skills keep the same branch), the project's own where it is a project's page.
+See "Skills and agents" in `packages/entoli_chat/lib/domain/AGENTS.md`. **Byte
+Repair** is the tooling for the built-in project of the same name: a banner
+saying whether the configured terminal env can run it, a button that runs a
+bundled install script through that env to put `make`, `github-cli` and ESBMC
+into the selected shared rootfs, a button to import a local ESBMC binary into
+that rootfs, a button to delete the workspace and all chats in the project, and
+the versions found afterwards. "Run Setup" runs the install script and writes a
+`.setup-complete` marker — packages stay in the shared rootfs when project data
+is deleted. The chat page gates the composer on that marker, showing a "setup
 required" bar until it is there; on the host the marker is not enough either,
 since the fetched tools live in a cache directory that can be emptied between
 setups, so the binary is asked after too. Where the tools land follows the env:
-inside a rootfs they go to the guest's own `/usr/local/bin`; on Linux they go
-to `<cacheDir>/byte-repair/bin`, which the project's turns are given on PATH —
-so Byte Repair works on the host env with no root and nothing installed into
-the machine, and a tool already on the machine is used rather than fetched.
-A mac is the exception to "nothing installed": its tools come from Homebrew,
-into the system, and are linked into the same bin directory. The page says so
-in a line above Run Setup, and where no `brew` is installed it shows Homebrew's
-install command to paste into a terminal, drawn as a reply's `CodeBlock` so it
-carries the same copy button; the setup cannot run that installer itself,
-which wants sudo. Both are the store's (`setupNotice`, `prerequisite`), so the
-page names no platform. A delete takes the links and leaves what Homebrew
-installed, and its confirm says that.
-While a setup or an import runs, the category cannot be left
+inside a rootfs they go to the guest's own `/usr/local/bin`; on Linux they go to
+`<cacheDir>/byte-repair/bin`, which the project's turns are given on PATH — so
+Byte Repair works on the host env with no root and nothing installed into the
+machine, and a tool already on the machine is used rather than fetched. A mac is
+the exception to "nothing installed": its tools come from Homebrew, into the
+system, and are linked into the same bin directory. The page says so in a line
+above Run Setup, and where no `brew` is installed it shows Homebrew's install
+command to paste into a terminal, drawn as a reply's `CodeBlock` so it carries
+the same copy button; the setup cannot run that installer itself, which wants
+sudo. Both are the store's (`setupNotice`, `prerequisite`), so the page names no
+platform. A delete takes the links and leaves what Homebrew installed, and its
+confirm says that. While a setup or an import runs, the category cannot be left
 (`SettingsCategory.held`): back, the bar's button and another category's tile
-are all shut, since the run's log and error are the page's to show.
-See "Byte Repair's environment, in five variables" in `lib/data/local/AGENTS.md`.
-The
+are all shut, since the run's log and error are the page's to show. See "Byte
+Repair's environment, in five variables" in `lib/data/local/AGENTS.md`. The
 banner asks the same env question everywhere, the store naming the platform's
-own answer: a phone with no Linux has no shell at all — so both hide the
-rest until a rootfs is picked from Terminal, and a setup run by either guest installs through its own `apk`.
-The desktops'
-host shells are each given an install destination and so are capable.
-The delete sits below the banner everywhere the
+own answer: a phone with no Linux has no shell at all — so both hide the rest
+until a rootfs is picked from Terminal, and a setup run by either guest installs
+through its own `apk`. The desktops' host shells are each given an install
+destination and so are capable. The delete sits below the banner everywhere the
 category is drawn, since the workspace and the chats are data wherever the
 tooling is not: its confirm message's environment clause is worded by the
-store's `environmentDeletion`, asked off the disk rather than assumed off
-the platform, so a delete over a project whose setup left nothing behind
-names the workspace and the chats alone. **Sync** is paired devices — this device's name,
-the paired-device list, and the
-pairing controls. A pairing never renders inline: window, invite and pasted
-code all move to a screen of their own that ends on a paired screen naming
-the device, with Pair another device on it — see "The pairing flows as pages"
-in `lib/data/sync/AGENTS.md`. A paired device's row clicks through to its own
-page (Paired device page, `lib/ui/settings/paired_device_page.dart`) — the
-record and a rename, then both fingerprints under "Device fingerprint" and
-"This device" with the explanation of the comparison they exist for. The Sync
-list itself draws no fingerprint. The relay and TURN settings are screens
-of their own behind two rows on the page, and Keep connected off screen is
-Android's row only — the one platform whose process freezes with the screen.
-See `lib/data/sync/AGENTS.md` for the threat model and
-handshake. **Providers** is the endpoints — and the keys, which are not in
-`settings.json` at all: a key typed into the provider dialog (or the
+store's `environmentDeletion`, asked off the disk rather than assumed off the
+platform, so a delete over a project whose setup left nothing behind names the
+workspace and the chats alone. **Sync** is paired devices — this device's name,
+the paired-device list, and the pairing controls. A pairing never renders
+inline: window, invite and pasted code all move to a screen of their own that
+ends on a paired screen naming the device, with Pair another device on it — see
+"The pairing flows as pages" in `lib/data/sync/AGENTS.md`. A paired device's row
+clicks through to its own page (Paired device page,
+`lib/ui/settings/paired_device_page.dart`) — the record and a rename, then both
+fingerprints under "Device fingerprint" and "This device" with the explanation
+of the comparison they exist for. The Sync list itself draws no fingerprint. The
+relay and TURN settings are screens of their own behind two rows on the page,
+and Keep connected off screen is Android's row only — the one platform whose
+process freezes with the screen. See `lib/data/sync/AGENTS.md` for the threat
+model and handshake. **Providers** is the endpoints — and the keys, which are
+not in `settings.json` at all: a key typed into the provider dialog (or the
 recommended-provider card) goes to the secret store, under the provider's id,
-and the row says "Connected" rather than showing any of it — "Needs a key"
-where neither a stored key nor its named variable is there, "On this computer"
-for a local server, and an endpoint typed in by hand carries its address in
-front (`ProvidersSection`, `provider_settings.dart`). Adding one opens
-`pickProviderPreset` (`provider_picker.dart`) on the presets alone, grouped
-as paid, free at a cost to privacy and on this machine, each with what it
-does with the prompts, and a free tier is agreed to in a second dialog
-before anything else is asked. Then `ProviderDialog` ("Connect X" for a
-preset), over a `ProviderEdit` (`lib/app/settings/provider_edit.dart`), which
-holds the entry being edited and builds what is saved: an empty name, base
-URL or models.dev id falls back to the preset's. A preset's dialog is
-written for someone who has never seen a base URL: what a key is and a link
-to make one, the key field as "Access key" and focused, and the provider's
-privacy policy, with the technical fields — name, API, base URL, models, the
-named variable — folded under Advanced; an endpoint typed in by hand opens
-on those alone. Which is which is the preset's `terms`. A typed key is put
-to the provider's own `checkKey` (`checkProviderKey` over
-`keyCheckProvider`) on Save: a no keeps the dialog open, said on the key,
-with Save turned into Save anyway, and a provider that could not be asked
-is saved, since no answer is not a no. The key is tri-state — typed text
-stores, an empty field over a stored key keeps it, and "Remove saved key"
-clears it — because an empty field alone cannot say keep from clear once
-the field no longer echoes what is stored. `editProvider` is the one way
-in, for the page and for a caller connecting a service by name (`adopt`).
-The TURN password is in the store the same way; the TURN username is not a
-secret and rides in `settings.json` beside the URL.
-**LLMs** is what a new chat is answered by and what names it, and how long
-that model thinks — `ReasoningEffort`, sent only to a model the catalog says
-reasons, since another may refuse the field; a chat's settings, and the
-new-chat screen's, can override it in `meta.json`, a reset beside it putting
-the chat back on the app's. Under it the **Agent** — command
-approval mode and the classifier model, which travel together because auto
-mode is unusable without one, and the standing permission rules the agent
+and the row says "Connected" rather than showing any of it — "Needs a key" where
+neither a stored key nor its named variable is there, "On this computer" for a
+local server, and an endpoint typed in by hand carries its address in front
+(`ProvidersSection`, `provider_settings.dart`). Adding one opens
+`pickProviderPreset` (`provider_picker.dart`) on the presets alone, grouped as
+paid, free at a cost to privacy and on this machine, each with what it does with
+the prompts, and a free tier is agreed to in a second dialog before anything
+else is asked. Then `ProviderDialog` ("Connect X" for a preset), over a
+`ProviderEdit` (`lib/app/settings/provider_edit.dart`), which holds the entry
+being edited and builds what is saved: an empty name, base URL or models.dev id
+falls back to the preset's. A preset's dialog is written for someone who has
+never seen a base URL: what a key is and a link to make one, the key field as
+"Access key" and focused, and the provider's privacy policy, with the technical
+fields — name, API, base URL, models, the named variable — folded under
+Advanced; an endpoint typed in by hand opens on those alone. Which is which is
+the preset's `terms`. A typed key is put to the provider's own `checkKey`
+(`checkProviderKey` over `keyCheckProvider`) on Save: a no keeps the dialog
+open, said on the key, with Save turned into Save anyway, and a provider that
+could not be asked is saved, since no answer is not a no. The key is tri-state —
+typed text stores, an empty field over a stored key keeps it, and "Remove saved
+key" clears it — because an empty field alone cannot say keep from clear once
+the field no longer echoes what is stored. `editProvider` is the one way in, for
+the page and for a caller connecting a service by name (`adopt`). The TURN
+password is in the store the same way; the TURN username is not a secret and
+rides in `settings.json` beside the URL. **LLMs** is what a new chat is answered
+by and what names it, and how long that model thinks — `ReasoningEffort`, sent
+only to a model the catalog says reasons, since another may refuse the field; a
+chat's settings, and the new-chat screen's, can override it in `meta.json`, a
+reset beside it putting the chat back on the app's. Under it the **Agent** —
+command approval mode and the classifier model, which travel together because
+auto mode is unusable without one, and the standing permission rules the agent
 consults before any of it — and a **Turns** section — how a turn runs and is
 bounded: the retry rounds, the step limit, the Total Context window, the
-Auto-compact switch and share, and the Maximum response length, a number that
-is a fallback for models of unknown limit or, switched on, a cap on every
-reply (see "How long a reply may be" in `lib/data/builtin/llm/AGENTS.md`). The
-Agent was under General until it moved
-beside the model it runs. How long the model thinks and the image model's
-Quality are both a `ThinkingSlider` (see `lib/ui/widgets/AGENTS.md`). **Memory** is
-what one conversation leaves the others: the two `AGENTS.md` files every turn
-is read from — the user's own at the root of the data directory and the
-project's in its workspace — and the ways a turn may keep what they pull in
-out: imports and the nested ones found on a read, both on by default, and the
-patterns that keep a file out; the built-in projects read a note the app ships
-instead of any file. Beside them the memories the app writes for itself, which
-the recall, extraction and tools sub-gates and the Memory LLM steer; the
-profile pages edit the files — the global page the user's own, the project
-page the project's, and no built-in project's — and the memories themselves
-are looked at on a page the settings draw. The two halves are "Memory" in
-`lib/data/builtin/AGENTS.md`. **Data** is all of it at once, out as
-one file and back — see "Backing it all up". **About** is the
-app rather than anything it does, which is why it is last — see "What the app
-is".
+Auto-compact switch and share, and the Maximum response length, a number that is
+a fallback for models of unknown limit or, switched on, a cap on every reply
+(see "How long a reply may be" in `lib/data/builtin/llm/AGENTS.md`). The Agent
+was under General until it moved beside the model it runs. How long the model
+thinks and the image model's Quality are both a `ThinkingSlider` (see
+`lib/ui/widgets/AGENTS.md`). **Memory** is what one conversation leaves the
+others: the two `AGENTS.md` files every turn is read from — the user's own at
+the root of the data directory and the project's in its workspace — and the ways
+a turn may keep what they pull in out: imports and the nested ones found on a
+read, both on by default, and the patterns that keep a file out; the built-in
+projects read a note the app ships instead of any file. Beside them the memories
+the app writes for itself, which the recall, extraction and tools sub-gates and
+the Memory LLM steer; the profile pages edit the files — the global page the
+user's own, the project page the project's, and no built-in project's — and the
+memories themselves are looked at on a page the settings draw. The two halves
+are "Memory" in `lib/data/builtin/AGENTS.md`. **Data** is all of it at once, out
+as one file and back — see "Backing it all up". **About** is the app rather than
+anything it does, which is why it is last — see "What the app is".
 
 ## Work folders
 
@@ -376,17 +445,17 @@ backup or sync names a folder that is not there, which grants nothing (below).
 
 A folder comes from the platform's picker (`FolderPicker`, `file_selector`'s
 `getDirectoryPath` under it) and is never typed. It is refused, with a
-notice, by `refuseFolder` in `lib/domain/work_folders.dart`, the one test any
-grant takes, `add_directory`'s banner included. It refuses a path that is not
-a directory, the root, the home or anything holding it, the app's own data
-tree (the data directory, anything under it, or anything holding it), and
-anything holding the project's workspace. A row whose folder that test now
-refuses says why under its path (`FolderRefusal.row`). The commonest case is
-"Missing on this device", a folder that has disappeared or arrived by sync
-from another machine. The turn drops such a folder from its policy as well, so
-it grants nothing and a command cannot recreate it under the grant. Rows are
-the shared `EditableRow`, with no tap, since a folder is only added and
-removed.
+notice, by `refuseFolder` in
+`packages/entoli_chat/lib/domain/work_folders.dart`, the one test any grant
+takes, `add_directory`'s banner included. It refuses a path that is not a
+directory, the root, the home or anything holding it, the app's own data tree
+(the data directory, anything under it, or anything holding it), and anything
+holding the project's workspace. A row whose folder that test now refuses says
+why under its path (`FolderRefusal.row`). The commonest case is "Missing on this
+device", a folder that has disappeared or arrived by sync from another machine.
+The turn drops such a folder from its policy as well, so it grants nothing and a
+command cannot recreate it under the grant. Rows are the shared `EditableRow`,
+with no tap, since a folder is only added and removed.
 
 The folders the sandbox grants by default — the temp folders, the caches, the
 toolchains' stores, a repository's `.git` — are not rows here. They are the

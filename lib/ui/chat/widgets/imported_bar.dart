@@ -2,7 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../app/chat_shares.dart";
-import "../../../domain/models.dart";
+import "package:entoli_chat/domain/models.dart";
 
 /// Why an imported chat has no composer, and the two ways to enable it.
 /// Follows `NeedsSetupBar`'s shape.

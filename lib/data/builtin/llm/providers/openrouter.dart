@@ -1,8 +1,8 @@
 import "package:clock/clock.dart";
 import "package:http/http.dart" as http;
 
-import "../../../../domain/llm_provider.dart";
-import "../../../../domain/provider_usage.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
+import "package:entoli_chat/domain/provider_usage.dart";
 import "../http_stream.dart";
 import "provider.dart";
 

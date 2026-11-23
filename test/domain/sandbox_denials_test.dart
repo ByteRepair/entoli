@@ -3,8 +3,8 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-import "package:agent_chat/domain/sandbox_denials.dart";
-import "package:agent_chat/domain/shell.dart";
+import "package:entoli_chat/domain/sandbox_denials.dart";
+import "package:entoli_chat/domain/shell.dart";
 
 void main() {
   late String root;

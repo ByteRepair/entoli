@@ -5,12 +5,12 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/tools/trigger_tool.dart";
-import "package:agent_chat/domain/agent_backend.dart";
+import "package:entoli_chat/domain/agent_backend.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/prompt_library.dart";
-import "package:agent_chat/domain/trigger.dart";
-import "package:agent_chat/domain/trigger_manager.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/prompt_library.dart";
+import "package:entoli_chat/domain/trigger.dart";
+import "package:entoli_chat/domain/trigger_manager.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";

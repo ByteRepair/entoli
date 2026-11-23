@@ -5,7 +5,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/app/memories.dart";
 import "package:agent_chat/data/builtin/memory/store.dart";
-import "package:agent_chat/domain/project.dart" show ProjectRef;
+import "package:entoli_chat/domain/project.dart" show ProjectRef;
 import "package:agent_chat/providers.dart";
 
 class _Frozen extends Notifier<bool> {

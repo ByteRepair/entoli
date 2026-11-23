@@ -1,8 +1,8 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/permission.dart";
-import "package:agent_chat/domain/shell_command_analysis.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/permission.dart";
+import "package:entoli_chat/domain/shell_command_analysis.dart";
 
 void main() {
   group("globMatch", () {

@@ -1,6 +1,6 @@
 import "package:agent_chat/app/settings/provider_edit.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart";
-import "package:agent_chat/domain/llm_provider.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {

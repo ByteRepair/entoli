@@ -4,8 +4,8 @@ import "dart:typed_data";
 import "package:archive/archive.dart";
 
 import "../../data/sync/artifact_bytes.dart" show ArtifactBytes;
-import "../../domain/workspace.dart";
-import "../log.dart";
+import "package:entoli_chat/domain/workspace.dart";
+import "package:entoli_chat/core/log.dart";
 
 /// The mirror-side half of opening a remote artifact: the bytes come off the
 /// sync channel, are written to a temporary directory, and every platform

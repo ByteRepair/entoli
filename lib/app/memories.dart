@@ -1,9 +1,9 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../core/log.dart";
+import "package:entoli_chat/core/log.dart";
 import "../data/builtin/memory/store.dart";
-import "../domain/date_words.dart" show shortDate;
-import "../domain/project.dart" show ProjectRef;
+import "package:entoli_chat/domain/date_words.dart" show shortDate;
+import "package:entoli_chat/domain/project.dart" show ProjectRef;
 import "../providers.dart";
 
 /// What the memories page shows: the store's entries for [query], null

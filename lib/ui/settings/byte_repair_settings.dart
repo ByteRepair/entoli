@@ -5,9 +5,10 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../app/byte_repair.dart";
 import "../../data/local/byte_repair_store.dart";
 import "../../providers.dart";
-import "../chat/widgets/code_block.dart";
-import "../chat/widgets/shell_run.dart" show LiveShellOutput;
-import "../widgets/busy.dart";
+import "package:entoli_chat/ui/chat/widgets/code_block.dart";
+import "package:entoli_chat/ui/chat/widgets/shell_run.dart"
+    show LiveShellOutput;
+import "package:entoli_chat/ui/widgets/busy.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/section_header.dart";
 import "../widgets/settings_warning_banner.dart";

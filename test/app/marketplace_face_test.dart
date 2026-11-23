@@ -3,7 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/app/marketplace/face.dart";
 import "package:agent_chat/data/bot_avatar_library.dart";
-import "package:agent_chat/domain/bot_avatar/spec.dart";
+import "package:entoli_chat/domain/bot_avatar/spec.dart";
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

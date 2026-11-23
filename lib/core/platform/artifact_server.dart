@@ -3,8 +3,8 @@ import "dart:io";
 
 import "package:path/path.dart" as p;
 
-import "../../domain/artifact_style.dart";
-import "../../domain/content_type.dart";
+import "package:entoli_chat/domain/artifact_style.dart";
+import "package:entoli_chat/domain/content_type.dart";
 
 /// Serves [rootDir] over HTTP on a random localhost port. Used on the phones,
 /// where the WebView blocks `file://` URLs — even with `setAllowFileAccess(true)`

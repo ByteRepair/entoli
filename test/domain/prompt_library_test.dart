@@ -1,7 +1,7 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/prompt_library.dart";
+import "package:entoli_chat/domain/models.dart";
+import "package:entoli_chat/domain/prompt_library.dart";
 
 PromptDocument skill(String name, String source) =>
     PromptDocument.parse(CompletionKind.skill, name, source);

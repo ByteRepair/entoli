@@ -2,7 +2,7 @@ import "dart:ui" as ui;
 
 import "package:flutter/material.dart";
 
-import "../../widgets/scrolling.dart";
+import "package:entoli_chat/ui/widgets/scrolling.dart";
 import "../transcript.dart";
 
 /// Five lines of the conversation, and it **scrolls**: a window onto every line

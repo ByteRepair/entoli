@@ -1,9 +1,9 @@
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/local/proot.dart";
-import "package:agent_chat/domain/file_tools.dart";
-import "package:agent_chat/domain/rootfs.dart";
-import "package:agent_chat/domain/shell.dart";
+import "package:entoli_chat/domain/file_tools.dart";
+import "package:entoli_chat/domain/rootfs.dart";
+import "package:entoli_chat/domain/shell.dart";
 
 /// What proot is asked to do is the whole of what this feature does, and it is
 /// the one part of it that can be pinned on a machine with no Android on it.

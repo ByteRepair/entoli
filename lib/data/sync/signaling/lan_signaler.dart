@@ -3,8 +3,9 @@ import "dart:convert";
 
 import "package:http/http.dart" as http;
 
-import "../../../domain/sync/lan_signaling.dart" show preferredSignalingPort;
-import "../../../domain/sync/signaling_routes.dart";
+import "package:entoli_chat/domain/sync/lan_signaling.dart"
+    show preferredSignalingPort;
+import "package:entoli_chat/domain/sync/signaling_routes.dart";
 import "../handshake.dart" show ProtocolMismatchException;
 
 /// The joiner's half of a LAN exchange: find which of [exchange]'s addresses

@@ -6,13 +6,15 @@ version: 0.1.0
 environment:
   sdk: ^3.13.3
 
+resolution: workspace
+
 dependencies:
   flutter:
     sdk: flutter
   flutter_web_plugins:
     sdk: flutter
-  agent_chat:
-    path: ../..
+  entoli_chat:
+    path: ../entoli_chat
   file: ^7.0.1
   flutter_riverpod: ^3.4.2
   path: ^1.9.1

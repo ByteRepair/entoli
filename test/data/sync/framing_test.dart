@@ -5,7 +5,7 @@ import "dart:typed_data";
 import "package:agent_chat/data/sync/channel.dart";
 import "package:agent_chat/data/sync/framing.dart";
 import "package:agent_chat/data/sync/handshake.dart";
-import "package:agent_chat/domain/sync/identity.dart";
+import "package:entoli_chat/domain/sync/identity.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "../../fakes.dart";

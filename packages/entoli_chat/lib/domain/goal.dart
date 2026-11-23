@@ -1,6 +1,6 @@
 /// A chat's goal: what `/goal <objective>` sets, and what keeps the agent
 /// working across stops until a reviewer reads the conversation and finds it
-/// met. See "Goals" in `lib/domain/AGENTS.md`.
+/// met. See "Goals" in `packages/entoli_chat/lib/domain/AGENTS.md`.
 library;
 
 import "models.dart";

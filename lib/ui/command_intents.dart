@@ -2,8 +2,8 @@ import "dart:async";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../domain/availability.dart";
-import "../domain/intent_action.dart";
+import "package:entoli_chat/domain/availability.dart";
+import "package:entoli_chat/domain/intent_action.dart";
 import "app_command.dart";
 import "commands.dart";
 

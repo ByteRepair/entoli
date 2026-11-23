@@ -1,4 +1,4 @@
-import "package:agent_chat/domain/voice_model.dart";
+import "package:entoli_chat/domain/voice_model.dart";
 import "package:flutter_test/flutter_test.dart";
 
 /// The catalog is data, so what is worth pinning is that the data holds

@@ -2,9 +2,9 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../providers.dart";
-import "agent_picture.dart";
+import "package:entoli_chat/ui/widgets/agent_picture.dart";
 
-export "agent_picture.dart";
+export "package:entoli_chat/ui/widgets/agent_picture.dart";
 
 /// An agent's face as the project shows it: the `<name>.avatar.json` or
 /// `<name>.png` beside the agent's `.md`, resolved over the library's tier

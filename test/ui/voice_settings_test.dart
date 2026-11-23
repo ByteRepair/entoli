@@ -3,9 +3,9 @@ import "dart:convert";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/model_registry.dart";
-import "package:agent_chat/domain/voice.dart";
-import "package:agent_chat/domain/voice_model.dart";
+import "package:entoli_chat/domain/model_registry.dart";
+import "package:entoli_chat/domain/voice.dart";
+import "package:entoli_chat/domain/voice_model.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/widgets/catalog.dart";
 import "package:agent_chat/ui/settings/voice_settings.dart";

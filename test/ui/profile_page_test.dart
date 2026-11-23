@@ -5,11 +5,11 @@ import "package:flutter/gestures.dart" show kLongPressTimeout;
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/tone.dart";
+import "package:entoli_chat/domain/tone.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/profile/profile_page.dart";
 import "package:agent_chat/ui/widgets/prompt_field.dart";
-import "package:agent_chat/ui/widgets/text_file_page.dart";
+import "package:entoli_chat/ui/widgets/text_file_page.dart";
 
 import "../harness.dart";
 

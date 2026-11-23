@@ -2,7 +2,7 @@ import "dart:convert";
 import "dart:io";
 
 import "package:agent_chat/data/local/model_format.dart";
-import "package:agent_chat/domain/local_model.dart";
+import "package:entoli_chat/domain/local_model.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 

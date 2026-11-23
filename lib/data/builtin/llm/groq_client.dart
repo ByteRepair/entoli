@@ -1,4 +1,4 @@
-import "../../../domain/provider_usage.dart";
+import "package:entoli_chat/domain/provider_usage.dart";
 import "rate_limit_client.dart";
 
 /// Groq through its OpenAI surface. Groq has no endpoint that says what is

@@ -7,12 +7,12 @@ import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-import "package:agent_chat/core/config.dart";
-import "package:agent_chat/core/migrations.dart";
-import "package:agent_chat/data/chat_share.dart";
-import "package:agent_chat/data/local/file_chat_store.dart";
-import "package:agent_chat/domain/chat_share.dart";
-import "package:agent_chat/domain/models.dart";
+import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/core/migrations.dart";
+import "package:entoli_chat/data/chat_share.dart";
+import "package:entoli_chat/data/local/file_chat_store.dart";
+import "package:entoli_chat/domain/chat_share.dart";
+import "package:entoli_chat/domain/models.dart";
 
 import "../harness.dart";
 

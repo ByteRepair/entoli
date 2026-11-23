@@ -256,7 +256,7 @@ class SteerEvent extends AgentEvent {
 /// What the user has said to a running turn and the turn has not read yet.
 /// The room offers; the agent takes at its next step boundary; whatever is
 /// left when the turn ends is the room's to queue. See "Steering a turn" in
-/// `lib/domain/room/AGENTS.md`.
+/// `packages/entoli_chat/lib/domain/room/AGENTS.md`.
 class SteerInbox {
   final List<Message> _pending = [];
   bool _closed = false;
@@ -293,7 +293,7 @@ class SteerInbox {
 /// The turn's review moved the chat's goal: met, blocked, or paused for a
 /// model that kept stopping without doing anything. Not a part: the room
 /// writes it to the log as a `goal` record after the reply, which is what
-/// the goal is folded from. See "Goals" in `lib/domain/AGENTS.md`.
+/// the goal is folded from. See "Goals" in `packages/entoli_chat/lib/domain/AGENTS.md`.
 class GoalEvent extends AgentEvent {
   const GoalEvent(this.change, this.objective, {this.reason});
   final GoalChange change;
@@ -664,7 +664,7 @@ abstract class AgentBackend {
   ///
   /// [prompt] is the message being logged for this turn, not the text of it —
   /// what the model is shown of a user turn is the whole message, attachments
-  /// named rather than passed. See "The projection" in `lib/domain/AGENTS.md`.
+  /// named rather than passed. See "The projection" in `packages/entoli_chat/lib/domain/AGENTS.md`.
   ///
   /// [participant] answers it, under their own file and in a session of
   /// their own. [mayDecline] offers it `end_turn`, in a room that has one —

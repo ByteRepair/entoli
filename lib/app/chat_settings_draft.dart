@@ -1,8 +1,8 @@
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../domain/chat_meta.dart";
-import "../domain/models.dart";
+import "package:entoli_chat/domain/chat_meta.dart";
+import "package:entoli_chat/domain/models.dart";
 import "../providers.dart";
 import "chat_controller.dart";
 import "chat_edits.dart";

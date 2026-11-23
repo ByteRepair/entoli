@@ -2,10 +2,10 @@ import "package:flutter/widgets.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../app/chat_controller.dart";
-import "../../domain/models.dart";
+import "package:entoli_chat/domain/models.dart";
 import "../../providers.dart";
 import "../selection.dart";
-import "../widgets/dialogs.dart";
+import "package:entoli_chat/ui/widgets/dialogs.dart";
 
 /// A temporary chat whose window has passed is offered a choice between
 /// keeping it — its TTL turned off — and deleting it, asked over [context].

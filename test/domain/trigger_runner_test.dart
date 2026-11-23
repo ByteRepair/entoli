@@ -3,17 +3,17 @@ import "dart:io";
 import "package:clock/clock.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/core/config.dart";
-import "package:agent_chat/data/local/file_chat_store.dart";
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/chat_meta.dart";
-import "package:agent_chat/domain/chat_repository.dart";
-import "package:agent_chat/domain/permission.dart";
-import "package:agent_chat/domain/reminder_alarms.dart";
-import "package:agent_chat/domain/trigger.dart";
-import "package:agent_chat/domain/trigger_runner.dart";
-import "package:agent_chat/domain/turn_sender.dart";
-import "package:agent_chat/domain/temp_chat_ttl.dart";
+import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/data/local/file_chat_store.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/chat_meta.dart";
+import "package:entoli_chat/domain/chat_repository.dart";
+import "package:entoli_chat/domain/permission.dart";
+import "package:entoli_chat/domain/reminder_alarms.dart";
+import "package:entoli_chat/domain/trigger.dart";
+import "package:entoli_chat/domain/trigger_runner.dart";
+import "package:entoli_chat/domain/turn_sender.dart";
+import "package:entoli_chat/domain/temp_chat_ttl.dart";
 
 import "../fakes.dart";
 

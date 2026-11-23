@@ -1,9 +1,9 @@
 import "dart:io";
 
-import "package:agent_chat/app/handoff.dart";
-import "package:agent_chat/domain/agent_browser.dart";
-import "package:agent_chat/domain/file_handoff.dart";
-import "package:agent_chat/ui/widgets/text_file_page.dart";
+import "package:entoli_chat/app/handoff.dart";
+import "package:entoli_chat/domain/agent_browser.dart";
+import "package:entoli_chat/domain/file_handoff.dart";
+import "package:entoli_chat/ui/widgets/text_file_page.dart";
 import "package:entoli_share_viewer/shared_chat_hand_off.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";

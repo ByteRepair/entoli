@@ -1,4 +1,4 @@
-import "../../../../domain/llm_provider.dart";
+import "package:entoli_chat/domain/llm_provider.dart";
 import "anthropic.dart";
 import "claude_cli.dart";
 import "cli.dart";
