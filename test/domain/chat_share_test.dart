@@ -5,6 +5,7 @@ import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:entoli_chat/domain/chat_share.dart";
+import "package:entoli_chat/domain/link_bytes.dart" show appLinkMaxLength;
 
 void main() {
   Uint8List zipOf(Map<String, String> files, {String? comment}) {
@@ -88,7 +89,7 @@ void main() {
       final result = fit({
         "cat.jpeg": 10,
         "a1": 10,
-        "big.bin": bytesFor(shareLinkMaxLength),
+        "big.bin": bytesFor(appLinkMaxLength),
       });
 
       expect(result.dropped, {ShareSection.workspace});
@@ -97,7 +98,7 @@ void main() {
     });
 
     test("then the artifacts, then the attachments", () {
-      final huge = bytesFor(shareLinkMaxLength);
+      final huge = bytesFor(appLinkMaxLength);
 
       expect(fit({"cat.jpeg": 10, "a1": huge, "big.bin": 10}).dropped, {
         ShareSection.workspace,
@@ -117,7 +118,7 @@ void main() {
       };
 
       final result = fit({
-        "cat.jpeg": bytesFor(shareLinkMaxLength),
+        "cat.jpeg": bytesFor(appLinkMaxLength),
       }, picked: picked);
 
       expect(result.dropped, {ShareSection.attachments});
@@ -128,7 +129,7 @@ void main() {
         "cat.jpeg": 1,
         "a1": 1,
         "big.bin": 1,
-      }, base: bytesFor(shareLinkMaxLength) + 100);
+      }, base: bytesFor(appLinkMaxLength) + 100);
 
       expect(result.fits, isFalse);
       expect(result.dropped, ShareSection.values.toSet());

@@ -11,6 +11,7 @@ import "package:entoli_chat/core/log.dart";
 import "package:entoli_chat/data/chat_share.dart"
     show ChatShareSource, ShareFile;
 import "package:entoli_chat/domain/chat_share.dart";
+import "package:entoli_chat/domain/link_bytes.dart" show appLinkMaxLength;
 import "package:entoli_chat/domain/chat_store.dart" show attachmentFilename;
 import "package:entoli_chat/domain/models.dart";
 import "package:entoli_chat/ui/widgets/dialogs.dart" show copyToClipboard, say;
@@ -408,7 +409,7 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
       null => ("Measuring the link…", false),
       ShareFit(fits: false) => (
         "Too long to share as a link, even with no files: "
-            "${formatSize(fit.length)} of ${formatSize(shareLinkMaxLength)}.",
+            "${formatSize(fit.length)} of ${formatSize(appLinkMaxLength)}.",
         true,
       ),
       ShareFit(:final dropped) when dropped.isNotEmpty => (
@@ -417,7 +418,7 @@ class _ShareChatDialogState extends ConsumerState<ShareChatDialog> {
         true,
       ),
       _ => (
-        "${formatSize(fit.length)} of ${formatSize(shareLinkMaxLength)} "
+        "${formatSize(fit.length)} of ${formatSize(appLinkMaxLength)} "
             "of link.",
         false,
       ),

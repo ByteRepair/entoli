@@ -924,9 +924,9 @@ arrow; a divider, then Artifacts by their card's title and the workspace by
 path. A file `isShareIgnored` names — a credentials or build folder, a
 secret by its name — starts unticked and says why.
 
-**Nothing is left out unseen.** The link is capped at `shareLinkMaxLength`,
-the same on every platform (Windows hands it to the app as one argument, and
-sets the limit), and what does not fit is shown before Share, not reported
+**Nothing is left out unseen.** The link is capped at `appLinkMaxLength`
+(`domain/link_bytes.dart`), the cap every link Entoli makes shares, and what
+does not fit is shown before Share, not reported
 after: the sections that would go are drawn in red, and
 every tick moves it. A zip compresses each member alone, so the link's length
 is the conversation's cost plus each ticked piece's, exactly — each piece is

@@ -8,6 +8,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:entoli_chat/domain/chat_share.dart";
+import "package:entoli_chat/domain/link_bytes.dart" show appLinkMaxLength;
 import "package:entoli_chat/domain/models.dart";
 import "package:agent_chat/ui/chat/share_chat_dialog.dart";
 
@@ -293,7 +294,7 @@ void main() {
       await share(tester);
 
       final link = closed()!;
-      expect(link.length, lessThanOrEqualTo(shareLinkMaxLength));
+      expect(link.length, lessThanOrEqualTo(appLinkMaxLength));
       expect(members(link).where((m) => m.contains("/workspace/")), isEmpty);
       expect(
         members(link),

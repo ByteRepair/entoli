@@ -7,6 +7,7 @@ import "package:archive/archive.dart" show GZipDecoder, GZipEncoder, getCrc32;
 
 import "bot_avatar/import.dart";
 import "chat_share.dart";
+import "link_bytes.dart";
 import "models.dart";
 
 /// The scheme every platform registers Entoli for.
@@ -70,7 +71,7 @@ sealed class AppLink {
   /// than installed as part of itself; a plain-text agent could not be.
   static Uint8List? _whole(CompletionKind kind, String def) {
     try {
-      final raw = base64Url.decode(base64Url.normalize(def.trim()));
+      final raw = decodeLinkBytes(def);
       return switch (kind) {
         CompletionKind.agent => _gunzipWhole(raw),
         CompletionKind.skill => zipEnds(raw) ? raw : null,
@@ -98,7 +99,7 @@ sealed class AppLink {
     final payload = kind == CompletionKind.agent
         ? GZipEncoder().encode(bytes)
         : bytes;
-    final def = base64Url.encode(payload).replaceAll("=", "");
+    final def = encodeLinkBytes(payload);
     return Uri(
       scheme: appLinkScheme,
       host: "install",
@@ -114,7 +115,7 @@ sealed class AppLink {
   static String _unbase64(String def) {
     if (def.trimLeft().startsWith(RegExp(r"[\[{]"))) return def;
     try {
-      return utf8.decode(base64Url.decode(base64Url.normalize(def.trim())));
+      return utf8.decode(decodeLinkBytes(def));
     } on FormatException {
       return def;
     }
@@ -131,11 +132,6 @@ final class InstallLink extends AppLink {
   final CompletionKind kind;
   final String slug;
 }
-
-/// The longest link [AppLink.share] makes: Windows hands a link over on the
-/// command line, which stops at 32767 characters, and it is the tightest of
-/// the five.
-const appLinkMaxLength = 32000;
 
 /// A skill or agent the link carries whole: [bytes] are a `.skill` zip or a
 /// PROMPT.md, unparsed — the parsers are above the domain — and null where

@@ -10,6 +10,7 @@ import "package:uuid/uuid.dart";
 import "../core/config.dart";
 import "../core/migrations.dart";
 import "../domain/chat_share.dart";
+import "../domain/link_bytes.dart" show appLinkMaxLength;
 import "../domain/models.dart";
 import "../domain/workspace.dart" show safeRelativePath;
 
@@ -95,7 +96,7 @@ class ChatShareSource {
       compute(_cost, _members(section, id));
 
   /// The link carrying the conversation and [picks], or null where it is
-  /// past [shareLinkMaxLength]: the dialog decides what is left out, from
+  /// past [appLinkMaxLength]: the dialog decides what is left out, from
   /// [shareFit], before anything is packed.
   Future<String?> pack(SharePicks picks) async {
     final entries = [
@@ -104,7 +105,7 @@ class ChatShareSource {
         for (final id in ids) ..._members(section, id),
     ];
     final link = shareLinkOf(await compute(_zip, entries));
-    return link.length <= shareLinkMaxLength ? link : null;
+    return link.length <= appLinkMaxLength ? link : null;
   }
 
   String _from(ShareSection section) => switch (section) {

@@ -3,7 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "package:entoli_chat/core/config.dart";
 import "../../data/prompts/prompt_export.dart";
-import "package:entoli_chat/domain/app_link.dart" show appLinkMaxLength;
+import "package:entoli_chat/domain/link_bytes.dart" show appLinkMaxLength;
 import "package:entoli_chat/domain/models.dart";
 import "../../providers.dart";
 import "package:entoli_chat/ui/widgets/dialogs.dart";

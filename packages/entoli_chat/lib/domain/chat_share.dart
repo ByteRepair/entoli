@@ -1,16 +1,12 @@
-import "dart:convert";
 import "dart:typed_data";
+
+import "link_bytes.dart";
+import "permission.dart" show globMatch;
 
 /// Where a shared chat's link points: the read-only viewer
 /// (packages/entoli_share_viewer), and the host the phones claim so the app
 /// opens it where it is installed.
 const shareHost = "share.entoli.byterepair.io";
-
-/// The longest link Share makes, the same everywhere so a link opens on any
-/// machine it is sent to. Windows sets it: the link reaches the app as an
-/// argument, and a command line there is 32,767 characters, the quoted exe
-/// path included.
-const shareLinkMaxLength = 32000;
 
 /// What a share can carry besides the conversation, in the order the share
 /// dialog lists them.
@@ -29,7 +25,7 @@ enum ShareSection {
 typedef SharePicks = Map<ShareSection, Set<String>>;
 
 /// How a share with some picks comes out: how long its link is, and which
-/// sections are left out to bring it under [shareLinkMaxLength]. [fits] is
+/// sections are left out to bring it under [appLinkMaxLength]. [fits] is
 /// false where even the conversation alone is too long.
 class ShareFit {
   const ShareFit({required this.length, required this.dropped});
@@ -37,7 +33,7 @@ class ShareFit {
   final int length;
   final Set<ShareSection> dropped;
 
-  bool get fits => length <= shareLinkMaxLength;
+  bool get fits => length <= appLinkMaxLength;
 
   /// [picks] without what this fit leaves out: what Share packs.
   SharePicks kept(SharePicks picks) => {
@@ -65,7 +61,7 @@ ShareFit shareFit({
   final dropped = <ShareSection>{};
   var length = shareLinkLength(bytes(dropped));
   for (final section in ShareSection.dropOrder) {
-    if (length <= shareLinkMaxLength) break;
+    if (length <= appLinkMaxLength) break;
     if (picks[section]?.isEmpty ?? true) continue;
     dropped.add(section);
     length = shareLinkLength(bytes(dropped));
@@ -77,18 +73,17 @@ const _linkPrefix = "https://$shareHost/#";
 
 /// The link carrying [zip]: in the fragment, which a browser never sends to
 /// the server.
-String shareLinkOf(Uint8List zip) =>
-    "$_linkPrefix${base64Url.encode(zip).replaceAll("=", "")}";
+String shareLinkOf(Uint8List zip) => "$_linkPrefix${encodeLinkBytes(zip)}";
 
-/// How long [shareLinkOf] comes out for a zip of [bytes]: unpadded base64.
-int shareLinkLength(int bytes) => _linkPrefix.length + (bytes * 4 + 2) ~/ 3;
+/// How long [shareLinkOf] comes out for a zip of [bytes].
+int shareLinkLength(int bytes) => _linkPrefix.length + encodedLinkLength(bytes);
 
 /// The zip a share link carries, or null where it is cut short or not one:
 /// a chat app that truncates a long link hands over something that still
 /// looks like one, and a zip's end record says whether all of it arrived.
 Uint8List? shareZipOf(String payload) {
   try {
-    final zip = base64Url.decode(base64Url.normalize(payload.trim()));
+    final zip = decodeLinkBytes(payload);
     return zipEnds(zip) ? zip : null;
   } on FormatException {
     return null;
@@ -136,8 +131,7 @@ const _ignoredDirs = {
   "target",
 };
 
-/// Files that hold secrets, by name. A trailing `*` matches any suffix, a
-/// leading one any prefix.
+/// Files that hold secrets, by name, as [globMatch] globs.
 const _ignoredFiles = {
   ".env",
   ".env.*",
@@ -170,12 +164,5 @@ bool isShareIgnored(String path) {
   if (segments.take(segments.length - 1).any(_ignoredDirs.contains)) {
     return true;
   }
-  final name = segments.last.toLowerCase();
-  return _ignoredFiles.any(
-    (pattern) => pattern.startsWith("*")
-        ? name.endsWith(pattern.substring(1))
-        : pattern.endsWith("*")
-        ? name.startsWith(pattern.substring(0, pattern.length - 1))
-        : name == pattern,
-  );
+  return _ignoredFiles.any((glob) => globMatch(glob, segments.last));
 }
