@@ -1,6 +1,7 @@
 import "dart:async";
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:entoli_chat/domain/agent_backend.dart";
 import "package:entoli_chat/domain/file_tools.dart";
 import "package:entoli_chat/domain/models.dart";
@@ -11,6 +12,7 @@ import "package:entoli_chat/domain/safe_command.dart"
 import "package:entoli_chat/domain/shell.dart";
 import "package:entoli_chat/domain/shell_command_analysis.dart";
 import "package:entoli_chat/domain/web_search.dart" show webfetchToolName;
+
 import "llm/llm_client.dart";
 import "sandbox_grants.dart";
 import "templates.dart" show notExecuted;
@@ -181,7 +183,8 @@ class ApprovalGate {
         if (on(SandboxGrant.caches)) ..._toolchainCaches,
         if (on(SandboxGrant.toolchains)) ..._toolchainHomes,
         if (on(SandboxGrant.systemTemps)) ...systemTemps,
-        if (on(SandboxGrant.git)) ...repositoryGitDirs(dirs, granted),
+        if (on(SandboxGrant.git))
+          ...repositoryGitDirs(const LocalFileSystem(), dirs, granted),
       ],
     );
   }

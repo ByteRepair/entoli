@@ -1,3 +1,4 @@
+import "package:file/file.dart";
 import "package:entoli_chat/domain/agent_backend.dart";
 import "package:entoli_chat/domain/agent_browser.dart";
 import "package:entoli_chat/domain/ask.dart";
@@ -7,13 +8,14 @@ import "package:entoli_chat/domain/shell.dart";
 import "package:entoli_chat/domain/todo.dart";
 import "package:entoli_chat/domain/trigger_manager.dart" show TriggerRegistry;
 import "package:entoli_chat/domain/web_search.dart";
+import "package:entoli_chat/domain/app_settings.dart" show SettingsEditor;
+
 import "../approval_gate.dart";
 import "../background_jobs.dart";
 import "../builtin_options.dart";
 import "../llm/llm_client.dart";
 import "../memory/store.dart";
 import "grant_nudge.dart";
-import "package:entoli_chat/domain/app_settings.dart" show SettingsEditor;
 
 /// What a running tool may reach of the turn it runs in: the workspaces, the
 /// shell, the gate, the user, and whichever of the optional collaborators
@@ -46,6 +48,9 @@ abstract interface class Turn {
   List<String> get readOnlyDirs;
 
   BuiltinOptions get options;
+
+  /// What the workspaces are on, for the file tools.
+  FileSystem get fs;
 
   /// The app's own data directory, which no grant may reach. Null where a
   /// test does not exercise the refusal.

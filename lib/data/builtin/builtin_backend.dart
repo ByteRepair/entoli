@@ -6,7 +6,6 @@ import "package:collection/collection.dart";
 import "package:flutter/foundation.dart";
 import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
-
 import "package:entoli_chat/core/config.dart";
 import "package:entoli_chat/core/log.dart";
 import "package:entoli_chat/domain/agent_backend.dart";
@@ -32,6 +31,7 @@ import "package:entoli_chat/domain/shell.dart";
 import "package:entoli_chat/domain/sub_agent_log.dart";
 import "package:entoli_chat/domain/tool_arg.dart";
 import "package:entoli_chat/domain/web_search.dart";
+
 import "../local/file_sub_agent_log.dart";
 import "../local/linked_instructions_store.dart";
 import "../prompts/prompt_sources.dart" show promptDirsOf;
@@ -397,6 +397,7 @@ class BuiltinBackend implements AgentBackend {
         modelLimit: target.info?.output,
       );
       final runner = SubAgentRunner(
+        fs: config.fs,
         client: gatedClient,
         shell: shell,
         workspace: workspace,
@@ -451,7 +452,7 @@ class BuiltinBackend implements AgentBackend {
       // turn, so recall and the agent's tools share one.
       final memoryStore =
           settings.memory.autoMemory && settings.memory.memoryDir != null
-          ? MemoryStore(settings.memory.memoryDir!)
+          ? MemoryStore(config.fs, settings.memory.memoryDir!)
           : null;
       // The memories this turn is about, rendered ready to read, and the
       // always-loaded half of the store: the pinned ones in full, and the
@@ -552,6 +553,7 @@ class BuiltinBackend implements AgentBackend {
       final said =
           prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
       final agent = BuiltinAgent(
+        fs: config.fs,
         asked: Asked.fromLog(
           history.skip(verbatimFrom(history, compactions).from),
           said,
@@ -674,7 +676,7 @@ class BuiltinBackend implements AgentBackend {
         editSettings: editSettings,
         packageSkill: (path, name) async {
           final resolved = resolvePath(path);
-          final pkg = await packageSkillDirectory(resolved, name);
+          final pkg = await packageSkillDirectory(config.fs, resolved, name);
           final bytes = packageSkillBytes(pkg);
           final installId = const Uuid().v4();
           final stagingDir = config.skillStagingDir(

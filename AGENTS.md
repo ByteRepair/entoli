@@ -240,9 +240,18 @@ app-private storage (Android), and the App Group's container (iOS).
 reads the workspace half of it in Kotlin, because Android's Files app asks with
 no engine running. See "The workspaces in the Files app".
 
-The filesystem is `dart:io`'s, with no port over it: every platform the app
-runs on has a disk, and a test runs on a real temp directory (see
-`test/AGENTS.md`). `AppConfig` composes path names: `dataDir` and every helper
+The filesystem is a `FileSystem` from `package:file`, which `AppConfig` holds
+as `fs` and hands to whatever reads or writes under the data directory: the
+disk wherever the app runs, memory in the share viewer, a browser having no
+disk. Inside a widget it is `fileSystemProvider`, and the workspace explorer's
+reads and writes are `Workspace` over it; writing through a rename is
+`RenameWriter`'s. The chat package imports no `dart:io`. The app's native code
+— the shells, the sandboxes, the guests, a backup's streams — is on the
+machine by definition and passes `LocalFileSystem` where it needs one. A
+missing path is `isNotFound` (`domain/file_errors.dart`), since the disk
+raises dart:io's `PathNotFoundException` and memory the plain exception. A
+test runs on a real temp directory (see `test/AGENTS.md`), the viewer's in
+memory. `AppConfig` composes path names: `dataDir` and every helper
 are plain `String`s rather than `File` and `Directory`, joined with
 `package:path`. `exists`, `stat` and their kin are called sync — one metadata
 call each — which `avoid_slow_async_io` holds the code to; the one async

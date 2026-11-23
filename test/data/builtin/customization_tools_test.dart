@@ -1,7 +1,7 @@
 import "dart:convert";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/tools/customization_tools.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
@@ -12,10 +12,10 @@ import "package:entoli_chat/domain/permission.dart";
 import "package:entoli_chat/domain/profile.dart";
 import "package:entoli_chat/domain/prompt_library.dart";
 import "package:entoli_chat/domain/tone.dart";
+import "package:agent_chat/data/builtin/builtin_options.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
-import "package:agent_chat/data/builtin/builtin_options.dart";
 
 void main() {
   group("editedProfile", () {
@@ -73,6 +73,7 @@ void main() {
         [saidOnly("done")],
       ]);
       await BuiltinAgent(
+        fs: const LocalFileSystem(),
         session: BuiltinSession(),
         client: client,
         shell: FakeShell((_) => ok(""), canRunCommands: true),

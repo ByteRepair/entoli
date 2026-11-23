@@ -1,5 +1,4 @@
-import "dart:io";
-
+import "package:file/file.dart";
 import "package:path/path.dart" as p;
 
 import "../domain/documents.dart";
@@ -53,16 +52,19 @@ const instructionBlockHeader = "Workspace instructions are shown below";
 class AppConfig {
   /// Over [dataDir] as it is: creates nothing and migrates nothing, which is
   /// [load]'s to do — a test that wants neither builds one directly.
-  AppConfig.forDirectory(this.dataDir) : documents = Documents();
+  AppConfig.forDirectory(this.fs, this.dataDir) : documents = Documents(fs);
+
+  /// What every path here leads into: the disk, or memory where there is none.
+  final FileSystem fs;
 
   final String dataDir;
 
   /// The handful of documents that have to be readable synchronously.
   final Documents documents;
 
-  static Future<AppConfig> load(String dataDir) async {
-    final config = AppConfig.forDirectory(dataDir);
-    await runMigrations(config.dataDir, fresh: await config.ensureDirs());
+  static Future<AppConfig> load(FileSystem fs, String dataDir) async {
+    final config = AppConfig.forDirectory(fs, dataDir);
+    await runMigrations(fs, config.dataDir, fresh: await config.ensureDirs());
     return config;
   }
 
@@ -89,7 +91,7 @@ class AppConfig {
   /// been created as a project is not one, so a stray `.git` beside them is not
   /// listed.
   Future<List<String>> projectNames() async {
-    final dir = Directory(projectsDir);
+    final dir = fs.directory(projectsDir);
     if (!dir.existsSync()) return const [];
     final names = <String>[
       await for (final entity in dir.list())
@@ -211,7 +213,7 @@ class AppConfig {
   /// custom command goes. Every other project's are made with it, through
   /// [ensureProjectDirs].
   Future<bool> ensureDirs() async {
-    final fresh = !Directory(dataDir).existsSync();
+    final fresh = !fs.directory(dataDir).existsSync();
     await _ensure([dataDir, projectsDir, syncDir]);
     await ensureProjectDirs();
     return fresh;
@@ -219,7 +221,7 @@ class AppConfig {
 
   Future<void> _ensure(List<String> dirs) async {
     for (final dir in dirs) {
-      await Directory(dir).create(recursive: true);
+      await fs.directory(dir).create(recursive: true);
     }
   }
 

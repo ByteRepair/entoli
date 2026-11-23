@@ -6,6 +6,7 @@ import "../../core/formatting.dart";
 import "../../domain/file_handoff.dart";
 import "../../domain/workspace.dart";
 import "../../app/handoff.dart";
+import "../../app/storage.dart";
 import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/empty_pane.dart";
@@ -96,7 +97,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   Future<void> _read() async {
     final reading = ++_reading;
     try {
-      final entries = await listWorkspace(_dir);
+      final entries = await ref.read(workspaceProvider).list(_dir);
       if (!mounted || reading != _reading) return;
       setState(() {
         _entries = entries;
@@ -183,7 +184,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     );
     if (name == null || !mounted) return;
     await _guard(() async {
-      await createFolder(_dir, name);
+      await ref.read(workspaceProvider).createFolder(_dir, name);
       await _read();
     });
   }
@@ -203,7 +204,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     );
     if (!agreed || !mounted) return;
     await _guard(() async {
-      await deleteEntries(paths);
+      await ref.read(workspaceProvider).deleteEntries(paths);
       if (mounted) setState(_clearSelection);
       await _read();
     });

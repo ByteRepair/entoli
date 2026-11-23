@@ -4,13 +4,14 @@ import "dart:io";
 import "dart:isolate";
 import "dart:typed_data";
 
+import "package:file/local.dart";
 import "package:archive/archive_io.dart";
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
-
 import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/domain/documents.dart" show RenameWriter;
+
 import "../../core/tls.dart";
-import "package:entoli_chat/domain/documents.dart" show writeBytesThroughRename;
 import "file_modes.dart";
 import "guest_mounts.dart";
 import "host_grep.dart";
@@ -30,6 +31,9 @@ class HostTools {
   final List<GuestMount> Function() mounts;
 
   final http.Client Function() _client;
+
+  /// The guest's calls are on this machine's disk, whatever the chats are on.
+  final _writer = RenameWriter(const LocalFileSystem());
 
   static const guestDir = "/run/entoli";
   static const guestBin = "$guestDir/bin";
@@ -109,7 +113,7 @@ class HostTools {
     } catch (e) {
       logFailure("host-tools", "request $id failed", e);
     }
-    await writeBytesThroughRename(
+    await _writer.writeBytes(
       p.join(callsDir, "$id.res"),
       answer?.encode() ?? utf8.encode("fallback\n"),
     );

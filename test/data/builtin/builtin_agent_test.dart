@@ -3,9 +3,9 @@ import "dart:convert";
 import "dart:io";
 import "dart:typed_data";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/goal_reviewer.dart";
 import "package:agent_chat/data/builtin/tools/image_tool.dart";
@@ -25,13 +25,13 @@ import "package:entoli_chat/domain/permission.dart";
 import "package:entoli_chat/domain/plan.dart";
 import "package:entoli_chat/domain/shell.dart";
 import "package:entoli_chat/domain/todo.dart";
+import "package:agent_chat/data/builtin/builtin_options.dart";
+import "package:agent_chat/data/builtin/templates.dart" show previewChars;
+import "package:agent_chat/data/builtin/tools/bash_tool.dart" show BashTool;
 
 import "../../fakes.dart";
 import "../../harness.dart" show waitFor;
 import "builtin_fakes.dart";
-import "package:agent_chat/data/builtin/builtin_options.dart";
-import "package:agent_chat/data/builtin/templates.dart" show previewChars;
-import "package:agent_chat/data/builtin/tools/bash_tool.dart" show BashTool;
 
 void main() {
   late BuiltinSession session;
@@ -89,6 +89,7 @@ void main() {
     shell = FakeShell(respond ?? (_) => ok(""), canRunCommands: canRunCommands);
     final allowed = [...approvals];
     return BuiltinAgent(
+      fs: const LocalFileSystem(),
       outputLimit: outputLimit,
       provider: provider,
       session: session,
@@ -2163,7 +2164,7 @@ void main() {
 
     setUp(() {
       tmp = Directory.systemTemp.createTempSync("agent_memory_test_");
-      store = MemoryStore(p.join(tmp.path, "memory"));
+      store = MemoryStore(const LocalFileSystem(), p.join(tmp.path, "memory"));
     });
 
     tearDown(() => tmp.deleteSync(recursive: true));

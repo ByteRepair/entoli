@@ -1,5 +1,6 @@
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:entoli_chat/domain/shell.dart";
 
 /// Seatbelt confinement for one command, on a Mac.
@@ -38,7 +39,7 @@ class SeatbeltSandboxHelper implements SandboxHelper {
       seatbeltProfile(writes.length),
       for (final (i, path) in writes.indexed) ...[
         "-D",
-        "W$i=${realPath(path)}",
+        "W$i=${realPath(const LocalFileSystem(), path)}",
       ],
       "--",
     ];

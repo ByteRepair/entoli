@@ -1,12 +1,13 @@
 import "dart:io";
 
+import "package:file/file.dart" show FileSystem;
 import "package:path/path.dart" as p;
-
 import "package:entoli_chat/core/log.dart";
 import "package:entoli_chat/domain/shell.dart"
     show cdTarget, commandPath, repositoryRootOf;
 import "package:entoli_chat/domain/shell_command_analysis.dart"
     show plainCommand;
+
 import "local_shell.dart" show LocalShell;
 
 /// The caches developer tools write to as a matter of course, under the
@@ -93,12 +94,16 @@ String? _flutterCache(String path) {
 /// Read from the files git leaves — a worktree's `.git` file names its
 /// gitdir, and that gitdir's `commondir` names the repository's — rather
 /// than by running git per command.
-List<String> repositoryGitDirs(Iterable<String> dirs, List<String> granted) {
+List<String> repositoryGitDirs(
+  FileSystem fs,
+  Iterable<String> dirs,
+  List<String> granted,
+) {
   bool inGrant(String path) =>
       granted.any((g) => p.equals(g, path) || p.isWithin(g, path));
   final found = <String>{};
   for (final dir in dirs) {
-    final at = repositoryRootOf(dir);
+    final at = repositoryRootOf(fs, dir);
     if (at == null) continue;
     final gitDir = _gitDirOf(p.join(at, ".git"));
     if (gitDir != null && !inGrant(gitDir)) found.add(gitDir);

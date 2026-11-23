@@ -3,13 +3,13 @@ import "dart:io";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:path/path.dart" as p;
-
 import "package:entoli_chat/core/formatting.dart" show nonBlank;
 import "package:entoli_chat/core/log.dart";
-import "../core/platform/form_factor.dart";
 import "package:entoli_chat/domain/documents.dart" show RenameWriter;
 import "package:entoli_chat/domain/profile.dart";
 import "package:entoli_chat/domain/tone.dart";
+
+import "../core/platform/form_factor.dart";
 import "../providers.dart";
 
 /// What a turn knows about the user, as the profile page edits it. With no
@@ -112,7 +112,7 @@ class ProfileEditor {
   final Ref _ref;
 
   /// One writer of the instructions files, so two overlapping saves queue.
-  final _write = RenameWriter();
+  late final _write = RenameWriter(_ref.read(appConfigProvider).fs);
 
   String _instructionsPath(String? project) {
     final config = _ref.read(appConfigProvider);

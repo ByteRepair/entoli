@@ -1,5 +1,4 @@
 import "dart:async";
-import "dart:io";
 import "dart:typed_data";
 
 import "package:uuid/uuid.dart";
@@ -789,7 +788,7 @@ class ChatRepository {
     required bool keepWorkspace,
   }) async {
     if (!keepWorkspace) {
-      final dir = Directory(
+      final dir = _config.fs.directory(
         _config.workspaceDir(chatId, project: await projectOf(chatId)),
       );
       if (dir.existsSync()) await dir.delete(recursive: true);
@@ -820,7 +819,7 @@ class ChatRepository {
       // outlive the turn.
       final dirs = [
         for (final d in deniedDirs)
-          if (!pathsOverlap(d, _config.dataDir)) d,
+          if (!pathsOverlap(_config.fs, d, _config.dataDir)) d,
       ];
       if (dirs.length < deniedDirs.length) {
         logFailure("perms", "refused a persisted grant over the app's data");

@@ -12,6 +12,7 @@
 // model's words, which is why it can stand where a guess from text cannot.
 // See "Approvals" in `lib/data/builtin/AGENTS.md`.
 
+import "package:file/file.dart";
 import "package:path/path.dart" as p;
 
 import "shell.dart" show CommandSandbox, pathInside, realPath;
@@ -36,6 +37,7 @@ const _most = 5;
 /// own few. Empty where nothing printed one — the common case, answered
 /// before anything is resolved.
 List<String> sandboxDenials(
+  FileSystem fs,
   String output,
   CommandSandbox sandbox, {
   required String cwd,
@@ -43,10 +45,10 @@ List<String> sandboxDenials(
 }) {
   if (!_denied.hasMatch(output)) return const [];
   final grants = [...sandbox.writes, ...readOnly, "/dev"];
-  late final resolved = [for (final g in grants) realPath(g)];
+  late final resolved = [for (final g in grants) realPath(fs, g)];
   bool granted(String path) {
     if (grants.any((g) => pathInside(path, g))) return true;
-    final real = realPath(path);
+    final real = realPath(fs, path);
     return resolved.any((g) => pathInside(real, g));
   }
 

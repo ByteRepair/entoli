@@ -1,11 +1,25 @@
 import "dart:async";
 import "dart:ui" show AppExitResponse;
 
+import "package:file/local.dart";
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-
+import "package:entoli_chat/app/storage.dart";
 import "package:entoli_chat/core/config.dart";
+import "package:entoli_chat/domain/app_restart.dart";
+import "package:entoli_chat/domain/app_secrets.dart";
+import "package:entoli_chat/domain/chat_intents.dart" show ChatIntentAction;
+import "package:entoli_chat/domain/intent_action.dart" show IntentRegistry;
+import "package:entoli_chat/domain/app_settings.dart" show AppSettings;
+import "package:entoli_chat/domain/trigger_manager.dart"
+    show TriggerRegistryFactory;
+import "package:entoli_chat/domain/project.dart" show everyProject;
+import "package:entoli_chat/domain/prompt_library.dart";
+import "package:entoli_chat/domain/sync/identity.dart";
+import "package:entoli_chat/ui/fonts.dart";
+import "package:entoli_chat/ui/theme.dart";
+
 import "app/app_menus.dart";
 import "core/platform/app_menus.dart";
 import "core/platform/background_work.dart";
@@ -27,16 +41,6 @@ import "data/prompts/bundled_skills.dart";
 import "data/prompts/prompt_sources.dart" show promptDirsOf;
 import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
-import "package:entoli_chat/domain/app_restart.dart";
-import "package:entoli_chat/domain/app_secrets.dart";
-import "package:entoli_chat/domain/chat_intents.dart" show ChatIntentAction;
-import "package:entoli_chat/domain/intent_action.dart" show IntentRegistry;
-import "package:entoli_chat/domain/app_settings.dart" show AppSettings;
-import "package:entoli_chat/domain/trigger_manager.dart"
-    show TriggerRegistryFactory;
-import "package:entoli_chat/domain/project.dart" show everyProject;
-import "package:entoli_chat/domain/prompt_library.dart";
-import "package:entoli_chat/domain/sync/identity.dart";
 import "providers.dart";
 import "ui/bot_avatar/licence.dart";
 import "app/remote_turns.dart";
@@ -50,13 +54,11 @@ import "ui/app_shell.dart";
 import "app/controller_turn_sender.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
-import "package:entoli_chat/ui/fonts.dart";
 import "ui/link_opener.dart";
 import "ui/incoming_links.dart";
 import "ui/share/incoming_shares.dart";
 import "ui/triggers/incoming_open.dart";
 import "ui/selection.dart";
-import "package:entoli_chat/ui/theme.dart";
 import "ui/app_look.dart";
 import "ui/app_routes.dart";
 
@@ -133,7 +135,7 @@ class AppSession {
     // Before anything reads the data directory: a restore leaves its swap's
     // last step to the launch after it.
     await recoverRestore(dataDir, deleteTree: platform.deleteTree);
-    final config = await AppConfig.load(dataDir);
+    final config = await AppConfig.load(const LocalFileSystem(), dataDir);
     // Started here and awaited before the identity load below: the keyring
     // probe is decided once, so the identity's own first read must not race
     // this one, and the mirror the registry reads keys through is filled by
@@ -311,6 +313,7 @@ class AppSession {
         ...appTranscriptOverrides,
         shellProvider.overrideWithValue(backend.shell),
         appConfigProvider.overrideWithValue(config),
+        fileSystemProvider.overrideWithValue(config.fs),
         appSecretsProvider.overrideWithValue(secrets),
         attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
         folderPickerProvider.overrideWithValue(

@@ -1,4 +1,6 @@
-import "dart:io";
+import "package:file/file.dart";
+
+import "file_errors.dart";
 
 /// A file on its way into a workspace from outside Entoli: shared to the app
 /// by another one.
@@ -16,13 +18,14 @@ abstract class IncomingFile {
   /// through `safeRelativePath` before it is joined onto anything.
   final String path;
 
-  /// Put it at [target], which the caller has already made room for.
+  /// Put it at [target], which the caller has already made room for, on
+  /// whichever filesystem [target] is on.
   ///
   /// Once, and it consumes what it was holding: a staged copy is moved out of
   /// where the platform put it, so a second call has nothing left to write.
   /// Whoever offers a retry has to offer it over files that have not landed
   /// yet, never over the same list again.
-  Future<void> writeTo(String target);
+  Future<void> writeTo(File target);
 }
 
 /// A copy the platform staged on disk before Entoli was told about it —
@@ -37,17 +40,16 @@ class IncomingStaged extends IncomingFile {
   final String staged;
 
   @override
-  Future<void> writeTo(String target) async {
-    final file = File(staged);
+  Future<void> writeTo(File target) async {
+    final file = target.fileSystem.file(staged);
     try {
-      await file.rename(target);
-    } on PathNotFoundException {
+      await file.rename(target.path);
+    } on FileSystemException catch (e) {
       // Only a rename across volumes is worth a second try. A copy of a file
       // that is not there fails the same way and buries the real cause under
       // its own.
-      rethrow;
-    } on FileSystemException {
-      await file.copy(target);
+      if (e.isNotFound) rethrow;
+      await file.copy(target.path);
       await file.delete();
     }
   }

@@ -3,8 +3,8 @@ import "dart:convert";
 import "dart:typed_data";
 
 import "package:flutter/foundation.dart" show visibleForTesting;
+import "package:file/file.dart";
 import "package:uuid/uuid.dart";
-
 import "package:entoli_chat/core/log.dart" show logFailure;
 import "package:entoli_chat/domain/agent_backend.dart";
 import "package:entoli_chat/domain/agent_definition.dart";
@@ -26,6 +26,8 @@ import "package:entoli_chat/domain/work_folders.dart" show grantsNow;
 import "package:entoli_chat/domain/trigger_manager.dart" show TriggerRegistry;
 import "package:entoli_chat/domain/turn_recorder.dart";
 import "package:entoli_chat/domain/web_search.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+
 import "approval_gate.dart";
 import "background_jobs.dart";
 import "compact_prompt.dart" show estimateTokens;
@@ -46,7 +48,6 @@ import "tools/skill_tool.dart" show skillToolName;
 import "tools/turn.dart";
 import "builtin_options.dart";
 import "system_prompt.dart";
-import "package:entoli_chat/domain/app_settings.dart";
 
 /// What the spinner says while the model reads the prompt.
 ///
@@ -243,6 +244,7 @@ class BuiltinAgent implements Turn {
     this.memoryChat,
     this.sandboxHelper,
     this.policy = noPolicy,
+    required this.fs,
     this.dataDir,
     this.claimInstruction,
     this.goal,
@@ -298,6 +300,9 @@ class BuiltinAgent implements Turn {
   /// the repository, read afresh at every gated call: a rule saved while the
   /// turn runs — a banner's "always" included — covers the next call.
   final PolicyReader policy;
+
+  @override
+  final FileSystem fs;
 
   /// The app's own data directory — settings, secrets, chats. The one shape
   /// `add_directory` refuses outright: the data directory itself, or
@@ -680,6 +685,7 @@ class BuiltinAgent implements Turn {
           if (_grantable.putIfAbsent(
             dir,
             () => grantsNow(
+              fs,
               dir,
               dataDir: dataDir,
               home: home,

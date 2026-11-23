@@ -16,7 +16,7 @@ import "package:entoli_chat/domain/trigger.dart";
 /// reads this file with no engine running, so a read landing mid-write must
 /// never find a half-written one.
 class FileTriggerStore {
-  FileTriggerStore(this._config) : _write = RenameWriter();
+  FileTriggerStore(this._config) : _write = RenameWriter(_config.fs);
 
   final AppConfig _config;
   final RenameWriter _write;

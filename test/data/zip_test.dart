@@ -3,7 +3,8 @@ import "dart:io";
 import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
+import "package:agent_chat/data/zip.dart";
+import "package:file/local.dart";
 import "package:entoli_chat/data/zip.dart";
 
 import "../harness.dart";
@@ -86,7 +87,10 @@ void main() {
     expect(archive.findFile("tree/broken"), isNull);
 
     final unfollowed = [
-      await for (final e in walkTree(["$dir/tree"], followLinks: false)) e.name,
+      await for (final e in walkTree(const LocalFileSystem(), [
+        "$dir/tree",
+      ], followLinks: false))
+        e.name,
     ];
     expect(unfollowed, ["tree"]);
   });
@@ -122,7 +126,7 @@ void main() {
     Link("$dir/file.txt").createSync("$outside/s.txt");
 
     final names = [
-      await for (final e in walkTree([
+      await for (final e in walkTree(const LocalFileSystem(), [
         "$dir/folder",
         "$dir/file.txt",
       ], followLinks: false))
@@ -140,6 +144,7 @@ void main() {
 
     final names = [
       await for (final e in walkTree(
+        const LocalFileSystem(),
         ["$dir/tree"],
         base: "$dir/tree",
         skipDir: (path) => p.equals(path, "$dir/tree/secret"),

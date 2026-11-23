@@ -1,9 +1,9 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:entoli_chat/core/config.dart";
 import "package:agent_chat/data/backup.dart";
 import "package:agent_chat/data/local/tree_ops.dart";
@@ -196,7 +196,7 @@ void main() {
       Directory(dataDir).renameSync(replacedDirOf(dataDir));
 
       await recoverRestore(dataDir);
-      final loaded = await AppConfig.load(dataDir);
+      final loaded = await AppConfig.load(const LocalFileSystem(), dataDir);
 
       expect(Directory(loaded.chatDir("kept")).existsSync(), isTrue);
       expect(Directory(replacedDirOf(dataDir)).existsSync(), isFalse);

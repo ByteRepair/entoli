@@ -1,7 +1,7 @@
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:entoli_chat/core/config.dart";
 import "package:entoli_chat/data/local/file_chat_store.dart";
 import "package:entoli_chat/domain/app_settings.dart";
@@ -70,7 +70,7 @@ void main() {
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync("chat_intents_test_");
-    config = AppConfig.forDirectory(tmp.path);
+    config = AppConfig.forDirectory(const LocalFileSystem(), tmp.path);
     repo = ChatRepository(
       FileChatStore(config),
       FakeBackend(),

@@ -1,7 +1,7 @@
 import "dart:io";
 
+import "package:file/file.dart" show FileSystem;
 import "package:path/path.dart" as p;
-
 import "package:entoli_chat/core/config.dart"
     show instructionBlockHeader, instructionFileName;
 import "package:entoli_chat/core/log.dart";
@@ -106,12 +106,13 @@ Future<List<InstructionFile>> loadInstructions({
 /// it sits in. A file in no repository walks to the filesystem root. A file
 /// whose path [excludes] names is skipped.
 Future<List<InstructionFile>> findNestedInstructions(
+  FileSystem fs,
   String filePath, {
   required Set<String> alreadyLoaded,
   List<String> excludes = const [],
 }) async {
   var dir = _norm(p.dirname(filePath));
-  final repository = repositoryRootOf(dir);
+  final repository = repositoryRootOf(fs, dir);
   final found = <InstructionFile>[];
   while (true) {
     await _readInto(

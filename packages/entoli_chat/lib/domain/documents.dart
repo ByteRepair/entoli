@@ -1,44 +1,44 @@
 import "dart:convert";
-import "dart:io";
+
+import "package:file/file.dart";
+
+import "file_errors.dart";
 
 /// What a document being written through a rename is called until the rename.
 /// Whoever writes one spells it, and a backup skips one — it is the half of a
 /// rename a kill landed in, not a file anything reads.
 const writingSuffix = ".writing";
 
-/// A whole-file write no reader may catch mid-way: to the [writingSuffix]
-/// sibling, then a rename. The caller that owns the parent directory creates
-/// it. The temp name is fixed, which is safe only because a path has one
-/// writer — [RenameWriter] is that writer.
-Future<void> writeThroughRename(String path, String text) =>
-    writeBytesThroughRename(path, utf8.encode(text));
-
-/// [writeThroughRename] of bytes that need not be text.
-Future<void> writeBytesThroughRename(String path, List<int> bytes) async {
-  final temp = File("$path$writingSuffix");
-  await temp.writeAsBytes(bytes);
-  await temp.rename(path);
-}
-
-/// The one writer of a path: whole-file writes queued per path, so two
+/// The one writer of a path: whole-file writes no reader may catch mid-way —
+/// to the [writingSuffix] sibling, then a rename — queued per path, so two
 /// overlapping saves land in the order they were asked and the disk ends on
 /// the last — the copy the next read answers with. Each owner instantiates
 /// its own and writes only its own paths through it; that one-writer rule is
-/// what makes the fixed temp name under [writeThroughRename] safe, where two
-/// writers would rename the same temp away from under each other.
+/// what makes the fixed temp name safe, where two writers would rename the
+/// same temp away from under each other. The caller that owns the parent
+/// directory creates it.
 ///
 /// The rename itself is what protects readers of the file — one sees the
 /// whole old file or the whole new one, with no coordination to forget — so
 /// there is no lock here for them, and none wanted where the reads are the
 /// in-memory copy [Documents] serves.
 ///
-/// [writeOne] is the single write a queued entry runs, [writeThroughRename]
-/// unless a test stands a fake behind it, so queue behavior needs no
-/// filesystem at all.
+/// [RenameWriter.over] runs a given write in place of the rename, so queue
+/// behavior needs no filesystem at all.
 class RenameWriter {
-  RenameWriter([this._writeOne = writeThroughRename]);
+  RenameWriter(FileSystem fs) : _writeOne = _throughRename(fs);
 
-  final Future<void> Function(String path, String text) _writeOne;
+  RenameWriter.over(this._writeOne);
+
+  final Future<void> Function(String path, List<int> bytes) _writeOne;
+
+  static Future<void> Function(String, List<int>) _throughRename(
+    FileSystem fs,
+  ) => (path, bytes) async {
+    final temp = fs.file("$path$writingSuffix");
+    await temp.writeAsBytes(bytes);
+    await temp.rename(path);
+  };
 
   /// One write per path at a time. Taken out once it is the tail: a write
   /// landing behind it queues behind it, and a clean finish leaves the map
@@ -48,11 +48,14 @@ class RenameWriter {
   /// How many paths still hold a queue entry — the drain the test pins.
   int get pendingWrites => _writes.length;
 
-  Future<void> write(String path, String text) {
+  Future<void> write(String path, String text) =>
+      writeBytes(path, utf8.encode(text));
+
+  Future<void> writeBytes(String path, List<int> bytes) {
     final queued = _writes[path];
     final write = queued == null
-        ? _writeOne(path, text)
-        : queued.then((_) => _writeOne(path, text));
+        ? _writeOne(path, bytes)
+        : queued.then((_) => _writeOne(path, bytes));
     // The catch is what keeps a failed write's queue entry from being an
     // unhandled error beside the one the await delivers — the entry has
     // nowhere else to carry it to. The entry is the wrapper itself: every
@@ -83,7 +86,9 @@ class RenameWriter {
 /// through [write], which updates the copy before it touches the filesystem,
 /// so a read on the next line sees it.
 class Documents {
-  Documents() : _writes = RenameWriter();
+  Documents(this._fs) : _writes = RenameWriter(_fs);
+
+  final FileSystem _fs;
 
   final RenameWriter _writes;
 
@@ -94,9 +99,10 @@ class Documents {
   /// defaults rather than an error.
   String? read(String path) => _texts.putIfAbsent(path, () {
     try {
-      return File(path).readAsStringSync();
-    } on PathNotFoundException {
-      return null;
+      return _fs.file(path).readAsStringSync();
+    } on FileSystemException catch (e) {
+      if (e.isNotFound) return null;
+      rethrow;
     }
   });
 

@@ -1,10 +1,10 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:clock/clock.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:agent_chat/data/builtin/memory/store.dart";
 
 /// Runs [body] on a clock a second further on at every reading, so memories
@@ -27,7 +27,7 @@ void main() {
   setUp(() {
     tmp = Directory.systemTemp.createTempSync("memory_store_test_");
     dir = p.join(tmp.path, "memory");
-    store = MemoryStore(dir);
+    store = MemoryStore(const LocalFileSystem(), dir);
   });
 
   tearDown(() {

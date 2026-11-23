@@ -14,6 +14,7 @@ import "package:entoli_chat/domain/shell.dart";
 import "package:entoli_chat/domain/file_tools.dart" show outsideWorkspaces;
 import "package:entoli_chat/domain/tool_arg.dart";
 import "package:entoli_chat/domain/work_folders.dart";
+
 import "../llm/llm_client.dart";
 import "agent_tool.dart";
 import "turn.dart";
@@ -88,6 +89,7 @@ class AddDirectoryTool extends AgentTool {
     // The workspaces' own directories are answered before its refusals,
     // since they live beneath trees it refuses and need no grant.
     final refusal = refuseFolder(
+      turn.fs,
       resolved,
       dataDir: turn.dataDir,
       home: turn.shell.machineHome,

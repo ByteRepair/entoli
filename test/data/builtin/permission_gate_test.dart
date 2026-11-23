@@ -1,8 +1,8 @@
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/sandbox_grants.dart" show systemTemps;
 import "package:agent_chat/data/builtin/tools/agent_tool.dart"
@@ -82,6 +82,7 @@ void main() {
     final allowed = [...approvals];
     liveRules = [...permissions];
     return BuiltinAgent(
+      fs: const LocalFileSystem(),
       session: session,
       client: client,
       shell: shell,

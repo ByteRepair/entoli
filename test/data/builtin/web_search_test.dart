@@ -1,7 +1,7 @@
 import "dart:convert";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:entoli_chat/domain/agent_backend.dart";
@@ -9,10 +9,10 @@ import "package:entoli_chat/domain/models.dart";
 import "package:entoli_chat/domain/permission.dart";
 import "package:entoli_chat/domain/shell.dart";
 import "package:entoli_chat/domain/web_search.dart";
+import "package:agent_chat/data/builtin/builtin_options.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
-import "package:agent_chat/data/builtin/builtin_options.dart";
 
 void main() {
   late BuiltinSession session;
@@ -30,6 +30,7 @@ void main() {
     WebSearch? webSearch,
     bool useDefaultWeb = true,
   }) => BuiltinAgent(
+    fs: const LocalFileSystem(),
     session: session,
     client: client,
     shell: shell,

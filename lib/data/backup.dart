@@ -3,17 +3,19 @@ import "dart:convert";
 import "dart:io";
 import "dart:isolate";
 
+import "package:file/local.dart";
 import "package:archive/archive_io.dart";
 import "package:path/path.dart" as p;
-
 import "package:entoli_chat/core/config.dart";
 import "package:entoli_chat/core/log.dart";
 import "package:entoli_chat/core/migrations.dart";
+import "package:entoli_chat/data/zip.dart" show linkTargetOf;
 import "package:entoli_chat/domain/documents.dart";
 import "package:entoli_chat/domain/file_handoff.dart";
 import "package:entoli_chat/domain/workspace.dart";
+
 import "local/tree_ops.dart" show removeTree;
-import "package:entoli_chat/data/zip.dart";
+import "zip.dart";
 
 /// The whole data directory as a zip, and back again. The members are the
 /// files, at the paths they have under the data directory. See AGENTS.md,
@@ -251,7 +253,7 @@ Future<void> _restore(
       // A member's name was written by whoever made the zip, and
       // `writeIncoming` is where a path from outside is made safe to join
       // onto a directory.
-      await writeIncoming(staged, [
+      await const Workspace(LocalFileSystem()).writeIncoming(staged, [
         for (final member in members)
           if (!member.isDirectory && linkTargetOf(member) == null)
             _RestoredFile(member),
@@ -262,7 +264,11 @@ Future<void> _restore(
         }
       }
       for (final member in members) {
-        if (member.isDirectory) await createFolder(staged, member.name);
+        if (member.isDirectory) {
+          await const Workspace(
+            LocalFileSystem(),
+          ).createFolder(staged, member.name);
+        }
       }
     } finally {
       await input.close();
@@ -276,8 +282,12 @@ Future<void> _restore(
     // one made by an older build unpacks that build's layout — including the
     // version stamp that says which one it is.
     await runMigrations(
+      const LocalFileSystem(),
       staged,
-      fresh: await AppConfig.forDirectory(staged).ensureDirs(),
+      fresh: await AppConfig.forDirectory(
+        const LocalFileSystem(),
+        staged,
+      ).ensureDirs(),
     );
   } catch (_) {
     await _clear(staged, deleteTree);
@@ -370,10 +380,11 @@ class _RestoredFile extends IncomingFile {
   final ArchiveFile member;
 
   @override
-  Future<void> writeTo(String target) async {
+  Future<void> writeTo(File target) async {
     // Decompressed straight into the file, so the largest member costs a
-    // buffer rather than its whole size.
-    final output = OutputFileStream(target);
+    // buffer rather than its whole size. The restore is on the disk, which
+    // is the only filesystem `OutputFileStream` writes.
+    final output = OutputFileStream(target.path);
     try {
       member.writeContent(output);
     } finally {

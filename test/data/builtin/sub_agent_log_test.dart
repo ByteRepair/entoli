@@ -1,7 +1,7 @@
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:entoli_chat/core/config.dart";
 import "package:agent_chat/data/local/file_sub_agent_log.dart";
 import "package:agent_chat/data/builtin/sub_agent.dart";
@@ -45,6 +45,7 @@ void main() {
     FakeLlmClient client, {
     ShellResult Function(String)? respond,
   }) => SubAgentRunner(
+    fs: const LocalFileSystem(),
     client: client,
     shell: FakeShell(respond ?? (_) => ok(""), canRunCommands: true),
     workspace: config.workspaceDir(chatId),

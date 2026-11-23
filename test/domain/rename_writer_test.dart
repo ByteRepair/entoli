@@ -1,8 +1,12 @@
 import "dart:async";
+import "dart:convert";
 
 import "package:flutter_test/flutter_test.dart";
-
 import "package:entoli_chat/domain/documents.dart";
+
+/// A writer whose writes are [write] of the text, with no filesystem.
+RenameWriter _writer(Future<void> Function(String path, String text) write) =>
+    RenameWriter.over((path, bytes) => write(path, utf8.decode(bytes)));
 
 void main() {
   test("overlapping writes run one at a time, in the order asked", () async {
@@ -10,7 +14,7 @@ void main() {
     // runs — the overlap the queue exists for — with no timer to bet on.
     final hold = Completer<void>();
     final started = <String>[];
-    final writer = RenameWriter((path, text) async {
+    final writer = _writer((path, text) async {
       started.add(text);
       if (text == "first") await hold.future;
     });
@@ -31,7 +35,7 @@ void main() {
   test("a failed write drains its entry and does not wedge the path", () async {
     var fail = true;
     final written = <String>[];
-    final writer = RenameWriter((path, text) async {
+    final writer = _writer((path, text) async {
       if (fail) throw StateError("disk gone");
       written.add(text);
     });
@@ -49,7 +53,7 @@ void main() {
     () async {
       // The queue entry carries a caught error, not the raw future: what the
       // await delivers to the caller is the only copy of the failure.
-      final writer = RenameWriter((path, text) async => throw StateError("no"));
+      final writer = _writer((path, text) async => throw StateError("no"));
       await expectLater(writer.write("settings", "text"), throwsStateError);
     },
   );
@@ -57,7 +61,7 @@ void main() {
   test("different paths do not block each other", () async {
     final hold = Completer<void>();
     final started = <String>[];
-    final writer = RenameWriter((path, text) async {
+    final writer = _writer((path, text) async {
       started.add(path);
       await hold.future;
     });
@@ -80,7 +84,7 @@ void main() {
     final hang = Completer<void>();
     var calls = 0;
     var started = false;
-    final writer = RenameWriter((path, text) async {
+    final writer = _writer((path, text) async {
       calls += 1;
       if (calls == 3) {
         started = true;

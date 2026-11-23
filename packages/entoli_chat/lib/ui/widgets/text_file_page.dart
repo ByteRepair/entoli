@@ -1,5 +1,3 @@
-import "dart:io";
-
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -9,6 +7,7 @@ import "../../core/code_grammars.dart" show grammarOfFile;
 import "../../core/formatting.dart";
 import "../../domain/workspace.dart";
 import "../../app/handoff.dart";
+import "../../app/storage.dart";
 import "busy.dart";
 import "dialogs.dart";
 import "discard_guard.dart";
@@ -90,7 +89,9 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
 
   Future<void> _load() async {
     try {
-      final content = await readTextHead(widget.path);
+      final content = await ref
+          .read(workspaceProvider)
+          .readTextHead(widget.path);
       if (!mounted) return;
       // The name said text and the bytes disagree. Popping `true` puts the
       // hand-off back on the explorer, which stays on screen to say so if it
@@ -135,7 +136,7 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
   /// which drops the mode an agent's script was given.
   Future<void> _save() => whileBusy(context, _busy, () async {
     final text = _controller!.text;
-    await File(widget.path).writeAsString(text);
+    await ref.read(fileSystemProvider).file(widget.path).writeAsString(text);
     if (!mounted) return;
     setState(() {
       _saved = text;
@@ -152,7 +153,7 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
   /// have been read for the page.
   Future<void> _copy() => whileBusy(context, _busy, () async {
     final text = _tooLarge
-        ? await File(widget.path).readAsString()
+        ? await ref.read(fileSystemProvider).file(widget.path).readAsString()
         : _controller!.text;
     if (mounted) {
       await copyToClipboard(context, text, said: "Copied ${widget.name}");

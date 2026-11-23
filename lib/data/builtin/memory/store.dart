@@ -1,10 +1,10 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:file/file.dart" show FileSystem;
 import "package:clock/clock.dart";
 import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
-
 import "package:entoli_chat/domain/documents.dart" show RenameWriter;
 
 /// A project's auto-memory: small durable facts that accumulate as turns
@@ -112,7 +112,7 @@ abstract interface class Memories {
 }
 
 class MemoryStore implements Memories {
-  MemoryStore(this.dir) : _writer = RenameWriter();
+  MemoryStore(FileSystem fs, this.dir) : _writer = RenameWriter(fs);
 
   final String dir;
 

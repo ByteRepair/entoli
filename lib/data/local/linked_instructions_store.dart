@@ -12,7 +12,7 @@ import "package:entoli_chat/domain/linked_instructions.dart";
 /// pages saving at once would otherwise each write back what the other had
 /// not seen.
 class LinkedInstructionsStore {
-  LinkedInstructionsStore(this._config) : _write = RenameWriter();
+  LinkedInstructionsStore(this._config) : _write = RenameWriter(_config.fs);
 
   final AppConfig _config;
   final RenameWriter _write;

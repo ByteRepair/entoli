@@ -1,8 +1,8 @@
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:agent_chat/data/builtin/memory/instructions.dart";
 import "package:entoli_chat/domain/models.dart";
 
@@ -367,6 +367,7 @@ void main() {
       () async {
         write("chats/chat-1/sub/AGENTS.md", "sub rules");
         final found = await findNestedInstructions(
+          const LocalFileSystem(),
           p.join(chatWorkspace, "sub", "notes.txt"),
           alreadyLoaded: {},
           excludes: ["**/sub/AGENTS.md"],
@@ -380,6 +381,7 @@ void main() {
     test("finds the nearest AGENTS.md above a read file", () async {
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
       final found = await findNestedInstructions(
+        const LocalFileSystem(),
         p.join(chatWorkspace, "sub", "notes.txt"),
         alreadyLoaded: {},
       );
@@ -390,6 +392,7 @@ void main() {
       write("AGENTS.md", "project rules");
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
       final found = await findNestedInstructions(
+        const LocalFileSystem(),
         p.join(chatWorkspace, "sub", "notes.txt"),
         alreadyLoaded: {p.join(projectWorkspace, "AGENTS.md")},
       );
@@ -399,6 +402,7 @@ void main() {
     test("skips files already loaded", () async {
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
       final found = await findNestedInstructions(
+        const LocalFileSystem(),
         p.join(chatWorkspace, "sub", "notes.txt"),
         alreadyLoaded: {p.join(chatWorkspace, "sub", "AGENTS.md")},
       );
@@ -413,6 +417,7 @@ void main() {
       File(p.join(repo, "AGENTS.md")).writeAsStringSync("repo rules");
       File(p.join(repo, "src", "AGENTS.md")).writeAsStringSync("src rules");
       final found = await findNestedInstructions(
+        const LocalFileSystem(),
         p.join(repo, "src", "notes.txt"),
         alreadyLoaded: {},
       );
@@ -429,6 +434,7 @@ void main() {
       File(p.join(repo, ".git")).writeAsStringSync("gitdir: elsewhere\n");
       File(p.join(repo, "AGENTS.md")).writeAsStringSync("tree rules");
       final found = await findNestedInstructions(
+        const LocalFileSystem(),
         p.join(repo, "notes.txt"),
         alreadyLoaded: {},
       );
@@ -439,6 +445,7 @@ void main() {
       File(p.join(tmp.path, "AGENTS.md")).writeAsStringSync("above rules");
       write("chats/chat-1/sub/AGENTS.md", "sub rules");
       final found = await findNestedInstructions(
+        const LocalFileSystem(),
         p.join(chatWorkspace, "sub", "notes.txt"),
         alreadyLoaded: {},
       );

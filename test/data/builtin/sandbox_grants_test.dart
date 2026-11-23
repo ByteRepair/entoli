@@ -1,8 +1,8 @@
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:agent_chat/data/builtin/sandbox_grants.dart";
 
 void main() {
@@ -93,21 +93,33 @@ void main() {
 
     test("a worktree's is its repository's", () {
       expect(
-        repositoryGitDirs([p.join(workspace, "tree", "lib")], [workspace]),
+        repositoryGitDirs(
+          const LocalFileSystem(),
+          [p.join(workspace, "tree", "lib")],
+          [workspace],
+        ),
         [p.join(repo, ".git")],
       );
     });
 
     test("a checkout outside the grant is granted its .git alone", () {
-      expect(repositoryGitDirs([p.join(repo, "src")], [workspace]), [
-        p.join(repo, ".git"),
-      ]);
+      expect(
+        repositoryGitDirs(
+          const LocalFileSystem(),
+          [p.join(repo, "src")],
+          [workspace],
+        ),
+        [p.join(repo, ".git")],
+      );
     });
 
     test("a checkout inside the grant needs nothing more", () {
       final checkout = p.join(workspace, "plain");
       Directory(p.join(checkout, ".git")).createSync(recursive: true);
-      expect(repositoryGitDirs([checkout], [workspace]), isEmpty);
+      expect(
+        repositoryGitDirs(const LocalFileSystem(), [checkout], [workspace]),
+        isEmpty,
+      );
     });
   });
 

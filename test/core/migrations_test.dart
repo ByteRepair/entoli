@@ -1,8 +1,8 @@
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:entoli_chat/core/config.dart";
 import "package:entoli_chat/core/migrations.dart";
 
@@ -21,7 +21,7 @@ void main() {
   });
 
   Migration step(String version, {bool fails = false}) =>
-      Migration(version, (_) async {
+      Migration(version, (_, _) async {
         ran.add(version);
         if (fails) throw StateError("stopped in $version");
       });
@@ -38,6 +38,7 @@ void main() {
     "a directory this launch created is stamped at the end and left alone",
     () async {
       await runMigrations(
+        const LocalFileSystem(),
         config.dataDir,
         fresh: true,
         chain: [step("0.1.3"), step("1.0.0")],
@@ -51,6 +52,7 @@ void main() {
   test("the stamp is where the chain resumes", () async {
     // No stamp: older than every entry, so the whole chain runs.
     await runMigrations(
+      const LocalFileSystem(),
       config.dataDir,
       fresh: false,
       chain: [step("0.1.3"), step("0.2.0"), step("1.0.0")],
@@ -63,6 +65,7 @@ void main() {
     // A stamp mid-chain: only the entries after it run.
     await stamp("0.2.0");
     await runMigrations(
+      const LocalFileSystem(),
       config.dataDir,
       fresh: false,
       chain: [step("0.1.3"), step("0.2.0"), step("1.0.0")],
@@ -73,9 +76,15 @@ void main() {
 
     // A stamp from a build newer than this one is left where it is, and
     // nothing runs here.
-    await runMigrations(config.dataDir, fresh: false, chain: [step("9.9.9")]);
+    await runMigrations(
+      const LocalFileSystem(),
+      config.dataDir,
+      fresh: false,
+      chain: [step("9.9.9")],
+    );
     await stamp("2.0.0");
     await runMigrations(
+      const LocalFileSystem(),
       config.dataDir,
       fresh: false,
       chain: [step("0.1.3"), step("1.0.0")],
@@ -88,6 +97,7 @@ void main() {
   test("one that dies halfway is picked up at the entry it died in", () async {
     await expectLater(
       runMigrations(
+        const LocalFileSystem(),
         config.dataDir,
         fresh: false,
         chain: [step("0.1.3"), step("0.2.0", fails: true)],
@@ -98,6 +108,7 @@ void main() {
     ran.clear();
 
     await runMigrations(
+      const LocalFileSystem(),
       config.dataDir,
       fresh: false,
       chain: [step("0.1.3"), step("0.2.0"), step("1.0.0")],
@@ -131,7 +142,10 @@ void main() {
         ..createSync(recursive: true)
         ..writeAsStringSync("{}");
 
-      expect(relocateDataDir(from: from, to: to), isTrue);
+      expect(
+        relocateDataDir(const LocalFileSystem(), from: from, to: to),
+        isTrue,
+      );
 
       expect(Directory(from).existsSync(), isFalse);
       expect(File(p.join(to, "settings.json")).readAsStringSync(), "{}");
@@ -141,7 +155,10 @@ void main() {
       File(p.join(from, "old.json")).createSync(recursive: true);
       File(p.join(to, "new.json")).createSync(recursive: true);
 
-      expect(relocateDataDir(from: from, to: to), isTrue);
+      expect(
+        relocateDataDir(const LocalFileSystem(), from: from, to: to),
+        isTrue,
+      );
 
       expect(File(p.join(from, "old.json")).existsSync(), isTrue);
       expect(Directory(to).listSync().map((e) => p.basename(e.path)), [
@@ -150,7 +167,10 @@ void main() {
     });
 
     test("has nothing to do where there was none before", () {
-      expect(relocateDataDir(from: from, to: to), isTrue);
+      expect(
+        relocateDataDir(const LocalFileSystem(), from: from, to: to),
+        isTrue,
+      );
 
       expect(Directory(to).existsSync(), isFalse);
     });
@@ -160,7 +180,10 @@ void main() {
       // No parent to rename into.
       final nowhere = p.join(p.dirname(to), "missing", "entoli");
 
-      expect(relocateDataDir(from: from, to: nowhere), isFalse);
+      expect(
+        relocateDataDir(const LocalFileSystem(), from: from, to: nowhere),
+        isFalse,
+      );
 
       expect(File(p.join(from, "settings.json")).existsSync(), isTrue);
     });

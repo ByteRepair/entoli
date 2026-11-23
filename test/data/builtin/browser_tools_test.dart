@@ -3,10 +3,10 @@ import "dart:convert";
 import "dart:io";
 import "dart:typed_data";
 
+import "package:file/local.dart";
 import "package:flutter/foundation.dart" show ValueNotifier;
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:agent_chat/data/browser/cdp_browser.dart"
     show CdpBrowser, looksLikeChallenge, pageAddress, reapLostBrowser;
 import "package:agent_chat/data/browser/helium.dart";
@@ -20,10 +20,10 @@ import "package:entoli_chat/domain/models.dart";
 import "package:entoli_chat/domain/permission.dart";
 import "package:entoli_chat/domain/shell.dart";
 import "package:agent_chat/data/builtin/tools/agent_tool.dart";
+import "package:agent_chat/data/builtin/system_prompt.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
-import "package:agent_chat/data/builtin/system_prompt.dart";
 
 /// A tab that records what it was asked and answers with fixed text.
 class FakeBrowserTab implements BrowserTab {
@@ -293,6 +293,7 @@ void main() {
     Directory(chat).createSync(recursive: true);
     inWorkspace?.call(chat);
     return BuiltinAgent(
+      fs: const LocalFileSystem(),
       session: BuiltinSession(),
       client: client,
       shell: FakeShell((_) => ok(""), canRunCommands: true),

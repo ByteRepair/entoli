@@ -1,8 +1,8 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/tools/skill_create_tool.dart";
@@ -11,10 +11,10 @@ import "package:agent_chat/data/prompts/skill_import.dart"
 import "package:entoli_chat/domain/agent_backend.dart";
 import "package:entoli_chat/domain/models.dart";
 import "package:entoli_chat/domain/permission.dart";
+import "package:agent_chat/data/builtin/builtin_options.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
-import "package:agent_chat/data/builtin/builtin_options.dart";
 
 const _skillMd =
     "---\nname: demo\ndescription: does the demo thing\n---\n\nDo it.\n";
@@ -64,6 +64,7 @@ void main() {
     void Function()? onPackage,
     Object? packageError,
   }) => BuiltinAgent(
+    fs: const LocalFileSystem(),
     session: session,
     client: client,
     shell: FakeShell((_) => ok(""), canRunCommands: true),
@@ -115,6 +116,7 @@ void main() {
         [finish],
       ]);
       final agent = BuiltinAgent(
+        fs: const LocalFileSystem(),
         session: session,
         client: without,
         shell: FakeShell((_) => ok(""), canRunCommands: true),

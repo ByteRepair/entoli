@@ -1,9 +1,9 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:entoli_chat/core/migrations.dart";
 import "package:entoli_chat/domain/app_settings.dart";
 import "package:entoli_chat/domain/chat_meta.dart";
@@ -30,7 +30,8 @@ void main() {
 
   T read<T>(File file) => jsonDecode(file.readAsStringSync()) as T;
 
-  Future<void> migrate() => runMigrations(dataDir, fresh: false);
+  Future<void> migrate() =>
+      runMigrations(const LocalFileSystem(), dataDir, fresh: false);
 
   test("settings under the names they had before move under today's", () async {
     final app = seed("settings.json", {

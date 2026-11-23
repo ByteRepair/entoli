@@ -1,59 +1,17 @@
 import "dart:convert";
-import "dart:io";
 import "dart:typed_data";
 
-import "package:archive/archive_io.dart";
+import "package:archive/archive.dart";
+import "package:file/file.dart";
 import "package:path/path.dart" as p;
 
 import "../core/log.dart";
 import "../domain/workspace.dart" show safeRelativePath;
 
-/// Zip [paths] — files and folders alike — into a new file at [to]. Each
-/// member is read and compressed in turn, straight into the file, so a tree of
-/// any size costs one member's memory rather than the whole archive's. Entries
-/// are named relative to [base], defaulting to each path's own parent, so
-/// unzipping a folder gives the folder back rather than its contents loose.
-/// [skip] drops a file by its path, and is never asked about a directory;
-/// [skipDir] drops a directory by its path, and is asked before recursing into
-/// it. [extra] goes in last, for a member of the caller's own. [followLinks]
-/// and [followInto] are [walkTree]'s.
-Future<void> zipTo(
-  String to,
-  List<String> paths, {
-  String? base,
-  bool Function(String path)? skip,
-  bool Function(String path)? skipDir,
-  List<ArchiveFile> extra = const [],
-  bool followLinks = true,
-  bool Function(String real)? followInto,
-}) async {
-  final encoder = ZipFileEncoder()..create(to);
-  try {
-    await for (final entry in walkTree(
-      paths,
-      base: base,
-      skip: skip,
-      skipDir: skipDir,
-      followLinks: followLinks,
-      followInto: followInto,
-    )) {
-      if (entry.link case final link?) {
-        encoder.addArchiveFile(linkMember(entry.name, link));
-      } else if (entry.isDirectory) {
-        encoder.addArchiveFile(ArchiveFile.directory(entry.name));
-      } else {
-        await _addStreamed(encoder, entry.path, entry.name);
-      }
-    }
-    extra.forEach(encoder.addArchiveFile);
-  } finally {
-    await encoder.close();
-  }
-}
-
-/// The same walk as [zipTo], held in memory: for the small trees — a skill, an
-/// artifact — whose zip goes out as bytes.
+/// The walk `zipTo` streams to a file, held in memory: for the small trees — a
+/// skill, an artifact — whose zip goes out as bytes.
 Future<Archive> archiveOf(
+  FileSystem fs,
   List<String> paths, {
   String? base,
   bool Function(String path)? skip,
@@ -62,6 +20,7 @@ Future<Archive> archiveOf(
 }) async {
   final archive = Archive();
   await for (final entry in walkTree(
+    fs,
     paths,
     base: base,
     skip: skip,
@@ -73,31 +32,13 @@ Future<Archive> archiveOf(
           ? linkMember(entry.name, entry.link!)
           : entry.isDirectory
           ? ArchiveFile.directory(entry.name)
-          : ArchiveFile.bytes(entry.name, await File(entry.path).readAsBytes()),
+          : ArchiveFile.bytes(
+              entry.name,
+              await fs.file(entry.path).readAsBytes(),
+            ),
     );
   }
   return archive;
-}
-
-/// [path] into [encoder] as [name], read as it is compressed. One stat of the
-/// path for the time and the mode, where `ZipFileEncoder.addFile` takes two —
-/// beside the length the open reads off the handle either way.
-Future<void> _addStreamed(
-  ZipFileEncoder encoder,
-  String path,
-  String name,
-) async {
-  final stat = File(path).statSync();
-  final input = InputFileStream(path);
-  try {
-    encoder.addArchiveFile(
-      ArchiveFile.stream(name, input)
-        ..lastModTime = stat.modified.millisecondsSinceEpoch ~/ 1000
-        ..mode = stat.mode,
-    );
-  } finally {
-    await input.close();
-  }
 }
 
 /// What the archive is called: the folder that was picked, or the one
@@ -128,17 +69,19 @@ typedef TreeEntry = ({
   String? link,
 });
 
-/// Every member [paths] make, in walk order: each folder before what is in
-/// it, named relative to [base] or the path's own parent. A link is followed,
-/// so a member is what the link points at; with [followLinks] false it is no
-/// member at all, even as one of [paths], for a tree handed to someone else,
-/// where what it points at outside itself is not the tree's to give. A link
-/// to a folder the walk is already inside is never a member, which would
-/// never end. [followInto] is asked where a link lands, by its real path:
-/// refused, or broken, the link is a member as the link, with nothing it
-/// leads to; without it a broken link is no member.
-/// [skip] and [skipDir] are as [zipTo]'s.
+/// Every member [paths] make on [fs], in walk order: each folder before what
+/// is in it, named relative to [base] or the path's own parent. A link is
+/// followed, so a member is what the link points at; with [followLinks] false
+/// it is no member at all, even as one of [paths], for a tree handed to
+/// someone else, where what it points at outside itself is not the tree's to
+/// give. A link to a folder the walk is already inside is never a member,
+/// which would never end. [followInto] is asked where a link lands, by its
+/// real path: refused, or broken, the link is a member as the link, with
+/// nothing it leads to; without it a broken link is no member. [skip] drops a
+/// file by its path, and is never asked about a directory; [skipDir] drops a
+/// directory by its path, and is asked before recursing into it.
 Stream<TreeEntry> walkTree(
+  FileSystem fs,
   List<String> paths, {
   String? base,
   bool Function(String path)? skip,
@@ -179,7 +122,7 @@ Stream<TreeEntry> walkTree(
     }
     // Listed without following, so only a link costs a lookup of where it
     // lands: a folder that is not one is its parent's real path and its name.
-    await for (final entity in Directory(path).list(followLinks: false)) {
+    await for (final entity in fs.directory(path).list(followLinks: false)) {
       if (entity is! Link) {
         final isDir = entity is Directory;
         yield* walk(
@@ -189,12 +132,12 @@ Stream<TreeEntry> walkTree(
           isDir && real != null ? p.join(real, p.basename(entity.path)) : null,
         );
       } else if (followLinks) {
-        final type = FileSystemEntity.typeSync(entity.path);
+        final type = fs.typeSync(entity.path);
         if (followInto != null) {
           // A broken link leads nowhere in scope either: kept, like one out.
           final real = type == FileSystemEntityType.notFound
               ? null
-              : _realOf(entity.path);
+              : _realOf(fs, entity.path);
           if (real == null || !followInto(real)) {
             yield (
               path: entity.path,
@@ -209,7 +152,7 @@ Stream<TreeEntry> walkTree(
           case FileSystemEntityType.file:
             yield* walk(from, entity.path, false, null);
           case FileSystemEntityType.directory:
-            final target = _realOf(entity.path);
+            final target = _realOf(fs, entity.path);
             // [skipDir] matches by position, which a link's own path lacks: a
             // link to a skipped folder is asked about where it lands.
             if (target == null || (skipDir != null && skipDir(target))) {
@@ -224,22 +167,22 @@ Stream<TreeEntry> walkTree(
   }
 
   for (final path in paths) {
-    if (!followLinks && FileSystemEntity.isLinkSync(path)) continue;
-    final isDirectory = FileSystemEntity.isDirectorySync(path);
+    if (!followLinks && fs.isLinkSync(path)) continue;
+    final isDirectory = fs.isDirectorySync(path);
     yield* walk(
       base ?? p.dirname(path),
       path,
       isDirectory,
-      followLinks && isDirectory ? _realOf(path) : null,
+      followLinks && isDirectory ? _realOf(fs, path) : null,
     );
   }
 }
 
 /// [path] with its links resolved, or null where it went between being
 /// listed and being asked.
-String? _realOf(String path) {
+String? _realOf(FileSystem fs, String path) {
   try {
-    return Directory(path).resolveSymbolicLinksSync();
+    return fs.directory(path).resolveSymbolicLinksSync();
   } on FileSystemException catch (e) {
     logFailure("files", "a link could not be resolved", e.osError);
     return null;
@@ -250,6 +193,7 @@ String? _realOf(String path) {
 /// [safeRelativePath] first, so `../x` lands inside [dir] rather than beside
 /// it; [accept] drops a member by the path it would be written to.
 Future<void> extractInto(
+  FileSystem fs,
   Archive archive,
   String dir, {
   bool Function(String target)? accept,
@@ -258,7 +202,7 @@ Future<void> extractInto(
     if (member.isDirectory) continue;
     final target = p.join(dir, safeRelativePath(member.name));
     if (accept != null && !accept(target)) continue;
-    final file = File(target);
+    final file = fs.file(target);
     await file.parent.create(recursive: true);
     await file.writeAsBytes(member.readBytes() ?? Uint8List(0));
   }

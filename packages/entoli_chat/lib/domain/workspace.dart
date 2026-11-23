@@ -1,13 +1,10 @@
 import "dart:convert";
-import "dart:io";
 import "dart:typed_data";
 
+import "package:file/file.dart";
 import "package:path/path.dart" as p;
 
 import "file_handoff.dart";
-
-/// Reading and writing a workspace folder, for the explorer and for whatever a
-/// share drops into one.
 
 /// One entry of a workspace folder, as the explorer draws it.
 class WorkspaceEntry {
@@ -27,27 +24,107 @@ class WorkspaceEntry {
   final int size;
 }
 
-/// What is in [dir]: folders first, then files, each by name. A folder that is
-/// not there yet is empty rather than an error — a workspace is created with
-/// the chat and may never be written to.
-///
-Future<List<WorkspaceEntry>> listWorkspace(String dir) async {
-  final directory = Directory(dir);
-  if (!directory.existsSync()) return const [];
-  final entries = [
-    for (final entity in await directory.list().toList())
-      WorkspaceEntry(
-        path: entity.path,
-        name: p.basename(entity.path),
-        isDirectory: entity is Directory,
-        size: entity is Directory ? 0 : entity.statSync().size,
-      ),
-  ];
-  return entries..sort(
-    (a, b) => a.isDirectory == b.isDirectory
-        ? a.name.toLowerCase().compareTo(b.name.toLowerCase())
-        : (a.isDirectory ? -1 : 1),
-  );
+/// Reading and writing a workspace folder, for the explorer and for whatever a
+/// share drops into one.
+class Workspace {
+  const Workspace(this.fs);
+
+  final FileSystem fs;
+
+  /// What is in [dir]: folders first, then files, each by name. A folder that
+  /// is not there yet is empty rather than an error — a workspace is created
+  /// with the chat and may never be written to.
+  Future<List<WorkspaceEntry>> list(String dir) async {
+    final directory = fs.directory(dir);
+    if (!directory.existsSync()) return const [];
+    final entries = [
+      for (final entity in await directory.list().toList())
+        WorkspaceEntry(
+          path: entity.path,
+          name: p.basename(entity.path),
+          isDirectory: entity is Directory,
+          size: entity is Directory ? 0 : entity.statSync().size,
+        ),
+    ];
+    return entries..sort(
+      (a, b) => a.isDirectory == b.isDirectory
+          ? a.name.toLowerCase().compareTo(b.name.toLowerCase())
+          : (a.isDirectory ? -1 : 1),
+    );
+  }
+
+  /// Read at most [textViewLimit] bytes of [path] as UTF-8, or `null` if what
+  /// came back is not text after all — a `.log` the agent wrote as a gzip is a
+  /// hand-off rather than a page of mojibake.
+  Future<WorkspaceText?> readTextHead(String path) async {
+    final file = fs.file(path);
+    final stat = file.statSync();
+    if (stat.type != FileSystemEntityType.file) {
+      throw Exception("$path is no longer there");
+    }
+    final truncated = stat.size > textViewLimit;
+    final end = truncated ? textViewLimit : stat.size;
+    final read = BytesBuilder(copy: false);
+    await for (final chunk in file.openRead(0, end)) {
+      read.add(chunk);
+    }
+    var bytes = read.takeBytes();
+    if (bytes.contains(0)) return null;
+    if (truncated) bytes = _withoutCutRune(bytes);
+    try {
+      return WorkspaceText(utf8.decode(bytes), truncated: truncated);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// Write [files] into [dir], creating whatever folders they name. Their paths
+  /// were written by another app, so each one is sanitised before it is joined
+  /// onto a workspace — see [safeRelativePath].
+  ///
+  /// One at a time, and each one's bytes are the file's own business: this
+  /// makes room and hands over the target, so a staged share is moved and a
+  /// restored backup member written. See [IncomingFile].
+  ///
+  /// Sequential on purpose. Writing them at once would put every file's bytes
+  /// in memory together, which is the thing [IncomingFile] exists to avoid, and
+  /// buys nothing back — a rename is too cheap to overlap.
+  ///
+  /// The folders are made first, once each: a restored backup names one
+  /// directory hundreds of times, and asking per file is hundreds of redundant
+  /// creates in front of the spinner.
+  Future<void> writeIncoming(String dir, List<IncomingFile> files) async {
+    final targets = [
+      for (final file in files) p.join(dir, safeRelativePath(file.path)),
+    ];
+    for (final folder in {for (final target in targets) p.dirname(target)}) {
+      await fs.directory(folder).create(recursive: true);
+    }
+    for (var i = 0; i < files.length; i++) {
+      await files[i].writeTo(fs.file(targets[i]));
+    }
+  }
+
+  Future<void> createFolder(String dir, String name) =>
+      fs.directory(p.join(dir, safeRelativePath(name))).create(recursive: true);
+
+  /// Remove [paths], each with whatever is under it. One already gone is a
+  /// deletion that happened.
+  ///
+  /// The lookups go out in one wave and the deletions in another, for the
+  /// reason [list] stats in one: a selection is a folder's siblings, so nothing
+  /// here is ordered, and awaiting per path is one lookup at a time in front of
+  /// the busy bar.
+  Future<void> deleteEntries(List<String> paths) async {
+    final types = await Future.wait(paths.map(fs.type));
+    await Future.wait([
+      for (final (index, path) in paths.indexed)
+        if (types[index] == FileSystemEntityType.directory)
+          fs.directory(path).delete(recursive: true)
+        else if (types[index] != FileSystemEntityType.notFound)
+          fs.file(path).delete(),
+    ]);
+  }
 }
 
 /// The most of a file the viewer reads. A workspace holds the agent's logs, so
@@ -134,30 +211,6 @@ const _textExtensions = {
   "gradle",
 };
 
-/// Read at most [textViewLimit] bytes of [path] as UTF-8, or `null` if what
-/// came back is not text after all — a `.log` the agent wrote as a gzip is a
-/// hand-off rather than a page of mojibake.
-Future<WorkspaceText?> readTextHead(String path) async {
-  final stat = File(path).statSync();
-  if (stat.type != FileSystemEntityType.file) {
-    throw Exception("$path is no longer there");
-  }
-  final truncated = stat.size > textViewLimit;
-  final end = truncated ? textViewLimit : stat.size;
-  final read = BytesBuilder(copy: false);
-  await for (final chunk in File(path).openRead(0, end)) {
-    read.add(chunk);
-  }
-  var bytes = read.takeBytes();
-  if (bytes.contains(0)) return null;
-  if (truncated) bytes = _withoutCutRune(bytes);
-  try {
-    return WorkspaceText(utf8.decode(bytes), truncated: truncated);
-  } on FormatException {
-    return null;
-  }
-}
-
 /// The cap falls on a byte, so the last character can be half of one. Dropping
 /// it is the difference between a truncated file and one that reads as binary.
 ///
@@ -174,54 +227,6 @@ Uint8List _withoutCutRune(Uint8List bytes) {
   return bytes.length - start >= needed
       ? bytes
       : Uint8List.sublistView(bytes, 0, start);
-}
-
-/// Write [files] into [dir], creating whatever folders they name. Their paths
-/// were written by another app, so each one is sanitised before it is joined
-/// onto a workspace — see [safeRelativePath].
-///
-/// One at a time, and each one's bytes are the file's own business: this makes
-/// room and hands over the target, so a staged share is moved and a restored
-/// backup member written. See [IncomingFile].
-///
-/// Sequential on purpose. Writing them at once would put every file's bytes in
-/// memory together, which is the thing [IncomingFile] exists to avoid, and buys
-/// nothing back — a rename is too cheap to overlap.
-///
-/// The folders are made first, once each: a restored backup names one
-/// directory hundreds of times, and asking per file is hundreds of redundant
-/// creates in front of the spinner.
-Future<void> writeIncoming(String dir, List<IncomingFile> files) async {
-  final targets = [
-    for (final file in files) p.join(dir, safeRelativePath(file.path)),
-  ];
-  for (final folder in {for (final target in targets) p.dirname(target)}) {
-    await Directory(folder).create(recursive: true);
-  }
-  for (var i = 0; i < files.length; i++) {
-    await files[i].writeTo(targets[i]);
-  }
-}
-
-Future<void> createFolder(String dir, String name) =>
-    Directory(p.join(dir, safeRelativePath(name))).create(recursive: true);
-
-/// Remove [paths], each with whatever is under it. One already gone is a
-/// deletion that happened.
-///
-/// The lookups go out in one wave and the deletions in another, for the reason
-/// [listWorkspace] stats in one: a selection is a folder's siblings, so nothing
-/// here is ordered, and awaiting per path is one lookup at a time in front of
-/// the busy bar.
-Future<void> deleteEntries(List<String> paths) async {
-  final types = await Future.wait(paths.map(FileSystemEntity.type));
-  await Future.wait([
-    for (final (index, path) in paths.indexed)
-      if (types[index] == FileSystemEntityType.directory)
-        Directory(path).delete(recursive: true)
-      else if (types[index] != FileSystemEntityType.notFound)
-        File(path).delete(),
-  ]);
 }
 
 /// Whether [path] is [root] itself or under it, for two resolved paths. The

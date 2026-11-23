@@ -5,11 +5,12 @@ import "dart:isolate";
 import "package:flutter/services.dart";
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
-
 import "package:entoli_chat/domain/file_handoff.dart";
-import "../mime.dart";
-import "package:entoli_chat/data/zip.dart";
+import "package:entoli_chat/data/zip.dart" show zipNameFor;
 import "package:entoli_chat/core/log.dart";
+
+import "../mime.dart";
+import "../zip.dart";
 
 /// Android, where every route runs through an intent and `FilesChannel.kt` is
 /// the other end of `agent_chat/files`. There is no file manager to point at a

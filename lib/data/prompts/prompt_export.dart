@@ -6,7 +6,6 @@ import "dart:io";
 import "dart:typed_data";
 
 import "package:entoli_chat/core/config.dart";
-import "bundled_skill_data.dart" show bundledSkillFiles, bundledAgentFiles;
 import "package:entoli_chat/data/zip.dart" show archiveOf;
 import "package:entoli_chat/domain/app_link.dart" show AppLink;
 import "package:entoli_chat/domain/backup_handoff.dart";
@@ -14,6 +13,8 @@ import "package:entoli_chat/domain/bundled_prompt_file.dart"
     show bundledPromptFileOf, bundledPromptFilesOf;
 import "package:entoli_chat/domain/models.dart";
 import "package:entoli_chat/domain/project.dart" show defaultProjectDir;
+
+import "bundled_skill_data.dart" show bundledSkillFiles, bundledAgentFiles;
 import "skill_import.dart"
     show SkillImportException, SkillPackage, skillDirectory, agentFilePath;
 import "skill_package.dart" show packageSkillBytes;
@@ -137,7 +138,7 @@ Future<List<(String, Uint8List)>?> _skillEntries(
 }) async {
   final dir = skillDirectory(config, name, project: project);
   if (!Directory(dir).existsSync()) return null;
-  final archive = await archiveOf([dir], base: dir);
+  final archive = await archiveOf(config.fs, [dir], base: dir);
   return [
     for (final file in archive)
       if (file.isFile) (file.name, file.readBytes() ?? Uint8List(0)),

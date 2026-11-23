@@ -4,7 +4,6 @@ import "dart:typed_data";
 
 import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:path/path.dart" as p;
-
 import "package:entoli_chat/core/formatting.dart";
 import "package:entoli_chat/domain/agent_backend.dart";
 import "package:entoli_chat/domain/chat_store.dart" show attachmentFilename;
@@ -12,6 +11,7 @@ import "package:entoli_chat/domain/file_tools.dart";
 import "package:entoli_chat/domain/shell.dart";
 import "package:entoli_chat/domain/tool_arg.dart";
 import "package:entoli_chat/domain/workspace.dart" show isUnder;
+
 import "../../mime.dart";
 import "../approval_gate.dart";
 import "../compact_prompt.dart" show charsPerToken;
@@ -67,6 +67,7 @@ Future<String?> _unread(
   String shownPath,
   String tool,
 ) => unreadFileProblem(
+  turn.fs,
   path,
   shownPath: shownPath,
   toolName: tool,
@@ -76,7 +77,7 @@ Future<String?> _unread(
 /// What the model wrote or read is what it has seen, so the next edit needs
 /// no read.
 Future<void> _stamp(Turn turn, String path) async {
-  final stamp = fileStampOf(path);
+  final stamp = fileStampOf(turn.fs, path);
   if (stamp != null) turn.readFiles[path] = stamp;
 }
 
@@ -261,6 +262,7 @@ class ReadTool extends AgentTool {
       await _stamp(turn, path);
       final found = turn.memory.nested
           ? await findNestedInstructions(
+              turn.fs,
               path,
               alreadyLoaded: turn.loadedInstructions,
               excludes: turn.memory.excludes,

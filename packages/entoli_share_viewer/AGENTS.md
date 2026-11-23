@@ -19,15 +19,14 @@ from Flutter's CDN, so `build/web/canvaskit/` is never fetched.
 
 - **`setUrlStrategy(null)`.** The chat is the fragment, and Flutter's default
   hash routing would rewrite it to `#/`. The URL stays what was opened.
-- **`useMemoryFileSystem`** (`memory_io.dart`). A browser has no disk, and
-  `lib/` reads its files through `dart:io` with no port over it, so the whole
-  process gets `IOOverrides` over `package:file`'s `MemoryFileSystem`. The
-  app's readers, `FileChatStore` and the migration chain run unchanged over it.
-- **`unpackShare`** into `/entoli`, whose `AppConfig.load` migrates a link
-  from an older build and is the config the viewer runs on. A fragment that is not a whole zip, or not a chat,
-  is the "incomplete" page.
-- **The overrides.** The drawing's ports (`transcriptOverrides`), and in place
-  of the app's:
+- **A `MemoryFileSystem`**, since a browser has no disk. The core is handed
+  its filesystem, so the app's readers, `FileChatStore` and the migration
+  chain run over this one unchanged.
+- **`unpackShare`** into its `/entoli`, whose `AppConfig.load` migrates a link
+  from an older build and is the config the viewer runs on. A fragment that
+  is not a whole zip, or not a chat, is the "incomplete" page.
+- **The overrides.** The drawing's ports (`transcriptOverrides`), the
+  filesystem (`fileSystemProvider`), and in place of the app's:
   - `SharedChatHost` — the chat as loaded, never running: the plan, the
     sub-agents' transcripts and the attachments read from the store; no
     agent pictures and no job logs, a job having ended where it was shared.
@@ -52,7 +51,5 @@ Entoli**, the product page.
 
 `test/` runs on the VM, not in a browser, over the same in-memory filesystem:
 a link unpacked with nothing written to disk, an older stamp migrated, what
-the host reads and what the hand-off opens. `IOOverrides` reach only the
-isolate that set them, which is why the app reads a share's files before
-handing the compressing to `compute`. The web hand-offs need a browser and are
-not tested.
+the host reads and what the hand-off opens, and that the disk is left alone.
+The web hand-offs need a browser and are not tested.

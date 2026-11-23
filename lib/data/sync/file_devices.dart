@@ -2,7 +2,6 @@ import "dart:convert";
 import "dart:io";
 
 import "package:path/path.dart" as p;
-
 import "package:entoli_chat/core/config.dart";
 import "package:entoli_chat/domain/documents.dart" show RenameWriter;
 import "package:entoli_chat/domain/secret_store.dart";
@@ -16,7 +15,8 @@ import "package:entoli_chat/domain/sync/devices.dart";
 /// secrets are not: one JSON map under [pairingSecretsKey], in the keyring
 /// wherever there is one.
 class FileDeviceRegistry implements DeviceRegistry {
-  FileDeviceRegistry(this._config, this._secrets) : _writer = RenameWriter();
+  FileDeviceRegistry(this._config, this._secrets)
+    : _writer = RenameWriter(_config.fs);
 
   final AppConfig _config;
   final SecretStore _secrets;

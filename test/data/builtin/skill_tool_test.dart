@@ -1,7 +1,7 @@
 import "dart:convert";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/tools/skill_tool.dart";
@@ -10,10 +10,10 @@ import "package:entoli_chat/domain/models.dart";
 import "package:entoli_chat/domain/permission.dart";
 import "package:entoli_chat/domain/prompt_library.dart";
 import "package:agent_chat/data/builtin/tools/agent_tool.dart";
+import "package:agent_chat/data/builtin/builtin_options.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
-import "package:agent_chat/data/builtin/builtin_options.dart";
 
 /// A skill as the library holds one: a body the model is handed whole.
 PromptDocument skillDoc(
@@ -38,6 +38,7 @@ void main() {
 
   BuiltinAgent agentWith(FakeLlmClient client, List<PromptDocument> skills) =>
       BuiltinAgent(
+        fs: const LocalFileSystem(),
         session: session,
         client: client,
         shell: FakeShell((_) => ok(""), canRunCommands: true),

@@ -1,7 +1,7 @@
 import "dart:convert";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/gated_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
@@ -10,14 +10,13 @@ import "package:agent_chat/data/builtin/sub_agent.dart";
 import "package:entoli_chat/domain/agent_backend.dart";
 import "package:entoli_chat/domain/models.dart";
 import "package:entoli_chat/domain/permission.dart";
-
-import "../../harness.dart";
 import "package:entoli_chat/domain/prompt_library.dart";
 import "package:entoli_chat/domain/shell.dart";
+import "package:agent_chat/data/builtin/builtin_options.dart";
 
+import "../../harness.dart";
 import "../../fakes.dart";
 import "builtin_fakes.dart";
-import "package:agent_chat/data/builtin/builtin_options.dart";
 
 void main() {
   late BuiltinSession session;
@@ -41,6 +40,7 @@ void main() {
   }) {
     shell = FakeShell(respond ?? (_) => ok(""), canRunCommands: true);
     return SubAgentRunner(
+      fs: const LocalFileSystem(),
       client: subClient,
       shell: shell,
       workspace: "/tmp/workspace",
@@ -128,6 +128,7 @@ void main() {
     }) {
       shell = FakeShell(respond ?? (_) => ok(""), canRunCommands: true);
       final runner = SubAgentRunner(
+        fs: const LocalFileSystem(),
         client: subClient,
         shell: shell,
         workspace: "/tmp/workspace",
@@ -136,6 +137,7 @@ void main() {
         library: libraryWithGeneral(),
       );
       return BuiltinAgent(
+        fs: const LocalFileSystem(),
         session: session,
         client: parentClient,
         shell: shell,
@@ -267,6 +269,7 @@ void main() {
             : ok(""),
       );
       final runner = SubAgentRunner(
+        fs: const LocalFileSystem(),
         client: sub,
         shell: shell,
         workspace: "/tmp/workspace",
@@ -275,6 +278,7 @@ void main() {
         library: libraryWithGeneral(),
       );
       final agent = BuiltinAgent(
+        fs: const LocalFileSystem(),
         session: session,
         client: parent,
         shell: shell,
@@ -333,6 +337,7 @@ void main() {
       final gatedParent = GatedLlmClient(parentTrack, gate);
       final gatedSub = GatedLlmClient(subTrack, gate);
       final runner = SubAgentRunner(
+        fs: const LocalFileSystem(),
         client: gatedSub,
         shell: shell,
         workspace: "/tmp/workspace",
@@ -343,6 +348,7 @@ void main() {
         rateLimitGate: gate,
       );
       final agent = BuiltinAgent(
+        fs: const LocalFileSystem(),
         session: session,
         client: gatedParent,
         shell: shell,
@@ -560,6 +566,7 @@ void main() {
       shell = FakeShell((_) => ok(""), canRunCommands: true);
       // No gate, no GatedLlmClient — raw clients.
       final runner = SubAgentRunner(
+        fs: const LocalFileSystem(),
         client: sub,
         shell: shell,
         workspace: "/tmp/workspace",
@@ -570,6 +577,7 @@ void main() {
         options: const BuiltinOptions(retryBackoff: Duration.zero),
       );
       final agent = BuiltinAgent(
+        fs: const LocalFileSystem(),
         session: session,
         client: parent,
         shell: shell,
@@ -600,6 +608,7 @@ void main() {
     SubAgentRunner runnerFor(FakeLlmClient client) {
       shell = FakeShell((_) => ok("found"), canRunCommands: true);
       return SubAgentRunner(
+        fs: const LocalFileSystem(),
         client: client,
         shell: shell,
         workspace: "/tmp/workspace",

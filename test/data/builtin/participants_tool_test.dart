@@ -1,15 +1,15 @@
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
-
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/tools/participants_tool.dart";
 import "package:entoli_chat/domain/agent_backend.dart";
 import "package:entoli_chat/domain/models.dart";
 import "package:entoli_chat/domain/permission.dart";
 import "package:entoli_chat/domain/prompt_library.dart";
+import "package:agent_chat/data/builtin/builtin_options.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
-import "package:agent_chat/data/builtin/builtin_options.dart";
 
 /// A member as the library holds one: the frontmatter's description is the
 /// short description the roster answers with.
@@ -36,6 +36,7 @@ void main() {
     String? viewer,
     bool mayDecline = true,
   }) => BuiltinAgent(
+    fs: const LocalFileSystem(),
     session: session,
     client: client,
     shell: FakeShell((_) => ok("")),

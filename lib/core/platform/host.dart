@@ -3,6 +3,7 @@ import "dart:ffi";
 import "dart:io";
 import "dart:isolate";
 
+import "package:file/local.dart";
 import "package:ffi/ffi.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart" show MethodChannel, rootBundle;
@@ -11,6 +12,29 @@ import "package:record_platform_interface/record_platform_interface.dart"
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
 import "package:path_provider_foundation/path_provider_foundation.dart";
+import "package:entoli_chat/core/read_only_dirs.dart";
+import "package:entoli_chat/domain/model_budget.dart";
+import "package:entoli_chat/domain/app_settings.dart";
+import "package:entoli_chat/domain/agent_browser.dart";
+import "package:entoli_chat/domain/app_update.dart";
+import "package:entoli_chat/core/log.dart";
+import "package:entoli_chat/core/migrations.dart";
+import "package:entoli_chat/domain/assistant_launch.dart";
+import "package:entoli_chat/domain/confinement.dart";
+import "package:entoli_chat/domain/intent_action.dart";
+import "package:entoli_chat/domain/backup_handoff.dart";
+import "package:entoli_chat/domain/builtin_project.dart";
+import "package:entoli_chat/domain/file_handoff.dart";
+import "package:entoli_chat/domain/file_watches.dart";
+import "package:entoli_chat/domain/reminder_alarms.dart";
+import "package:entoli_chat/domain/rootfs.dart";
+import "package:entoli_chat/domain/rootfs_store.dart";
+import "package:entoli_chat/domain/secret_store.dart";
+import "package:entoli_chat/domain/shell.dart";
+import "package:entoli_chat/domain/sync/lan_signaling.dart";
+import "package:entoli_chat/domain/voice.dart";
+import "package:entoli_chat/domain/voice_model_store.dart";
+import "package:entoli_chat/core/config.dart";
 
 import "../../data/backup_handoff.dart";
 import "../../data/local/android_assistant_launch.dart";
@@ -23,7 +47,6 @@ import "../../data/local/file_secret_store.dart";
 import "../../data/local/ios_file_handoff.dart";
 import "../../data/local/ios_reminder_alarms.dart";
 import "../../data/local/file_modes.dart";
-import "package:entoli_chat/core/read_only_dirs.dart";
 import "../../data/local/file_local_model_store.dart";
 import "../../data/local/file_rootfs_store.dart";
 import "../../data/local/ish_ffi.dart";
@@ -58,28 +81,6 @@ import "../../data/voice/file_voice_model_store.dart";
 import "../../data/voice/ios_voice.dart";
 import "../../data/voice/macos_voice.dart";
 import "../../data/voice/sherpa_voice.dart";
-import "package:entoli_chat/domain/model_budget.dart";
-import "package:entoli_chat/domain/app_settings.dart";
-import "package:entoli_chat/domain/agent_browser.dart";
-import "package:entoli_chat/domain/app_update.dart";
-import "package:entoli_chat/core/log.dart";
-import "package:entoli_chat/core/migrations.dart";
-import "package:entoli_chat/domain/assistant_launch.dart";
-import "package:entoli_chat/domain/confinement.dart";
-import "package:entoli_chat/domain/intent_action.dart";
-import "package:entoli_chat/domain/backup_handoff.dart";
-import "package:entoli_chat/domain/builtin_project.dart";
-import "package:entoli_chat/domain/file_handoff.dart";
-import "package:entoli_chat/domain/file_watches.dart";
-import "package:entoli_chat/domain/reminder_alarms.dart";
-import "package:entoli_chat/domain/rootfs.dart";
-import "package:entoli_chat/domain/rootfs_store.dart";
-import "package:entoli_chat/domain/secret_store.dart";
-import "package:entoli_chat/domain/shell.dart";
-import "package:entoli_chat/domain/sync/lan_signaling.dart";
-import "package:entoli_chat/domain/voice.dart";
-import "package:entoli_chat/domain/voice_model_store.dart";
-import "package:entoli_chat/core/config.dart";
 import "form_factor.dart" show isPhone;
 import "keyring_secret_store.dart";
 import "linux_recorder.dart";
@@ -588,6 +589,7 @@ Future<String> _resolveIosBase() async {
     return documents;
   }
   final moved = relocateDataDir(
+    const LocalFileSystem(),
     from: p.join(documents, _dirLeaf),
     to: p.join(group, _dirLeaf),
   );

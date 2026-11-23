@@ -12,8 +12,8 @@
 
 import "dart:io";
 
+import "package:file/file.dart" show FileSystem;
 import "package:path/path.dart" as p;
-
 import "package:entoli_chat/domain/permission.dart" show addDirectoryName;
 import "package:entoli_chat/domain/file_tools.dart" show outsideWorkspaces;
 import "package:entoli_chat/domain/shell.dart" show repositoryRootOf;
@@ -56,6 +56,7 @@ class GrantNudges {
 /// the root, [home] or anything holding it, the app's own data ([dataDir]),
 /// or anything holding the workspaces.
 String? grantFolder(
+  FileSystem fs,
   Iterable<String> candidates, {
   required String workspace,
   required String projectWorkspace,
@@ -67,6 +68,7 @@ String? grantFolder(
   // folder the tool would then refuse.
   bool grantable(String dir) =>
       refuseFolder(
+        fs,
         dir,
         dataDir: dataDir,
         home: home,
@@ -84,7 +86,7 @@ String? grantFolder(
     )) {
       continue;
     }
-    final repo = repositoryRootOf(dir, stopAt: home);
+    final repo = repositoryRootOf(fs, dir, stopAt: home);
     if (repo != null && grantable(repo)) return repo;
     if (grantable(dir)) return dir;
   }

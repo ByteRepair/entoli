@@ -9,27 +9,11 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:http/http.dart" as http;
 import "package:uuid/uuid.dart";
-
-import "app/app_menus.dart";
 import "package:entoli_chat/core/config.dart";
 import "package:entoli_chat/domain/settings/keys.dart";
 import "package:entoli_chat/domain/settings/setting.dart";
 import "package:entoli_chat/domain/chat_intents.dart";
 import "package:entoli_chat/domain/file_tools.dart" show resolveWorkspacePath;
-import "../core/platform/platform.dart"
-    show createFileWatches, createPromptSources, processEnv, setupComplete;
-import "data/builtin/llm/hosted_models.dart" show ModelHost;
-import "data/builtin/llm/on_device_provider.dart" show OnDeviceProvider;
-import "data/builtin/llm/providers/presets.dart"
-    show CliProvider, cliProviderPresets, providerOf;
-import "data/builtin/llm/providers/provider.dart" show LlmProvider, resolveIn;
-import "data/local/apple_fm.dart" show AppleFm;
-import "data/local/local_engine.dart";
-import "data/builtin/builtin_backend.dart";
-import "data/local/file_trigger_store.dart";
-import "data/local/linked_instructions_store.dart";
-import "data/bot_avatar_library.dart";
-import "data/prompts/agent_pictures.dart";
 import "package:entoli_chat/domain/agent_face.dart";
 import "package:entoli_chat/domain/bot_avatar/definition.dart";
 import "package:entoli_chat/domain/bot_avatar/spec.dart";
@@ -54,12 +38,9 @@ import "package:entoli_chat/domain/chat_store.dart";
 import "package:entoli_chat/domain/llm_provider.dart";
 import "package:entoli_chat/domain/model_capability.dart";
 import "package:entoli_chat/domain/model_registry.dart";
-import "data/local/local_prefill.dart";
-import "data/local/byte_repair_store.dart";
 import "package:entoli_chat/domain/local_llm.dart";
 import "package:entoli_chat/domain/local_model.dart";
 import "package:entoli_chat/domain/models.dart";
-import "data/prompts/prompt_sources.dart" show promptTiers;
 import "package:entoli_chat/domain/profile.dart";
 import "package:entoli_chat/domain/project_settings.dart";
 import "package:entoli_chat/domain/provider_usage.dart";
@@ -75,9 +56,6 @@ import "package:entoli_chat/domain/trigger_manager.dart";
 import "package:entoli_chat/domain/rootfs.dart" show LinuxHost, NoLinux;
 import "package:entoli_chat/domain/rootfs_store.dart";
 import "package:entoli_chat/domain/shell.dart";
-import "data/builtin/memory/store.dart" show Memories, MemoryStore;
-import "data/sync/sync_hub.dart";
-import "data/sync/sync_keep_alive.dart";
 import "package:entoli_chat/domain/temp_chat_ttl.dart";
 import "package:entoli_chat/domain/theme_colour.dart";
 import "package:entoli_chat/domain/tone.dart";
@@ -85,8 +63,29 @@ import "package:entoli_chat/domain/tristate.dart";
 import "package:entoli_chat/domain/turn_keep_alive.dart";
 import "package:entoli_chat/domain/voice.dart";
 import "package:entoli_chat/domain/voice_model_store.dart";
-
 export "package:entoli_chat/app/handoff.dart";
+
+import "app/app_menus.dart";
+import "../core/platform/platform.dart"
+    show createFileWatches, createPromptSources, processEnv, setupComplete;
+import "data/builtin/llm/hosted_models.dart" show ModelHost;
+import "data/builtin/llm/on_device_provider.dart" show OnDeviceProvider;
+import "data/builtin/llm/providers/presets.dart"
+    show CliProvider, cliProviderPresets, providerOf;
+import "data/builtin/llm/providers/provider.dart" show LlmProvider, resolveIn;
+import "data/local/apple_fm.dart" show AppleFm;
+import "data/local/local_engine.dart";
+import "data/builtin/builtin_backend.dart";
+import "data/local/file_trigger_store.dart";
+import "data/local/linked_instructions_store.dart";
+import "data/bot_avatar_library.dart";
+import "data/prompts/agent_pictures.dart";
+import "data/local/local_prefill.dart";
+import "data/local/byte_repair_store.dart";
+import "data/prompts/prompt_sources.dart" show promptTiers;
+import "data/builtin/memory/store.dart" show Memories, MemoryStore;
+import "data/sync/sync_hub.dart";
+import "data/sync/sync_keep_alive.dart";
 
 final chatStoreProvider = Provider<ChatStore>(
   (ref) => throw UnimplementedError(),
@@ -1749,7 +1748,10 @@ class ImportedBotAvatars extends AsyncNotifier<List<BotAvatarDefinition>> {
 
   @override
   Future<List<BotAvatarDefinition>> build() {
-    _library = BotAvatarLibrary(ref.watch(appConfigProvider).botAvatarsFile);
+    _library = BotAvatarLibrary(
+      ref.watch(appConfigProvider).fs,
+      ref.watch(appConfigProvider).botAvatarsFile,
+    );
     return _library.load();
   }
 
@@ -1805,7 +1807,7 @@ final memoriesProvider = Provider.family<Memories, ProjectRef>((ref, project) {
     return RemoteMemories(ref.watch(syncHubProvider), project);
   }
   final config = ref.watch(appConfigProvider);
-  return MemoryStore(config.memoryDir(project: project.project));
+  return MemoryStore(config.fs, config.memoryDir(project: project.project));
 });
 
 /// Whether Omada runs in [project]: the one rule [omadaFor] resolves — a

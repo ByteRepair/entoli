@@ -1,9 +1,9 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:agent_chat/data/builtin/background_jobs.dart";
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:entoli_chat/domain/agent_backend.dart";
@@ -37,6 +37,7 @@ void main() {
     );
     jobs = BackgroundJobs();
     return BuiltinAgent(
+      fs: const LocalFileSystem(),
       session: BuiltinSession(),
       client: client,
       shell: shell,

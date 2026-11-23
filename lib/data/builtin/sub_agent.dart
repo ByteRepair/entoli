@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:file/file.dart";
 import "package:entoli_chat/domain/agent_backend.dart";
 import "package:entoli_chat/domain/agent_definition.dart";
 import "package:entoli_chat/domain/chat_log.dart";
@@ -11,6 +12,7 @@ import "package:entoli_chat/domain/sub_agent_log.dart";
 import "package:entoli_chat/domain/tone.dart";
 import "package:entoli_chat/domain/turn_recorder.dart";
 import "package:entoli_chat/domain/web_search.dart";
+
 import "builtin_agent.dart";
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
@@ -29,6 +31,7 @@ class SubAgentRunner implements SubAgents {
   SubAgentRunner({
     required this.client,
     required this.shell,
+    required this.fs,
     required this.workspace,
     required this.projectWorkspace,
     this.environment = const {},
@@ -52,6 +55,7 @@ class SubAgentRunner implements SubAgents {
 
   final LlmClient client;
   final Shell shell;
+  final FileSystem fs;
   final String workspace;
   final String projectWorkspace;
   final Map<String, String> environment;
@@ -173,6 +177,7 @@ class SubAgentRunner implements SubAgents {
       agent: definition,
       client: client,
       shell: shell,
+      fs: fs,
       // One-shot over the same shell: a fresh subshell per command, so the
       // fan-out's commands never share a directory or an environment.
       oneShot: true,

@@ -1,8 +1,8 @@
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:entoli_chat/domain/sandbox_denials.dart";
 import "package:agent_chat/data/local/seatbelt.dart";
 import "package:entoli_chat/domain/shell.dart";
@@ -84,6 +84,7 @@ void main() {
     final denied = await run(sandbox, 'touch "$outside/new"');
     expect(
       sandboxDenials(
+        const LocalFileSystem(),
         "${denied.stdout}${denied.stderr}",
         sandbox,
         cwd: workspace,
@@ -96,7 +97,12 @@ void main() {
     );
     expect(failed.exitCode, isNot(0));
     expect(
-      sandboxDenials("${failed.stdout}${failed.stderr}", sandbox, cwd: outside),
+      sandboxDenials(
+        const LocalFileSystem(),
+        "${failed.stdout}${failed.stderr}",
+        sandbox,
+        cwd: outside,
+      ),
       isEmpty,
     );
   }, skip: skip);
@@ -111,7 +117,7 @@ void main() {
     final real = Directory(root.path).resolveSymbolicLinksSync();
 
     expect(
-      realPath(p.join(root.path, "not", "yet")),
+      realPath(const LocalFileSystem(), p.join(root.path, "not", "yet")),
       p.join(real, "not", "yet"),
     );
   }, skip: skip);

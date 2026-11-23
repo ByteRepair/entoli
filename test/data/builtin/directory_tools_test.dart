@@ -1,8 +1,8 @@
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:entoli_chat/domain/agent_backend.dart";
 import "package:entoli_chat/domain/builtin_project.dart" show AgentCapability;
@@ -65,6 +65,7 @@ void main() {
   }) {
     final allowed = [...grants];
     return BuiltinAgent(
+      fs: const LocalFileSystem(),
       session: session,
       client: client,
       shell: shell,

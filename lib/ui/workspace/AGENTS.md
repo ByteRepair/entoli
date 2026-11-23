@@ -35,8 +35,9 @@ folder inside it. That is the layout rather than something the explorer draws:
 the same folder is what the chat settings page opens directly, and what the
 agent's `HOME` points at from a command.
 
-Listing, making a folder and deleting (`listWorkspace`, `createFolder`,
-`deleteEntries`) are the same code on every platform and are offered wherever the explorer is. A typed
+Listing, making a folder and deleting (`Workspace`'s `list`, `createFolder`
+and `deleteEntries`, over the app's `FileSystem`) are the same code on every
+platform and are offered wherever the explorer is. A typed
 folder name is sanitised by `safeRelativePath` like anything else joined onto a
 workspace — `../` is a name a folder can be asked for. Deleting looks each path
 up rather than trusting what the listing said it was, and asks first; it, and
@@ -53,9 +54,9 @@ every other document page), read-only and highlighted by the grammar
 `grammarOfFile` picks from the name — the same thirty-one `CodeBlockBuilder`
 registers, found by a grammar's alias the way a fence names one. Edit turns the
 editor writable (markdown switches to its source), and the save is a plain write
-rather than `writeThroughRename`, since a rename makes a new file and drops the
-mode an agent gave its script, and would replace a linked CLAUDE.md that is a
-symlink with a file of its own. Whether it is changed is measured against the
+rather than through `RenameWriter`, since a rename makes a new file and drops
+the mode an agent gave its script, and would replace a linked CLAUDE.md that is
+a symlink with a file of its own. Whether it is changed is measured against the
 controller's text, not the file as read: the editor writes every line break as
 the file's first kind, so a file of mixed breaks would otherwise read as edited
 before a key was pressed.

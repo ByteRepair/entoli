@@ -7,6 +7,7 @@ import "package:entoli_chat/domain/shell.dart";
 import "package:entoli_chat/domain/shell_command_analysis.dart";
 import "package:entoli_chat/domain/shell_job.dart" show backgroundLog;
 import "package:entoli_chat/domain/tool_arg.dart";
+
 import "../approval_gate.dart";
 import "../background_jobs.dart";
 import "../builtin_options.dart";
@@ -273,6 +274,7 @@ class BashTool extends AgentTool {
     }
     if (!leavesSandbox || !grantsDirectories(offer)) return null;
     final folder = grantFolder(
+      turn.fs,
       unsandboxed
           ? [?_cdTarget(analysis, standing, turn), ?result.cwd, standing]
           : [for (final path in denied) existingDirectoryOf(path)],

@@ -3,6 +3,7 @@ import "dart:convert";
 import "dart:io" show Directory;
 import "dart:typed_data";
 
+import "package:file/local.dart";
 import "package:entoli_chat/core/config.dart";
 import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:entoli_chat/data/local/file_chat_store.dart";
@@ -179,7 +180,9 @@ void main() {
   test("a chat on a real store mirrors with its records", () async {
     final onDisk = await _Device.create(
       "${tempDir.path}/disk",
-      store: FileChatStore(await AppConfig.load("${tempDir.path}/disk")),
+      store: FileChatStore(
+        await AppConfig.load(const LocalFileSystem(), "${tempDir.path}/disk"),
+      ),
     );
     addTearDown(onDisk.hub.dispose);
 
@@ -1522,7 +1525,7 @@ class _Turns implements RemoteTurns {
 
   @override
   Memories memories(String? project) =>
-      MemoryStore(config.memoryDir(project: project));
+      MemoryStore(const LocalFileSystem(), config.memoryDir(project: project));
 }
 
 class _Device {
@@ -1537,7 +1540,7 @@ class _Device {
   );
 
   static Future<_Device> create(String dir, {ChatStore? store}) async {
-    final config = await AppConfig.load(dir);
+    final config = await AppConfig.load(const LocalFileSystem(), dir);
     final registry = FakeDeviceRegistry();
     final chats = store ?? FakeChatStore();
     final backend = FakeBackend();

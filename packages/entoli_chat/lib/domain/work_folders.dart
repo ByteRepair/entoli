@@ -1,5 +1,4 @@
-import "dart:io";
-
+import "package:file/file.dart";
 import "package:path/path.dart" as p;
 
 import "shell.dart" show isTildePath, pathInside, pathsOverlap;
@@ -56,12 +55,13 @@ enum FolderRefusal {
 /// user's, [dataDir] the app's (null in a test that does not reach it), and
 /// [workspaces] the chat's and the project's.
 FolderRefusal? refuseFolder(
+  FileSystem fs,
   String dir, {
   required String? dataDir,
   required String? home,
   List<String> workspaces = const [],
 }) {
-  final type = FileSystemEntity.typeSync(dir);
+  final type = fs.typeSync(dir);
   if (type == FileSystemEntityType.notFound) return FolderRefusal.missing;
   if (type != FileSystemEntityType.directory) {
     return FolderRefusal.notADirectory;
@@ -70,7 +70,7 @@ FolderRefusal? refuseFolder(
     return FolderRefusal.root;
   }
   if (home != null && pathInside(home, dir)) return FolderRefusal.home;
-  if (dataDir != null && pathsOverlap(dir, dataDir)) {
+  if (dataDir != null && pathsOverlap(fs, dir, dataDir)) {
     return FolderRefusal.appData;
   }
   if (workspaces.any((w) => pathInside(w, dir))) {
@@ -86,11 +86,18 @@ FolderRefusal? refuseFolder(
 /// grant. A `~` path stands: the gate resolves it, in a guest's terms or the
 /// host's, and only then is there a folder to look for.
 bool grantsNow(
+  FileSystem fs,
   String path, {
   required String? dataDir,
   required String? home,
   List<String> workspaces = const [],
 }) =>
     isTildePath(path) ||
-    refuseFolder(path, dataDir: dataDir, home: home, workspaces: workspaces) ==
+    refuseFolder(
+          fs,
+          path,
+          dataDir: dataDir,
+          home: home,
+          workspaces: workspaces,
+        ) ==
         null;

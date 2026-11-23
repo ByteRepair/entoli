@@ -1,15 +1,15 @@
 // Packaging a skill from a workspace directory: the inverse of
 // `installSkillPackage`, used by the `create_skill` tool to offer a drafted
 // skill for install, and by `prompt_export.dart` to re-zip one.
-import "dart:io";
 import "dart:typed_data";
 
 import "package:archive/archive.dart";
+import "package:file/file.dart";
 import "package:path/path.dart" as p;
-
 import "package:entoli_chat/domain/models.dart";
 import "package:entoli_chat/domain/prompt_library.dart";
 import "package:entoli_chat/data/zip.dart";
+
 import "skill_import.dart";
 import "skill_validate.dart";
 
@@ -24,9 +24,13 @@ import "skill_validate.dart";
 /// [prompt_export.dart] deliberately does not ride this: export packages
 /// whatever sits in the folder, since that is the way out for a skill the
 /// loader skipped.
-Future<SkillPackage> packageSkillDirectory(String dir, String? name) async {
+Future<SkillPackage> packageSkillDirectory(
+  FileSystem fs,
+  String dir,
+  String? name,
+) async {
   final folderName = p.basename(dir);
-  final skillMdFile = File(p.join(dir, "SKILL.md"));
+  final skillMdFile = fs.file(p.join(dir, "SKILL.md"));
   final skillMdContent = await skillMdFile.readAsString();
   final parsed = PromptDocument.parse(
     CompletionKind.skill,
@@ -43,7 +47,7 @@ Future<SkillPackage> packageSkillDirectory(String dir, String? name) async {
     throw SkillImportException(problems.join("; "));
   }
 
-  final archive = await archiveOf([dir], base: dir);
+  final archive = await archiveOf(fs, [dir], base: dir);
   final entries = [
     for (final file in archive)
       if (file.isFile) (file.name, file.readBytes() ?? Uint8List(0)),

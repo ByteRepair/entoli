@@ -5,8 +5,8 @@
 library;
 
 import "dart:async";
-import "dart:io";
 
+import "package:file/file.dart";
 import "package:flutter/foundation.dart" show ValueListenable;
 import "package:path/path.dart" as p;
 
@@ -205,13 +205,13 @@ bool pathInside(String path, String root) {
 /// Whether [a] and [b] overlap — one is the other or holds it — by the names
 /// given, then by where their links lead, so a symlink aliasing a directory is
 /// that directory. What keeps a grant or a restore off the app's own data.
-bool pathsOverlap(String a, String b) {
+bool pathsOverlap(FileSystem fs, String a, String b) {
   bool named(String x, String y) => pathInside(x, y) || pathInside(y, x);
   if (named(a, b)) return true;
   try {
     return named(
-      File(a).resolveSymbolicLinksSync(),
-      File(b).resolveSymbolicLinksSync(),
+      fs.file(a).resolveSymbolicLinksSync(),
+      fs.file(b).resolveSymbolicLinksSync(),
     );
   } on FileSystemException {
     return false;
@@ -222,12 +222,15 @@ bool pathsOverlap(String a, String b) {
 /// kernel resolved: a grant of `/tmp/x` matches nothing, every write there
 /// landing at `/private/tmp/x`. A path not there yet resolves its nearest
 /// existing ancestor and keeps the rest as written.
-String realPath(String path) {
+String realPath(FileSystem fs, String path) {
   var head = p.normalize(p.absolute(path));
   final tail = <String>[];
   while (true) {
     try {
-      return p.joinAll([Directory(head).resolveSymbolicLinksSync(), ...tail]);
+      return p.joinAll([
+        fs.directory(head).resolveSymbolicLinksSync(),
+        ...tail,
+      ]);
     } on FileSystemException {
       final parent = p.dirname(head);
       if (parent == head) return p.normalize(p.absolute(path));
@@ -240,10 +243,10 @@ String realPath(String path) {
 /// The repository [dir] is in: the nearest directory from [dir] up holding a
 /// `.git` — a directory for a checkout, a file for a worktree — or null
 /// where there is none below [stopAt] (exclusive) or the root.
-String? repositoryRootOf(String dir, {String? stopAt}) {
+String? repositoryRootOf(FileSystem fs, String dir, {String? stopAt}) {
   var at = p.normalize(dir);
   while (at != stopAt) {
-    if (FileSystemEntity.typeSync(p.join(at, ".git"), followLinks: false) !=
+    if (fs.typeSync(p.join(at, ".git"), followLinks: false) !=
         FileSystemEntityType.notFound) {
       return at;
     }

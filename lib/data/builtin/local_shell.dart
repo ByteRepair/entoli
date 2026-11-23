@@ -2,10 +2,10 @@ import "dart:async";
 import "dart:convert";
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter/foundation.dart";
 import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
-
 import "package:entoli_chat/core/log.dart";
 import "package:entoli_chat/domain/file_tools.dart";
 import "package:entoli_chat/domain/sandbox_denials.dart";
@@ -1039,6 +1039,7 @@ class _OneShotRun extends ShellRun {
     final sandbox = this.sandbox;
     if (sandbox == null) return result;
     final denied = sandboxDenials(
+      const LocalFileSystem(),
       result.output,
       sandbox,
       cwd: result.cwd ?? cwd,

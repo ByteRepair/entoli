@@ -1,16 +1,16 @@
-import "package:agent_chat/app/app_menus.dart";
 import "dart:async";
 import "dart:io";
 
+import "package:file/local.dart";
+import "package:agent_chat/app/app_menus.dart";
 import "package:clock/clock.dart";
 import "package:flutter/gestures.dart" show PointerDeviceKind;
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-
 import "package:http/http.dart" as http;
-
+import "package:entoli_chat/app/storage.dart";
 import "package:entoli_chat/core/config.dart";
 import "package:agent_chat/data/local/local_instance.dart";
 import "package:agent_chat/data/local/local_prefill.dart";
@@ -69,10 +69,10 @@ import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/selection.dart";
 import "package:entoli_chat/ui/theme.dart";
 import "package:entoli_chat/ui/widgets/decorative_motion.dart";
-
-import "fakes.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
 import "package:entoli_chat/domain/rootfs.dart";
+
+import "fakes.dart";
 
 /// The shell a test gets by default: a real host shell where the test pretends
 /// to be a phone — any [LinuxHost] but a desktop's — and `UnavailableShell`
@@ -269,6 +269,7 @@ class TestApp {
           ...appTranscriptOverrides,
           shellProvider.overrideWithValue(shell ?? _defaultShell(linuxHost)),
           appConfigProvider.overrideWithValue(config),
+          fileSystemProvider.overrideWithValue(config.fs),
           if (appleFm != null) appleFmProvider.overrideWithValue(appleFm),
           // Installed and signed in unless a test says otherwise, and running
           // nothing either way.
@@ -1135,7 +1136,7 @@ Future<void> waitFor(
 /// directories — made with `dart:io` so this stays synchronous.
 AppConfig tempConfig([String prefix = "agent_chat_test_"]) {
   final tmp = Directory.systemTemp.createTempSync(prefix);
-  final config = AppConfig.forDirectory(tmp.path);
+  final config = AppConfig.forDirectory(const LocalFileSystem(), tmp.path);
   Directory(config.chatsDir()).createSync(recursive: true);
   Directory(config.projectWorkspaceDir()).createSync(recursive: true);
   addTearDown(() {
@@ -1163,7 +1164,8 @@ Directory tempDir([String prefix = "agent_chat_test_"]) {
 
 /// A data directory [AppConfig.load] made from nothing, the state a first
 /// launch is in — unlike [tempConfig], which builds the folders itself.
-Future<AppConfig> loadedTempConfig() => AppConfig.load(tempDir().path);
+Future<AppConfig> loadedTempConfig() =>
+    AppConfig.load(const LocalFileSystem(), tempDir().path);
 
 /// Reload a project's prompt library and settle, so what a page draws reflects
 /// what is on disk rather than the test's seeded library. The reload is real

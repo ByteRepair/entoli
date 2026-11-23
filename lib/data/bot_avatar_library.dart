@@ -5,8 +5,8 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:file/file.dart" show FileSystem;
 import "package:flutter/services.dart" show AssetBundle;
-
 import "package:entoli_chat/core/log.dart";
 import "package:entoli_chat/domain/bot_avatar/definition.dart";
 import "package:entoli_chat/domain/bot_avatar/spec.dart";
@@ -49,10 +49,10 @@ Future<List<BotAvatarSpec>> loadBotAvatarPresets(AssetBundle bundle) async {
 /// and a write in one queue, the way `LinkedInstructionsStore`'s is: two
 /// quick imports would otherwise each write back what the other had not seen.
 class BotAvatarLibrary {
-  BotAvatarLibrary(this.path);
+  BotAvatarLibrary(FileSystem fs, this.path) : _writer = RenameWriter(fs);
 
   final String path;
-  final _writer = RenameWriter();
+  final RenameWriter _writer;
   Future<void> _queue = Future.value();
 
   Future<List<BotAvatarDefinition>> load() async {

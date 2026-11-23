@@ -1,6 +1,5 @@
 import "dart:async";
 import "dart:convert";
-import "dart:io";
 import "dart:typed_data";
 
 import "package:entoli_chat/app/transcript/activity.dart" show LiveMessage;
@@ -14,7 +13,8 @@ import "package:entoli_chat/domain/models.dart";
 import "package:entoli_chat/domain/plan.dart";
 import "package:entoli_chat/domain/shell_job.dart";
 import "package:archive/archive.dart";
-import "package:entoli_share_viewer/memory_io.dart";
+import "package:file/local.dart";
+import "package:file/memory.dart";
 import "package:entoli_share_viewer/shared_chat_host.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
@@ -23,6 +23,8 @@ import "package:path/path.dart" as p;
 
 /// Where the sharer's data is, in memory: nothing here is on the disk.
 const _sharer = "/sharer";
+
+late MemoryFileSystem _fs;
 const _viewer = "/entoli";
 
 const _job = ShellJob(id: 1, callId: "b1", command: "make", logPath: "/x");
@@ -37,7 +39,7 @@ Message _said(String id, MessageRole role, String text) => Message(
 );
 
 void _put(String path, List<int> bytes) {
-  final file = File(path);
+  final file = _fs.file(path);
   file.parent.createSync(recursive: true);
   file.writeAsBytesSync(bytes);
 }
@@ -45,7 +47,7 @@ void _put(String path, List<int> bytes) {
 /// A chat with a reply, an attachment, a plan, a sub-agent and a file, shared
 /// with its workspace.
 Future<Uint8List> _shared() async {
-  final config = AppConfig.forDirectory(_sharer);
+  final config = AppConfig.forDirectory(_fs, _sharer);
   final store = FileChatStore(config);
   await store.saveState(
     ChatState(
@@ -94,20 +96,22 @@ Future<T> _settled<T>(
 }
 
 void main() {
-  setUp(useMemoryFileSystem);
-  tearDown(() => IOOverrides.global = null);
+  setUp(() => _fs = MemoryFileSystem(style: FileSystemStyle.posix));
 
   group("in memory", () {
     test("a shared chat unpacks and reads with nothing on the disk", () async {
-      final (:config, :chatId) = (await unpackShare(await _shared(), _viewer))!;
+      final (:config, :chatId) = (await unpackShare(
+        await _shared(),
+        _fs.directory(_viewer),
+      ))!;
       final chat = await FileChatStore(config).load(chatId);
 
       expect(chat.state.title, "A shared chat");
       expect(chat.state.imported, isTrue);
       expect(chat.messages.map((m) => m.id), ["m1", "m2"]);
-      IOOverrides.global = null;
-      expect(Directory(_sharer).existsSync(), isFalse);
-      expect(Directory(_viewer).existsSync(), isFalse);
+      const disk = LocalFileSystem();
+      expect(disk.directory(_sharer).existsSync(), isFalse);
+      expect(disk.directory(_viewer).existsSync(), isFalse);
     });
 
     test("a link from an older build runs the migration chain", () async {
@@ -123,12 +127,12 @@ void main() {
 
       final unpacked = await unpackShare(
         ZipEncoder().encodeBytes(older),
-        _viewer,
+        _fs.directory(_viewer),
       );
 
       expect(unpacked?.chatId, "c1");
       expect(
-        File(migrationStamp(_viewer)).readAsStringSync(),
+        _fs.file(migrationStamp(_viewer)).readAsStringSync(),
         migrations.last.version,
       );
     });
@@ -139,7 +143,10 @@ void main() {
     late SharedChatHost host;
 
     setUp(() async {
-      final config = (await unpackShare(await _shared(), _viewer))!.config;
+      final config = (await unpackShare(
+        await _shared(),
+        _fs.directory(_viewer),
+      ))!.config;
       final store = FileChatStore(config);
       host = SharedChatHost(
         await store.load("c1"),
@@ -192,7 +199,9 @@ void main() {
 
     test("puts the workspace where it was unpacked", () {
       expect(
-        File(p.join(host.workspaceDir("c1"), "notes.md")).readAsStringSync(),
+        _fs
+            .file(p.join(host.workspaceDir("c1"), "notes.md"))
+            .readAsStringSync(),
         "notes",
       );
     });

@@ -44,6 +44,8 @@ dependencies:
 
   # Path / filesystem
   path: ^1.9.1
+  # The filesystem the core is handed; the app hands it the disk.
+  file: ^7.0.1
   path_provider: ^2.1.6
   # The App Group container, which path_provider does not ask for. See
   # "The workspaces in the Files app" in ios/AGENTS.md.

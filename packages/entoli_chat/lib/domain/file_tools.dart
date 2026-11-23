@@ -1,5 +1,4 @@
-import "dart:io";
-
+import "package:file/file.dart";
 import "package:path/path.dart" as p;
 
 import "tool_arg.dart";
@@ -96,8 +95,8 @@ EditArgs? editArgsFrom(String? json) {
 typedef FileStamp = ({DateTime modified, int size});
 
 /// [path]'s stamp now, or null where nothing is there.
-FileStamp? fileStampOf(String path) {
-  final stat = File(path).statSync();
+FileStamp? fileStampOf(FileSystem fs, String path) {
+  final stat = fs.file(path).statSync();
   if (stat.type == FileSystemEntityType.notFound) return null;
   return (modified: stat.modified, size: stat.size);
 }
@@ -107,12 +106,13 @@ FileStamp? fileStampOf(String path) {
 /// what it saw, and what it saw has to be what is there. A file that does not
 /// exist is a `write` creating it, which needs no read.
 Future<String?> unreadFileProblem(
+  FileSystem fs,
   String path, {
   required String shownPath,
   required String toolName,
   required Map<String, FileStamp> readFiles,
 }) async {
-  final now = fileStampOf(path);
+  final now = fileStampOf(fs, path);
   if (now == null) return null;
   final read = readFiles[path];
   if (read == null) {

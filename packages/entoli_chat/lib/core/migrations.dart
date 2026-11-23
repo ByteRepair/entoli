@@ -1,6 +1,6 @@
 import "dart:convert";
-import "dart:io";
 
+import "package:file/file.dart";
 import "package:path/path.dart" as p;
 
 import "../domain/documents.dart";
@@ -18,7 +18,7 @@ class Migration {
   /// A data directory rather than the `AppConfig` over it:
   /// an entry describes a layout that no longer exists, and a path helper
   /// answers for the one this build has.
-  final Future<void> Function(String dataDir) apply;
+  final Future<void> Function(FileSystem fs, String dataDir) apply;
 }
 
 /// The stamp in [dataDir] naming the release whose entry last ran there.
@@ -38,14 +38,14 @@ const List<Migration> migrations = [
 /// author is hers and a say addressed to nobody was said to her. And a
 /// message records the `/skill` and `@agent` it named rather than what they
 /// meant: the `documents` map becomes `references`, its keys in order.
-Future<void> _athena(String dataDir) async {
-  final projects = Directory(p.join(dataDir, "projects"));
+Future<void> _athena(FileSystem fs, String dataDir) async {
+  final projects = fs.directory(p.join(dataDir, "projects"));
   if (!projects.existsSync()) return;
   await for (final project in projects.list()) {
-    final chats = Directory(p.join(project.path, "chats"));
+    final chats = fs.directory(p.join(project.path, "chats"));
     if (!chats.existsSync()) continue;
     await for (final chat in chats.list()) {
-      final log = File(p.join(chat.path, "conv.jsonl"));
+      final log = fs.file(p.join(chat.path, "conv.jsonl"));
       if (log.existsSync()) await _athenaIn(log);
     }
   }
@@ -78,7 +78,9 @@ Future<void> _athenaIn(File log) async {
     lines[i] = jsonEncode(record);
     changed = true;
   }
-  if (changed) await writeThroughRename(log.path, "${lines.join("\n")}\n");
+  if (changed) {
+    await RenameWriter(log.fileSystem).write(log.path, "${lines.join("\n")}\n");
+  }
 }
 
 /// Moves a whole data directory from where an earlier release kept it to
@@ -90,9 +92,13 @@ Future<void> _athenaIn(File log) async {
 /// A rename, the two being on one volume, where a copy would be gigabytes of
 /// rootfs. Where [to] is already there, or [from] is not, there is nothing to
 /// move. False only where the rename failed, so the caller keeps [from].
-bool relocateDataDir({required String from, required String to}) {
-  final old = Directory(from);
-  if (Directory(to).existsSync() || !old.existsSync()) return true;
+bool relocateDataDir(
+  FileSystem fs, {
+  required String from,
+  required String to,
+}) {
+  final old = fs.directory(from);
+  if (fs.directory(to).existsSync() || !old.existsSync()) return true;
   try {
     old.renameSync(to);
     return true;
@@ -106,31 +112,41 @@ bool relocateDataDir({required String from, required String to}) {
 /// today's, so they read one shape. Settings under a name they had before —
 /// at the app's level, a project's and a chat's — provider entries from 7.0.0
 /// or older, and triggers in the reminder shape they began as.
-Future<void> _todaysShapes(String dataDir) async {
+Future<void> _todaysShapes(FileSystem fs, String dataDir) async {
   await _rewriteJson<Map<String, dynamic>>(
+    fs,
     p.join(dataDir, "settings.json"),
     (json) => _settingShapes(json) | _providerEntries(json),
   );
   await _rewriteJson<List<dynamic>>(
+    fs,
     p.join(dataDir, "reminders.json"),
     _triggerShapes,
   );
-  final projects = Directory(p.join(dataDir, "projects"));
+  final projects = fs.directory(p.join(dataDir, "projects"));
   if (!projects.existsSync()) return;
   await for (final project in projects.list()) {
-    await _rewriteJson(p.join(project.path, "project.json"), _settingShapes);
-    final chats = Directory(p.join(project.path, "chats"));
+    await _rewriteJson(
+      fs,
+      p.join(project.path, "project.json"),
+      _settingShapes,
+    );
+    final chats = fs.directory(p.join(project.path, "chats"));
     if (!chats.existsSync()) continue;
     await for (final chat in chats.list()) {
-      await _rewriteJson(p.join(chat.path, "meta.json"), _settingShapes);
+      await _rewriteJson(fs, p.join(chat.path, "meta.json"), _settingShapes);
     }
   }
 }
 
 /// [change] edits the decoded [T] and says whether it did; a file that is not
 /// there, or does not decode to a [T], is left as it is.
-Future<void> _rewriteJson<T>(String path, bool Function(T json) change) async {
-  final file = File(path);
+Future<void> _rewriteJson<T>(
+  FileSystem fs,
+  String path,
+  bool Function(T json) change,
+) async {
+  final file = fs.file(path);
   if (!file.existsSync()) return;
   final Object? json;
   try {
@@ -139,7 +155,7 @@ Future<void> _rewriteJson<T>(String path, bool Function(T json) change) async {
     return;
   }
   if (json is! T || !change(json)) return;
-  await writeThroughRename(path, jsonEncode(json));
+  await RenameWriter(fs).write(path, jsonEncode(json));
 }
 
 /// Each setting under the key it had before, moved under today's: kept where
@@ -241,17 +257,18 @@ bool _triggerShapes(List<dynamic> triggers) {
 /// [chain] is a parameter so a test can drive the engine with entries of its
 /// own.
 Future<void> runMigrations(
+  FileSystem fs,
   String dataDir, {
   required bool fresh,
   List<Migration> chain = migrations,
 }) async {
   if (chain.isEmpty) return;
-  if (fresh) return _stamp(dataDir, chain.last);
-  for (final migration in await _pending(dataDir, chain)) {
-    await migration.apply(dataDir);
+  if (fresh) return _stamp(fs, dataDir, chain.last);
+  for (final migration in await _pending(fs, dataDir, chain)) {
+    await migration.apply(fs, dataDir);
     // As each one goes rather than at the end: a run cut short by a kill picks
     // up at the entry it died in.
-    await _stamp(dataDir, migration);
+    await _stamp(fs, dataDir, migration);
   }
 }
 
@@ -259,8 +276,12 @@ Future<void> runMigrations(
 /// written by a newer build, and moving its files to an older idea of the
 /// layout is worse than leaving them where they are. No stamp at all is a
 /// directory older than every entry there is.
-Future<List<Migration>> _pending(String dataDir, List<Migration> chain) async {
-  final file = File(migrationStamp(dataDir));
+Future<List<Migration>> _pending(
+  FileSystem fs,
+  String dataDir,
+  List<Migration> chain,
+) async {
+  final file = fs.file(migrationStamp(dataDir));
   if (!file.existsSync()) return chain;
   final stamped = (await file.readAsString()).trim();
   final at = chain.indexWhere((migration) => migration.version == stamped);
@@ -271,5 +292,5 @@ Future<List<Migration>> _pending(String dataDir, List<Migration> chain) async {
 /// `writeAsString` killed between its truncate and its write leaves a stamp
 /// naming no entry, and that directory is frozen out of every migration to
 /// come.
-Future<void> _stamp(String dataDir, Migration migration) =>
-    writeThroughRename(migrationStamp(dataDir), migration.version);
+Future<void> _stamp(FileSystem fs, String dataDir, Migration migration) =>
+    RenameWriter(fs).write(migrationStamp(dataDir), migration.version);

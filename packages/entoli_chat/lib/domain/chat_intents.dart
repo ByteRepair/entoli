@@ -1,8 +1,6 @@
 import "dart:async";
-import "dart:io";
 
 import "package:collection/collection.dart";
-import "package:path/path.dart" as p;
 
 import "../core/log.dart";
 import "../core/config.dart";
@@ -276,7 +274,7 @@ final class ChatIntents {
       }
       dir = config.projectWorkspaceDir(project: project?.dir);
     }
-    await writeIncoming(dir, files);
+    await Workspace(config.fs).writeIncoming(dir, files);
   }
 
   /// What [chatId] has published, the newest copy of each, each packed into
@@ -289,15 +287,18 @@ final class ChatIntents {
           part.artifactId: part.title,
     };
     if (titles.isEmpty) return const [];
-    final out = await Directory.systemTemp.createTemp("entoli-artifacts-");
+    final out = await config.fs.systemTempDirectory.createTemp(
+      "entoli-artifacts-",
+    );
     return [
       for (final MapEntry(key: id, value: title) in titles.entries)
         if (await repo.readArtifactZip(chat.state.id, id) case final zip?)
           IntentArtifact(
             title,
-            (await File(
-              p.join(out.path, "${_fileName(title)}-$id.zip"),
-            ).writeAsBytes(zip)).path,
+            (await out
+                    .childFile("${_fileName(title)}-$id.zip")
+                    .writeAsBytes(zip))
+                .path,
           ),
     ];
   }

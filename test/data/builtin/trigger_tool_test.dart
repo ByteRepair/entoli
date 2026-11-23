@@ -1,8 +1,8 @@
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/tools/trigger_tool.dart";
 import "package:entoli_chat/domain/agent_backend.dart";
@@ -104,6 +104,7 @@ void main() {
     final workspace = p.join(projectWorkspace, "chats", "chat-1");
     Directory(workspace).createSync(recursive: true);
     return BuiltinAgent(
+      fs: const LocalFileSystem(),
       session: BuiltinSession(),
       client: client,
       shell: FakeShell((_) => ok("")),
@@ -284,6 +285,7 @@ void main() {
       [_finish],
     ]);
     final bare = BuiltinAgent(
+      fs: const LocalFileSystem(),
       session: BuiltinSession(),
       client: client,
       shell: FakeShell((_) => ok("")),

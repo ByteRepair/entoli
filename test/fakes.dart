@@ -6,7 +6,6 @@ import "package:archive/archive.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/widgets.dart";
 import "package:path/path.dart" as p;
-
 import "package:agent_chat/data/builtin/llm/hosted_models.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
@@ -626,7 +625,7 @@ class _IncomingBytes extends IncomingFile {
   final Uint8List bytes;
 
   @override
-  Future<void> writeTo(String target) => File(target).writeAsBytes(bytes);
+  Future<void> writeTo(File target) => target.writeAsBytes(bytes);
 }
 
 /// A chat's background jobs as a test sets them.

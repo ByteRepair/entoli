@@ -1,5 +1,3 @@
-import "dart:io";
-
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:path/path.dart" as p;
 
@@ -8,6 +6,7 @@ import "../../../domain/shell.dart" show bashToolName;
 import "../../../domain/shell_job.dart";
 import "../../../domain/tool_arg.dart";
 import "../../reader.dart" show SettingReader;
+import "../../storage.dart";
 import "../activity.dart";
 import "../host.dart";
 import "tool_run.dart";
@@ -189,7 +188,7 @@ DetailAction _openLog(SettingReader reader, String chatId, String callId) {
     project: reader.read(host.view(chatId)).chat?.state.project,
   );
   final path = p.join(workspace, backgroundLog(callId));
-  if (!File(path).existsSync()) {
+  if (!reader.read(fileSystemProvider).file(path).existsSync()) {
     return const DetailAction(
       label: "Open log",
       why: "The log is no longer in the workspace",
