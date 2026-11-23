@@ -2,6 +2,7 @@ import "dart:io";
 
 import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:path/path.dart" as p;
 
 import "package:entoli_chat/data/zip.dart";
 
@@ -113,4 +114,39 @@ void main() {
       );
     },
   );
+
+  test("unfollowed, a link handed in as a path is no member either", () async {
+    final outside = tempDir().path;
+    File("$outside/s.txt").writeAsStringSync("s");
+    Link("$dir/folder").createSync(outside);
+    Link("$dir/file.txt").createSync("$outside/s.txt");
+
+    final names = [
+      await for (final e in walkTree([
+        "$dir/folder",
+        "$dir/file.txt",
+      ], followLinks: false))
+        e.name,
+    ];
+
+    expect(names, isEmpty);
+  });
+
+  test("a link into a skipped folder is skipped where it lands", () async {
+    Directory("$dir/tree/secret").createSync(recursive: true);
+    File("$dir/tree/secret/key").writeAsStringSync("k");
+    Directory("$dir/tree/work").createSync();
+    Link("$dir/tree/work/keys").createSync("$dir/tree/secret");
+
+    final names = [
+      await for (final e in walkTree(
+        ["$dir/tree"],
+        base: "$dir/tree",
+        skipDir: (path) => p.equals(path, "$dir/tree/secret"),
+      ))
+        e.name,
+    ];
+
+    expect(names, ["work"]);
+  });
 }

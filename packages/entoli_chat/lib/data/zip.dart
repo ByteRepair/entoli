@@ -4,6 +4,7 @@ import "dart:typed_data";
 import "package:archive/archive_io.dart";
 import "package:path/path.dart" as p;
 
+import "../core/log.dart";
 import "../domain/workspace.dart" show safeRelativePath;
 
 /// Zip [paths] — files and folders alike — into a new file at [to]. Each
@@ -103,7 +104,8 @@ typedef TreeEntry = ({String path, String name, bool isDirectory});
 /// Every member [paths] make, in walk order: each folder before what is in
 /// it, named relative to [base] or the path's own parent. A link is followed,
 /// so a member is what the link points at; with [followLinks] false it is no
-/// member at all, for a tree handed to someone else, where what it points at
+/// member at all, even as one of [paths], for a tree handed to someone else,
+/// where what it points at
 /// outside itself is not the tree's to give. A broken link is never a member,
 /// and nor is a link to a folder the walk is already inside, which would
 /// never end.
@@ -155,12 +157,13 @@ Stream<TreeEntry> walkTree(
           case FileSystemEntityType.file:
             yield* walk(from, entity.path, false, null);
           case FileSystemEntityType.directory:
-            yield* walk(
-              from,
-              entity.path,
-              true,
-              Directory(entity.path).resolveSymbolicLinksSync(),
-            );
+            final target = _realOf(entity.path);
+            // [skipDir] matches by position, which a link's own path lacks: a
+            // link to a skipped folder is asked about where it lands.
+            if (target == null || (skipDir != null && skipDir(target))) {
+              continue;
+            }
+            yield* walk(from, entity.path, true, target);
           default:
         }
       }
@@ -169,14 +172,25 @@ Stream<TreeEntry> walkTree(
   }
 
   for (final path in paths) {
+    if (!followLinks && FileSystemEntity.isLinkSync(path)) continue;
+    final isDirectory = FileSystemEntity.isDirectorySync(path);
     yield* walk(
       base ?? p.dirname(path),
       path,
-      FileSystemEntity.isDirectorySync(path),
-      followLinks && FileSystemEntity.isDirectorySync(path)
-          ? Directory(path).resolveSymbolicLinksSync()
-          : null,
+      isDirectory,
+      followLinks && isDirectory ? _realOf(path) : null,
     );
+  }
+}
+
+/// [path] with its links resolved, or null where it went between being
+/// listed and being asked.
+String? _realOf(String path) {
+  try {
+    return Directory(path).resolveSymbolicLinksSync();
+  } on FileSystemException catch (e) {
+    logFailure("files", "a link could not be resolved", e.osError);
+    return null;
   }
 }
 

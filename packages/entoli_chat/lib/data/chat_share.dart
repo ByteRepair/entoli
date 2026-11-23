@@ -76,7 +76,7 @@ class ChatShareSource {
     if (!Directory(dir).existsSync()) return const [];
     if (section == ShareSection.artifacts) {
       return [
-        await for (final entity in Directory(dir).list())
+        await for (final entity in Directory(dir).list(followLinks: false))
           if (entity is Directory)
             ShareFile(
               p.basename(entity.path),
@@ -206,6 +206,8 @@ class ChatShareSource {
     final (section, id) = piece;
     final from = p.join(_dir(config, section, chatId, project: project), id);
     final into = p.join(_dir(_shared, section, chatId), id);
+    // A file the dialog listed may have become a link since.
+    if (FileSystemEntity.isLinkSync(from)) return const [];
     if (FileSystemEntity.isFileSync(from)) {
       return [(name: _member(into), path: from)];
     }
