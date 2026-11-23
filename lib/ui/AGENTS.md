@@ -68,6 +68,11 @@ in `main` beside `IncomingShares`) reads. What a link means is
 - `entoli://install/avatar?def=…` — a Bot Avatar definition, raw or base64url
   JSON (Open Bot Avatar's own `def`), on `BotAvatarInstallPage`: the bot and
   Install, landing in the editor's library.
+- `https://share.entoli.byterepair.io/#…` and `entoli://share?def=…` — a
+  shared chat, imported as a new chat and opened. The first is the link Share
+  makes, which the web viewer reads where the app is not installed; the second
+  is the viewer's Open in Entoli. A cut-short one says so and imports nothing.
+  See "A shared chat" in `lib/ui/chat/AGENTS.md`.
 
 The desktops are single-instance for it: Linux's runner lets GLib emit
 `command-line` (`G_APPLICATION_HANDLES_COMMAND_LINE`), here or in the running

@@ -1,3 +1,3 @@
 # entoli_share_viewer
 
-A new Flutter project.
+The read-only web viewer for a chat shared as a link. See `AGENTS.md`.

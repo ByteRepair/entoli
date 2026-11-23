@@ -15,6 +15,12 @@ browsing actions, and a Share button where there is a share sheet. A
 selection is one folder's, so leaving the folder ends it. New Folder and
 Select are offered once the folder has been read.
 
+`readOnly` is the explorer for files that are someone else's: a chat shared
+from elsewhere, in the web viewer. It browses and opens and changes nothing —
+no New Folder, no selection, no Delete, and a text file opens with no Edit. A
+row keeps its menu only while it has something left in it, and an empty root
+says the chat was shared without its workspace.
+
 The default project's is reached from the sidebar instead, from the slot beside
 the project switcher that a named project fills with its settings gear. The
 default project has no settings page — it cannot be renamed or deleted, which is

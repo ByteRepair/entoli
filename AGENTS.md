@@ -67,7 +67,10 @@ named in a cross-reference is findable from this list.
   blocks, A command
   the user ran, Activities, on screen, A goal, on screen, The plan, on screen,
   The task list, on screen,
-  A chat whose home device is elsewhere, The chat page
+  A chat whose home device is elsewhere, A shared chat, The chat page
+- `packages/entoli_share_viewer/AGENTS.md` — The shared-chat viewer: the web
+  page a share link opens where the app is not installed, the app's code over
+  an in-memory disk
 - `lib/data/voice/AGENTS.md` — Voice mode, What listens and what speaks, The
   Android system engines, Which language it is asked in, Ending the utterance,
   What counts as being spoken to, One listener, two engines, Mute is the user,

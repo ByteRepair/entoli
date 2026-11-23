@@ -668,20 +668,32 @@ is. The layers, each knowing only the one below:
   `MessageActions` is what can be done to a message and does it: the
   threads and the steps between them, delete and its question, edit,
   regenerate, react — every rule of when each is on offer.
-- **Ports**, bound at the root (`core/transcript_bindings.dart`, which
-  `main` and the harness both spread): `ActivityCatalog`, which
-  `TranscriptActivities` implements over every kind. The catalogue is bound
-  rather than imported because a sub-agent's detail holds a transcript that
-  is made of activities: the layout depends on the abstraction, and the
-  composite stays acyclic. The Flutter side has the same composite one level
-  up — a detail draws a `MessageBubble` — and binds it the same way
+- **Ports**, bound at the root. `core/transcript_bindings.dart` is the
+  drawing's own: `ActivityCatalog`, which `TranscriptActivities` implements
+  over every kind. The catalogue is bound rather than imported because a
+  sub-agent's detail holds a transcript that is made of activities: the
+  layout depends on the abstraction, and the composite stays acyclic. The
+  Flutter side has the same composite one level up — a detail draws a
+  `MessageBubble` — and binds it the same way
   (`nestedTranscriptViewProvider`).
+- **The host** (`transcript/host.dart`). Everything the drawing reads of
+  its chat goes through `TranscriptHost`: the view state, the plan, a
+  sub-agent's live message, an agent's face, an attachment's bytes, a job's
+  log, stopping a job, and where the workspace is. None of it reaches
+  `providers.dart`, so the drawing runs with no app behind it. The app's
+  `AppTranscriptHost` maps it onto the chat providers;
+  `core/app_transcript_bindings.dart` binds it, the hand-off and the ports
+  above, and is what `main` and the harness both spread. The shared-chat
+  viewer binds its own (see `packages/entoli_share_viewer/AGENTS.md`).
 
 **The UI** draws all of it in `activity/`: `ActivityNodeView`
-switches over the nodes (`nodes.dart`) and hands each press to the node, and
-`ContextHandOff` (`card.dart`) is the hand-off over the context of what was
-tapped, opening a detail as an `ActivityCard` that follows its source while
-it is open.
+switches over the nodes (`nodes.dart`) and hands each press to the node.
+What a press opens is the `TranscriptHandOff` that `transcriptHandOffProvider`
+builds over the context of what was tapped — `handOffOf(context)`. The app's
+is `ContextHandOff` (`context_hand_off.dart`), which opens a detail as an
+`ActivityCard` that follows its source while it is open (`showActivityDetail`,
+`card.dart`), and a file, an artifact, a skill, the plan and the agent's
+browser on their own pages.
 `MessageBubble` keeps its public shape and lays its message out through
 `MessageLayout`, re-laid only when it is handed another message.
 
@@ -713,10 +725,11 @@ show. The bar carries a checklist button beside the running-turn spinner for
 as long as the chat has a plan, and it opens `PlanPage` (`plan_page.dart`),
 the same list (`PlanTaskList`) with a progress bar over it.
 
-Both read `PLAN.md` off the chat's workspace through `planProvider`, not off
-the call: the card shows where the work stands now, ticks included. The
-provider reads again when `planRevision` moves — a result landing for a plan
-tool or a `write`/`edit` — rather than watching the file, since every write to
+Both read `PLAN.md` off the chat's workspace through the host's `plan`, not
+off the call: the card shows where the work stands now, ticks included. In the
+app that is `planProvider`, which reads again when `planRevision` moves — a
+result landing for a plan tool or a `write`/`edit` — rather than watching the
+file, since every write to
 it lands in the conversation as one; a `bash` that rewrote it is picked up at
 the next. A mirrored chat's plan is asked of its home device over the sync
 channel (see "Attachments" in `lib/data/sync/AGENTS.md`), so the same card and
@@ -884,6 +897,54 @@ Cancel cancels. **A message sent while one waits cancels it**, in the
 composer's `onSend` before the send: what the user said instead is their
 answer, the page's chooser is cancelled as a dismissed dialog would be, and
 the agent's call says so.
+
+## A shared chat
+
+Share (a chat's row menu, its settings page, and the Chat menu) makes the
+chat a link: `https://share.entoli.byterepair.io/#<zip>`, the zip base64url in
+the fragment, which a browser never sends to the server. The zip is a data
+directory of that one chat — the stamp, `share.json` naming it, and the chat
+under the default project — so unpacking it is `AppConfig.load` over a
+directory like any other, and a link from an older build is brought up by
+the migration chain (`lib/data/chat_share.dart`).
+
+**What goes is the conversation, never the setup.** `conv.jsonl` and the
+sub-agents' transcripts always go; the state goes stripped to id, title and
+dates and marked imported; `meta.json`, the project, the pin and the TTL are
+the sharer's and stay. The system prompt, the tools and the profile were
+never in the log. Everything else is picked: the chat's attachments, its
+artifacts, and its workspace files.
+
+**The dialog** (`share_chat_dialog.dart`) is framed as the project palette
+is, search over every row, arrow keys and Ctrl+Space. **Chat Attachments** is
+its first line, one box for every attachment, its list collapsed under an
+arrow; a divider, then Artifacts by their card's title and the workspace by
+path. A file `isShareIgnored` names — a credentials or build folder, a
+secret by its name — starts unticked and says why.
+
+**Nothing is left out unseen.** The link is capped at `shareLinkMaxLength`
+(Android carries it twice over Binder), and what does not fit is shown before
+Share, not reported after: the sections that would go are drawn in red, and
+every tick moves it. A zip compresses each member alone, so the link's length
+is the conversation's cost plus each ticked piece's, exactly — each piece is
+compressed once when first ticked (`ChatShareSource.cost`, through `compute`)
+and `shareFit` (`lib/domain/chat_share.dart`) sums them. Whole sections go,
+the workspace first, then the artifacts, then the attachments, since those
+are what the conversation shows; a conversation too long alone disables
+Share. Share packs exactly what is ticked and not red. The share sheet takes
+the link; Linux's would be a `mailto:`, so there it is copied.
+
+**Taking one in** is `ChatShares.import`: a new chat under a new id, in the
+project on screen, its workspace and attachments with it, opened. Two imports
+of one link are two chats. An imported chat runs nothing: `ImportedBar` stands
+in for the composer, saying anything in it could be malicious, and
+`ChatRepository._turnSettings` refuses a turn for it, since a resume, a
+paired device or a trigger reaches a turn without the composer. **Enable
+Chat** deletes the workspace files that came with it first, so no command
+runs over them; **Enable and Import** keeps them. An attachment that was not
+shared is drawn as its box with a stop sign, and a turn reads past it.
+
+The viewer, where the app is not installed, is `packages/entoli_share_viewer`.
 
 ## The chat page
 
@@ -1135,11 +1196,18 @@ could not see, and it passed against a build that closed the app on a phone.
 Anything asserting about the back key needs `frameworkHandlesBack` beside the
 press.
 
+**The scrolling list is `ConversationView`** (`widgets/conversation_view.dart`):
+the list, the rail, the glides, jump to latest and the turn's follow, below.
+It is handed the chat's view state as a listenable, how to draw a message, and
+what sits under it — the composer here, nothing in the shared-chat viewer —
+so both draw one conversation and neither keeps a copy of the scrolling.
+Sending calls its `follow()`.
+
 **The chapter rail** (`ChapterRail`) is a tick per prompt in the margin right
 of the column, the one being read picked out, the first line of each on hover.
 It is laid over the margin rather than beside the column, so the column stays
 centred whether it is there or not, and it is drawn only where the margin has
-room for it — `_ReadableColumn`'s `side` — from the first prompt on: a lone
+room for it — `ReadableColumn`'s `side` — from the first prompt on: a lone
 tick still says where the conversation starts. A command the user ran is a
 chapter as well, its tooltip the `!` line as typed, since it is something they did
 there. A chapter is a prompt and the turn
@@ -1153,12 +1221,12 @@ one goes to the reply's row and then to the steer's bubble, keyed through
 `MessageBubble.steerKey`. What it draws is fed from the chat's view state, not
 assigned while the page builds: a `listenManual` with `fireImmediately` hands
 it the chat as loaded, then every change — a turn, a deletion, a thread
-switched — and restarts when the chat id changes, since `_ChatBody` is not
-keyed per chat and its state outlives a switch. The tooltip is the prompt's
-first line, cut at fifty characters. **A press selects, not a tap**, and so
-does every move while pressed, so dragging a mouse or a finger along the rail
-scrubs the conversation prompt by prompt; a scrub jumps where a press
-glides. That is one `Listener` over the whole rail finding the tick by
+switched — and restarts when the source changes, since `ConversationView`
+is not keyed per chat and its state outlives a switch. The tooltip is the
+prompt's first line, cut at fifty characters. **A press selects, not a
+tap**, and so does every move while pressed, so dragging a mouse or a finger
+along the rail scrubs the conversation prompt by prompt; a scrub jumps where
+a press glides. That is one `Listener` over the whole rail finding the tick by
 height, not a handler per tick — a pointer stays with what it went down on,
 so a tick's own handler never hears the drag reach the next. The rail does
 not scroll, since a drag on it is a scrub; its ticks close up instead when
