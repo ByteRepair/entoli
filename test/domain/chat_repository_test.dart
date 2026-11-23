@@ -1123,4 +1123,54 @@ void main() {
       );
     });
   });
+
+  group("an imported chat", () {
+    Future<(ChatRepository, String)> imported() async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.saveState(chat.state.copyWith(imported: true));
+      return (repo, chat.state.id);
+    }
+
+    test("sends nothing to the backend", () async {
+      final (repo, id) = await imported();
+
+      await expectLater(
+        repo.sendPrompt(participant: "athena", id, userMessage("hi")).toList(),
+        throwsStateError,
+      );
+      expect(backend.prompts, isEmpty);
+    });
+
+    test("carries no turn on and compacts nothing", () async {
+      final (repo, id) = await imported();
+
+      await expectLater(
+        repo.resumeTurn(id, participant: "athena").toList(),
+        throwsStateError,
+      );
+      await expectLater(
+        repo.compact(
+          id,
+          history: const [],
+          compactions: const [],
+          instructions: null,
+        ),
+        throwsStateError,
+      );
+      expect(backend.compactionCalls, isEmpty);
+    });
+
+    test("runs once it is enabled", () async {
+      final (repo, id) = await imported();
+      final state = (await repo.loadState(id))!;
+      await repo.saveState(state.copyWith(imported: false));
+
+      await repo
+          .sendPrompt(participant: "athena", id, userMessage("hi"))
+          .toList();
+
+      expect(backend.prompts, hasLength(1));
+    });
+  });
 }
