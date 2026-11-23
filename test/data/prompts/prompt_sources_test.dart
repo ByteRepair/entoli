@@ -7,7 +7,7 @@ import "package:path/path.dart" as p;
 import "package:entoli_core/model/agent_face.dart";
 import "package:entoli_core/model/config.dart";
 import "package:entoli_core/model/read_only_dirs.dart";
-import "package:agent_chat/data/local/file_modes.dart";
+import "package:entoli_shell/file_modes.dart";
 import "package:agent_chat/data/prompts/agent_pictures.dart";
 import "package:entoli_core/model/bundled_prompt_file.dart";
 import "package:entoli_core/model/bundled_skill_data.dart";

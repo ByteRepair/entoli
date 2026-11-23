@@ -88,8 +88,8 @@ turns on — how this device would run a Linux (a `LinuxHost`), and which are
 installed — with
 `FakeRootfsStore` behind them. Its `installing` completer holds a download open
 so a test can see the row mid-flight. What a command actually runs under is not
-faked either: `local_shell_test.dart` builds a `ShellDriver` out of
-`/usr/bin/env`, which really runs, and `proot_test.dart` pins the guest driver's
+faked either: `entoli_shell`'s `local_shell_test.dart` builds a `ShellDriver`
+out of `/usr/bin/env`, which really runs, and its `proot_test.dart` pins the guest driver's
 invocation itself as a pure function — between them they are what can be checked
 about proot on a machine with no Android on it. The persistent shell's own
 contract is checked the same

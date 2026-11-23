@@ -4,8 +4,7 @@ import "dart:convert";
 import "package:entoli_core/agent/goal_reviewer.dart";
 import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:entoli_core/agent/llm/providers/provider.dart";
-import "package:agent_chat/data/builtin/sandbox_grants.dart"
-    show MachineSandboxFolders;
+import "package:entoli_shell/sandbox_grants.dart" show MachineSandboxFolders;
 import "package:entoli_core/model/artifact.dart";
 import "package:entoli_core/model/ask.dart";
 import "package:entoli_core/model/goal.dart";

@@ -1,5 +1,5 @@
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/data/local/proot.dart";
+import "package:entoli_shell/proot.dart";
 import "package:entoli_core/model/file_tools.dart";
 import "package:entoli_core/model/rootfs.dart";
 import "package:entoli_core/model/shell.dart";

@@ -9,7 +9,7 @@ the 5,000-character head and tail included, though that elision is now only the
 fallback for a long result nothing saved, past 50,000 characters rather than
 upstream's 10,000 (see "Tools") — and the shell contract `LocalShell` keeps,
 which is `local.py`'s; see "Running the commands" in
-`lib/data/builtin/AGENTS.md`. Prompt furniture too: the `cd` prefix rule, the
+`packages/entoli_shell/lib/AGENTS.md`. Prompt furniture too: the `cd` prefix rule, the
 `<system_information>` block, the `cat <<'EOF'` and `sed -i` examples.
 
 Everything else has diverged, and one divergence is the protocol rather than a
@@ -414,8 +414,9 @@ the banner), `auto` (a classifier model decides allow/ask/deny per command),
 `never` (run everything). An older file's `approveCommands` bool migrates:
 `true` → `ask`, `false` → `never`.
 
-What runs a confined command, and the helpers that enforce it, are the app's:
-see "Running the commands" in `lib/data/builtin/AGENTS.md`.
+What runs a confined command, and the helpers that enforce it, are
+`entoli_shell`'s: see "Running the commands" in
+`packages/entoli_shell/lib/AGENTS.md`.
 
 Before the mode, the **rules** decide. `PermissionRule`
 (`packages/entoli_core/lib/model/permission.dart`) names a tool, a pattern and
@@ -490,7 +491,7 @@ per project over the default project's (`sandboxTemps`, `sandboxCaches`,
 toggles on Terminal > Permissions and a project's page rather than as work
 folders, being the app's defaults and not the user's additions. The policy
 carries the ones on (`StandingPermissions.grants`). Each goes into the sandbox's
-`extraWrites` from `_sandboxFor` (`lib/data/builtin/sandbox_grants.dart` finds
+`extraWrites` from `_sandboxFor` (`packages/entoli_shell/lib/sandbox_grants.dart` finds
 the folders), so a `CommandSandbox` is always the whole write set and a helper
 renders it and adds nothing of its own. The sandbox is there to bound the damage
 a turn can do, not to stop it working: every grant that was missing sent the
@@ -550,8 +551,8 @@ globally and per project whatever runs the commands, and they stay set when
 the environment changes. The approval half is the app's own gate and holds
 everywhere, the classifier with it; the sandbox half is the driver's to
 enforce, and two host drivers can (their `sandboxHelper`): Linux's under
-Landlock (`lib/data/local/landlock.dart`) and macOS's under Seatbelt's
-`sandbox-exec` (`lib/data/local/seatbelt.dart`) — a phone needs none, its app
+Landlock (`packages/entoli_shell/lib/landlock.dart`) and macOS's under Seatbelt's
+`sandbox-exec` (`packages/entoli_shell/lib/seatbelt.dart`) — a phone needs none, its app
 sandbox being the OS's. Both are the same ruleset, read everywhere and write
 only the grant, and neither changes a live one: every confined command is its
 own subshell with a profile built from that command's `CommandSandbox`, which

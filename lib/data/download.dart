@@ -133,6 +133,7 @@ class DownloadRun implements DownloadTask {
 
   /// [fetch] one file and answer its SHA-256 in hex, hashed on the way past
   /// rather than by reading back what may be gigabytes.
+  @override
   Future<String> fetchSha256({
     required String url,
     required String to,

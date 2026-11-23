@@ -36,7 +36,6 @@ named in a cross-reference is findable from this list.
   Sub-agents, Their own transcripts, Following one while it runs, Carrying one
   on, Web search, The browser, Images, Attachments, Skills, The room's roster,
   Compaction, The plan, The task list, Memory
-- `lib/data/builtin/AGENTS.md` — Running the commands (the local shell)
 - `packages/entoli_core/lib/agent/llm/AGENTS.md` — Reaching a provider, How
   long a reply may be, How much of an allowance is spent, Errors, and how long
   the UI waits
@@ -46,8 +45,8 @@ named in a cross-reference is findable from this list.
   layer, three rendezvous transports, the peer connection, the SyncHub,
   mirroring a chat, driving a turn from the other end, what the Sync page can
   do about a peer, secrets at rest
-- `lib/data/local/AGENTS.md` — Bundled tools, A whole Linux under proot,
-  Running a model on the device
+- `lib/data/local/AGENTS.md` — Byte Repair's environment, Running a model on
+  the device
 - `android/AGENTS.md` — Staying alive off screen, The workspaces in the Files
   app, Being the assistant, Waking for a trigger, The app icon, The debug
   build's own
@@ -93,6 +92,8 @@ named in a cross-reference is findable from this list.
   a phone's artifact open in
 - `packages/entoli_sync_transport/lib/AGENTS.md` — The WebRTC data channel
   sync runs over
+- `packages/entoli_shell/lib/AGENTS.md` — Running the commands (the local
+  shell), Bundled tools, A whole Linux under proot
 - `lib/ui/voice/AGENTS.md` — Reading one message out, The screen, Touch to
   speak, Taking turns
 - `packages/entoli_core/lib/view/workspace/AGENTS.md` — The workspace explorer
@@ -331,14 +332,16 @@ path, because that is what serialises a path's writes; two overlapping would
 have the first relock under the second. A skills directory passes
 `executable: true`, since its scripts arrive from embedded data with no
 execute bit. The modes are set through libc's `chmod` and Windows' read-only
-attribute (`data/local/file_modes.dart`), not the `chmod` binary, which iOS
+attribute (`packages/entoli_shell/lib/file_modes.dart`), not the `chmod`
+binary, which iOS
 will not spawn. A tree that holds one is deleted through `deleteTree`, which
 unlocks it first.
 
 What it stops is an accident: on the machine itself the same user can `chmod`
 it back. The guests are the reason it matters — proot's fake root and iSH's
 root would otherwise write straight through — and each is patched to leave
-these modes alone; see "A whole Linux under proot" in `lib/data/local/AGENTS.md`
+these modes alone; see "A whole Linux under proot" in
+`packages/entoli_shell/lib/AGENTS.md`
 and "The workspace inside the guest" in `ios/AGENTS.md`.
 
 ### Migrations

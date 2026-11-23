@@ -27,7 +27,7 @@ Map<String, String> environmentWithoutAppImage() => {
 
 /// Runs commands under the [ShellDriver] it is given, in one persistent shell
 /// per chat; a sandboxed or `oneShot` command gets a fresh subshell. See
-/// "Running the commands" in `lib/data/builtin/AGENTS.md`.
+/// "Running the commands" in `AGENTS.md` beside this file.
 class LocalShell extends Shell {
   LocalShell({
     Map<String, String> Function()? environment,

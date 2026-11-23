@@ -11,7 +11,7 @@ import "package:entoli_core/model/rootfs_store.dart";
 import "package:entoli_core/model/shell.dart";
 
 import "../../core/platform/form_factor.dart";
-import "tree_ops.dart";
+import "package:entoli_shell/entoli_shell.dart" show removeTree;
 
 /// Installs and queries the Byte Repair tooling — make, github-cli and ESBMC —
 /// so they are on PATH for every agent turn in the project. The install runs

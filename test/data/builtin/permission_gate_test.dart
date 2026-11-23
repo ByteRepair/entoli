@@ -4,7 +4,7 @@ import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 import "package:entoli_core/agent/builtin_agent.dart";
-import "package:agent_chat/data/builtin/sandbox_grants.dart" show systemTemps;
+import "package:entoli_shell/sandbox_grants.dart" show systemTemps;
 import "package:entoli_core/agent/tools/agent_tool.dart"
     show AgentCapabilities, ToolOffer;
 import "package:entoli_core/agent/tools/bash_tool.dart" show BashTool;

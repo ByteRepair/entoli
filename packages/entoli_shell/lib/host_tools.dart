@@ -11,7 +11,6 @@ import "package:path/path.dart" as p;
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/documents.dart" show RenameWriter;
 
-import "../../core/tls.dart";
 import "file_modes.dart";
 import "guest_mounts.dart";
 import "host_grep.dart";
@@ -21,7 +20,7 @@ import "host_grep.dart";
 /// "Tools the host runs" in ios/AGENTS.md.
 class HostTools {
   HostTools(this.dir, {required this.mounts, http.Client Function()? client})
-    : _client = client ?? tlsClient;
+    : _client = client ?? http.Client.new;
 
   /// The host side of [guestDir].
   final String dir;
@@ -30,6 +29,8 @@ class HostTools {
   /// with the project.
   final List<GuestMount> Function() mounts;
 
+  /// `http.Client()` by default, which the app's `runWithClient` makes its
+  /// TLS client.
   final http.Client Function() _client;
 
   /// The guest's calls are on this machine's disk, whatever the chats are on.

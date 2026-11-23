@@ -4,7 +4,7 @@ import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 import "package:entoli_core/model/sandbox_denials.dart";
-import "package:agent_chat/data/local/landlock.dart";
+import "package:entoli_shell/landlock.dart";
 import "package:entoli_core/model/shell.dart";
 
 void main() {

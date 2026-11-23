@@ -14,7 +14,7 @@ decision the rest follows, and it came out unsandboxed, which is also what
 every agent that ships runs on a Mac does: the app is not sandboxed; the
 permissions are the app's own approvals; the OS-level isolation anyone has is
 a per-command child sandbox built by the helper. That third is Seatbelt:
-`SeatbeltSandboxHelper` (`lib/data/local/seatbelt.dart`) prefixes each confined
+`SeatbeltSandboxHelper` (`packages/entoli_shell/lib/seatbelt.dart`) prefixes each confined
 command with `/usr/bin/sandbox-exec` and a profile of the turn's grant, in the
 slot `platformDriver` keeps for Linux's Landlock helper. `sandbox-exec` is
 deprecated and still works; it is probed once, and where it will not apply a

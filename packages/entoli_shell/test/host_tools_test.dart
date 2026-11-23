@@ -5,9 +5,9 @@ import "package:flutter_test/flutter_test.dart";
 import "package:http/http.dart" as http;
 import "package:http/testing.dart";
 import "package:path/path.dart" as p;
-import "package:agent_chat/data/local/host_tools.dart";
+import "package:entoli_shell/host_tools.dart";
 
-import "../../harness.dart" show tempDir;
+import "temp_dir.dart";
 
 void main() {
   late Directory root;

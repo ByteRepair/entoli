@@ -100,8 +100,10 @@ with the same ports, which is how the UI gets an entry's program from
 says the ABI its programs are built for, whether they are musl, what they
 start with, how packages go in, and how a process is started; every start —
 a session, a status check, a sign-in, a package install — goes through
-`CliProvider.run` to it. `main` sets `CliProvider.platformGuest` once, from
-the device's `LinuxHost` (`cliGuestOf` in `core/platform/host.dart`): a
+`CliProvider.run` to it. The guests are `entoli_shell`'s
+(`packages/entoli_shell/lib/cli_guest.dart`, `proot.dart`, `ish_pipe.dart`).
+`main` sets `CliProvider.platformGuest` once, from the device's `LinuxHost`
+(`cliGuestOf` in `entoli_shell.dart`): a
 `HostCliGuest` on a desktop, whose programs are this machine's processes
 with its environment as the subclass's `inherits` passes it on; a
 `ProotCliGuest` on Android; an `IshCliGuest` on iOS; none on an Android
@@ -148,7 +150,7 @@ installs is used without a restart, and with none the start says to
 install one.
 
 `ProotCliGuest` starts the program under proot as a process of the phone:
-`prootProgram` (`data/local/proot.dart`) is the terminal driver's proot
+`prootProgram` (`packages/entoli_shell/lib/proot.dart`) is the terminal driver's proot
 running one program rather than a shell, with the program's cache folder
 bound at its own host path, so its file, its `data/<id>/`, its `work/<id>/`
 and a Claude session's files are one path inside the guest and out and

@@ -185,8 +185,8 @@ contract is the same one LocalShell keeps: the escalation answers a run
 still pending at the second, and nothing else.
 
 The session and one-shot logic over this seam is pinned by
-`test/data/local/ish_session_test.dart` over a fake transport; that a real
-guest honours the 130, that a hangup unblocks the loop, and that output
+`packages/entoli_shell/test/ish_session_test.dart` over a fake transport; that
+a real guest honours the 130, that a hangup unblocks the loop, and that output
 arrives live is the simulator's hand-run, like the wire — witnessed on this
 build: the stop ends a running command at once, the escalation answers a
 SIGINT-ignoring one on its second, and output reaches the chat while the
@@ -673,7 +673,7 @@ the guest, and a download is TLS decrypted the same way, 240 MB of ESBMC
 sitting on "Downloading" for minutes. `unzip`, `tar`, `wget`, `curl` and a
 recursive `grep` are therefore the host's where they can be, for the setup
 script and for an agent's own commands alike.
-`HostTools` (`lib/data/local/host_tools.dart`) puts a shim for each in a host
+`HostTools` (`packages/entoli_shell/lib/host_tools.dart`) puts a shim for each in a host
 directory the bridge binds writable at `/run/entoli` (`ish_set_host_calls`,
 once, as the guest boots), first on the guest's `PATH`. A shim leaves its
 arguments and working directory in `/run/entoli/calls/` and waits; Dart,

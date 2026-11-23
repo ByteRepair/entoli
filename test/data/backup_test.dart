@@ -6,7 +6,7 @@ import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:entoli_core/model/config.dart";
 import "package:agent_chat/data/backup.dart";
-import "package:agent_chat/data/local/tree_ops.dart";
+import "package:entoli_shell/tree_ops.dart";
 
 import "../harness.dart";
 

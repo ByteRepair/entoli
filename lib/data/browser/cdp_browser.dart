@@ -9,7 +9,7 @@ import "package:path/path.dart" as p;
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/agent_browser.dart";
 
-import "../builtin/local_shell.dart" show environmentWithoutAppImage;
+import "package:entoli_shell/entoli_shell.dart" show environmentWithoutAppImage;
 import "cdp.dart";
 import "helium.dart";
 import "page_script.dart";

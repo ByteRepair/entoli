@@ -2,7 +2,7 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:agent_chat/data/builtin/local_shell.dart";
+import "package:entoli_shell/local_shell.dart";
 import "package:entoli_core/model/confinement.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/app/settings/scope.dart";

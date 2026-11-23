@@ -47,6 +47,14 @@ abstract interface class DownloadTask {
     int? total,
     int done = 0,
   });
+
+  /// [fetch], answering the file's SHA-256 in hex.
+  Future<String> fetchSha256({
+    required String url,
+    required String to,
+    int? total,
+    int done = 0,
+  });
 }
 
 /// Starts a download whose [run] does the fetching, and whose [discard] undoes

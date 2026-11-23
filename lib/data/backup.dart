@@ -15,7 +15,7 @@ import "package:entoli_core/model/file_handoff.dart";
 import "package:entoli_core/model/workspace.dart";
 import "package:entoli_files/entoli_files.dart" show zipTo;
 
-import "local/tree_ops.dart" show removeTree;
+import "package:entoli_shell/entoli_shell.dart" show removeTree;
 
 /// The whole data directory as a zip, and back again. The members are the
 /// files, at the paths they have under the data directory. See AGENTS.md,

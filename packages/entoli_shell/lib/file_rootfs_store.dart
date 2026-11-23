@@ -2,22 +2,20 @@ import "dart:async";
 import "dart:io";
 
 import "package:path/path.dart" as p;
-import "package:http/http.dart" as http;
 import "package:entoli_core/model/download.dart";
 import "package:entoli_core/model/rootfs.dart";
 import "package:entoli_core/model/rootfs_store.dart";
 
-import "../download.dart";
 import "tree_ops.dart";
 
 /// A downloaded Linux in a directory of its own, outside the data directory —
 /// see [RootfsStore] for why that matters.
 class FileRootfsStore extends RootfsStore {
-  FileRootfsStore(this.root, {this.tar = _systemTar, this.client});
+  FileRootfsStore(this.root, {required this.download, this.tar = _systemTar});
 
-  /// The client downloads go through. Injected only by the tests, which have
-  /// no socket to reach.
-  final http.Client? client;
+  /// What fetches the tarball: the app's download, over a client the tests
+  /// replace with one that has no socket to reach.
+  final StartDownload download;
 
   /// `<cacheDir>/rootfs`, holding one directory per installed distribution.
   final String root;
@@ -63,14 +61,13 @@ class FileRootfsStore extends RootfsStore {
   }
 
   /// One tarball, checked and then unpacked. The fetching and the giving up are
-  /// [DownloadRun]'s; what is left here is the checksum, which is the thing
+  /// [download]'s; what is left here is the checksum, which is the thing
   /// this download has that no other one does.
   @override
   Stream<DownloadProgress> install(
     Rootfs rootfs, {
     required String imageKey,
-  }) => DownloadRun(
-    client: client,
+  }) => download(
     discard: () => delete(rootfs),
     run: (run) async {
       final image = rootfs.imageFor(imageKey);
@@ -120,7 +117,7 @@ class FileRootfsStore extends RootfsStore {
       await File(archive).delete();
       await File(p.join(dir.path, _marker)).writeAsString("");
     },
-  ).stream;
+  );
 
   /// Android's `tar` is toybox's, and `-z` is the one thing this needs of it.
   /// `runTar` in `tree_ops` handles finding it on `PATH` or at

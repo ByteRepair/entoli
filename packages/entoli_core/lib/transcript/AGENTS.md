@@ -21,7 +21,7 @@ knowing only the one below:
   other name the defaults ("Used x", "Allow x?"). `BashActivity` sets the
   command apart with the exit code under it, labels it with the call's
   `description` where the model gave one (see "The command's label" in
-  `lib/data/builtin/AGENTS.md`), and is the job once a call started one
+  `packages/entoli_shell/lib/AGENTS.md`), and is the job once a call started one
   (`JobActivity`); `TaskActivity` is a `SubAgentActivity`, whose detail holds
   the sub-agent's own transcript; the web tools show the query or URL.
   `JobActivity` and `SubAgentActivity` hold what they are drawn from, so a

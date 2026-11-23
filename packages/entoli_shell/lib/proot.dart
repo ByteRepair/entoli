@@ -7,8 +7,7 @@ import "package:entoli_core/model/rootfs_store.dart";
 import "package:entoli_core/model/shell.dart";
 import "package:entoli_core/agent/llm/llm_client.dart" show LlmException;
 
-import "../builtin/llm/providers/cli.dart"
-    show CliProcess, LinuxCliGuest, launchProcess;
+import "cli_guest.dart" show CliProcess, LinuxCliGuest, launchProcess;
 
 /// How a command is run inside a downloaded Linux: the proot invocation, the
 /// environment on both sides of it bar `HOME`, and the sentence the model is

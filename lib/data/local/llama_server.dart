@@ -20,7 +20,7 @@ import "local_instance.dart";
 /// It is the native library directory, and that is not tidiness — it is the
 /// only place an app targeting a modern Android may execute a file from, which
 /// is the same rule that puts git and proot there. See "Bundled tools" in
-/// AGENTS.md. Here the directory is load-bearing twice over:
+/// `packages/entoli_shell/lib/AGENTS.md`. Here the directory is load-bearing twice over:
 /// the CPU-side backends are resolved out of it by the dynamic linker, and the
 /// Hexagon backend's DSP-side skeletons are resolved out of it by fastRPC.
 class LlamaBinaries {

@@ -70,7 +70,9 @@ void main() {
 /// written once over its core's prefix, so they are every core's prefix
 /// with every one of those, beside the lookups named outright.
 Set<String> _lookedUp() {
-  final source = File("lib/data/local/ish_ffi.dart").readAsStringSync();
+  final source = File(
+    "packages/entoli_shell/lib/ish_ffi.dart",
+  ).readAsStringSync();
   final prefixes = RegExp(
     r'^\s*\w+\("((?:ish|blinkish))"\)[,;]$',
     multiLine: true,

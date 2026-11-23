@@ -3,10 +3,10 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-import "package:agent_chat/data/local/guest_mounts.dart";
-import "package:agent_chat/data/local/host_grep.dart";
+import "package:entoli_shell/guest_mounts.dart";
+import "package:entoli_shell/host_grep.dart";
 
-import "../../harness.dart" show tempDir;
+import "temp_dir.dart";
 
 /// What each search prints is busybox 1.37's own, recorded from the x86-64
 /// Alpine guest over the same files.

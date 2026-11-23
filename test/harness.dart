@@ -14,7 +14,7 @@ import "package:entoli_core/transcript/storage.dart";
 import "package:entoli_core/model/config.dart";
 import "package:agent_chat/data/local/local_instance.dart";
 import "package:agent_chat/data/local/local_prefill.dart";
-import "package:agent_chat/data/builtin/local_shell.dart";
+import "package:entoli_shell/local_shell.dart";
 import "package:entoli_core/store/file_chat_store.dart";
 import "package:agent_chat/data/local/llama_engine.dart";
 import "package:agent_chat/data/local/local_engine.dart";

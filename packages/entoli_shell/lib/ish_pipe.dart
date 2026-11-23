@@ -6,8 +6,7 @@ import "dart:isolate"
 
 import "package:ffi/ffi.dart";
 
-import "../builtin/llm/providers/cli.dart"
-    show CliGuest, CliProcess, LinuxCliGuest;
+import "cli_guest.dart" show CliGuest, CliProcess, LinuxCliGuest;
 import "ish_ffi.dart";
 import "ish_shell.dart" show IshWorker;
 

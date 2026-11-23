@@ -656,7 +656,8 @@ already downloaded. Outside it, both are true by construction rather than by a
 rule in `writeBackup` that someone has to remember.
 
 A downloaded Linux is beside them, at `<cacheDir>/rootfs/<id>/`, and it is there
-for exactly the same two reasons — see "A whole Linux under proot".
+for exactly the same two reasons — see "A whole Linux under proot" in
+`packages/entoli_shell/lib/AGENTS.md`.
 
 `platformCacheDir` resolves it by hand, the way `platformDataDir` does:
 `$XDG_CACHE_HOME/entoli` or `~/.cache/entoli` on Linux,

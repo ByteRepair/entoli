@@ -21,6 +21,7 @@ workspace:
   - packages/entoli_scanner
   - packages/entoli_webview
   - packages/entoli_sync_transport
+  - packages/entoli_shell
 
 dependencies:
   flutter:
@@ -52,6 +53,9 @@ dependencies:
   # The WebRTC data channel sync runs over.
   entoli_sync_transport:
     path: packages/entoli_sync_transport
+  # Where commands run: the shells, proot, iSH and the bundled tools.
+  entoli_shell:
+    path: packages/entoli_shell
 
   # State management
   flutter_riverpod: ^3.4.2
@@ -66,8 +70,8 @@ dependencies:
   # Serialization
   json_annotation: ^4.12.0
   freezed_annotation: ^3.1.0
-  # FFI bindings to the iSH emulator core on iOS. A transitive dep before; direct
-  # now that lib/data/local/ish_ffi.dart uses its Utf8/calloc helpers.
+  # Utf8 strings for libc's `getenv` on iOS and the macOS update's
+  # `renamex_np`.
   ffi: ^2.1.4
 
   # Path / filesystem
@@ -121,9 +125,8 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
 
-  # The session timers of the iSH shell: the one-second escalation and the
-  # command timeout are app code's, so a test drives them on a clock of its
-  # own rather than waiting one out.
+  # Timers a test drives on a clock of its own rather than waiting one out:
+  # a room's retry rounds, a provider's rate limit.
   fake_async: ^1.3.1
 
   pigeon: ^27.3.0

@@ -2,7 +2,7 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-import "package:agent_chat/data/local/tree_ops.dart";
+import "package:entoli_shell/tree_ops.dart";
 
 /// The real tar, the real chmod and the real rm, the way
 /// `file_rootfs_store_test.dart` unpacks with the machine's own tar: only a

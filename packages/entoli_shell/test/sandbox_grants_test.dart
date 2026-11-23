@@ -3,7 +3,7 @@ import "dart:io";
 import "package:file/local.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
-import "package:agent_chat/data/builtin/sandbox_grants.dart";
+import "package:entoli_shell/sandbox_grants.dart";
 import "package:entoli_core/model/shell.dart" show commandDirs;
 
 void main() {

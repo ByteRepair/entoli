@@ -144,7 +144,7 @@ also why `useLegacyPackaging` has to stay on in `android/app/build.gradle.kts`:
 without it the file is mapped from inside the APK and there is nothing on disk
 to exec.
 
-Then tell the app. `BundledTools.install` in `lib/data/local/bundled_tools.dart`
+Then tell the app. `BundledTools.install` in `packages/entoli_shell/lib/bundled_tools.dart`
 symlinks the binary into its prefix under its real name; the link is what gives
 it a name without a `lib` prefix, since the file itself may not be renamed; and
 adds it to `Toolset.names`, which is what the system prompt tells the model is

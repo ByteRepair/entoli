@@ -7,7 +7,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 import "package:entoli_core/model/config.dart";
 import "package:agent_chat/core/platform/host.dart" show deleteTree;
-import "package:agent_chat/data/local/file_modes.dart";
+import "package:entoli_shell/file_modes.dart";
 import "package:entoli_core/model/read_only_dirs.dart";
 import "package:entoli_core/store/file_chat_store.dart";
 import "package:entoli_core/model/chat_log.dart";
