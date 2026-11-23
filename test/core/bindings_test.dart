@@ -3,16 +3,18 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-/// The Dart sources under [dir], generated ones aside.
-Iterable<File> _sources(String dir) => Directory(dir)
-    .listSync(recursive: true)
-    .whereType<File>()
-    .where(
-      (f) =>
-          f.path.endsWith(".dart") &&
-          !f.path.endsWith(".g.dart") &&
-          !f.path.endsWith(".freezed.dart"),
-    );
+import "workspace_packages.dart";
+
+/// Every source under the app's and the packages' `lib/`s by path, as text.
+final _texts = {
+  for (final dir in [
+    "lib",
+    for (final package in Directory("packages").listSync())
+      if (Directory(p.join(package.path, "lib")).existsSync())
+        p.join(package.path, "lib"),
+  ])
+    for (final file in dartSources(dir)) file.path: file.readAsStringSync(),
+};
 
 /// The providers declared under [dir] with no value of their own: a port
 /// whoever assembles a front end binds.
@@ -21,27 +23,21 @@ Set<String> _ports(String dir) {
     r"final (\w+)\s*=[^;]*?\(ref\)\s*=>\s*throw UnimplementedError\(",
   );
   return {
-    for (final file in _sources(dir))
-      for (final m in declaration.allMatches(file.readAsStringSync()))
-        m.group(1)!,
+    for (final MapEntry(key: file, value: text) in _texts.entries)
+      if (p.isWithin(dir, file))
+        for (final m in declaration.allMatches(text)) m.group(1)!,
   };
 }
 
 /// Every `final name = <Override>[...]` list in the roots, by name, so a
 /// spread in a composition reads as what it spreads.
 final _lists = {
-  for (final dir in [
-    "lib",
-    for (final package in Directory("packages").listSync())
-      if (Directory(p.join(package.path, "lib")).existsSync())
-        p.join(package.path, "lib"),
-  ])
-    for (final file in _sources(dir))
-      for (final m in RegExp(
-        r"final (\w+) = <Override>\[(.*?)\n\];",
-        dotAll: true,
-      ).allMatches(file.readAsStringSync()))
-        m.group(1)!: m.group(2)!,
+  for (final text in _texts.values)
+    for (final m in RegExp(
+      r"final (\w+) = <Override>\[(.*?)\n\];",
+      dotAll: true,
+    ).allMatches(text))
+      m.group(1)!: m.group(2)!,
 };
 
 /// [file]'s text with every override list it spreads written out.

@@ -5,6 +5,8 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 import "package:yaml/yaml.dart";
 
+import "workspace_packages.dart";
+
 /// Every package the workspace resolved, by name, as its pubspec.
 Map<String, YamlMap> _pubspecs() {
   final config = File(p.join(".dart_tool", "package_config.json"));
@@ -30,16 +32,6 @@ Set<String> _dependencies(YamlMap pubspec) => {
 bool _isPlugin(YamlMap pubspec) => switch (pubspec["flutter"]) {
   final YamlMap flutter => flutter.containsKey("plugin"),
   _ => false,
-};
-
-/// The adapters: every `packages/entoli_*` but the core and the viewer.
-final _adapters = {
-  for (final dir in Directory("packages").listSync().whereType<Directory>())
-    if (p.basename(dir.path) case final name
-        when name.startsWith("entoli_") &&
-            name != "entoli_core" &&
-            name != "entoli_share_viewer")
-      name,
 };
 
 void main() {
@@ -74,31 +66,24 @@ void main() {
   // A front end names the core and the adapters it chose, and its plugins
   // arrive through those: take its adapters out of the graph and none is
   // left.
-  for (final frontEnd in ["agent_chat", "entoli_share_viewer"]) {
-    final chosen = _dependencies(pubspecs[frontEnd]!).intersection(_adapters);
-
-    test("$frontEnd depends on no plugin but an adapter", () {
-      expect([
-        for (final dep in _dependencies(pubspecs[frontEnd]!))
-          if (!_adapters.contains(dep) && _isPlugin(pubspecs[dep]!))
-            "$frontEnd -> $dep",
-      ], isEmpty);
-    });
-
+  for (final frontEnd in frontEnds) {
     test("$frontEnd reaches every plugin through an adapter it chose", () {
+      final chosen = _dependencies(
+        pubspecs[frontEnd]!,
+      ).intersection(adapters.keys.toSet());
       expect(pluginsFrom(frontEnd, skip: chosen), isEmpty);
     });
   }
 
   test("each adapter depends on the core and on no front end", () {
-    expect(_adapters, isNotEmpty);
+    expect(adapters, isNotEmpty);
     expect([
-      for (final adapter in _adapters)
+      for (final adapter in adapters.keys)
         if (_dependencies(pubspecs[adapter]!) case final deps)
           if (!deps.contains("entoli_core"))
             "$adapter does not depend on entoli_core"
           else
-            for (final frontEnd in ["agent_chat", "entoli_share_viewer"])
+            for (final frontEnd in frontEnds)
               if (deps.contains(frontEnd)) "$adapter -> $frontEnd",
     ], isEmpty);
   });
