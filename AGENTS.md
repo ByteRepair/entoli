@@ -127,13 +127,20 @@ port is bound (the filesystem, for one, is handed to `AppConfig`). It is a
 package because Flutter bundles the assets of every package a build depends
 on, so a front end has only what it chose.
 
-Its `lib/` is four layers, each importing only those before it:
+Its `lib/` is five layers, each importing only those before it:
 
 - **`model/`** — the terms: the conversation log, chats, projects, settings,
   the room a turn runs in, `AppConfig` and the migrations, and the interfaces
   the rest is bound through.
 - **`store/`** — the disk under them: `FileChatStore`, packing and unpacking a
-  shared chat, the zip walk.
+  shared chat, the zip walk, the skills on disk and the sub-agents' logs.
+- **`agent/`** — the turn: the loop, its tools, the approval gate, memory,
+  and the model calls, which are HTTP (`http.Client()`, so a browser's in a
+  browser; the app runs under `http.runWithClient` with its TLS client). What
+  runs a command is the `Shell` interface in `model/`, and the folders a
+  sandbox grants are its `SandboxFolders`; the shells, the sandboxes and the
+  CLI providers that run a program in the model's place stay with the
+  platform that has processes.
 - **`transcript/`** — what is drawn, as state: messages, activities, chapters,
   and the ports a host binds (`TranscriptHost`, the hand-offs, storage). No
   Flutter library but `foundation`.
