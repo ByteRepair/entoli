@@ -15,8 +15,6 @@ import "package:entoli_core/model/file_handoff.dart";
 import "package:entoli_core/model/workspace.dart";
 import "package:entoli_files/entoli_files.dart" show zipTo;
 
-import "package:entoli_shell/entoli_shell.dart" show removeTree;
-
 /// The whole data directory as a zip, and back again. The members are the
 /// files, at the paths they have under the data directory. See AGENTS.md,
 /// "Backing it all up".
@@ -81,6 +79,9 @@ class Backup {
   /// Null where the manifest did not say, which a hand-made one may not.
   final DateTime? createdAt;
 }
+
+const _disk = LocalFileSystem();
+const _workspace = Workspace(_disk);
 
 /// `projects/<name>/chats/<id>/state.json`, which is where `AppConfig` puts one
 /// and nowhere else.
@@ -223,7 +224,7 @@ DateTime? _createdAt(Archive archive) {
 Future<void> restoreBackup(
   AppConfig config,
   Backup backup, {
-  Future<void> Function(String path) deleteTree = _removeTree,
+  required Future<void> Function(String path) deleteTree,
 }) {
   final dataDir = config.dataDir;
   final machineLocal = config.machineLocalFiles;
@@ -253,7 +254,7 @@ Future<void> _restore(
       // A member's name was written by whoever made the zip, and
       // `writeIncoming` is where a path from outside is made safe to join
       // onto a directory.
-      await const Workspace(LocalFileSystem()).writeIncoming(staged, [
+      await _workspace.writeIncoming(staged, [
         for (final member in members)
           if (!member.isDirectory && linkTargetOf(member) == null)
             _RestoredFile(member),
@@ -265,9 +266,7 @@ Future<void> _restore(
       }
       for (final member in members) {
         if (member.isDirectory) {
-          await const Workspace(
-            LocalFileSystem(),
-          ).createFolder(staged, member.name);
+          await _workspace.createFolder(staged, member.name);
         }
       }
     } finally {
@@ -282,12 +281,9 @@ Future<void> _restore(
     // one made by an older build unpacks that build's layout — including the
     // version stamp that says which one it is.
     await runMigrations(
-      const LocalFileSystem(),
+      _disk,
       staged,
-      fresh: await AppConfig.forDirectory(
-        const LocalFileSystem(),
-        staged,
-      ).ensureDirs(),
+      fresh: await AppConfig.forDirectory(_disk, staged).ensureDirs(),
     );
   } catch (_) {
     await _clear(staged, deleteTree);
@@ -323,7 +319,7 @@ Future<void> _restoreLink(String staged, String name, String target) async {
 /// so the app is not held up while a rootfs goes.
 Future<void> recoverRestore(
   String dataDir, {
-  Future<void> Function(String path) deleteTree = _removeTree,
+  required Future<void> Function(String path) deleteTree,
 }) async {
   if (!Directory(dataDir).existsSync()) {
     await _putBack(dataDir);
@@ -354,13 +350,6 @@ Future<void> _clear(
   } catch (_) {
     if (Directory(path).existsSync()) rethrow;
   }
-}
-
-/// The default delete: `removeTree`, which gets past what a plain recursive
-/// delete dies on where `chmod` can run.
-Future<void> _removeTree(String path) async {
-  final err = await removeTree(path);
-  if (err != null) throw FileSystemException(err, path);
 }
 
 /// Where a restore unpacks a backup before swapping it in, beside [dataDir] so
