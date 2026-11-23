@@ -41,6 +41,10 @@ class SharedChatPage extends ConsumerWidget {
               root: host.workspaceDir(chatId),
               title: "Files",
               readOnly: true,
+              whenEmpty: (
+                title: "No files were shared",
+                detail: "The chat was shared without its workspace.",
+              ),
             ),
           ),
           TextButton(

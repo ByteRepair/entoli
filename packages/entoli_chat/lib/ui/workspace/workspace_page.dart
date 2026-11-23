@@ -18,11 +18,20 @@ Future<void> openWorkspace(
   required String root,
   required String title,
   bool readOnly = false,
+  WorkspaceEmpty? whenEmpty,
 }) => Navigator.of(context).push(
   MaterialPageRoute<void>(
-    builder: (_) => WorkspacePage(root: root, title: title, readOnly: readOnly),
+    builder: (_) => WorkspacePage(
+      root: root,
+      title: title,
+      readOnly: readOnly,
+      whenEmpty: whenEmpty,
+    ),
   ),
 );
+
+/// What an empty folder says, in place of the explorer's own words.
+typedef WorkspaceEmpty = ({String title, String detail});
 
 /// A workspace folder, and what can be done with what is in it. Listing,
 /// creating a folder and deleting are on every platform; the routes out of
@@ -34,6 +43,7 @@ class WorkspacePage extends ConsumerStatefulWidget {
     required this.root,
     required this.title,
     this.readOnly = false,
+    this.whenEmpty,
   });
 
   /// The folder the explorer cannot go above.
@@ -44,6 +54,9 @@ class WorkspacePage extends ConsumerStatefulWidget {
 
   /// Browsed and read, nothing made or deleted: a shared chat's workspace.
   final bool readOnly;
+
+  /// What an empty folder says. Null is that the agent's files land here.
+  final WorkspaceEmpty? whenEmpty;
 
   @override
   ConsumerState<WorkspacePage> createState() => _WorkspacePageState();
@@ -251,11 +264,11 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     if (entries.isEmpty) {
       return EmptyPane(
         icon: Icons.folder_open,
-        title: widget.readOnly ? "No files were shared" : "Nothing here yet",
-        detail: widget.readOnly
-            ? "The chat was shared without its workspace."
-            : "The agent's files land here."
-                  "${handoff.canShare ? " Share files to Entoli to add your own." : ""}",
+        title: widget.whenEmpty?.title ?? "Nothing here yet",
+        detail:
+            widget.whenEmpty?.detail ??
+            "The agent's files land here."
+                "${handoff.canShare ? " Share files to Entoli to add your own." : ""}",
       );
     }
     return ListView.builder(
