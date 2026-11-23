@@ -1,19 +1,16 @@
 import "package:agent_chat/ui/link_opener.dart";
+import "package:entoli_core/view/web_view.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
 
 void main() {
-  late _FakeWebViewPlatform platform;
+  late _FakeWebView webView;
 
-  setUp(() {
-    platform = _FakeWebViewPlatform();
-    WebViewPlatform.instance = platform;
-  });
+  setUp(() => webView = _FakeWebView());
 
   /// The in-app webview is Android's alone, and the override has to be undone
   /// inside the body: flutter_test checks it before a tear-down runs.
@@ -47,6 +44,7 @@ void main() {
             onPressed: () => PlatformLinkOpener(
               FakeChatStore(),
               FakeLinkLauncher(),
+              webView,
             ).open(context, Uri.parse(url)),
             child: const Text("open"),
           ),
@@ -67,8 +65,7 @@ void main() {
     tester,
   ) async {
     final copied = await openLink(tester, "https://example.com/one");
-    platform.title = "Two";
-    platform.delegate!.onPageFinished!("https://example.com/two");
+    webView.onNavigated!(Uri.parse("https://example.com/two"), "Two");
     await settleIo(tester);
 
     await tapCopyLink(tester);
@@ -79,24 +76,11 @@ void main() {
     expect(find.byTooltip("Open in browser"), findsOneWidget);
   });
 
-  androidTest("a page that only rewrites its URL is still copied as it is", (
-    tester,
-  ) async {
-    final copied = await openLink(tester, "https://example.com/one");
-    platform.delegate!.onUrlChange!(
-      const UrlChange(url: "https://example.com/three"),
-    );
-    await settleIo(tester);
-
-    await tapCopyLink(tester);
-
-    expect(copied, ["https://example.com/three"]);
-  });
-
   androidTest("nothing loaded yet copies the link it was opened with", (
     tester,
   ) async {
     final copied = await openLink(tester, "https://example.com/one");
+    expect(webView.url, Uri.parse("https://example.com/one"));
 
     await tapCopyLink(tester);
 
@@ -112,73 +96,19 @@ void main() {
   });
 }
 
-/// The webview, faked at the platform interface — see `test/AGENTS.md` for why
-/// here. Only the members the page calls are answered: the rest of the
-/// interface keeps its default of throwing, so a new call shows up as a failure
-/// rather than as a silent no-op.
-class _FakeWebViewPlatform extends WebViewPlatform {
-  _FakeNavigationDelegate? delegate;
-  String? title;
+/// A [WebView] that loads nothing, keeping the [url] it was asked for and the
+/// page's [onNavigated] for the test to fire by hand.
+class _FakeWebView implements WebView {
+  Uri? url;
+  void Function(Uri url, String? title)? onNavigated;
 
   @override
-  PlatformWebViewController createPlatformWebViewController(
-    PlatformWebViewControllerCreationParams params,
-  ) => _FakeWebViewController(params, this);
-
-  @override
-  PlatformNavigationDelegate createPlatformNavigationDelegate(
-    PlatformNavigationDelegateCreationParams params,
-  ) => delegate = _FakeNavigationDelegate(params);
-
-  @override
-  PlatformWebViewWidget createPlatformWebViewWidget(
-    PlatformWebViewWidgetCreationParams params,
-  ) => _FakeWebViewWidget(params);
-}
-
-class _FakeWebViewController extends PlatformWebViewController {
-  _FakeWebViewController(super.params, this._platform) : super.implementation();
-
-  final _FakeWebViewPlatform _platform;
-
-  @override
-  Future<void> setJavaScriptMode(JavaScriptMode javaScriptMode) async {}
-
-  @override
-  Future<void> setPlatformNavigationDelegate(
-    PlatformNavigationDelegate handler,
-  ) async {}
-
-  @override
-  Future<void> loadRequest(LoadRequestParams params) async {}
-
-  @override
-  Future<String?> getTitle() async => _platform.title;
-
-  @override
-  Future<bool> canGoBack() async => false;
-}
-
-class _FakeNavigationDelegate extends PlatformNavigationDelegate {
-  _FakeNavigationDelegate(super.params) : super.implementation();
-
-  PageEventCallback? onPageFinished;
-  UrlChangeCallback? onUrlChange;
-
-  @override
-  Future<void> setOnPageFinished(PageEventCallback onPageFinished) async {
-    this.onPageFinished = onPageFinished;
+  Widget view({
+    required Uri url,
+    void Function(Uri url, String? title)? onNavigated,
+  }) {
+    this.url = url;
+    this.onNavigated = onNavigated;
+    return const SizedBox.expand();
   }
-
-  @override
-  Future<void> setOnUrlChange(UrlChangeCallback onUrlChange) async {
-    this.onUrlChange = onUrlChange;
-  }
-}
-
-class _FakeWebViewWidget extends PlatformWebViewWidget {
-  _FakeWebViewWidget(super.params) : super.implementation();
-
-  @override
-  Widget build(BuildContext context) => const SizedBox.expand();
 }

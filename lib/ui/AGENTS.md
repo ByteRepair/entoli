@@ -5,7 +5,7 @@
 `PlatformLinkOpener` is here rather than under `core/platform/` because it is a
 page, not a port. What it dispatches on is the platform, which is what filed it
 there to begin with, but two of its three answers are a `Navigator.push` of a
-webview it also defines — it takes a `BuildContext`, builds `Scaffold`s and
+web view's page — it takes a `BuildContext`, builds `Scaffold`s and
 `AppBar`s, and reaches the shared `copyToClipboard` the rest of the UI uses.
 Under `core/` that last one was the only import in the tree pointing from
 `core/` back into `ui/`, which is the direction that says a file is on the wrong
@@ -21,6 +21,11 @@ this used to, would break every relative reference to the files sitting beside
 it. The `LinkOpener` interface is the core's (`model/link_opener.dart`),
 which is what lets `main` inject it and the tests fake it.
 
+The web view itself is the plugin, so it is `entoli_webview`'s: the core's
+`WebView` (`view/web_view.dart`) is handed to the opener in `main` beside the
+launcher, and the opener's two pages — a link's and a phone's artifact's —
+ask it for the view (see `packages/entoli_webview/lib/AGENTS.md`).
+
 Every route out of the app goes through the `LinkLauncher` it is handed —
 the external app a scheme belongs to, or the system's in-app browser for a
 sign-in page on the phones — which `main` binds to `entoli_links`' plugin
@@ -28,8 +33,8 @@ sign-in page on the phones — which `main` binds to `entoli_links`' plugin
 and refuses what is not a web, mail or phone link; the launcher only hands
 the URL over.
 
-The one thing the opener asks beyond the store is the `SyncHub`, handed in
-`main` beside it and null in tests: a chat being mirrored has no artifact
+Last, the opener is handed the `SyncHub`, in `main` beside the rest and null
+in tests: a chat being mirrored has no artifact
 directory here, so its artifacts come down as one zip (see "Artifacts" in the
 root notes) and open out of a temp directory by the same platform paths. The
 staging itself is the `RemoteArtifacts` port, not opener code — the opener

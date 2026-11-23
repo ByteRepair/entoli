@@ -1,21 +1,30 @@
+import "package:entoli_core/view/web_view.dart";
 import "package:flutter/material.dart";
 import "package:webview_flutter/webview_flutter.dart";
 import "package:webview_flutter_android/webview_flutter_android.dart";
 
-/// [url] in the platform's web view, scripts on; back goes back through the
-/// page's own history before it leaves. [onNavigated] hears each place it
-/// lands and that page's title.
-class WebPageView extends StatefulWidget {
-  const WebPageView({super.key, required this.url, this.onNavigated});
+/// `webview_flutter`'s web view.
+class PluginWebView implements WebView {
+  const PluginWebView();
+
+  @override
+  Widget view({
+    required Uri url,
+    void Function(Uri url, String? title)? onNavigated,
+  }) => _WebPageView(url: url, onNavigated: onNavigated);
+}
+
+class _WebPageView extends StatefulWidget {
+  const _WebPageView({required this.url, this.onNavigated});
 
   final Uri url;
   final void Function(Uri url, String? title)? onNavigated;
 
   @override
-  State<WebPageView> createState() => _WebPageViewState();
+  State<_WebPageView> createState() => _WebPageViewState();
 }
 
-class _WebPageViewState extends State<WebPageView> {
+class _WebPageViewState extends State<_WebPageView> {
   late final WebViewController _controller = WebViewController()
     ..setJavaScriptMode(JavaScriptMode.unrestricted)
     ..setNavigationDelegate(

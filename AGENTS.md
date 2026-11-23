@@ -89,6 +89,8 @@ named in a cross-reference is findable from this list.
   link leaves through
 - `packages/entoli_scanner/lib/AGENTS.md` — The camera that reads a pairing
   code
+- `packages/entoli_webview/lib/AGENTS.md` — The in-app web view a link and
+  a phone's artifact open in
 - `lib/ui/voice/AGENTS.md` — Reading one message out, The screen, Touch to
   speak, Taking turns
 - `packages/entoli_core/lib/view/workspace/AGENTS.md` — The workspace explorer
@@ -403,8 +405,9 @@ fact: the desktop opener serves the directory itself over `file://`, so the
 entry file on disk must already be the whole page — the model's `read` tool and
 every future reader see the same styled file, and a temp copy at open time would
 break every relative reference to the files beside it. The phones still layer
-their runtime path (an HTTP server on loopback under an in-app webview) over the
-same injected copy, where the marker makes the second injection a no-op.
+their runtime path (an HTTP server on loopback under the in-app web view,
+`entoli_webview`) over the same injected copy, where the marker makes the second
+injection a no-op.
 Artifacts published before the injection moved open unstyled on desktop until
 the model re-publishes them.
 

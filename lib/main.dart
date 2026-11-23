@@ -31,6 +31,7 @@ import "package:entoli_scanner/entoli_scanner.dart" show PluginCodeScanner;
 import "package:entoli_share/entoli_share.dart" show PluginShareSheet;
 import "package:entoli_voice/entoli_voice.dart"
     show registerVoice, sherpaWorkers;
+import "package:entoli_webview/entoli_webview.dart" show PluginWebView;
 
 import "app/app_menus.dart";
 import "core/platform/app_menus.dart";
@@ -337,7 +338,12 @@ class AppSession {
         systemAccentProvider.overrideWithValue(await accent),
         linkLauncherProvider.overrideWithValue(const PluginLinkLauncher()),
         linkOpenerProvider.overrideWithValue(
-          PlatformLinkOpener(store, const PluginLinkLauncher(), syncHub),
+          PlatformLinkOpener(
+            store,
+            const PluginLinkLauncher(),
+            const PluginWebView(),
+            syncHub,
+          ),
         ),
         appLinksProvider.overrideWithValue(incomingLinks()),
         shareSheetProvider.overrideWithValue(const PluginShareSheet()),
