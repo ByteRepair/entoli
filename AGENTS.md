@@ -140,12 +140,12 @@ with nothing either, which is why nothing user-facing names it at all.
 ### The core
 
 `packages/entoli_core/` is a chat without a platform: what a conversation is,
-how it is kept, and how it is drawn, for any front end to run. The app is one
-front end and the share viewer another; the core reaches neither, and no
-plugin. What a front end alone can do — a disk, a microphone, a shell — the
-core asks for through an interface the front end binds at its root, as every
-port is bound (the filesystem, for one, is handed to `AppConfig`). It is a
-package because Flutter bundles the assets of every package a build depends
+how it is kept, how a turn runs, and how it is drawn, for any front end to
+run. The app is one front end and the share viewer another; the core reaches
+neither, no adapter, and no plugin. What a front end alone can do — a disk, a microphone, a shell — the
+core asks for through an interface an adapter implements and the front end
+binds at its root (the filesystem, for one, is handed to `AppConfig`). It is
+a package because Flutter bundles the assets of every package a build depends
 on, so a front end has only what it chose.
 
 Its `lib/` is five layers, each importing only those before it:
@@ -170,7 +170,40 @@ Its `lib/` is five layers, each importing only those before it:
   family is named `packages/entoli_core/<family>` (`view/fonts.dart`).
 
 No path exists in both the core and the app, so a path names one file. The
-app, the core and the viewer are one pub workspace with one `pubspec.lock`.
+app, the core, the adapters and the viewer are one pub workspace with one
+`pubspec.lock`.
+
+### The adapters
+
+`packages/entoli_<capability>/` is one platform capability: the core's
+interfaces for it implemented with the Flutter plugins it takes, and nothing
+else — voice, files, links, share, scanner, webview, sync_transport, shell,
+paths, menu. An adapter depends on the core and its plugins, never on a front
+end, and on another adapter only where it builds on one. Its notes are in its
+`lib/AGENTS.md`, listed above.
+
+### The two front ends
+
+A front end is the composition: it depends on the core and the adapters it
+chose, and binds every interface at its root, in one place.
+
+- **The app** (`lib/`, package `agent_chat`) binds them in `main.dart`, with
+  `providers.dart` declaring the app's own ports and `core/platform/` building
+  each platform's implementations. Beside the binding it is the pages and
+  widgets (`ui/`), their controllers (`app/`), and what only the app runs
+  (`data/`): sync, the secrets, the triggers, the models on the device, the
+  agent's browser and the CLI providers. It takes every adapter.
+- **The viewer** (`packages/entoli_share_viewer/`) is the core in a browser,
+  read-only. It takes the one adapter that builds for the web and is worth
+  taking, `entoli_links`, and implements the rest of what it needs itself;
+  see its `AGENTS.md`.
+
+Two tests hold this: `test/core/plugin_boundary_test.dart` walks the
+pubspecs — the core reaches no plugin, and a front end reaches one only
+through an adapter it chose — and `test/core/bindings_test.dart` checks that
+every port the core declares unbound (a provider throwing
+`UnimplementedError`) is bound in each front end's `main` and in the test
+harness, and every port of the app's in the app's `main`.
 
 ### Imports point one way
 
