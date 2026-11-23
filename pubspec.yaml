@@ -22,6 +22,7 @@ workspace:
   - packages/entoli_webview
   - packages/entoli_sync_transport
   - packages/entoli_shell
+  - packages/entoli_paths
 
 dependencies:
   flutter:
@@ -56,6 +57,9 @@ dependencies:
   # Where commands run: the shells, proot, iSH and the bundled tools.
   entoli_shell:
     path: packages/entoli_shell
+  # Where this platform keeps the app's data and its cache.
+  entoli_paths:
+    path: packages/entoli_paths
 
   # State management
   flutter_riverpod: ^3.4.2
@@ -78,10 +82,6 @@ dependencies:
   path: ^1.9.1
   # The filesystem the core is handed; the app hands it the disk.
   file: ^7.0.1
-  path_provider: ^2.1.6
-  # The App Group container, which path_provider does not ask for. See
-  # "The workspaces in the Files app" in ios/AGENTS.md.
-  path_provider_foundation: ^2.6.0
   mime: ^2.0.0
   # A backup, a shared chat and the archives the tools download.
   archive: ^4.1.0

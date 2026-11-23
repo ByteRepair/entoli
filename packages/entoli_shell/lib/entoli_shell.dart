@@ -28,7 +28,7 @@ import "tree_ops.dart";
 
 export "bundled_tools.dart" show BundledTools;
 export "cli_guest.dart";
-export "file_modes.dart" show excludeFromBackup, makeExecutable;
+export "file_modes.dart" show makeExecutable;
 export "local_shell.dart" show LocalShell, environmentWithoutAppImage;
 export "sandbox_grants.dart" show MachineSandboxFolders;
 export "tree_ops.dart" show removeTree;

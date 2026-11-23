@@ -7,7 +7,7 @@ import java.io.File
 
 // The data directory `AppConfig` composes, for the readers that run with no
 // engine. The call path_provider's getApplicationDocumentsDirectory makes, so
-// this is where `platformDataDir` put it rather than a guess at it.
+// this is where `appDirectories` put it rather than a guess at it.
 internal fun appDataDir(context: Context) = File(PathUtils.getDataDirectory(context), "entoli")
 
 // The triggers Dart wrote, or null when there is no file. Throws on a file

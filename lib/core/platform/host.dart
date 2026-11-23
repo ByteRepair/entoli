@@ -2,20 +2,15 @@ import "dart:async";
 import "dart:ffi";
 import "dart:io";
 
-import "package:file/local.dart";
 import "package:ffi/ffi.dart";
-import "package:flutter/foundation.dart";
 import "package:flutter/services.dart" show MethodChannel;
 import "package:path/path.dart" as p;
-import "package:path_provider/path_provider.dart";
-import "package:path_provider_foundation/path_provider_foundation.dart";
 import "package:entoli_core/model/model_budget.dart";
 import "package:entoli_core/model/model_process.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/agent_browser.dart";
 import "package:entoli_core/model/app_update.dart";
 import "package:entoli_core/model/log.dart";
-import "package:entoli_core/model/migrations.dart";
 import "package:entoli_core/model/assistant_launch.dart";
 import "package:entoli_core/model/intent_action.dart";
 import "package:entoli_core/model/backup_handoff.dart";
@@ -32,10 +27,11 @@ import "package:entoli_core/model/voice_model_store.dart";
 import "package:entoli_core/model/config.dart";
 import "package:entoli_files/entoli_files.dart"
     show platformBackupHandoff, platformFileHandoff;
+import "package:entoli_paths/entoli_paths.dart" show appDirectories;
 import "package:entoli_voice/entoli_voice.dart"
     show openVoiceModelStore, platformVoice;
 import "package:entoli_shell/entoli_shell.dart"
-    show BundledTools, LocalShell, excludeFromBackup, openRootfsStore;
+    show BundledTools, LocalShell, openRootfsStore;
 export "package:entoli_shell/entoli_shell.dart"
     show
         captureLoginPath,
@@ -329,97 +325,17 @@ Future<ReminderAlarms> createReminderAlarms() async {
 
 FileWatches createFileWatches() => IoFileWatches();
 
-/// `$ENTOLI_CONFIG` if set, else `~/.config/entoli` on desktop and
-/// app-private storage on the phones. A desktop debug build uses
-/// `entoli-debug`, so it never touches an installed copy's data; a
-/// phone's debug build is its own app, its storage already apart.
-Future<String> dataDir() async {
-  final override = processEnv("ENTOLI_CONFIG");
-  return override ?? p.join(await _resolveBase(), _dirLeaf);
-}
+/// Where this platform keeps the app's data and cache, resolved once.
+final _directories = appDirectories(home: LocalShell.machineHomeDir());
 
-String get _dirLeaf =>
-    (Platform.isLinux || Platform.isMacOS || Platform.isWindows) && kDebugMode
-    ? "entoli-debug"
-    : "entoli";
+/// `$ENTOLI_CONFIG` if set, else where this platform keeps the app's data.
+Future<String> dataDir() async =>
+    processEnv("ENTOLI_CONFIG") ?? await _directories.data;
 
-Future<String> _resolveBase() async {
-  if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
-    return p.join(_home, ".config");
-  }
-  if (Platform.isIOS) return _iosBase;
-  final dir = await getApplicationDocumentsDirectory();
-  return dir.path;
-}
-
-/// The App Group the Runner shares with its File Provider extension, which
-/// reads the workspaces from the data directory inside it. See "The
-/// workspaces in the Files app" in ios/AGENTS.md.
-const iosAppGroup = "group.io.byterepair.entoli";
-
-/// Resolved once per process, since resolving it may move the directory.
-final Future<String> _iosBase = _resolveIosBase();
-
-/// The App Group's container, once `relocateDataDir` has moved a data
-/// directory from before it out of Documents. Documents stays where the move
-/// fails, so the app still runs; the Files app then shows nothing until a
-/// launch where it lands.
-Future<String> _resolveIosBase() async {
-  final group = await PathProviderFoundation().getContainerPath(
-    appGroupIdentifier: iosAppGroup,
-  );
-  // Every launch after the move ends here, with no need of Documents.
-  if (group != null && Directory(p.join(group, _dirLeaf)).existsSync()) {
-    return group;
-  }
-  final documents = (await getApplicationDocumentsDirectory()).path;
-  if (group == null) {
-    logFailure("files", "no App Group container, data stays in Documents");
-    return documents;
-  }
-  final moved = relocateDataDir(
-    const LocalFileSystem(),
-    from: p.join(documents, _dirLeaf),
-    to: p.join(group, _dirLeaf),
-  );
-  return moved ? group : documents;
-}
-
-String get _home => LocalShell.machineHomeDir()!;
-
-/// Where things that can be fetched again live. `$ENTOLI_CACHE` if set,
-/// else the platform's cache directory, named by hand so it pairs with
-/// `~/.config/entoli`.
-///
-/// **Android uses the support directory, deliberately**: `getCacheDir()` is
-/// emptied under storage pressure and by Clear Cache, and a model the user
-/// chose to download is not something to lose that way.
-Future<String> cacheDir() async {
-  final override = processEnv("ENTOLI_CACHE");
-  if (override != null) return override;
-  if (Platform.isLinux) {
-    final xdg = Platform.environment["XDG_CACHE_HOME"];
-    return p.join(xdg ?? p.join(_home, ".cache"), _dirLeaf);
-  }
-  if (Platform.isMacOS) return p.join(_home, "Library", "Caches", _dirLeaf);
-  if (Platform.isWindows) {
-    final local =
-        Platform.environment["LOCALAPPDATA"] ??
-        p.join(_home, "AppData", "Local");
-    return p.join(local, _dirLeaf, "Cache");
-  }
-  final dir = p.join((await getApplicationSupportDirectory()).path, "entoli");
-  // iOS backs up Application Support, and Caches is purged under storage
-  // pressure, which a downloaded model must survive. Apple's answer for data
-  // that is refetchable yet kept is this, with the backup flag set.
-  if (Platform.isIOS) {
-    Directory(dir).createSync(recursive: true);
-    if (!excludeFromBackup(dir)) {
-      logFailure("files", "could not exclude the cache from backup");
-    }
-  }
-  return dir;
-}
+/// Where things that can be fetched again live: `$ENTOLI_CACHE` if set, else
+/// the platform's cache directory.
+Future<String> cacheDir() async =>
+    processEnv("ENTOLI_CACHE") ?? await _directories.cache;
 
 VoiceModelStore createVoiceModelStore(String cacheDir) =>
     openVoiceModelStore(cacheDir, startDownload());

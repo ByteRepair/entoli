@@ -162,8 +162,8 @@ class LocalShell extends Shell {
   @override
   bool get projectHome => _driver()?.projectHome ?? false;
 
-  /// One expression, beside the shell that reads it: `io/platform.dart`'s
-  /// `_home` composes the data and cache directories from the same answer.
+  /// One expression, beside the shell that reads it: `appDirectories`
+  /// composes the desktops' data and cache directories from the same answer.
   static String? machineHomeDir() => Platform.isWindows
       ? Platform.environment["USERPROFILE"] ?? Platform.environment["HOME"]
       : Platform.environment["HOME"];

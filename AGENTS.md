@@ -94,6 +94,8 @@ named in a cross-reference is findable from this list.
   sync runs over
 - `packages/entoli_shell/lib/AGENTS.md` — Running the commands (the local
   shell), Bundled tools, A whole Linux under proot
+- `packages/entoli_paths/lib/AGENTS.md` — Where the app's data lives: the
+  data and cache directories on each platform, iOS's App Group
 - `lib/ui/voice/AGENTS.md` — Reading one message out, The screen, Touch to
   speak, Taking turns
 - `packages/entoli_core/lib/view/workspace/AGENTS.md` — The workspace explorer
@@ -270,7 +272,8 @@ one JSON list, offered in the avatar editor beside the presets; see
 `<dataDir>/models.json` is models.dev trimmed to what the app reads, a cache
 refetched daily — see "The model catalog" in `lib/ui/widgets/AGENTS.md`.
 Data dir: `$ENTOLI_CONFIG` if set, else `~/.config/entoli` (desktop),
-app-private storage (Android), and the App Group's container (iOS).
+app-private storage (Android), and the App Group's container (iOS); see
+`packages/entoli_paths/lib/AGENTS.md`.
 `AppConfig` is not the only thing that knows this layout: `WorkspaceProvider`
 reads the workspace half of it in Kotlin, because Android's Files app asks with
 no engine running. See "The workspaces in the Files app".

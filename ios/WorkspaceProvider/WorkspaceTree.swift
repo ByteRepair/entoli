@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 // Read with no Flutter engine running, so the layout `AppConfig` composes is
 // read off the disk here, as Android's `WorkspaceProvider` reads it.
 
-/// `iosAppGroup`, in lib/core/platform/host.dart.
+/// `iosAppGroup`, in packages/entoli_paths/lib/entoli_paths.dart.
 let workspaceAppGroup = "group.io.byterepair.entoli"
 
 /// "Local": this device's workspaces, which a domain per synced device's

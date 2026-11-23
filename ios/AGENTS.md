@@ -566,7 +566,7 @@ added to it stays on the device.
 
 **The data directory lives in the App Group** (`group.io.byterepair.entoli`),
 because the extension is a process of its own and sees nothing of the app's
-container. `dataDir()` asks `path_provider_foundation` for the group's
+container. `entoli_paths` asks `path_provider_foundation` for the group's
 container and has `relocateDataDir` (`migrations.dart`) move a
 `Documents/entoli` from before into it, once. Where the move fails the app
 runs from Documents and Files shows nothing until a launch where it lands. Both targets carry the group's entitlement, so the group has to exist

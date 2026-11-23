@@ -1,0 +1,30 @@
+name: entoli_paths
+description: >
+  Where this platform keeps the app's data and its cache: the desktops'
+  dot-directories, the phones' app storage and iOS's App Group container.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  entoli_core:
+    path: ../entoli_core
+  # CoreFoundation's backup flag, looked up in the process.
+  ffi: ^2.1.4
+  file: ^7.0.1
+  path: ^1.9.1
+  path_provider: ^2.1.6
+  # The App Group container, which path_provider does not ask for. See
+  # "The workspaces in the Files app" in ios/AGENTS.md.
+  path_provider_foundation: ^2.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
