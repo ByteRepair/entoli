@@ -55,3 +55,7 @@ jobs:
       - run: flutter analyze
 
       - run: flutter test --concurrency 8
+
+      # The viewer is its own package, which the root's suite does not reach.
+      - run: flutter test
+        working-directory: packages/entoli_share_viewer
