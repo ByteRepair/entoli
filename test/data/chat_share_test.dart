@@ -383,7 +383,7 @@ void main() {
         "version": utf8.encode(migrations.last.version),
         "share.json": utf8.encode(jsonEncode({"chat": "c1"})),
         conv: [],
-        if (bytes != null) state: bytes,
+        state: ?bytes,
       });
 
       expect(await unpackShare(withState(null), tempDir().path), isNull);
