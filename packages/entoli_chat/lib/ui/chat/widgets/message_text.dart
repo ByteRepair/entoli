@@ -1,6 +1,19 @@
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../../app/handoff.dart" show linkOpenerProvider;
 import "markdown_text.dart";
+
+/// Opens [href], tapped in model-written markdown, through the host's
+/// link opener.
+void openMarkdownLink(BuildContext context, String href) {
+  final uri = Uri.tryParse(href);
+  if (uri == null) return;
+  ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(linkOpenerProvider).open(context, uri);
+}
 
 /// One line of a message bubble: raw text while the reply streams or when it is
 /// an error, `MarkdownText` once finished.

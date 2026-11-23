@@ -691,11 +691,12 @@ knowing only the one below:
 **The UI** draws all of it in `activity/`: `ActivityNodeView`
 switches over the nodes (`nodes.dart`) and hands each press to the node.
 What a press opens is the `TranscriptHandOff` that `transcriptHandOffProvider`
-builds over the context of what was tapped — `handOffOf(context)`. The app's
-is `ContextHandOff` (`context_hand_off.dart`), which opens a detail as an
-`ActivityCard` that follows its source while it is open (`showActivityDetail`,
-`card.dart`), and a file, an artifact, a skill, the plan and the agent's
-browser on their own pages.
+builds over the context of what was tapped — `handOffOf(context)`. Both
+hosts' are a `PageHandOff` (`activity/page_hand_off.dart` in the package),
+which opens a detail as an `ActivityCard` that follows its source while it is
+open (`showActivityDetail`, `card.dart`), the plan and an artifact on their
+own pages, and says what an open threw. The app's, `ContextHandOff`
+(`context_hand_off.dart`), adds a file, a skill and the agent's browser.
 `MessageBubble` keeps its public shape and lays its message out through
 `MessageLayout`, re-laid only when it is handed another message.
 
@@ -1208,9 +1209,12 @@ press.
 
 **The scrolling list is `ConversationView`** (`widgets/conversation_view.dart`):
 the list, the rail, the glides, jump to latest and the turn's follow, below.
-It is handed the chat's view state as a listenable, how to draw a message, and
-what sits under it — the composer here, nothing in the shared-chat viewer —
-so both draw one conversation and neither keeps a copy of the scrolling.
+It reads the chat's view state from the host (`TranscriptHost.view`, which in
+the app picks the mirror's controller for a mirrored chat) and is handed how
+to draw a message and what sits under it — the composer here, nothing in the
+shared-chat viewer — so both draw one conversation and neither keeps a copy
+of the scrolling. A link tapped in model-written markdown opens through
+`linkOpenerProvider` (`openMarkdownLink`), which both hosts bind.
 Sending calls its `follow()`.
 
 **The chapter rail** (`ChapterRail`) is a tick per prompt in the margin right
@@ -1231,7 +1235,7 @@ one goes to the reply's row and then to the steer's bubble, keyed through
 `MessageBubble.steerKey`. What it draws is fed from the chat's view state, not
 assigned while the page builds: a `listenManual` with `fireImmediately` hands
 it the chat as loaded, then every change — a turn, a deletion, a thread
-switched — and restarts when the source changes, since `ConversationView`
+switched — and restarts when the chat changes, since `ConversationView`
 is not keyed per chat and its state outlives a switch. The tooltip is the
 prompt's first line, cut at fifty characters. **A press selects, not a
 tap**, and so does every move while pressed, so dragging a mouse or a finger

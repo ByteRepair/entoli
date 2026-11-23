@@ -10,7 +10,7 @@ export "../../app/completion.dart";
 import "package:entoli_chat/domain/models.dart";
 import "package:entoli_chat/domain/project.dart" show ProjectRef;
 import "../../providers.dart";
-import "project_agent_picture.dart";
+import "package:entoli_chat/ui/widgets/agent_picture.dart";
 import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "package:entoli_chat/ui/widgets/text_input.dart";
 

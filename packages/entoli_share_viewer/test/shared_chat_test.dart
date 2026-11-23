@@ -192,7 +192,7 @@ void main() {
 
     test("puts the workspace where it was unpacked", () {
       expect(
-        File(p.join(host.workspaceDir("c1")!, "notes.md")).readAsStringSync(),
+        File(p.join(host.workspaceDir("c1"), "notes.md")).readAsStringSync(),
         "notes",
       );
     });

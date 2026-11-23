@@ -13,17 +13,9 @@ const double readableWidth = 760;
 /// being given what it holds; the marks between messages are the same
 /// wherever the conversation is shown.
 class TranscriptRowView extends StatelessWidget {
-  const TranscriptRowView(
-    this.row, {
-    super.key,
-    required this.onTapLink,
-    required this.message,
-  });
+  const TranscriptRowView(this.row, {super.key, required this.message});
 
   final TranscriptRow row;
-
-  /// Opens a link tapped in model-written markdown: a compaction's summary.
-  final ValueChanged<String> onTapLink;
 
   final Widget Function(MessageRow row) message;
 
@@ -33,20 +25,21 @@ class TranscriptRowView extends StatelessWidget {
     final GoalRow row => GoalMarkRow(row: row),
     CompactionRow(:final summary) => ConversationSeparator(
       text: CompactionRow.text,
-      body: _text(summary, isError: false),
+      body: _text(context, summary, isError: false),
     ),
     CompactionFailedRow(:final reason) => ConversationSeparator(
       text: CompactionFailedRow.text,
-      body: _text(reason, isError: true),
+      body: _text(context, reason, isError: true),
     ),
     final MessageRow row => message(row),
   };
 
-  Widget _text(String text, {required bool isError}) => MessageText(
-    text: text,
-    isError: isError,
-    isWaiting: false,
-    caret: false,
-    onTapLink: onTapLink,
-  );
+  Widget _text(BuildContext context, String text, {required bool isError}) =>
+      MessageText(
+        text: text,
+        isError: isError,
+        isWaiting: false,
+        caret: false,
+        onTapLink: (href) => openMarkdownLink(context, href),
+      );
 }

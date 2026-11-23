@@ -6,7 +6,7 @@ import "package:entoli_chat/core/formatting.dart" show tokenCount;
 import "package:entoli_chat/domain/models.dart";
 import "package:entoli_chat/domain/prompt_library.dart" show nameOf;
 import "../../providers.dart";
-import "../widgets/project_agent_picture.dart";
+import "package:entoli_chat/ui/widgets/agent_picture.dart";
 import "package:entoli_chat/ui/widgets/empty_pane.dart";
 import "package:entoli_chat/ui/widgets/page_bar.dart";
 import "../widgets/section_header.dart" show mutedParagraph;

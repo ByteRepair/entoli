@@ -44,9 +44,9 @@ abstract interface class TranscriptHost {
 
   Future<void> stopJob(String chatId, int jobId);
 
-  /// Where chat [chatId]'s commands ran, for opening a job's whole log; null
-  /// where there is no workspace to open it from.
-  String? workspaceDir(String chatId, {String? project});
+  /// Where chat [chatId]'s commands ran: a job's whole log is there, and the
+  /// viewer's Files open it.
+  String workspaceDir(String chatId, {String? project});
 }
 
 final transcriptHostProvider = Provider<TranscriptHost>(

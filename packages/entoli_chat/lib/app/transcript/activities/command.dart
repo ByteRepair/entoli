@@ -188,10 +188,8 @@ DetailAction _openLog(SettingReader reader, String chatId, String callId) {
     chatId,
     project: reader.read(host.view(chatId)).chat?.state.project,
   );
-  final path = workspace == null
-      ? null
-      : p.join(workspace, backgroundLog(callId));
-  if (path == null || !File(path).existsSync()) {
+  final path = p.join(workspace, backgroundLog(callId));
+  if (!File(path).existsSync()) {
     return const DetailAction(
       label: "Open log",
       why: "The log is no longer in the workspace",

@@ -36,8 +36,7 @@ Future<void> main() async {
     final chat = await store.load(chatId);
     // A chat shared without its workspace has none to unpack; an empty one
     // is what the explorer says that of.
-    final workspace = config.workspaceDir(chatId);
-    Directory(workspace).createSync(recursive: true);
+    Directory(config.workspaceDir(chatId)).createSync(recursive: true);
     overrides = [
       ...transcriptOverrides,
       transcriptHostProvider.overrideWithValue(
@@ -47,7 +46,7 @@ Future<void> main() async {
       fileHandoffProvider.overrideWithValue(const WebFileHandoff()),
       linkOpenerProvider.overrideWithValue(WebLinkOpener(store)),
     ];
-    home = SharedChatPage(chat: chat, payload: payload, workspace: workspace);
+    home = SharedChatPage(chat: chat, payload: payload);
   }
   runApp(
     ProviderScope(

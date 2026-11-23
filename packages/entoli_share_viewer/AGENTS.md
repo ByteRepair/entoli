@@ -23,18 +23,18 @@ from Flutter's CDN, so `build/web/canvaskit/` is never fetched.
   `lib/` reads its files through `dart:io` with no port over it, so the whole
   process gets `IOOverrides` over `package:file`'s `MemoryFileSystem`. The
   app's readers, `FileChatStore` and the migration chain run unchanged over it.
-- **`unpackShare`** into `/entoli`, then `AppConfig.load`, which migrates a
-  link from an older build. A fragment that is not a whole zip, or not a chat,
+- **`unpackShare`** into `/entoli`, whose `AppConfig.load` migrates a link
+  from an older build and is the config the viewer runs on. A fragment that is not a whole zip, or not a chat,
   is the "incomplete" page.
 - **The overrides.** The drawing's ports (`transcriptOverrides`), and in place
   of the app's:
   - `SharedChatHost` — the chat as loaded, never running: the plan, the
     sub-agents' transcripts and the attachments read from the store; no
     agent pictures and no job logs, a job having ended where it was shared.
-  - `SharedChatHandOff` — a detail opens as in the app; a text file in
-    `TextFilePage` read-only, any other file downloaded; the plan on
-    `PlanPage`. A skill to install and the agent's browser say they open in
-    Entoli.
+  - `SharedChatHandOff` — a `PageHandOff`, so a detail, the plan and an
+    artifact open as in the app; a text file in `TextFilePage` read-only, any
+    other file downloaded. A skill to install and the agent's browser say, in
+    a notice, that they open in Entoli.
   - `WebFileHandoff` and `WebLinkOpener` (`web_hand_offs.dart`) — a file is
     downloaded as a blob; a web link opens in a new tab, and an artifact is
     its entry file in a new tab, so the files beside it that it loads do not
@@ -42,7 +42,7 @@ from Flutter's CDN, so `build/web/canvaskit/` is never fetched.
 
 `SharedChatPage` is the bar and a `ConversationView` with nothing under it:
 the chapter rail and jump to latest as in the app. The bar has the plan, the
-workspace in the explorer's `readOnly` mode, **Open in Entoli**
+workspace (the host's `workspaceDir`) in the explorer's `readOnly` mode, **Open in Entoli**
 (`entoli://share?def=` with the same fragment, which imports it) and **Get
 Entoli**, the product page.
 

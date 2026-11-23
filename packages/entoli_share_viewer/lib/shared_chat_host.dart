@@ -88,6 +88,6 @@ class SharedChatHost implements TranscriptHost {
   Future<void> stopJob(String chatId, int jobId) async {}
 
   @override
-  String? workspaceDir(String chatId, {String? project}) =>
+  String workspaceDir(String chatId, {String? project}) =>
       config.workspaceDir(chatId, project: project);
 }

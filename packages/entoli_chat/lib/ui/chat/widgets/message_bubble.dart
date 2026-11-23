@@ -85,7 +85,8 @@ class MessageBubble extends ConsumerStatefulWidget {
   /// looking for the button that started it.
   final bool isSpeaking;
 
-  /// Open a link tapped in the rendered markdown. Receives the `href`.
+  /// Open a link tapped in the rendered markdown. Receives the `href`. Null
+  /// is [openMarkdownLink].
   final ValueChanged<String>? onTapLink;
 
   /// Answer a passage selected in this message: the selection menu's Reply.
@@ -460,6 +461,10 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   /// outside the region already.
   Widget _label(Widget child) => SelectionContainer.disabled(child: child);
 
+  void _onTapLink(String href) => widget.onTapLink != null
+      ? widget.onTapLink!(href)
+      : openMarkdownLink(context, href);
+
   Widget _said(Said said) => Padding(
     padding: const EdgeInsets.only(bottom: 4),
     child: switch (said) {
@@ -468,14 +473,14 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
         isError: false,
         isWaiting: widget.moment.waiting,
         caret: caret,
-        onTapLink: widget.onTapLink,
+        onTapLink: _onTapLink,
       ),
       ErrorSaid() => MessageText(
         text: said.text,
         isError: true,
         isWaiting: widget.moment.waiting,
         caret: false,
-        onTapLink: widget.onTapLink,
+        onTapLink: _onTapLink,
       ),
       CommandSaid(:final command) => ShellCommandText(command: command),
     },

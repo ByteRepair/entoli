@@ -19,7 +19,7 @@ import "package:entoli_chat/domain/prompt_library.dart";
 import "../../providers.dart";
 import "../bot_avatar/bot_avatar_editor.dart";
 import "../widgets/add_button_row.dart";
-import "../widgets/project_agent_picture.dart";
+import "package:entoli_chat/ui/widgets/agent_picture.dart";
 import "package:entoli_chat/ui/widgets/anchored_menu.dart";
 import "package:entoli_chat/ui/widgets/busy.dart";
 import "package:entoli_chat/ui/widgets/dialogs.dart";

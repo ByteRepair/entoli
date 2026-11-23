@@ -54,7 +54,7 @@ class AppTranscriptHost implements TranscriptHost {
       _ref.read(agentBackendProvider).jobsOf(chatId).stop(jobId);
 
   @override
-  String? workspaceDir(String chatId, {String? project}) =>
+  String workspaceDir(String chatId, {String? project}) =>
       _ref.read(appConfigProvider).workspaceDir(chatId, project: project);
 }
 

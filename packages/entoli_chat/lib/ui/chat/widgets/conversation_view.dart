@@ -7,6 +7,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 import "package:super_sliver_list/super_sliver_list.dart";
 
+import "../../../app/transcript/host.dart";
 import "../../../app/transcript/transcript.dart";
 import "../../../domain/models.dart";
 import "../../../domain/room/room_state.dart";
@@ -133,9 +134,9 @@ final _measureAll = _MeasureAll();
 
 /// A conversation as it is read: its rows in a list that opens at the latest
 /// and follows a turn while the reader is there, the chapter rail beside it,
-/// and the way back to the end once the reader has left it. Fed by [source],
-/// whoever answers it — the chat page's controller or mirror, the share
-/// viewer's unpacked chat.
+/// and the way back to the end once the reader has left it. Fed by the
+/// host's view of the chat (`TranscriptHost.view`) — the app's controller or
+/// mirror, the share viewer's unpacked chat.
 ///
 /// A message's row is the host's to draw ([message]), given the key for a
 /// steer read into it ([steerKey]) which the rail finds it by; the rest is
@@ -144,22 +145,15 @@ class ConversationView extends ConsumerStatefulWidget {
   const ConversationView({
     super.key,
     required this.chatId,
-    required this.source,
     required this.message,
-    required this.onTapLink,
     required this.bottom,
     this.whenEmpty = const SizedBox.shrink(),
     this.banner,
   });
 
   final String chatId;
-  final ProviderListenable<ChatViewState> source;
   final Widget Function(MessageRow row, GlobalKey Function(String id) steerKey)
   message;
-
-  /// Opens a link tapped in model-written markdown that is not a message's:
-  /// a compaction's summary.
-  final ValueChanged<String> onTapLink;
 
   /// Under the conversation: whatever answers the turn.
   final Widget bottom;
@@ -241,15 +235,18 @@ class ConversationViewState extends ConsumerState<ConversationView>
       _chapterKeys.clear();
       _chapter.value = null;
     }
-    if (oldWidget.source != widget.source) _feedOutline();
+    if (oldWidget.chatId != widget.chatId) _feedOutline();
   }
 
-  /// Feed [_outline] from [ConversationView.source], keep to the end of a turn
+  ProviderListenable<ChatViewState> get _source =>
+      ref.read(transcriptHostProvider).view(widget.chatId);
+
+  /// Feed [_outline] from the chat's view, keep to the end of a turn
   /// being followed, and land at the end the first time the chat is there.
   void _feedOutline() {
     _outlineFeed?.close();
     _outline.value = _Outline.empty;
-    _outlineFeed = ref.listenManual(widget.source, (_, view) {
+    _outlineFeed = ref.listenManual(_source, (_, view) {
       final chat = view.chat;
       if (chat == null) return;
       _follow.jumpIfFollowing();
@@ -457,7 +454,7 @@ class ConversationViewState extends ConsumerState<ConversationView>
 
   @override
   Widget build(BuildContext context) {
-    final view = ref.watch(widget.source);
+    final view = ref.watch(_source);
     final chat = view.chat;
     return ReadableColumn(
       banner: widget.banner,
@@ -500,7 +497,6 @@ class ConversationViewState extends ConsumerState<ConversationView>
               itemCount: transcript.rows.length,
               itemBuilder: (context, i) => TranscriptRowView(
                 transcript.rows[i],
-                onTapLink: widget.onTapLink,
                 message: (row) {
                   final message = row.message;
                   return KeyedSubtree(
@@ -508,9 +504,7 @@ class ConversationViewState extends ConsumerState<ConversationView>
                         ? _keyOf(message.id)
                         : null,
                     child: ActivitySource(
-                      live: widget.source.select(
-                        (v) => liveMessageOf(v, message.id),
-                      ),
+                      live: _source.select((v) => liveMessageOf(v, message.id)),
                       child: widget.message(row, _keyOf),
                     ),
                   );

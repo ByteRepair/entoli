@@ -3,7 +3,6 @@ import "dart:math" as math;
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
 import "package:entoli_chat/domain/agent_backend.dart";
 import "package:entoli_chat/domain/models.dart";
@@ -595,7 +594,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       context,
       chat: chat,
       view: view,
-      source: chatControllerProvider(widget.chatId),
       editing: notifier,
       details: const [],
       whenEmpty: _EmptyChat(
@@ -624,7 +622,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       context,
       chat: chat,
       view: view,
-      source: mirrorChatControllerProvider(widget.chatId),
       // The device is the strip's to say.
       details: const [],
       editing: online ? driver : null,
@@ -651,7 +648,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     BuildContext context, {
     required Chat chat,
     required ChatViewState view,
-    required ProviderListenable<ChatViewState> source,
     required List<Widget> details,
     required Widget whenEmpty,
     required Widget bottom,
@@ -712,11 +708,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       body: ConversationView(
         key: _conversation,
         chatId: widget.chatId,
-        source: source,
         banner: banner,
         bottom: bottom,
         whenEmpty: whenEmpty,
-        onTapLink: (href) => _openLink(context, href),
         message: (row, steerKey) => _message(
           row,
           view,
@@ -773,13 +767,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     composer == null ? _controller.append(quote) : composer.embed(quote);
   }
 
-  /// The one link-opening rule, both renderers of model-written markdown — a
-  /// reply and a compaction summary — share it.
-  void _openLink(BuildContext context, String href) {
-    final uri = Uri.tryParse(href);
-    if (uri != null) ref.read(linkOpenerProvider).open(context, uri);
-  }
-
   /// A message to edit, on a page of its own with the composer's field: a
   /// message is often long, and the `/` and `@` it was written with complete
   /// here the way they did there.
@@ -811,7 +798,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       avatar: row.face(WidgetReader(ref), project: view.chat?.state.project),
       moment: row.moment(view, editing),
       latest: last,
-      onTapLink: (href) => _openLink(context, href),
       onReply: (quote) => _reply(QuoteEmbed(quote)),
       reactions: reactions,
       actions: MessageActions.of(row, view, editing),
