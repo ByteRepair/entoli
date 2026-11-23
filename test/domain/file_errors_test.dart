@@ -36,6 +36,10 @@ void main() {
       test("a document never written reads as nothing", () {
         expect(Documents(fs).read(p.join(dir, "settings.json")), isNull);
       });
+
+      test("a document whose folder is not there reads as nothing", () {
+        expect(Documents(fs).read(p.join(dir, "gone", "project.json")), isNull);
+      });
     });
   }
 }
