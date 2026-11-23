@@ -38,7 +38,9 @@ from Flutter's CDN, so `build/web/canvaskit/` is never fetched.
   - `WebFileHandoff` and `WebLinkOpener` (`web_hand_offs.dart`) — a file is
     downloaded as a blob; a web link opens in a new tab, and an artifact is
     its entry file in a new tab, so the files beside it that it loads do not
-    come with it.
+    come with it. The entry file is a sandboxed frame's `srcdoc` there, not a
+    blob: a blob URL runs as the viewer's origin, with the viewer as its
+    opener, and the page is a stranger's.
 
 `SharedChatPage` is the bar and a `ConversationView` with nothing under it:
 the chapter rail and jump to latest as in the app. The bar has the plan, the

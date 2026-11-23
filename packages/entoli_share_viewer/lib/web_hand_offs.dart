@@ -1,3 +1,5 @@
+import "dart:async";
+import "dart:convert";
 import "dart:io";
 import "dart:js_interop";
 
@@ -23,7 +25,8 @@ class WebFileHandoff implements FileHandoff {
           ..href = url
           ..download = p.basename(path))
         .click();
-    web.URL.revokeObjectURL(url);
+    // Not at once: a browser may still be starting the download.
+    Timer(const Duration(minutes: 1), () => web.URL.revokeObjectURL(url));
   }
 
   @override
@@ -78,10 +81,22 @@ class WebLinkOpener implements LinkOpener {
     final dir = await store.artifactPath(chatId, artifactId);
     final file = File(p.join(dir, entryFile));
     if (!file.existsSync()) return;
-    final bytes = await file.readAsBytes();
-    final url = web.URL.createObjectURL(
-      web.Blob([bytes.toJS].toJS, web.BlobPropertyBag(type: "text/html")),
-    );
-    web.window.open(url, "_blank");
+    final html = utf8.decode(await file.readAsBytes(), allowMalformed: true);
+    final tab = web.window.open("", "_blank");
+    if (tab == null) return;
+    // A stranger's page, so in a sandboxed frame with an origin of its own: a
+    // blob of it would run as this origin, with this tab as its opener.
+    tab.opener = null;
+    final doc = tab.document;
+    doc.title = title ?? "Artifact";
+    final frame = doc.createElement("iframe") as web.HTMLIFrameElement
+      ..setAttribute(
+        "sandbox",
+        "allow-scripts allow-forms allow-modals allow-popups allow-downloads",
+      )
+      ..srcdoc = html.toJS;
+    frame.style.cssText =
+        "position:fixed;inset:0;width:100%;height:100%;border:0";
+    (doc.body ?? doc.documentElement)?.append(frame);
   }
 }
