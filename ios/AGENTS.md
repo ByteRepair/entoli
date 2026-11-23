@@ -756,8 +756,8 @@ iOS suspends an app seconds after it leaves the screen, and a turn is
 minutes. `WorkHold` (`Runner/WorkHold.swift`) answers `agent_chat/background`
 as Android's foreground services do: while a turn runs (`running`) or a setup
 installs (`settingUp`), it holds a `BGContinuedProcessingTask`, the one thing
-iOS lets user-started work keep running on, and shows a Live Activity. Nothing
-about the work moves; the hold only buys the isolate the time.
+iOS lets user-started work keep running on. Nothing about the work moves; the
+hold only buys the isolate the time.
 
 **The task is submitted from the foreground or not at all.** A turn starts
 from a tap, so that is free; a trigger's or a sync peer's turn that starts in
@@ -770,22 +770,20 @@ it holds knows its length: a turn, its sub-agents, a long command, a setup.
 Dart already says exactly when work is held, so the progress is a native
 heartbeat, a tick a second against a total kept a minute ahead, for as long as
 the hold lasts. Counting the agent's steps was tried and left out what runs
-longest between them (a command, a sub-agent, a setup). An expiry is the system's, so it drops the hold and leaves the turn running,
-killable again, as Android's `onTimeout` does; the user's stop is the
-activity's.
+longest between them (a command, a sub-agent, a setup).
 
-**The Live Activity is the WorkActivity extension** (`ios/WorkActivity/`),
-a widget extension drawing `WorkAttributes`: what is running, the time since
-the hold began, and Stop while a turn runs. `WorkAttributes.swift` is
-compiled into both targets, as `WorkspaceTree.swift` is. Stop is a
-`LiveActivityIntent`, which iOS performs in the app's process: it posts a
-notification `WorkHold` forwards as `stopRequested("turns")`, the path
-Android's Stop takes. The system draws the continued task's own progress too,
-so a running turn shows twice; the activity is the one with Stop. It reads as
-Android's turn notification does ("Running 2 turns"), worded in Swift since the
-port carries a count. The compiled app icon is out of an extension's reach, so
-its foreground layer is linked into the extension's catalog and drawn on the
-icon's fill.
+**The system draws the task, and its stop is the only one.** iOS shows every
+continued task as its own Live Activity with a stop button. The app does not
+draw one of its own: a second activity next to it showed every turn twice. The
+task's title and subtitle read as Android's turn notification does ("Running 2
+turns"), worded in Swift since the port carries a count.
+
+**The system's stop and its expiry are the same call.** Both run the task's
+`expirationHandler`, and iOS does not say which one it was. Off screen, the
+handler sends `stopRequested("turns")`, the path Android's Stop takes, since
+the app is suspended next and the turns would be cut off anyway. In front, it
+drops the hold and leaves the turns running, killable again, as Android's
+`onTimeout` does.
 
 The task asks for no GPU: background GPU wants the
 `continued-processing.gpu` entitlement, so an MLX turn still stops off
