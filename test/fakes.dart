@@ -11,14 +11,13 @@ import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
     show
         CliProvider,
-        HostCliGuest,
-        CliProcess,
         CliRelease,
         CliSession,
         CliSessionSpec,
         ClaudeCliProvider,
         CodexCliProvider;
 import "package:entoli_core/agent/llm/providers/provider.dart";
+import "package:entoli_shell/entoli_shell.dart" show CliProcess, HostCliGuest;
 import "package:http/http.dart" as http;
 import "package:agent_chat/data/local/local_instance.dart";
 import "package:agent_chat/data/local/local_prefill.dart";

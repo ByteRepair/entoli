@@ -10,6 +10,7 @@ import "package:agent_chat/data/builtin/llm/providers/presets.dart";
 import "package:entoli_core/model/llm_provider.dart";
 import "package:entoli_core/model/shell.dart" show guestHome, guestPath;
 import "package:entoli_core/model/model_registry.dart";
+import "package:entoli_shell/entoli_shell.dart";
 import "package:archive/archive.dart";
 import "package:crypto/crypto.dart";
 import "package:http/http.dart" as http;

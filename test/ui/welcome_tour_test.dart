@@ -8,7 +8,8 @@ import "package:path/path.dart" as p;
 import "package:agent_chat/app/first_run.dart";
 import "package:entoli_browser/entoli_browser.dart" show CdpBrowser;
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
-    show CliProvider, HostCliGuest;
+    show CliProvider;
+import "package:entoli_shell/entoli_shell.dart" show HostCliGuest;
 import "package:entoli_core/model/agent_browser.dart"
     show EmbeddedBrowser, embeddedBrowserId;
 import "package:entoli_core/model/app_settings.dart";

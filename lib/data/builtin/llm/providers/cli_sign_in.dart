@@ -2,6 +2,7 @@ import "dart:async";
 
 import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
 import "package:entoli_core/model/log.dart";
+import "package:entoli_shell/entoli_shell.dart" show CliProcess, cliOpenMarker;
 
 import "cli.dart";
 

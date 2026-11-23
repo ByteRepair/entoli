@@ -21,16 +21,6 @@ import "../../../download.dart";
 import "package:entoli_shell/entoli_shell.dart"
     show CliGuest, CliProcess, HostCliGuest, makeExecutable;
 import "cli_release.dart";
-export "package:entoli_shell/entoli_shell.dart"
-    show
-        CliGuest,
-        CliProcess,
-        HostCliGuest,
-        LaunchCli,
-        LinuxCliGuest,
-        TerminalCliProcess,
-        cliOpenMarker,
-        launchProcess;
 export "cli_release.dart";
 
 /// Another harness's command-line program — Claude CLI, Codex — answering in
