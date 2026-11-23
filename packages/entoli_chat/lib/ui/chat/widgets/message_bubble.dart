@@ -18,6 +18,7 @@ import "../../widgets/attachment_chip.dart";
 import "../../theme.dart" show onFillTheme;
 import "../../widgets/dialogs.dart";
 import "../activity/activity.dart" show ActivityNodeView;
+import "../activity/card.dart" show handOffOf;
 import "../activity/label.dart" show ActivityGroup;
 import "../../selection/copy_format.dart" show replyContentOf;
 import "../../selection/rich_selection_area.dart";
@@ -36,7 +37,6 @@ class MessageBubble extends ConsumerStatefulWidget {
     this.moment = MessageMoment.still,
     this.latest = false,
     this.actions,
-    this.editText,
     this.onSpeak,
     this.isSpeaking = false,
     this.onTapLink,
@@ -71,10 +71,6 @@ class MessageBubble extends ConsumerStatefulWidget {
   /// What can be done to the message, and when: threads, delete, edit,
   /// regenerate, react. Null is a transcript shown read-only.
   final MessageActions? actions;
-
-  /// Asks for the message's text, edited, where [actions] can edit it: the
-  /// page the host edits a message on. Null leaves the message uneditable.
-  final Future<String?> Function(BuildContext context, String text)? editText;
 
   /// Read this message out, or stop reading it. Null where there is no speech
   /// model to read it with.
@@ -135,7 +131,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
   }
 
   Future<void> _edit() async {
-    final edited = await widget.editText!(context, widget.message.plainText);
+    final edited = await handOffOf(
+      context,
+    ).editMessage(widget.message.plainText);
     final text = edited?.trim() ?? "";
     // A blank message says nothing, so sending one is not what was meant.
     await _can.edit(text);
@@ -333,7 +331,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
             tooltip: "Delete thread",
             onPressed: _delete,
           ),
-        if (_can.canEdit && widget.editText != null)
+        if (_can.canEdit)
           ActionIcon(
             icon: Icons.edit_outlined,
             tooltip: "Edit",

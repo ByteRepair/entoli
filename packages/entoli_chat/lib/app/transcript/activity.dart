@@ -196,6 +196,10 @@ abstract interface class TranscriptHandOff {
 
   Future<void> openBrowser(AgentBrowser browser, BrowserTab tab);
 
+  /// [text], a message to resend, as the user edited it; null where they
+  /// left it.
+  Future<String?> editMessage(String text);
+
   /// Runs [action], telling the user what it threw.
   Future<void> attempt(Future<void> Function() action);
 }

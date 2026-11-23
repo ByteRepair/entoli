@@ -696,7 +696,9 @@ hosts' are a `PageHandOff` (`activity/page_hand_off.dart` in the package),
 which opens a detail as an `ActivityCard` that follows its source while it is
 open (`showActivityDetail`, `card.dart`), the plan and an artifact on their
 own pages, and says what an open threw. The app's, `ContextHandOff`
-(`context_hand_off.dart`), adds a file, a skill and the agent's browser.
+(`context_hand_off.dart`), adds a file, a skill, the agent's browser and the
+page a message is edited on (`editMessage`), so a bubble's Edit shows exactly
+where `MessageActions.canEdit` says.
 `MessageBubble` keeps its public shape and lays its message out through
 `MessageLayout`, re-laid only when it is handed another message.
 

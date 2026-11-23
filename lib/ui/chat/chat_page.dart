@@ -16,7 +16,6 @@ import "../voice/read_aloud.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/chip_row.dart";
 import "../widgets/completion_field.dart";
-import "../widgets/prompt_field.dart" show PromptPage;
 import "../widgets/side_panel_frame.dart";
 import "package:entoli_chat/ui/widgets/scrolling.dart";
 import "chat_settings_page.dart";
@@ -767,22 +766,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     composer == null ? _controller.append(quote) : composer.embed(quote);
   }
 
-  /// A message to edit, on a page of its own with the composer's field: a
-  /// message is often long, and the `/` and `@` it was written with complete
-  /// here the way they did there.
-  Future<String?> _editText(BuildContext context, String text) {
-    final at = ref.read(selectedProjectProvider);
-    return PromptPage.open(
-      context,
-      title: "Edit message",
-      text: text,
-      hint: "Message",
-      project: at.project,
-      device: at.device,
-      confirmLabel: "Send",
-    );
-  }
-
   Widget _message(
     MessageRow row,
     ChatViewState view,
@@ -801,7 +784,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       onReply: (quote) => _reply(QuoteEmbed(quote)),
       reactions: reactions,
       actions: MessageActions.of(row, view, editing),
-      editText: _editText,
       onSpeak: speechReady && message.hasText
           ? () => readAloud(context, ref, message.id, message.plainText)
           : null,

@@ -34,6 +34,10 @@ class SharedChatHandOff extends PageHandOff {
   Future<void> openBrowser(AgentBrowser browser, BrowserTab tab) async =>
       _inApp("The agent's browser");
 
+  /// Never asked: a shared chat has no driver, so nothing in it is editable.
+  @override
+  Future<String?> editMessage(String text) async => null;
+
   void _inApp(String what) {
     if (context.mounted) notify(context, "$what opens in Entoli.");
   }

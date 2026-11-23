@@ -26,7 +26,6 @@ import "package:entoli_chat/ui/chat/activity/card.dart"
 import "package:entoli_chat/ui/chat/activity/label.dart" show ActivityGroup;
 import "package:entoli_chat/ui/chat/widgets/message_bubble.dart";
 import "package:entoli_chat/ui/chat/widgets/message_text.dart";
-import "package:agent_chat/ui/widgets/prompt_field.dart" show PromptPage;
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -144,13 +143,6 @@ void main() {
             canRetry: actions?.canRegenerate ?? false,
           ),
           actions: actions,
-          editText: (context, text) => PromptPage.open(
-            context,
-            title: "Edit message",
-            text: text,
-            hint: "Message",
-            confirmLabel: "Send",
-          ),
           onSpeak: onSpeak,
           isSpeaking: isSpeaking,
           onTapLink: onTapLink,
