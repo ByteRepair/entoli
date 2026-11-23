@@ -2,7 +2,6 @@ import "package:flutter/material.dart";
 
 import "../../../domain/plan.dart";
 
-export "../../../app/plan.dart";
 import "message_text.dart" show MessageText;
 
 /// The plan's tasks under their headings, each opening to its details. The

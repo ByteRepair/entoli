@@ -3007,6 +3007,11 @@ void main() {
           .setAutoCompact(true);
       await controller.send("two");
       await waitIdle(id);
+      // Unawaited after the turn settles, like the title.
+      await waitFor(
+        () async => (await app.repo.openChat(id)).compactions.isNotEmpty,
+        what: "the compaction",
+      );
       expect(app.backend.compactionCalls, hasLength(1));
       // The marker fronts the projection, so the next request weighs the
       // summary and the fresh exchange, under the share again — what a real

@@ -92,6 +92,12 @@ final class ComposerViewOnly extends ComposerSlot {
   const ComposerViewOnly();
 }
 
+/// Made from a share link and not yet enabled: someone else wrote it, so
+/// nothing is sent until the user says they trust it.
+final class ComposerImported extends ComposerSlot {
+  const ComposerImported();
+}
+
 /// The turn waits on the user's answers, asked in the composer's place.
 final class ComposerAnswering extends ComposerSlot {
   const ComposerAnswering();

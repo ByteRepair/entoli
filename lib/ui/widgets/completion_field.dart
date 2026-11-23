@@ -10,7 +10,7 @@ export "../../app/completion.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart" show ProjectRef;
 import "../../providers.dart";
-import "agent_picture.dart";
+import "project_agent_picture.dart";
 import "page_bar.dart";
 import "text_input.dart";
 

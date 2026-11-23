@@ -6,7 +6,7 @@ import "../../core/formatting.dart" show tokenCount;
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart" show nameOf;
 import "../../providers.dart";
-import "../widgets/agent_picture.dart";
+import "../widgets/project_agent_picture.dart";
 import "../widgets/empty_pane.dart";
 import "../widgets/page_bar.dart";
 import "../widgets/section_header.dart" show mutedParagraph;

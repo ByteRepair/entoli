@@ -7,10 +7,9 @@ import "../../../domain/models.dart";
 import "../../../domain/shell.dart" show bashToolName;
 import "../../../domain/shell_job.dart";
 import "../../../domain/tool_arg.dart";
-import "../../../providers.dart";
-import "../../mirror_controller.dart" show chatViewProvider;
 import "../../reader.dart" show SettingReader;
 import "../activity.dart";
+import "../host.dart";
 import "tool_run.dart";
 
 /// What voice mode says of a command, whoever ran it — the model through
@@ -82,7 +81,10 @@ final class JobActivity extends Activity {
   final int jobId;
 
   JobState _state(SettingReader reader, Run run) => reader.watch(
-    chatViewProvider(run.chatId).select((v) => v.jobOf(run.callId!)),
+    reader
+        .read(transcriptHostProvider)
+        .view(run.chatId)
+        .select((v) => v.jobOf(run.callId!)),
   );
 
   @override
@@ -114,7 +116,7 @@ final class JobActivity extends Activity {
     final title = "Background job $jobId";
     if (state case JobRunning(:final job)) {
       final log = reader
-          .watch(jobLogProvider((chatId: run.chatId, job: job)))
+          .watch(reader.read(transcriptHostProvider).jobLog(run.chatId, job))
           .value;
       return ActivityDetail(
         title: title,
@@ -128,9 +130,8 @@ final class JobActivity extends Activity {
             label: "Stop",
             run: (handOff) => handOff.attempt(
               () => reader
-                  .read(agentBackendProvider)
-                  .jobsOf(run.chatId)
-                  .stop(job.id),
+                  .read(transcriptHostProvider)
+                  .stopJob(run.chatId, job.id),
             ),
           ),
         ],
@@ -149,7 +150,10 @@ final class JobActivity extends Activity {
       _ => null,
     };
     final mirrored = reader.watch(
-      chatViewProvider(run.chatId).select((v) => v.mirrored),
+      reader
+          .read(transcriptHostProvider)
+          .view(run.chatId)
+          .select((v) => v.mirrored),
     );
     return ActivityDetail(
       title: title,
@@ -177,25 +181,17 @@ DetailStatus _jobStatus(JobEnd end) {
   return DetailStatus("Exited with code $code", isError: code != 0);
 }
 
-/// The end of a running job's log as it grows, for its detail.
-final jobLogProvider = StreamProvider.autoDispose
-    .family<String, ({String chatId, ShellJob job})>(
-      (ref, of) =>
-          ref.watch(agentBackendProvider).jobsOf(of.chatId).log(of.job),
-    );
-
 /// Opens a job's whole log, while the workspace still has it.
 DetailAction _openLog(SettingReader reader, String chatId, String callId) {
-  final path = p.join(
-    reader
-        .read(appConfigProvider)
-        .workspaceDir(
-          chatId,
-          project: reader.read(chatViewProvider(chatId)).chat?.state.project,
-        ),
-    backgroundLog(callId),
+  final host = reader.read(transcriptHostProvider);
+  final workspace = host.workspaceDir(
+    chatId,
+    project: reader.read(host.view(chatId)).chat?.state.project,
   );
-  if (!File(path).existsSync()) {
+  final path = workspace == null
+      ? null
+      : p.join(workspace, backgroundLog(callId));
+  if (path == null || !File(path).existsSync()) {
     return const DetailAction(
       label: "Open log",
       why: "The log is no longer in the workspace",

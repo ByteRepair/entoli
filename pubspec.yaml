@@ -69,6 +69,9 @@ dependencies:
   # Hybrid composition, which the platform-neutral API cannot ask for.
   webview_flutter_android: ^4.14.1
 
+  # The system share sheet for a chat's share link. Linux has none, and copies.
+  share_plus: ^13.3.1
+
   # Voice mode. sherpa-onnx is speech recognition, speech synthesis and voice
   # activity detection from one dependency: `record` opens the microphone and
   # `audioplayers` says the reply back. See "Voice mode" in AGENTS.md. The

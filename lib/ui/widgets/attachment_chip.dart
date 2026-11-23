@@ -3,8 +3,8 @@ import "dart:typed_data";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../app/transcript/host.dart";
 import "../../domain/models.dart";
-import "../../providers.dart";
 import "image_viewer.dart";
 
 /// One attached file. An image shows itself, anything else its name and an
@@ -51,7 +51,13 @@ class AttachmentChip extends ConsumerWidget {
         bytes ??
         (source == null || !isImage
             ? null
-            : ref.watch(attachmentBytesProvider(source)).value);
+            : ref
+                  .watch(
+                    ref
+                        .read(transcriptHostProvider)
+                        .resource(source.chatId, source.resource),
+                  )
+                  .value);
 
     return Tooltip(
       message: filename,

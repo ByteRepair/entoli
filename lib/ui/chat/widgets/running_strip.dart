@@ -5,7 +5,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../../domain/room/room_state.dart" show ChatViewState;
 import "../../../app/running.dart";
 import "../../../app/reader.dart" show WidgetReader;
-import "../activity/card.dart" show ContextHandOff;
+import "../activity/card.dart" show handOffOf;
 import "../../../core/formatting.dart" show plural;
 import "running_pill.dart";
 
@@ -71,7 +71,7 @@ class _RunningStripState extends ConsumerState<RunningStrip> {
         tooltip: thing.tooltip,
         icon: _iconOf(thing),
         mono: thing.mono,
-        onPressed: () => thing.opens.open(ContextHandOff(context)),
+        onPressed: () => thing.opens.open(handOffOf(context)),
       ),
     );
     return Listener(

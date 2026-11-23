@@ -19,7 +19,7 @@ import "../../domain/prompt_library.dart";
 import "../../providers.dart";
 import "../bot_avatar/bot_avatar_editor.dart";
 import "../widgets/add_button_row.dart";
-import "../widgets/agent_picture.dart";
+import "../widgets/project_agent_picture.dart";
 import "../widgets/anchored_menu.dart";
 import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";

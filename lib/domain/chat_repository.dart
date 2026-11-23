@@ -472,8 +472,13 @@ class ChatRepository {
   /// it back from here. `headless` is the other: a chat nobody watches (a
   /// reminder's) drops `ask_user` and `task`, since nobody is there to answer.
   Future<TurnSettings> _turnSettings(String chatId, {GoalReader? goal}) async {
-    final meta = await loadMeta(chatId);
     final settings = _settings();
+    // Hiding the composer is not the only way a turn starts: a resume, a
+    // paired device or a trigger reaches here too.
+    if ((await loadState(chatId))?.imported ?? false) {
+      throw StateError("an imported chat runs nothing until it is enabled");
+    }
+    final meta = await loadMeta(chatId);
     final project = await projectOf(chatId);
     final builtIn = builtinProjectOf(project);
     final disabled = {...builtIn?.disabled ?? const <AgentCapability>{}};

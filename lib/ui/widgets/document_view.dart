@@ -6,7 +6,7 @@ import "package:re_highlight/styles/github-dark.dart";
 import "package:re_highlight/styles/github.dart";
 
 import "../../core/code_grammars.dart" show grammarOfFile;
-import "../../providers.dart";
+import "../../app/handoff.dart";
 import "../chat/widgets/code_block.dart";
 import "../chat/widgets/markdown_text.dart";
 import "../fonts.dart";

@@ -913,7 +913,7 @@ then *held* to the number counted for it rather than measured against it —
 the bar adds for a line is what the line takes, at any text scale, and the
 count cannot drift from the draw. Nothing is padded: the sum is the height.
 
-The conversation is a column of `_readableWidth`, centred. A phone gets the
+The conversation is a column of `readableWidth`, centred. A phone gets the
 whole screen and a monitor gets a line that can be read back to the start of.
 The composer is inside that column rather than under it: a centred conversation
 over a full-width field is a field twice the width of what it is answering.

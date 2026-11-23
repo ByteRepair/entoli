@@ -6,6 +6,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../core/log.dart";
 import "../domain/app_link.dart";
 import "../providers.dart";
+import "../app/chat_shares.dart";
 import "../app/marketplace/preview.dart";
 import "bot_avatar/bot_avatar_install.dart";
 import "marketplace/marketplace_entry_preview.dart";
@@ -72,6 +73,18 @@ class _IncomingLinksState extends ConsumerState<IncomingLinks> {
         );
       case AvatarLink(:final import):
         unawaited(openBotAvatarInstall(context, import));
+      case SharedChatLink(:final zip):
+        if (zip == null) {
+          logFailure("links", "a shared chat link arrived cut short");
+          say(context, "This shared chat's link arrived cut short.");
+          return;
+        }
+        navigator.popUntil((r) => r.isFirst);
+        final id = await ref.read(chatSharesProvider).import(zip);
+        if (id == null && mounted) {
+          logFailure("links", "a shared chat link held no chat");
+          say(context, "This link does not hold a shared chat.");
+        }
       case InstallLink(:final kind, :final slug):
         // The provider logs a failed fetch; a missing slug is this one's.
         final entries = await ref

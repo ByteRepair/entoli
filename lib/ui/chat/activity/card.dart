@@ -1,21 +1,10 @@
-import "dart:async";
-
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_riverpod/misc.dart" show ProviderListenable;
 
-import "package:path/path.dart" as p;
-
 import "../../../app/reader.dart" show WidgetReader;
 import "../../../app/transcript/activity.dart";
-import "../../../domain/agent_browser.dart" show AgentBrowser, BrowserTab;
-import "../../../providers.dart";
-import "../../widgets/dialogs.dart" show say;
-import "../plan_page.dart" as plan_page;
-import "../widgets/browser_strip.dart" show openBrowserTab;
 import "../../widgets/scrolling.dart" show ScrollFollow;
-import "../../skills/skill_install_preview.dart" show openSkillInstall;
-import "../../widgets/text_file_page.dart" show openTextFile;
 import "../widgets/code_block.dart" show codeBlockDecoration, codeBlockStyle;
 import "../widgets/message_text.dart" show StreamingCaret;
 import "../widgets/shell_run.dart" show ShellCommandText;
@@ -152,7 +141,7 @@ class _ActivityCardState extends State<ActivityCard> {
   Widget _actionButton(DetailAction action) {
     final run = action.run;
     final button = TextButton(
-      onPressed: run == null ? null : () => run(ContextHandOff(context)),
+      onPressed: run == null ? null : () => run(handOffOf(context)),
       child: Text(action.label),
     );
     final why = action.why;
@@ -281,71 +270,36 @@ class _ActivityCardState extends State<ActivityCard> {
   }
 }
 
-/// The conversation's hand-off: a page pushed over the [context] of what was
-/// tapped.
-class ContextHandOff implements TranscriptHandOff {
-  const ContextHandOff(this.context);
+/// The hand-off over the [BuildContext] of what was tapped: how the host
+/// opens what the conversation asks it to. Bound where the app is assembled,
+/// since the pages it pushes are the app's and a reader of a shared chat has
+/// none of them.
+final transcriptHandOffProvider =
+    Provider<TranscriptHandOff Function(BuildContext)>(
+      (ref) => throw UnimplementedError("bound where the app is assembled"),
+    );
 
-  final BuildContext context;
+/// The bound hand-off over [context].
+TranscriptHandOff handOffOf(BuildContext context) => ProviderScope.containerOf(
+  context,
+  listen: false,
+).read(transcriptHandOffProvider)(context);
 
-  ProviderContainer get _container =>
-      ProviderScope.containerOf(context, listen: false);
-
-  @override
-  Future<void> openFile(String path) async =>
-      unawaited(openTextFile(context, path, p.basename(path)));
-
-  @override
-  Future<void> openArtifact(
-    String chatId,
-    String artifactId, {
-    required String entryFile,
-    String? title,
-  }) => _container
-      .read(linkOpenerProvider)
-      .openArtifact(
-        context,
-        chatId,
-        artifactId,
-        entryFile: entryFile,
-        title: title,
-      );
-
-  @override
-  Future<void> installSkill(String chatId, String installId) =>
-      openSkillInstall(context, chatId: chatId, installId: installId);
-
-  @override
-  Future<void> openPlan(String chatId) async =>
-      plan_page.openPlan(context, chatId);
-
-  @override
-  Future<void> openDetail(OpensDetail detail) => showActivityCard<void>(
-    context,
-    (_) => _DetailCard(
-      opens: detail.source == null
-          ? OpensDetail(
-              detail.activity,
-              detail.run,
-              source: ActivitySource.of(context),
-            )
-          : detail,
-    ),
-  );
-
-  @override
-  Future<void> openBrowser(AgentBrowser browser, BrowserTab tab) async =>
-      openBrowserTab(context, browser, tab);
-
-  @override
-  Future<void> attempt(Future<void> Function() action) async {
-    try {
-      await action();
-    } on Object catch (error) {
-      if (context.mounted) say(context, error);
-    }
-  }
-}
+/// [detail] as a sheet over [context], following the message above it where
+/// it does not name a source of its own.
+Future<void> showActivityDetail(BuildContext context, OpensDetail detail) =>
+    showActivityCard<void>(
+      context,
+      (_) => _DetailCard(
+        opens: detail.source == null
+            ? OpensDetail(
+                detail.activity,
+                detail.run,
+                source: ActivitySource.of(context),
+              )
+            : detail,
+      ),
+    );
 
 class _DetailCard extends ConsumerWidget {
   const _DetailCard({required this.opens});

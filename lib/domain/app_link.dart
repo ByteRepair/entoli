@@ -6,6 +6,7 @@ import "dart:typed_data";
 import "package:archive/archive.dart" show GZipDecoder, GZipEncoder, getCrc32;
 
 import "bot_avatar/import.dart";
+import "chat_share.dart";
 import "models.dart";
 
 /// The scheme every platform registers Entoli for.
@@ -27,12 +28,24 @@ sealed class AppLink {
   ///   `def` cut short on its way here is still this link, carrying null.
   /// - `entoli://install/avatar?def=…` — a Bot Avatar definition, as JSON or
   ///   base64url JSON (Open Bot Avatar's `def` parameter), to install.
+  /// - `https://share.entoli.byterepair.io/#…` — a shared chat, its zip in the
+  ///   fragment, which the phones hand over where the app claims the host;
+  ///   `entoli://share?def=…` is the same zip, for the viewer's Open in
+  ///   Entoli on a desktop.
   static AppLink? parse(Uri uri) {
+    if (uri.scheme == "https" && uri.host == shareHost) {
+      return uri.fragment.isEmpty
+          ? null
+          : SharedChatLink(shareZipOf(uri.fragment));
+    }
     if (uri.scheme != appLinkScheme) return null;
     final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
     switch ((uri.host, segments)) {
       case ("new", []):
         return NewChatLink(uri.queryParameters["prompt"] ?? "");
+      case ("share", []):
+        final def = uri.queryParameters["def"];
+        return def == null ? null : SharedChatLink(shareZipOf(def));
       case ("install", ["avatar"]):
         final def = uri.queryParameters["def"];
         if (def == null) return null;
@@ -60,7 +73,7 @@ sealed class AppLink {
       final raw = base64Url.decode(base64Url.normalize(def.trim()));
       return switch (kind) {
         CompletionKind.agent => _gunzipWhole(raw),
-        CompletionKind.skill => _zipEnds(raw) ? raw : null,
+        CompletionKind.skill => zipEnds(raw) ? raw : null,
       };
       // Bad base64 is a FormatException, a bad deflate stream whatever the
       // decoder throws: either way the link did not arrive whole.
@@ -77,25 +90,6 @@ sealed class AppLink {
     final size = trailer.getUint32(4, Endian.little);
     final whole = size == out.length & 0xffffffff && crc == getCrc32(out);
     return whole ? out : null;
-  }
-
-  /// Whether [zip] ends exactly where its end-of-central-directory record
-  /// says it does: the record's signature, then its comment, then nothing.
-  static bool _zipEnds(Uint8List zip) {
-    for (
-      var at = zip.length - 22;
-      at >= 0 && at >= zip.length - 22 - 0xffff;
-      at--
-    ) {
-      if (zip[at] == 0x50 &&
-          zip[at + 1] == 0x4b &&
-          zip[at + 2] == 0x05 &&
-          zip[at + 3] == 0x06) {
-        final comment = zip[at + 20] | zip[at + 21] << 8;
-        return at + 22 + comment == zip.length;
-      }
-    }
-    return false;
   }
 
   /// The link that carries [bytes] — a `.skill` zip, or an agent's PROMPT.md
@@ -157,4 +151,11 @@ final class SharedEntryLink extends AppLink {
 final class AvatarLink extends AppLink {
   const AvatarLink(this.import);
   final BotAvatarImport import;
+}
+
+/// A shared chat: [zip] is its data directory (see `data/chat_share.dart`),
+/// null where the link was cut short.
+final class SharedChatLink extends AppLink {
+  const SharedChatLink(this.zip);
+  final Uint8List? zip;
 }

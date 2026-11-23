@@ -1,11 +1,9 @@
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/brand.dart";
 import "../domain/app_theme.dart";
 import "../domain/theme_colour.dart";
 import "fonts.dart";
-import "../providers.dart";
 
 /// The indigo the icon sits on, which is `ThemeColour.indigo` as a `Color`. The
 /// copies in `assets/icons/` and the Android drawable are
@@ -32,33 +30,6 @@ Color heardColour(Brightness brightness) =>
 Color spokenColour(Brightness brightness) => brightness == Brightness.dark
     ? const Color(0xFF2DD4BF)
     : const Color(0xFF0E9384);
-
-/// What the app is drawn with: the settings resolved against the system's own
-/// palette, so `main` watches one thing and the rule that an accent replaces
-/// both colours is written once.
-final appLookProvider = Provider<AppLook>((ref) {
-  final accent = ref.watch(paletteAccentProvider);
-  final settings = ref.watch(
-    appSettingsProvider.select(
-      (s) => (
-        primary: s.primaryColour,
-        secondary: s.secondaryColour,
-        radius: s.cornerRadius,
-      ),
-    ),
-  );
-  return (
-    primary: accent == null
-        ? settings.primary.seed
-        : (
-            colour: Color(accent),
-            variant: DynamicSchemeVariant.tonalSpot,
-            grey: false,
-          ),
-    secondary: accent == null ? settings.secondary.seed : null,
-    radius: settings.radius.radius,
-  );
-});
 
 /// A colour, how a scheme is built from it, and whether its surfaces are grey
 /// rather than tinted with it — which only a primary decides.

@@ -2,9 +2,9 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/plan.dart";
 import "../../../domain/tool_arg.dart";
-import "../../plan.dart" show planProgressLine, planProvider;
 import "../../reader.dart" show SettingReader;
 import "../activity.dart";
+import "../host.dart";
 import "tool_run.dart";
 
 /// The plan's own steps — `plan_add`, `plan_next`, `plan_done` — are not
@@ -40,7 +40,9 @@ final class PresentPlanActivity extends ToolActivity {
     if (run.failed || call == null) return super.node(reader, run);
     // Read off the file rather than the call, so it shows where the work
     // stands now, and is built again as the plan moves.
-    final plan = reader.watch(planProvider(run.chatId));
+    final plan = reader.watch(
+      reader.read(transcriptHostProvider).plan(run.chatId),
+    );
     return PlanNode(
       this,
       run,
@@ -49,4 +51,14 @@ final class PresentPlanActivity extends ToolActivity {
       progress: planProgressLine(plan.value, loading: plan.isLoading),
     );
   }
+}
+
+/// The line under a plan's title.
+String planProgressLine(List<PlanSection>? sections, {required bool loading}) {
+  if (sections != null) {
+    final (done, total) = sectionsProgress(sections);
+    return "$done of $total tasks done";
+  }
+  // A mirror's first read is a round trip to the home device.
+  return loading ? "Reading the plan…" : "The plan could not be read.";
 }

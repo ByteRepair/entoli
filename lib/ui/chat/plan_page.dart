@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../app/transcript/host.dart";
 import "../../domain/plan.dart";
 import "../widgets/page_bar.dart";
 import "widgets/plan_view.dart";
@@ -13,7 +14,7 @@ void openPlan(BuildContext context, String chatId) => Navigator.of(
 
 /// A chat's plan: how far it has got, and every task under its heading
 /// with whether it is done, each opening to the plan written for it. It
-/// follows the turn, [planProvider] reading the file again as it grows.
+/// follows the turn, the host reading the file again as it grows.
 class PlanPage extends ConsumerWidget {
   const PlanPage({super.key, required this.chatId});
 
@@ -21,7 +22,7 @@ class PlanPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final plan = ref.watch(planProvider(chatId));
+    final plan = ref.watch(ref.read(transcriptHostProvider).plan(chatId));
     final sections = plan.value;
     return Scaffold(
       appBar: PageBar(title: "Plan"),
@@ -75,7 +76,9 @@ class PlanButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sections = ref.watch(planProvider(chatId)).value;
+    final sections = ref
+        .watch(ref.read(transcriptHostProvider).plan(chatId))
+        .value;
     if (sections == null) return const SizedBox.shrink();
     final (done, total) = sectionsProgress(sections);
     return IconButton(

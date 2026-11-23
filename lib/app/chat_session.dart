@@ -90,6 +90,10 @@ class ChatSession {
   }) {
     final chat = view.chat;
     if (chat == null || driver == null) return const ComposerViewOnly();
+    // A mirror's is its home device's to enable.
+    if (chat.state.imported) {
+      return mirrored ? const ComposerViewOnly() : const ComposerImported();
+    }
     if (!mirrored && !reader.watch(setupCompleteProvider(chat.state.project))) {
       return const ComposerNeedsSetup();
     }

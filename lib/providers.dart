@@ -51,8 +51,6 @@ import "domain/background_work.dart";
 import "domain/builtin_project.dart";
 import "domain/chat_repository.dart";
 import "domain/chat_store.dart";
-import "domain/file_handoff.dart";
-import "domain/link_opener.dart";
 import "domain/llm_provider.dart";
 import "domain/model_capability.dart";
 import "domain/model_registry.dart";
@@ -87,6 +85,8 @@ import "domain/tristate.dart";
 import "domain/turn_keep_alive.dart";
 import "domain/voice.dart";
 import "domain/voice_model_store.dart";
+
+export "app/handoff.dart";
 
 final chatStoreProvider = Provider<ChatStore>(
   (ref) => throw UnimplementedError(),
@@ -135,9 +135,6 @@ final folderPickerProvider = Provider<FolderPicker>(
   (ref) => throw UnimplementedError(),
 );
 final clipboardFilesProvider = Provider<ClipboardFiles>(
-  (ref) => throw UnimplementedError(),
-);
-final fileHandoffProvider = Provider<FileHandoff>(
   (ref) => throw UnimplementedError(),
 );
 final backupHandoffProvider = Provider<BackupHandoff>(
@@ -1095,10 +1092,6 @@ final paletteAccentProvider = Provider<int?>(
 /// equality, so its notifier publishes a new instance for every save.
 final showCommandChipsProvider = Provider<bool>(
   (ref) => ref.watch(appSettingsProvider.select((s) => s.showCommandChips)),
-);
-
-final linkOpenerProvider = Provider<LinkOpener>(
-  (ref) => throw UnimplementedError(),
 );
 
 /// The provider API keys and the TURN password. Overridden in `main` with the

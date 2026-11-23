@@ -35,6 +35,7 @@ enum AppAction implements AppItem {
   pinChat("Pin Chat", key: AppKey("p", shift: true)),
   renameChat("Rename Chat…"),
   moveChat("Move Chat to Project…"),
+  shareChat("Share Chat…"),
   deleteChat("Delete Chat…"),
   stopTurn("Stop Turn", key: AppKey("."));
 
@@ -98,6 +99,7 @@ const List<AppItem> appItems = [
   AppAction.pinChat,
   AppAction.renameChat,
   AppAction.moveChat,
+  AppAction.shareChat,
   AppAction.deleteChat,
   Destination.chatSettings,
   Destination.showPlan,
@@ -133,6 +135,7 @@ Availability availabilityOf(AppItem item, AppFacts facts) {
     AppAction.pinChat ||
     AppAction.renameChat ||
     AppAction.moveChat ||
+    AppAction.shareChat ||
     AppAction.deleteChat ||
     Destination.chatSettings ||
     // The page says where a chat has none.
@@ -190,7 +193,12 @@ const List<AppMenu> appMenus = [
     [Destination.backUp],
   ]),
   AppMenu("Chat", MenuRole.own, [
-    [AppAction.pinChat, AppAction.renameChat, AppAction.moveChat],
+    [
+      AppAction.pinChat,
+      AppAction.renameChat,
+      AppAction.moveChat,
+      AppAction.shareChat,
+    ],
     [
       Destination.chatSettings,
       Destination.showPlan,

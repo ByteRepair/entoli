@@ -445,13 +445,15 @@ class _ChatTile extends ConsumerWidget {
   /// whose projects are its home device's.
   List<PopupMenuEntry<AppAction>> get _items => [
     for (final command in chatCommands)
-      if (!(remote && command == AppAction.moveChat))
+      if (!(remote &&
+          (command == AppAction.moveChat || command == AppAction.shareChat)))
         PopupMenuItem(
           value: command,
           child: Text(switch (command) {
             AppAction.pinChat => chat.pinned ? "Unpin" : "Pin",
             AppAction.renameChat => "Rename",
             AppAction.moveChat => "Move to project…",
+            AppAction.shareChat => "Share…",
             _ => "Delete",
           }),
         ),

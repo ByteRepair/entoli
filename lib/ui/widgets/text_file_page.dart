@@ -8,7 +8,7 @@ import "package:re_editor/re_editor.dart";
 import "../../core/code_grammars.dart" show grammarOfFile;
 import "../../core/formatting.dart";
 import "../../domain/workspace.dart";
-import "../../providers.dart";
+import "../../app/handoff.dart";
 import "busy.dart";
 import "dialogs.dart";
 import "discard_guard.dart";
@@ -34,6 +34,7 @@ class TextFilePage extends ConsumerStatefulWidget {
     required this.path,
     required this.name,
     this.popsBinary = true,
+    this.readOnly = false,
   });
 
   final String path;
@@ -44,6 +45,9 @@ class TextFilePage extends ConsumerStatefulWidget {
   /// Whether a file whose bytes are not text pops `true` for the caller to
   /// hand off, rather than saying so here.
   final bool popsBinary;
+
+  /// Read and never edited: a file of a chat shared from someone else.
+  final bool readOnly;
 
   @override
   ConsumerState<TextFilePage> createState() => _TextFilePageState();
@@ -183,7 +187,7 @@ class _TextFilePageState extends ConsumerState<TextFilePage> {
                       label: "Preview",
                       onPressed: () => setState(() => _editing = false),
                     ),
-                  ] else
+                  ] else if (!widget.readOnly)
                     PageAction.icon(
                       icon: Icons.edit_outlined,
                       label: "Edit",

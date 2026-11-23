@@ -131,6 +131,11 @@ abstract class ChatState with _$ChatState {
     /// extends an existing chat from its original anchor. The sidebar hides a
     /// chat once this is in the past; the background sweep deletes it.
     DateTime? tempTtlExpiresAt,
+
+    /// Made from a share link and not yet enabled: someone else wrote every
+    /// message, thought and file in it, so nothing runs until the user says
+    /// they trust it. See "A shared chat" in lib/ui/chat/AGENTS.md.
+    @Default(false) bool imported,
   }) = _ChatState;
 
   factory ChatState.fromJson(Map<String, dynamic> json) =>

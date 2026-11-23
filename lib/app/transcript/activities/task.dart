@@ -1,8 +1,8 @@
 import "../../../domain/agent_backend.dart" show taskToolName;
 import "../../../domain/tool_arg.dart";
 import "../../reader.dart" show SettingReader;
-import "../../sub_agent_transcript.dart" show subAgentLiveProvider;
 import "../activity.dart";
+import "../host.dart";
 import "tool_run.dart";
 
 /// A sub-agent's call, read from the call's own arguments.
@@ -58,7 +58,7 @@ final class SubAgentActivity extends Activity {
   ActivityDetail detail(SettingReader reader, Run run) {
     final result = run.result;
     final sub = (chatId: run.chatId, callId: run.callId!);
-    final source = subAgentLiveProvider(sub);
+    final source = reader.read(transcriptHostProvider).subAgent(sub);
     final live = reader.watch(source);
     final transcript = live.message;
     final drawn = transcript != null && transcript.parts.isNotEmpty;

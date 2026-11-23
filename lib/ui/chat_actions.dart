@@ -13,6 +13,7 @@ import "../domain/project.dart";
 import "../providers.dart";
 import "app_command.dart";
 import "../app/chat_edits.dart";
+import "chat/share_chat_dialog.dart";
 import "selection.dart";
 import "widgets/dialogs.dart";
 
@@ -21,6 +22,7 @@ const chatCommands = [
   AppAction.pinChat,
   AppAction.renameChat,
   AppAction.moveChat,
+  AppAction.shareChat,
   AppAction.deleteChat,
 ];
 
@@ -35,9 +37,27 @@ Future<void> runOnChat(
     ref.read(chatEditsProvider).setPinned(chat, !chat.pinned),
   AppAction.renameChat => renameChat(context, ref, chat),
   AppAction.moveChat => moveChat(context, ref, chat),
+  AppAction.shareChat => shareChat(context, ref, chat),
   AppAction.deleteChat => deleteChat(context, ref, chat),
   _ => throw ArgumentError.value(command, "command", "not a chat command"),
 };
+
+/// A mirror's files are its home device's, so it is shared from there.
+Future<void> shareChat(BuildContext context, WidgetRef ref, ChatState chat) {
+  if (ref.read(isMirroredChatProvider(chat.id))) {
+    say(context, "A paired device's chat is shared from that device.");
+    return Future.value();
+  }
+  return showShareChat(context, chat, origin: shareOrigin(context));
+}
+
+/// Where an iPad's share sheet points from: [context]'s box.
+Rect? shareOrigin(BuildContext context) {
+  final box = context.findRenderObject();
+  return box is RenderBox && box.hasSize
+      ? box.localToGlobal(Offset.zero) & box.size
+      : null;
+}
 
 Future<void> renameChat(
   BuildContext context,

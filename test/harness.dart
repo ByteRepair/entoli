@@ -44,7 +44,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/app/settings/scope.dart" show ProjectAddress;
 import "package:agent_chat/ui/settings/project_prompts_page.dart";
 import "package:agent_chat/domain/room/room_state.dart";
-import "package:agent_chat/core/transcript_bindings.dart";
+import "package:agent_chat/core/app_transcript_bindings.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart" show LabelledField;
 import "package:agent_chat/ui/app_routes.dart";
 import "package:agent_chat/ui/routes.dart";
@@ -266,7 +266,7 @@ class TestApp {
         overrides: [
           chatStoreProvider.overrideWithValue(chats),
           agentBackendProvider.overrideWithValue(backend),
-          ...transcriptOverrides,
+          ...appTranscriptOverrides,
           shellProvider.overrideWithValue(shell ?? _defaultShell(linuxHost)),
           appConfigProvider.overrideWithValue(config),
           if (appleFm != null) appleFmProvider.overrideWithValue(appleFm),

@@ -5,7 +5,7 @@ import "package:path/path.dart" as p;
 import "../../core/formatting.dart";
 import "../../domain/file_handoff.dart";
 import "../../domain/workspace.dart";
-import "../../providers.dart";
+import "../../app/handoff.dart";
 import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/empty_pane.dart";
@@ -17,9 +17,10 @@ Future<void> openWorkspace(
   BuildContext context, {
   required String root,
   required String title,
+  bool readOnly = false,
 }) => Navigator.of(context).push(
   MaterialPageRoute<void>(
-    builder: (_) => WorkspacePage(root: root, title: title),
+    builder: (_) => WorkspacePage(root: root, title: title, readOnly: readOnly),
   ),
 );
 
@@ -28,13 +29,21 @@ Future<void> openWorkspace(
 /// the app are `FileHandoff`'s, and each is drawn only where it leads
 /// somewhere — see AGENTS.md, "The workspace explorer".
 class WorkspacePage extends ConsumerStatefulWidget {
-  const WorkspacePage({super.key, required this.root, required this.title});
+  const WorkspacePage({
+    super.key,
+    required this.root,
+    required this.title,
+    this.readOnly = false,
+  });
 
   /// The folder the explorer cannot go above.
   final String root;
 
   /// What the bar says at the root: whose workspace this is.
   final String title;
+
+  /// Browsed and read, nothing made or deleted: a shared chat's workspace.
+  final bool readOnly;
 
   @override
   ConsumerState<WorkspacePage> createState() => _WorkspacePageState();
@@ -133,7 +142,11 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     if (looksTextual(entry.name)) {
       final handOff = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
-          builder: (_) => TextFilePage(path: entry.path, name: entry.name),
+          builder: (_) => TextFilePage(
+            path: entry.path,
+            name: entry.name,
+            readOnly: widget.readOnly,
+          ),
         ),
       );
       if (handOff != true || !mounted) return;
@@ -238,10 +251,11 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     if (entries.isEmpty) {
       return EmptyPane(
         icon: Icons.folder_open,
-        title: "Nothing here yet",
-        detail:
-            "The agent's files land here."
-            "${handoff.canShare ? " Share files to Entoli to add your own." : ""}",
+        title: widget.readOnly ? "No files were shared" : "Nothing here yet",
+        detail: widget.readOnly
+            ? "The chat was shared without its workspace."
+            : "The agent's files land here."
+                  "${handoff.canShare ? " Share files to Entoli to add your own." : ""}",
       );
     }
     return ListView.builder(
@@ -253,9 +267,11 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
           selecting: _selecting,
           selected: _selected.contains(entry.path),
           onTap: () => _selecting ? _toggle(entry) : _open(entry),
-          onLongPress: () => _select(entry),
+          onLongPress: widget.readOnly ? null : () => _select(entry),
           onShare: handoff.canShare ? () => _export([entry.path]) : null,
-          onDelete: () => _delete([entry.path], folder: entry.isDirectory),
+          onDelete: widget.readOnly
+              ? null
+              : () => _delete([entry.path], folder: entry.isDirectory),
         );
       },
     );
@@ -285,7 +301,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         onPressed: () => _guard(() => handoff.reveal(_dir)),
       ),
     // What it adds to is the listing, which is not there until it is read.
-    if (_entries != null && _error == null) ...[
+    if (_entries != null && _error == null && !widget.readOnly) ...[
       PageAction.icon(
         icon: Icons.create_new_folder_outlined,
         label: "New folder",
@@ -324,11 +340,13 @@ class _Row extends StatelessWidget {
   final bool selecting;
   final bool selected;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
+  final VoidCallback? onLongPress;
 
   /// Null where there is no share sheet to hand it to.
   final VoidCallback? onShare;
-  final VoidCallback onDelete;
+
+  /// Null where nothing may be deleted.
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -347,15 +365,23 @@ class _Row extends StatelessWidget {
           : Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                PopupMenuButton<VoidCallback>(
-                  tooltip: "More",
-                  onSelected: (run) => run(),
-                  itemBuilder: (_) => [
-                    if (onShare case final share?)
-                      PopupMenuItem(value: share, child: const Text("Share…")),
-                    PopupMenuItem(value: onDelete, child: const Text("Delete")),
-                  ],
-                ),
+                if (onShare != null || onDelete != null)
+                  PopupMenuButton<VoidCallback>(
+                    tooltip: "More",
+                    onSelected: (run) => run(),
+                    itemBuilder: (_) => [
+                      if (onShare case final share?)
+                        PopupMenuItem(
+                          value: share,
+                          child: const Text("Share…"),
+                        ),
+                      if (onDelete case final delete?)
+                        PopupMenuItem(
+                          value: delete,
+                          child: const Text("Delete"),
+                        ),
+                    ],
+                  ),
                 if (entry.isDirectory) const Icon(Icons.chevron_right),
               ],
             ),

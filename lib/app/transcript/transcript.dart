@@ -8,10 +8,10 @@ import "../../domain/models.dart";
 import "../../domain/prompt_library.dart" show nameOf;
 import "../../domain/reaction.dart";
 import "../../domain/room/room_state.dart" show ChatViewState;
-import "../../providers.dart" show agentPictureProvider;
-import "../chat_controller.dart" show TurnDriver;
 import "../reader.dart" show SettingReader;
+import "../turn_driver.dart";
 import "activity.dart";
+import "host.dart";
 import "message.dart" show MessageMoment;
 
 /// The conversation as rows, the core's account of what is on the page:
@@ -109,7 +109,11 @@ final class MessageRow extends TranscriptRow {
     final member = nameOf(message.author);
     if (member == null) return null;
     return reader
-        .watch(agentPictureProvider((project: project, name: member)))
+        .watch(
+          reader
+              .read(transcriptHostProvider)
+              .face(project: project, name: member),
+        )
         .value;
   }
 }

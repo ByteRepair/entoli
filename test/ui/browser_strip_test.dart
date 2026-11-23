@@ -15,6 +15,9 @@ import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/widgets/browser_input.dart";
 import "package:agent_chat/ui/chat/widgets/browser_strip.dart";
 import "package:agent_chat/ui/chat/widgets/running_strip.dart";
+import "package:agent_chat/ui/chat/activity/card.dart"
+    show transcriptHandOffProvider;
+import "package:agent_chat/ui/chat/activity/context_hand_off.dart";
 
 import "../fakes.dart";
 import "../harness.dart" show clipboard;
@@ -158,6 +161,7 @@ void main() {
         overrides: [
           agentBrowserProvider.overrideWithValue(browser),
           isMirroredChatProvider("chat-1").overrideWithValue(mirrored),
+          transcriptHandOffProvider.overrideWithValue(ContextHandOff.new),
         ],
         child: MaterialApp(
           home: Scaffold(

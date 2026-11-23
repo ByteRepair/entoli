@@ -16,7 +16,7 @@ class ActivityNodeView extends StatelessWidget {
   Widget build(BuildContext context) {
     // What pressing it opens is the node's; it follows the message above.
     void open() =>
-        node.open(ContextHandOff(context), source: ActivitySource.of(context));
+        node.open(handOffOf(context), source: ActivitySource.of(context));
     return switch (node) {
       final LabelNode label => LabelNodeView(label, onTap: open),
       final DiffNode diff => DiffNodeView(diff, onTap: open),

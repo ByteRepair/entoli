@@ -13,7 +13,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/project.dart" show localProject;
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/widgets/agent_picture.dart";
+import "package:agent_chat/ui/widgets/project_agent_picture.dart";
 
 import "../fakes.dart" show onePixelPng, testAttachment;
 import "../harness.dart";

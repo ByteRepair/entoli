@@ -39,7 +39,7 @@ import "domain/sync/identity.dart";
 import "providers.dart";
 import "ui/bot_avatar/licence.dart";
 import "app/remote_turns.dart";
-import "core/transcript_bindings.dart";
+import "core/app_transcript_bindings.dart";
 import "ui/app_licence.dart" show registerAppLicence, registerBlinkLicence;
 import "app/chat_edits.dart" show chatEditsProvider;
 import "ui/command_intents.dart";
@@ -56,6 +56,7 @@ import "ui/share/incoming_shares.dart";
 import "ui/triggers/incoming_open.dart";
 import "ui/selection.dart";
 import "ui/theme.dart";
+import "ui/app_look.dart";
 import "ui/app_routes.dart";
 
 /// The model host's entry point: Entoli's own executable launched again as
@@ -306,7 +307,7 @@ class AppSession {
       overrides: [
         chatStoreProvider.overrideWithValue(store),
         agentBackendProvider.overrideWithValue(backend),
-        ...transcriptOverrides,
+        ...appTranscriptOverrides,
         shellProvider.overrideWithValue(backend.shell),
         appConfigProvider.overrideWithValue(config),
         appSecretsProvider.overrideWithValue(secrets),

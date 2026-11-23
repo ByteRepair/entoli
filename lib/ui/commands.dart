@@ -123,6 +123,7 @@ class Commands {
       case AppAction.pinChat ||
           AppAction.renameChat ||
           AppAction.moveChat ||
+          AppAction.shareChat ||
           AppAction.deleteChat:
         // Read as it is now: what the menu was drawn from is two facts of it.
         final chat = ref.read(chatControllerProvider(chatId!)).chat!.state;
