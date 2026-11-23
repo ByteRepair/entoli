@@ -1,3 +1,5 @@
+import "package:collection/collection.dart";
+
 /// A platform's own menu bar, which draws menus it is sent as data and says
 /// which item was picked. macOS's and iPadOS's, bound in `main`; every other
 /// platform has none.
@@ -10,7 +12,9 @@ abstract interface class MenuBarHost {
 }
 
 /// What a menu is to the platform: its own app, File, View and Help menus,
-/// which the app's items join, or a menu of the app's own.
+/// which the app's items join, or a menu of the app's own. What the platform
+/// puts in its own itself (Hide, Quit, Full Screen, the Window menu) is its
+/// business.
 enum MenuBarRole { app, file, view, help, own }
 
 /// One menu: its items in groups, a separator between each.
@@ -24,6 +28,18 @@ class MenuBarMenu {
   final String title;
   final MenuBarRole role;
   final List<List<MenuBarItem>> groups;
+
+  static const _groups = DeepCollectionEquality();
+
+  @override
+  bool operator ==(Object other) =>
+      other is MenuBarMenu &&
+      other.title == title &&
+      other.role == role &&
+      _groups.equals(other.groups, groups);
+
+  @override
+  int get hashCode => Object.hash(title, role, _groups.hash(groups));
 }
 
 /// One item: [key] is the character typed with the chord key, lower case,
@@ -46,4 +62,18 @@ class MenuBarItem {
   final bool alt;
   final bool enabled;
   final String? symbol;
+
+  @override
+  bool operator ==(Object other) =>
+      other is MenuBarItem &&
+      other.id == id &&
+      other.title == title &&
+      other.key == key &&
+      other.shift == shift &&
+      other.alt == alt &&
+      other.enabled == enabled &&
+      other.symbol == symbol;
+
+  @override
+  int get hashCode => Object.hash(id, title, key, shift, alt, enabled, symbol);
 }

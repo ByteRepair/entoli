@@ -1,4 +1,5 @@
 import "package:entoli_core/model/availability.dart";
+import "package:entoli_core/model/menu_bar.dart";
 
 /// A key as the menus and the key handlers take it: the chord key (Cmd on
 /// Apple's platforms, Ctrl elsewhere) plus [char], with Shift and Alt
@@ -184,34 +185,28 @@ String titleOf(AppItem item, AppFacts facts) => switch (item) {
   _ => item.title,
 };
 
-/// What a menu is to the platform, which has its own of some: the app's
-/// menu, File, View and Help are the platform's, the app's items added to
-/// them; any other is a menu of the app's own. What the platform puts in
-/// them itself (Hide, Quit, Full Screen, the Window menu) is its business.
-enum MenuRole { app, file, view, help, own }
-
 /// One menu of the bar: its items in groups.
 class AppMenu {
   const AppMenu(this.title, this.role, this.groups);
 
   final String title;
-  final MenuRole role;
+  final MenuBarRole role;
   final List<List<AppItem>> groups;
 }
 
 /// The menu bar, as data. The app's
 /// menu is titled with the app's name by the platform whatever this says.
 const List<AppMenu> appMenus = [
-  AppMenu("Entoli", MenuRole.app, [
+  AppMenu("Entoli", MenuBarRole.app, [
     [Destination.about],
     [Destination.settings, Destination.profile, Destination.marketplace],
   ]),
-  AppMenu("File", MenuRole.file, [
+  AppMenu("File", MenuBarRole.file, [
     [AppAction.newChat, AppAction.newAnonymousChat, AppAction.newOmadaChat],
     [Destination.switchProject],
     [Destination.backUp],
   ]),
-  AppMenu("Chat", MenuRole.own, [
+  AppMenu("Chat", MenuBarRole.own, [
     [
       AppAction.pinChat,
       AppAction.renameChat,
@@ -226,17 +221,17 @@ const List<AppMenu> appMenus = [
     ],
     [AppAction.deleteChat],
   ]),
-  AppMenu("Project", MenuRole.own, [
+  AppMenu("Project", MenuBarRole.own, [
     [
       Destination.projectWorkspace,
       Destination.projectMemories,
       Destination.projectSettings,
     ],
   ]),
-  AppMenu("View", MenuRole.view, [
+  AppMenu("View", MenuBarRole.view, [
     [Destination.toggleSidebar],
   ]),
-  AppMenu("Help", MenuRole.help, [
+  AppMenu("Help", MenuBarRole.help, [
     [Destination.welcome, Destination.keyboardShortcuts],
   ]),
 ];

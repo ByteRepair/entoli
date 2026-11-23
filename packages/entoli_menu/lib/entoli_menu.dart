@@ -19,7 +19,7 @@ class _NativeMenuBar implements MenuBarHost, NativeMenuPicks {
   }
 
   final NativeMenuBar _bar = NativeMenuBar();
-  List<NativeMenu>? _shown;
+  List<MenuBarMenu>? _shown;
   void Function(String id)? _picked;
 
   @override
@@ -30,6 +30,8 @@ class _NativeMenuBar implements MenuBarHost, NativeMenuPicks {
 
   @override
   void show(List<MenuBarMenu> menus) {
+    if (listEquals(menus, _shown)) return;
+    _shown = menus;
     final native = [
       for (final menu in menus)
         NativeMenu(
@@ -58,8 +60,6 @@ class _NativeMenuBar implements MenuBarHost, NativeMenuPicks {
           },
         ),
     ];
-    if (listEquals(native, _shown)) return;
-    _shown = native;
     _bar.show(native).catchError((Object e) => logFailure("menu", "show: $e"));
   }
 }

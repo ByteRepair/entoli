@@ -84,13 +84,7 @@ class HostAppMenus implements AppMenus {
                 ),
             ],
         ],
-        role: switch (menu.role) {
-          MenuRole.app => MenuBarRole.app,
-          MenuRole.file => MenuBarRole.file,
-          MenuRole.view => MenuBarRole.view,
-          MenuRole.help => MenuBarRole.help,
-          MenuRole.own => MenuBarRole.own,
-        },
+        role: menu.role,
       ),
   ]);
 }
