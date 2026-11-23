@@ -6,10 +6,11 @@ import "dart:typed_data";
 /// opens it where it is installed.
 const shareHost = "share.entoli.byterepair.io";
 
-/// The longest link Share makes. Android carries it in a Binder transaction
-/// twice — into the share sheet, and into the app that opens it — each a
-/// megabyte shared by everything in flight, a character two bytes there.
-const shareLinkMaxLength = 128 * 1024;
+/// The longest link Share makes, the same everywhere so a link opens on any
+/// machine it is sent to. Windows sets it: the link reaches the app as an
+/// argument, and a command line there is 32,767 characters, the quoted exe
+/// path included.
+const shareLinkMaxLength = 32000;
 
 /// What a share can carry besides the conversation, in the order the share
 /// dialog lists them.
