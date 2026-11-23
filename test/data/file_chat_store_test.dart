@@ -487,6 +487,24 @@ void main() {
       expect(File(p.join(src, "index.html")).readAsStringSync(), "<h1>hi</h1>");
     });
 
+    test("createArtifact leaves a link out, and what it leads to", () async {
+      await store.saveState(makeState("a1"));
+      final src = p.join(config.workspaceDir("a1"), "report");
+      await Directory(src).create(recursive: true);
+      await File(p.join(src, "index.html")).writeAsString("<h1>hi</h1>");
+      final outside = tempDir().path;
+      File(p.join(outside, "id_ed25519")).writeAsStringSync("secret");
+      Link(p.join(src, "keys")).createSync(outside);
+      Link(p.join(src, "up")).createSync(src);
+
+      final id = await store.createArtifact("a1", src, "index.html");
+
+      final dir = config.artifactDir("a1", id);
+      expect(Directory(dir).listSync().map((e) => p.basename(e.path)), [
+        "index.html",
+      ]);
+    });
+
     test("createArtifact accepts a single file (copies parent dir)", () async {
       await store.saveState(makeState("a1"));
       final ws = config.workspaceDir("a1");

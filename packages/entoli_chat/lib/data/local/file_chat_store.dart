@@ -371,7 +371,7 @@ class FileChatStore implements ChatStore {
   Future<void> _publish(String target, String source, String entryFile) async {
     if (File(source).existsSync()) source = p.dirname(source);
     await Directory(target).create(recursive: true);
-    await _copyDir(source, target);
+    await _copyDir(source, target, links: false);
     final file = File(p.join(target, entryFile));
     if (!file.existsSync()) {
       logFailure(
@@ -432,14 +432,20 @@ class FileChatStore implements ChatStore {
   }
 }
 
-Future<void> _copyDir(String source, String target) async {
-  await for (final entity in Directory(source).list()) {
+/// A link is never followed, which a link back up would make endless: it is
+/// copied as the link, or with [links] false left out — for an artifact, where
+/// what one leads to is the workspace's, which a share would then offer, and
+/// the stylesheet written into an entry file that is one would land there.
+Future<void> _copyDir(String source, String target, {bool links = true}) async {
+  await for (final entity in Directory(source).list(followLinks: false)) {
     final dest = p.join(target, p.basename(entity.path));
-    if (entity is File) {
+    if (entity is Link) {
+      if (links) await Link(dest).create(await entity.target());
+    } else if (entity is File) {
       await File(dest).writeAsBytes(await entity.readAsBytes());
     } else if (entity is Directory) {
       await Directory(dest).create(recursive: true);
-      await _copyDir(entity.path, dest);
+      await _copyDir(entity.path, dest, links: links);
     }
   }
 }
