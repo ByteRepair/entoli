@@ -13,6 +13,7 @@ import "package:entoli_chat/domain/project.dart";
 import "../providers.dart";
 import "app_command.dart";
 import "../app/chat_edits.dart";
+import "package:entoli_chat/domain/availability.dart";
 import "chat/share_chat_dialog.dart";
 import "selection.dart";
 import "package:entoli_chat/ui/widgets/dialogs.dart";
@@ -42,13 +43,28 @@ Future<void> runOnChat(
   _ => throw ArgumentError.value(command, "command", "not a chat command"),
 };
 
-/// A mirror's files are its home device's, so it is shared from there.
-Future<void> shareChat(BuildContext context, WidgetRef ref, ChatState chat) {
-  if (ref.read(isMirroredChatProvider(chat.id))) {
-    say(context, "A paired device's chat is shared from that device.");
-    return Future.value();
+/// Whether [command] may run on [chat], saying why not where it may not.
+bool _mayRun(
+  BuildContext context,
+  WidgetRef ref,
+  ChatState chat,
+  AppAction command,
+) {
+  if (!ref.read(isMirroredChatProvider(chat.id))) return true;
+  if (onMirror(command) case Unavailable(:final reason)) {
+    say(context, reason);
+    return false;
   }
-  return showShareChat(context, chat, origin: shareOrigin(context));
+  return true;
+}
+
+Future<void> shareChat(
+  BuildContext context,
+  WidgetRef ref,
+  ChatState chat,
+) async {
+  if (!_mayRun(context, ref, chat, AppAction.shareChat)) return;
+  await showShareChat(context, chat, origin: shareOrigin(context));
 }
 
 /// Where an iPad's share sheet points from: [context]'s box.
@@ -82,6 +98,7 @@ Future<void> moveChat(
   WidgetRef ref,
   ChatState chat,
 ) async {
+  if (!_mayRun(context, ref, chat, AppAction.moveChat)) return;
   final projects = await ref.read(chatRepositoryProvider).listProjects();
   if (!context.mounted) return;
   final picked = await pickProject(

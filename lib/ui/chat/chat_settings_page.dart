@@ -21,9 +21,9 @@ import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 import "../widgets/temp_chat_ttl_field.dart";
 import "package:entoli_chat/ui/workspace/workspace_page.dart";
-import "../chat_actions.dart" show shareOrigin;
+import "../../app/app_items.dart" show AppAction, onMirror;
+import "../chat_actions.dart" show shareChat;
 import "context_page.dart";
-import "share_chat_dialog.dart";
 import "widgets/view_only_bar.dart" show DeviceNotice;
 
 /// Open [chatId]'s settings: its title bar and the app's Chat menu.
@@ -193,7 +193,8 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                       project: draft.project,
                     ),
                   ),
-                  if (device == null)
+                  if (device == null ||
+                      onMirror(AppAction.shareChat).isAvailable)
                     Builder(
                       builder: (tile) => ListTile(
                         leading: const Icon(Icons.ios_share),
@@ -205,11 +206,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                               .read(chatRepositoryProvider)
                               .loadState(chatId);
                           if (state == null || !tile.mounted) return;
-                          await showShareChat(
-                            tile,
-                            state,
-                            origin: shareOrigin(tile),
-                          );
+                          await shareChat(tile, ref, state);
                         }),
                       ),
                     ),

@@ -441,12 +441,11 @@ class _ChatTile extends ConsumerWidget {
   }
 
   /// The row's menu, the same from the button and from a right-click: the
-  /// chat commands, in the row's own shorter words, less Move for a mirror,
-  /// whose projects are its home device's.
+  /// chat commands, in the row's own shorter words, less what a mirror cannot
+  /// have here ([onMirror]).
   List<PopupMenuEntry<AppAction>> get _items => [
     for (final command in chatCommands)
-      if (!(remote &&
-          (command == AppAction.moveChat || command == AppAction.shareChat)))
+      if (!remote || onMirror(command).isAvailable)
         PopupMenuItem(
           value: command,
           child: Text(switch (command) {

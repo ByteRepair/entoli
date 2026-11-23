@@ -114,6 +114,9 @@ const List<AppItem> appItems = [
 typedef AppFacts = ({
   bool front,
   bool chatOpen,
+
+  /// The chat on screen is a paired device's.
+  bool mirrored,
   bool pinned,
   bool running,
   bool sidebarShown,
@@ -127,6 +130,9 @@ typedef AppFacts = ({
 Availability availabilityOf(AppItem item, AppFacts facts) {
   if (!item.anywhere && !facts.front) {
     return const Unavailable("A page is open over the chat.");
+  }
+  if (facts.mirrored) {
+    if (onMirror(item) case final Unavailable why) return why;
   }
   Availability needs(bool ok, String why) =>
       ok ? const Available() : Unavailable(why);
@@ -156,6 +162,19 @@ Availability availabilityOf(AppItem item, AppFacts facts) {
     _ => const Available(),
   };
 }
+
+/// What of [item] a paired device's chat cannot have here: its projects and
+/// its files are its home device's. The row menu, the settings page and the
+/// commands themselves ask this too.
+Availability onMirror(AppItem item) => switch (item) {
+  AppAction.moveChat => const Unavailable(
+    "A paired device's chat is moved on that device.",
+  ),
+  AppAction.shareChat => const Unavailable(
+    "A paired device's chat is shared from that device.",
+  ),
+  _ => const Available(),
+};
 
 /// [item]'s title, saying which way a toggle goes.
 String titleOf(AppItem item, AppFacts facts) => switch (item) {

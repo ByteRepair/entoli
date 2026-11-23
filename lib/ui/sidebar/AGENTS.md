@@ -88,9 +88,11 @@ in `lib/ui/AGENTS.md`.
 
 ## A chat's row menu
 
-The ⋮ button and a right-click open the same menu — Pin, Rename, Move, Delete,
-`_ChatTile._items` — and run the same `chat_actions.dart` functions the Chat
-menu runs on the open chat. Right-click is on every platform rather than a
+The ⋮ button and a right-click open the same menu — Pin, Rename, Move, Share,
+Delete, `_ChatTile._items` — and run the same `chat_actions.dart` functions
+the Chat menu runs on the open chat. A paired device's chat leaves out what
+`onMirror` (`lib/app/app_items.dart`) says it cannot have here, Move and
+Share, the same answer the menus, keys and its settings page take. Right-click is on every platform rather than a
 desktop's alone: it costs nothing where there is no mouse.
 
 ## A chat that is running

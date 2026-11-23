@@ -7,6 +7,7 @@ void main() {
   const facts = (
     front: true,
     chatOpen: false,
+    mirrored: false,
     pinned: false,
     running: false,
     sidebarShown: true,
@@ -39,10 +40,28 @@ void main() {
     expect(availabilityOf(AppAction.newChat, facts), isA<Available>());
   });
 
+  test("a paired device's chat is not moved or shared here", () {
+    final mirrored = (
+      front: true,
+      chatOpen: true,
+      mirrored: true,
+      pinned: false,
+      running: false,
+      sidebarShown: true,
+      hasWorkspace: true,
+      hasMemories: true,
+      hasSettings: true,
+    );
+    expect(availabilityOf(AppAction.shareChat, mirrored), isA<Unavailable>());
+    expect(availabilityOf(AppAction.moveChat, mirrored), isA<Unavailable>());
+    expect(availabilityOf(AppAction.renameChat, mirrored), isA<Available>());
+  });
+
   test("only an item that is anywhere runs over a page", () {
     final covered = (
       front: false,
       chatOpen: true,
+      mirrored: false,
       pinned: false,
       running: true,
       sidebarShown: true,
@@ -60,6 +79,7 @@ void main() {
       titleOf(AppAction.pinChat, (
         front: true,
         chatOpen: true,
+        mirrored: false,
         pinned: true,
         running: false,
         sidebarShown: false,

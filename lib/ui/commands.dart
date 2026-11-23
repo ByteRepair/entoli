@@ -71,6 +71,7 @@ class Commands {
       facts: (
         front: ModalRoute.isCurrentOf(context) ?? true,
         chatOpen: open != null,
+        mirrored: id != null && get(isMirroredChatProvider(id)),
         pinned: open?.pinned ?? false,
         running: open?.running ?? false,
         sidebarShown: get(sidebarShownProvider),
