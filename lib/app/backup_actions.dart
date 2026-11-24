@@ -6,6 +6,7 @@ import "package:entoli_core/model/formatting.dart";
 import "../core/platform/platform.dart" as platform;
 import "../data/backup.dart";
 import "../providers.dart";
+import "live_log.dart";
 
 /// Whether a backup is being written or restored, which holds both buttons
 /// wherever they are drawn.
@@ -16,14 +17,24 @@ final backupBusyProvider = NotifierProvider<BackupBusy, bool>(BackupBusy.new);
 /// before the second goes ahead.
 class BackupBusy extends Notifier<bool> {
   @override
-  bool build() => false;
+  bool build() {
+    ref.onDispose(log.dispose);
+    return false;
+  }
+
+  /// What the last export or restore printed, kept until the next starts.
+  final log = LiveLog();
 
   /// [work], unless one is already running.
   Future<T?> run<T>(Future<T> Function() work) async {
     if (state) return null;
     state = true;
+    log.clear();
     try {
       return await work();
+    } catch (e) {
+      log.writeln("Failed: $e");
+      rethrow;
     } finally {
       if (ref.mounted) state = false;
     }
@@ -37,10 +48,13 @@ class BackupBusy extends Notifier<bool> {
     final saved = await ref.read(backupHandoffProvider).save(
       backupFilename(DateTime.now()),
       (path) async {
-        await writeBackup(config, path);
+        log.writeln("Writing the backup");
+        await writeBackup(config, path, log: log);
         size = await File(path).length();
+        log.writeln("Wrote ${formatSize(size)}");
       },
     );
+    if (!saved) log.writeln("Cancelled");
     return saved ? size : null;
   }
 
@@ -63,6 +77,9 @@ class BackupBusy extends Notifier<bool> {
   /// replaces: everything that writes to them belongs to the session.
   Future<void> restore(Backup backup) {
     final config = ref.read(appConfigProvider);
+    log.writeln(
+      "Restoring ${backup.path}; Entoli starts again when it is done",
+    );
     return ref
         .read(appRestartProvider)
         .restart(

@@ -28,6 +28,11 @@ edited in the chat opens the same page, its Save called Send.
 marketplace's and the project palette's — and `ListHeading` the caption a list's
 groups sit under. Two were copies of the sidebar's, one had drifted.
 
+`LogPanel` is a task's output folded under a Log row, hidden while empty: Byte
+Repair's setup and delete, and Data's export. The task writes to the
+`LiveLog` (`lib/app/live_log.dart`, a `StringSink`) its notifier owns, so the
+log outlives the page and a writer needs no widget to write.
+
 `SidePanelFrame` is a navigation panel beside a page where the window is wide
 enough and the panel shown, and, where it is narrow, what its `narrow` says:
 the page's drawer (`SidePanelNarrow.drawer`, the shell's sidebar) or a page of

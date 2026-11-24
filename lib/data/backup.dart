@@ -90,14 +90,35 @@ final _chatState = RegExp(r"^projects/[^/]+/chats/[^/]+/state\.json$");
 /// Every file under the data directory, as the zip a backup is, written to
 /// [to] a member at a time — a backup costs disk, not memory — on an isolate of
 /// its own, so a large file compressing does not hold up a frame.
-Future<void> writeBackup(AppConfig config, String to) {
-  // Strings alone cross: whatever the closure captures is copied to the
-  // isolate.
+/// [log] hears each top-level folder, and each one under it, as it goes in.
+Future<void> writeBackup(AppConfig config, String to, {StringSink? log}) async {
   final dataDir = config.dataDir;
   final machineLocal = config.machineLocalFiles;
-  return Isolate.run(() {
+  // The lines arrive on a port of their own, so they may trail the result:
+  // the isolate's null is the last of them. The isolate's closure must
+  // capture only what it names: a completer or the log would not cross.
+  final progress = ReceivePort();
+  final send = progress.sendPort;
+  final zipped = Isolate.run(() => _zipData(dataDir, machineLocal, to, send));
+  await for (final line in progress) {
+    if (line == null) break;
+    log?.writeln(line);
+  }
+  await zipped;
+}
+
+/// The zip itself, on the isolate, ending its [progress] with a null.
+Future<void> _zipData(
+  String dataDir,
+  List<String> machineLocal,
+  String to,
+  SendPort progress,
+) async {
+  // A walk visits a folder's members together, so each is said once.
+  String? last;
+  try {
     final realDataDir = Directory(dataDir).resolveSymbolicLinksSync();
-    return zipTo(
+    await zipTo(
       to,
       [dataDir],
       base: dataDir,
@@ -137,8 +158,15 @@ Future<void> writeBackup(AppConfig config, String to) {
           }),
         ),
       ],
+      onMember: (name) {
+        final parts = p.split(name);
+        final folder = p.joinAll(parts.take(parts.length > 2 ? 2 : 1));
+        if (folder != last) progress.send("Adding ${last = folder}");
+      },
     );
-  });
+  } finally {
+    progress.send(null);
+  }
 }
 
 /// Open the backup at [path] and check the manifest, on an isolate of its own:

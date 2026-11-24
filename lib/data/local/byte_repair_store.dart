@@ -164,14 +164,18 @@ class ByteRepairStore {
   }
 
   /// Deletes this project's setup data, workspace and marker, plus desktop
-  /// tools. Shared guest packages remain installed for other projects. Null on
-  /// success, an error message on failure.
-  Future<String?> deleteEnvironment() async {
-    final errors = await Future.wait([
-      removeTree(config.projectWorkspaceDir(project: project)),
-      if (_hostInstallDir != null) removeTree(p.dirname(_hostInstallDir!)),
-    ]);
-    final err = errors.where((e) => e != null).firstOrNull;
+  /// tools, saying each to [log]. Shared guest packages remain installed for
+  /// other projects. Null on success, an error message on failure.
+  Future<String?> deleteEnvironment({StringSink? log}) async {
+    final trees = [
+      config.projectWorkspaceDir(project: project),
+      if (_hostInstallDir != null) p.dirname(_hostInstallDir!),
+    ];
+    for (final tree in trees) {
+      log?.writeln("Deleting $tree");
+    }
+    final errors = await Future.wait(trees.map(removeTree));
+    final err = errors.nonNulls.firstOrNull;
     if (err != null) {
       logFailure("byte-repair", "delete environment failed", err);
       return err;

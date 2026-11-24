@@ -1,5 +1,7 @@
 import "dart:io";
 
+import "file_modes.dart" show setTreeWritable;
+
 /// Whole-tree operations a rootfs needs, shelled out rather than `dart:io`,
 /// because a rootfs contains things proot leaves behind that Dart cannot even
 /// list.
@@ -22,6 +24,14 @@ import "dart:io";
 Future<String?> removeTree(String path) async {
   final dir = Directory(path);
   if (!dir.existsSync()) return null;
+  // The `chmod` below is a process, which iOS refuses, and Windows' read-only
+  // attribute is not a mode at all: there libc's chmod and the attributes
+  // unlock the tree instead.
+  if (Platform.isIOS || Platform.isWindows) {
+    try {
+      await setTreeWritable([path], writable: true);
+    } catch (_) {}
+  }
   try {
     await Process.run("chmod", ["-R", "u+rwX", path]);
   } catch (_) {}

@@ -5,6 +5,7 @@ import "package:flutter/foundation.dart"
     show TargetPlatform, debugDefaultTargetPlatformOverride;
 import "package:flutter/services.dart" show rootBundle;
 import "package:flutter_test/flutter_test.dart";
+import "package:entoli_shell/file_modes.dart" show setTreeWritable;
 import "package:path/path.dart" as p;
 import "package:entoli_core/model/config.dart";
 import "package:agent_chat/data/local/byte_repair_store.dart";
@@ -831,6 +832,32 @@ exit 0""");
     // host-side of the delete follows it.
     expect(Directory("/usr/local/bin").existsSync(), isTrue);
   });
+
+  // The workspace holds the skills, locked read-only between the app's own
+  // writes.
+  test(
+    "deleteEnvironment takes a locked tree and says what it deletes",
+    () async {
+      final project = ByteRepairProject().dir;
+      final workspace = config.projectWorkspaceDir(project: project);
+      final store = ByteRepairStore(
+        config: config,
+        project: project,
+        workspace: workspace,
+        installDir: guestEsbmcInstallDir,
+      );
+      final skills = Directory(p.join(workspace, "skills", "s"))
+        ..createSync(recursive: true);
+      File(p.join(skills.path, "SKILL.md")).writeAsStringSync("x");
+      await setTreeWritable([p.join(workspace, "skills")], writable: false);
+      final log = StringBuffer();
+
+      expect(await store.deleteEnvironment(log: log), isNull);
+
+      expect(Directory(workspace).existsSync(), isFalse);
+      expect(log.toString(), "Deleting $workspace\n");
+    },
+  );
 
   test(
     "deleteEnvironment takes the trees the setup made, and the marker",

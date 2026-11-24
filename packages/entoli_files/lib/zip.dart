@@ -12,7 +12,8 @@ import "package:file/local.dart";
 /// [skip] drops a file by its path, and is never asked about a directory;
 /// [skipDir] drops a directory by its path, and is asked before recursing into
 /// it. [extra] goes in last, for a member of the caller's own. [followLinks]
-/// and [followInto] are [walkTree]'s.
+/// and [followInto] are [walkTree]'s. [onMember] hears each member's name as
+/// it is added, for a caller showing progress.
 Future<void> zipTo(
   String to,
   List<String> paths, {
@@ -22,6 +23,7 @@ Future<void> zipTo(
   List<ArchiveFile> extra = const [],
   bool followLinks = true,
   bool Function(String real)? followInto,
+  void Function(String name)? onMember,
 }) async {
   final encoder = ZipFileEncoder()..create(to);
   try {
@@ -41,6 +43,7 @@ Future<void> zipTo(
       } else {
         await _addStreamed(encoder, entry.path, entry.name);
       }
+      onMember?.call(entry.name);
     }
     extra.forEach(encoder.addArchiveFile);
   } finally {
