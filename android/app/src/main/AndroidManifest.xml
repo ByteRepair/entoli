@@ -35,7 +35,8 @@
 
     <!-- Sync: scan a pairing QR from the paste-code field, a button the
          phones alone show. Not required: a device with no camera still pairs
-         by typing the code. -->
+         by typing the code. The composer's Camera needs it too, declared, and
+         image_picker asks for it. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
 

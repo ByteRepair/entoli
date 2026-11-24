@@ -32,7 +32,8 @@ here rather than as a comment beside the key because Xcode rewrites
 
 App Store processing reads the binary, not the UI, so a key is owed for
 whatever is linked, offered or not. `NSCameraUsageDescription` is the
-prompt the pairing scanner raises, and would be owed even without it, since
+prompt the pairing scanner and the composer's Camera raise, one string for
+both, and would be owed even without them, since
 `mobile_scanner` and WebRTC link `AVCaptureDevice`; an upload without it is
 refused.
 `NSLocalNetworkUsageDescription` is the wording of the prompt the first

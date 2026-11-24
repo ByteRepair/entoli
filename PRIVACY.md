@@ -132,7 +132,8 @@ The app requests the following permissions, each used only for its feature:
 
 - **Microphone** — voice mode listening.
 - **Speech recognition** (iOS) — hearing voice mode, on the device only.
-- **Camera** — scanning a sync pairing QR code.
+- **Camera** — taking a photo to attach to a message, and scanning a sync
+  pairing QR code.
 - **Local network** (iOS) — syncing with your other devices on the same
   network, and reaching a model or service you run on it.
 - **Notifications** — announcing reminders and finished turns.

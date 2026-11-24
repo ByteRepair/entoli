@@ -22,6 +22,8 @@ dependencies:
   # Android's staging directory for what an intent is handed.
   path_provider: ^2.1.6
   file_selector: ^1.1.0
+  # The phones' camera, for the composer's Camera.
+  image_picker: ^1.2.4
   url_launcher: ^6.3.2
 
 dev_dependencies:

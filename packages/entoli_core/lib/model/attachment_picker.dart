@@ -22,12 +22,11 @@ Future<List<Attachment>> pickAttachments(
   FilePicker picker,
   AttachmentKind kind,
 ) async {
-  final files = await picker.files(
-    types: switch (kind) {
-      AttachmentKind.image => imageFileTypes,
-      AttachmentKind.file => null,
-    },
-  );
+  final files = switch (kind) {
+    AttachmentKind.image => await picker.files(types: imageFileTypes),
+    AttachmentKind.photo => [?await picker.photo()],
+    AttachmentKind.file => await picker.files(),
+  };
   return Future.wait(
     files.map((file) async {
       final bytes = await file.readAsBytes();

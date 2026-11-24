@@ -13,7 +13,7 @@ import "shared_backup.dart";
 
 export "zip.dart" show zipTo;
 
-/// The chooser for a folder or for files.
+/// The chooser for a folder or for files, and the phones' camera.
 FilePicker platformFilePicker() => const FileSelectorFilePicker();
 
 /// Opening, showing and sharing a workspace file, and taking one shared in.

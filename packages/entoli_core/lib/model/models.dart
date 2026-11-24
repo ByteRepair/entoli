@@ -750,9 +750,9 @@ class Attachment {
 /// A message back in the composer's hands: a steer taken back unread.
 typedef Draft = ({String text, List<Attachment> attachments});
 
-/// What the composer's `+` button can attach. Only the chooser's filter
-/// differs — an image is a file narrowed down to.
-enum AttachmentKind { image, file }
+/// What the composer's `+` button can attach: an image is a file narrowed
+/// down to, a photo one the camera takes.
+enum AttachmentKind { image, photo, file }
 
 /// A pending tool-call approval surfaced to the UI.
 @freezed

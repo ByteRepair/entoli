@@ -39,4 +39,10 @@ abstract interface class FilePicker {
 
   /// The files the user chose; none if they cancelled.
   Future<List<PickedFile>> files({String? confirmLabel, FileTypes? types});
+
+  /// Whether [photo] has a camera to open here.
+  bool get canTakePhoto;
+
+  /// The photo taken, or null if cancelled or failed.
+  Future<PickedFile?> photo();
 }

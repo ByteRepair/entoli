@@ -35,6 +35,7 @@ enum ComposerAction {
   stop,
   voice,
   attachImage,
+  takePhoto,
   attachFile,
   insertSkill,
   insertAgent,
@@ -162,13 +163,16 @@ class ComposerBinding {
 /// change. [canSend] and [queues] are notifiers of their own, since they flip
 /// on keystrokes and only the buttons draw them.
 class ComposerModel extends ChangeNotifier {
-  ComposerModel(this.field, {required this.pick}) {
+  ComposerModel(this.field, {required this.pick, this.camera = false}) {
     field.addListener(_sync);
     _sync();
   }
 
   /// Runs the platform's picker: the files the user chose.
   final Future<List<Attachment>> Function(AttachmentKind kind) pick;
+
+  /// Whether [ComposerAction.takePhoto] has a camera to open.
+  final bool camera;
 
   final ComposerText field;
 
@@ -240,6 +244,8 @@ class ComposerModel extends ChangeNotifier {
         _turn.onVoice?.call();
       case ComposerAction.attachImage:
         attach(await pick(AttachmentKind.image));
+      case ComposerAction.takePhoto:
+        if (camera) attach(await pick(AttachmentKind.photo));
       case ComposerAction.attachFile:
         attach(await pick(AttachmentKind.file));
       case ComposerAction.insertSkill:
