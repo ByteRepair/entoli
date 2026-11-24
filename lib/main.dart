@@ -434,26 +434,25 @@ class AppSession {
             ),
       );
     }
-    // The model catalog, read from its cache and refreshed in the background.
-    // Only a hosted provider sends anything there: on-device models are
+    // The model catalog, read from its cache and refreshed once it is a day
+    // old: at launch, on the sweep's tick below, since an app can stay open
+    // for weeks, and when the first provider is added, which the welcome tour
+    // does. Only a hosted provider sends anything there: on-device models are
     // described by the app itself.
-    void loadCatalog() {
+    Future<void> refreshCatalog() async {
+      if (!modelCatalogStale ||
+          container.read(appSettingsProvider).llmProviders.isEmpty) {
+        return;
+      }
       final client = tlsClient();
-      unawaited(
-        loadModelCatalog(
-          config,
-          client,
-          fetch: container.read(appSettingsProvider).llmProviders.isNotEmpty,
-        ).whenComplete(client.close),
-      );
+      await refreshModelCatalog(config, client).whenComplete(client.close);
     }
 
-    loadCatalog();
-    // The first provider fetches it then: the welcome tour adds one.
+    unawaited(loadModelCatalog(config).then((_) => refreshCatalog()));
     container.listen(
       appSettingsProvider.select((s) => s.llmProviders.isNotEmpty),
       (was, now) {
-        if (now && was == false) loadCatalog();
+        if (now && was == false) unawaited(refreshCatalog());
       },
     );
     // Sweep expired temporary chats on startup, then every 30 minutes. The
@@ -469,7 +468,10 @@ class AppSession {
     unawaited(container.read(triggerManagerProvider).start());
     return AppSession._(
       container,
-      Timer.periodic(const Duration(minutes: 30), (_) => sweep()),
+      Timer.periodic(const Duration(minutes: 30), (_) {
+        unawaited(sweep());
+        unawaited(refreshCatalog());
+      }),
     );
   }
 

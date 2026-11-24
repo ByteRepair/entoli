@@ -269,9 +269,14 @@ a name of its own; the Provider ID is its models.dev key. An entry in
 `data/model_catalog.dart` loads it at startup — the presets' default models
 built in (`lib/data/builtin_models.dart`, written by
 `tool/gen_builtin_models.dart` and committed, since it fetches), then the cached
-copy in `<dataDir>/models.json`, then a fetch when that is a day old, or when
-the first provider is added. So with no network and no cache the Defaults are
-still pickable. Run the generator when a preset's defaults change.
+copy in `<dataDir>/models.json`, then a fetch when that is a day old — asked
+at launch, every half hour while the app runs, and when the first provider is
+added. So with no network and no cache the Defaults are still pickable. Run
+the generator when a preset's defaults change. A preset's Defaults are the
+preset's, not the entry's: an entry carries the ids it was added with, and
+the settings notifier's load puts the current preset's over them
+(`withPresetDefaults`), so a release that changes one reaches providers
+connected before it.
 
 A card's star puts its model in `AppSettings.favouriteModels`, one app-level
 list of (provider, model) pairs, and the Favourites section under Quick picks

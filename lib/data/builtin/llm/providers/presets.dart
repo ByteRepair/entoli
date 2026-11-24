@@ -75,6 +75,21 @@ LlmProvider providerOf(LlmProviderConfig config) {
   };
 }
 
+/// [config] with its preset's default models. An entry stores them from the
+/// day it was added and nothing lets the user change them, so the preset's
+/// win: a release that changes a default reaches entries made before it. The
+/// settings notifier puts them over every entry it loads.
+LlmProviderConfig withPresetDefaults(LlmProviderConfig config) {
+  final preset = config.api.isCli
+      ? cliPresetOf(config.api).config
+      : presetOf(config)?.config;
+  if (preset == null) return config;
+  return config.copyWith(
+    defaultModelId: preset.defaultModelId,
+    defaultLightModelId: preset.defaultLightModelId,
+  );
+}
+
 /// The preset [config] is an entry of, whatever it is called; null for an
 /// endpoint typed in by hand.
 LlmProvider? presetOf(LlmProviderConfig config) => _kindOf(config)?.call();
