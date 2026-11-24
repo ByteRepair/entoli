@@ -19,6 +19,7 @@ class NewChatSession {
     composer = ComposerModel(
       text,
       pick: (kind) => pickAttachments(_ref.read(filePickerProvider), kind),
+      camera: _ref.read(filePickerProvider).canTakePhoto,
     );
     _ref.listen(newChatPromptProvider, (_, prompt) {
       if (prompt == null) return;

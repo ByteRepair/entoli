@@ -21,6 +21,7 @@ class ChatSession {
     composer = ComposerModel(
       text,
       pick: (kind) => pickAttachments(_ref.read(filePickerProvider), kind),
+      camera: _ref.read(filePickerProvider).canTakePhoto,
     );
   }
 

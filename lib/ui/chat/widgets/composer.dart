@@ -49,6 +49,11 @@ _Place _place(ComposerAction action) => switch (action) {
     icon: Icons.image_outlined,
     group: 0,
   ),
+  ComposerAction.takePhoto => const _Plus(
+    "Camera",
+    icon: Icons.photo_camera_outlined,
+    group: 0,
+  ),
   ComposerAction.attachFile => const _Plus(
     "File",
     icon: Icons.attach_file,
@@ -227,6 +232,7 @@ class ComposerState extends ConsumerState<Composer> {
     final entries = <PopupMenuEntry<ComposerAction>>[];
     int? group;
     for (final action in ComposerAction.values) {
+      if (action == ComposerAction.takePhoto && !_model.camera) continue;
       if (_place(action) case final _Plus entry) {
         if (group != null && entry.group != group) {
           entries.add(const PopupMenuDivider());

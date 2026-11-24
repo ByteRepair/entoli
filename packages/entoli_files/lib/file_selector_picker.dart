@@ -1,12 +1,31 @@
 import "dart:typed_data";
 
 import "package:file_selector/file_selector.dart";
+import "package:flutter/services.dart" show PlatformException;
+import "package:image_picker/image_picker.dart" show ImagePicker, ImageSource;
 import "package:entoli_core/model/file_picker.dart";
+import "package:entoli_core/model/log.dart";
 
 /// The platform's own folder and file choosers, through `file_selector` — one
-/// plugin covering every platform the app runs on.
+/// plugin covering every platform the app runs on — and, where [canTakePhoto],
+/// the camera through `image_picker`.
 class FileSelectorFilePicker implements FilePicker {
-  const FileSelectorFilePicker();
+  const FileSelectorFilePicker({this.canTakePhoto = false});
+
+  @override
+  final bool canTakePhoto;
+
+  @override
+  Future<PickedFile?> photo() async {
+    try {
+      final file = await ImagePicker().pickImage(source: ImageSource.camera);
+      return file == null ? null : _Picked(file);
+    } on PlatformException catch (e) {
+      // camera_access_denied, no_available_camera.
+      logFailure("files", "camera: ${e.code}", e.message);
+      return null;
+    }
+  }
 
   @override
   Future<String?> folder({required String confirmLabel}) =>

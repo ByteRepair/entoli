@@ -22,6 +22,24 @@ A filter names extensions, MIME types and uniform type identifiers together,
 since each platform reads only its own field: the desktops the extension,
 Android the MIME type, Apple's the UTI.
 
+## The camera
+
+The composer's Camera is `FilePicker.photo`, `image_picker` with
+`ImageSource.camera` returning the same `XFile`, and `pickAttachments` reads
+it like an Image pick. `canTakePhoto` is set on the phones alone, and the
+composer leaves the entry out of the `+` menu without it; the desktops'
+`image_picker` would only open a file chooser. The photo is attached as
+taken, full size, as an Image pick is.
+
+The app's manifest declares `CAMERA` for the pairing scanner, and a declared
+`CAMERA` not yet granted makes `ACTION_IMAGE_CAPTURE` throw. The plugin
+checks for the declaration and asks for the grant itself, so nothing here
+does; a refusal (`camera_access_denied`) or no camera app
+(`no_available_camera`) gets a `logFailure` line and attaches nothing. The
+plugin's own `FileProvider` (`<applicationId>.flutter.image_provider`) is
+where the camera app writes, so `file_paths.xml` is untouched. iOS's prompt
+is `NSCameraUsageDescription`, one string for this and the scanner.
+
 ## The hand-offs
 
 `FileHandoff` is what the workspace explorer does past showing a file, and

@@ -573,6 +573,43 @@ void main() {
     },
   );
 
+  testWidgets("the + menu has no Camera where the port has none", (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.byIcon(Icons.add));
+    await settleIo(tester);
+
+    expect(find.text("Image"), findsOneWidget);
+    expect(find.text("Camera"), findsNothing);
+  });
+
+  testWidgets("the + menu's Camera attaches the photo taken", (tester) async {
+    final chooser = app.chooser
+      ..canTakePhoto = true
+      ..scriptedPhoto = testAttachment(
+        "photo.png",
+        mimeType: "image/png",
+        bytes: onePixelPng,
+      );
+    model.dispose();
+    model = ComposerModel(
+      controller,
+      pick: (kind) => pickAttachments(chooser, kind),
+      camera: chooser.canTakePhoto,
+    );
+    await pump(tester);
+    await insertVia(tester, "Camera");
+
+    expect(chooser.asked, isEmpty);
+    expect(find.byType(Image), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.send));
+    await settleIo(tester);
+
+    expect(sentAttachments.single.map((a) => a.filename), ["photo.png"]);
+  });
+
   testWidgets("an image shows itself rather than its name", (tester) async {
     app.chooser.scriptedAttachments = [
       testAttachment("shot.png", mimeType: "image/png", bytes: onePixelPng),
