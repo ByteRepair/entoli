@@ -774,7 +774,8 @@ void main() {
         expect(
           await deleteDialogMessage(tester),
           "This deletes the Byte Repair workspace (cloned repos, scratch "
-          "files) and all chats in the project.",
+          "files) and all chats in the project. The tools stay installed "
+          "in the Linux, which other projects share.",
         );
       },
     );
@@ -836,7 +837,8 @@ void main() {
         expect(
           await deleteDialogMessage(tester),
           "This deletes the Byte Repair workspace (cloned repos, scratch "
-          "files) and all chats in the project. Run Setup to use Byte "
+          "files) and all chats in the project. The tools stay installed "
+          "in the Linux, which other projects share. Run Setup to use Byte "
           "Repair again.",
         );
       },

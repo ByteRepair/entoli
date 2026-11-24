@@ -193,9 +193,13 @@ class ByteRepairStore {
   /// The delete confirm's message.
   String get deleteConfirmMessage {
     final environment = environmentDeletion;
-    final tail = capabilityBanner == null
-        ? " Run Setup to use Byte Repair again."
+    // Why the tool rows stand after a delete on a phone.
+    final kept = installDir == guestEsbmcInstallDir
+        ? " The tools stay installed in the Linux, which other projects share."
         : "";
+    final tail = capabilityBanner == null
+        ? "$kept Run Setup to use Byte Repair again."
+        : kept;
     return environment == null
         ? "This deletes the Byte Repair workspace (cloned repos, scratch "
               "files) and all chats in the project.$tail"

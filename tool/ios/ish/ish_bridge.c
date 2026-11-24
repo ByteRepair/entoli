@@ -242,17 +242,29 @@ static void bind_read_only(const char **dirs, int32_t count) {
 // The old bind is unmounted where nothing holds it; where a dying shell
 // still does, the new one shadows it (do_mount puts the newest first among
 // equal-length points).
+//
+// The same path is bound again where the directory under it is not the one
+// bound: realfs holds the directory it mounted, so a workspace deleted and
+// made again would otherwise leave /root on the deleted one.
 static void bind_workspace(const char *workspace) {
     static char bound_home[PATH_MAX];
-    if (strcmp(bound_home, workspace) == 0) return;
+    static dev_t bound_dev;
+    static ino_t bound_ino;
+    struct stat now;
+    bool same_dir = stat(workspace, &now) == 0 &&
+        now.st_dev == bound_dev && now.st_ino == bound_ino;
+    if (strcmp(bound_home, workspace) == 0 && same_dir) return;
     if (bound_home[0] != '\0') {
         lock(&mounts_lock);
         do_umount("/root");
         unlock(&mounts_lock);
         bound_home[0] = '\0';
     }
-    if (bind_host_dir(workspace, "/root", 0) == 0) {
+    if (bind_host_dir(workspace, "/root", 0) == 0 &&
+        stat(workspace, &now) == 0) {
         snprintf(bound_home, sizeof(bound_home), "%s", workspace);
+        bound_dev = now.st_dev;
+        bound_ino = now.st_ino;
     }
 }
 
