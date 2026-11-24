@@ -95,89 +95,78 @@ Future<void> writeBackup(AppConfig config, String to, {StringSink? log}) async {
   final dataDir = config.dataDir;
   final machineLocal = config.machineLocalFiles;
   // The lines arrive on a port of their own, so they may trail the result:
-  // the isolate's null is the last of them.
+  // the isolate's null is the last of them. The isolate's closure must
+  // capture only what it names: a completer or the log would not cross.
   final progress = ReceivePort();
-  final drained = Completer<void>();
-  progress.listen((line) {
-    if (line == null) return drained.complete();
+  final send = progress.sendPort;
+  final zipped = Isolate.run(() => _zipData(dataDir, machineLocal, to, send));
+  await for (final line in progress) {
+    if (line == null) break;
     log?.writeln(line);
-  });
-  try {
-    await _zipInIsolate(dataDir, machineLocal, to, progress.sendPort);
-    await drained.future;
-  } finally {
-    progress.close();
   }
+  await zipped;
 }
 
-/// Its own function so the closure holds these alone: one capturing
-/// [writeBackup]'s scope would carry its completer, which cannot cross.
-Future<void> _zipInIsolate(
-  String dataDir,
-  List<String> machineLocal,
-  String to,
-  SendPort progress,
-) => Isolate.run(() async {
-  try {
-    await _zipData(dataDir, machineLocal, to, progress);
-  } finally {
-    progress.send(null);
-  }
-});
-
+/// The zip itself, on the isolate, ending its [progress] with a null.
 Future<void> _zipData(
   String dataDir,
   List<String> machineLocal,
   String to,
   SendPort progress,
-) {
-  final realDataDir = Directory(dataDir).resolveSymbolicLinksSync();
+) async {
   // A walk visits a folder's members together, so each is said once.
   String? last;
-  return zipTo(
-    to,
-    [dataDir],
-    base: dataDir,
-    // The half of a rename that a kill landed in. Nothing reads one, and a
-    // restore that put it back would put back a torn write.
-    skip: (path) =>
-        path.endsWith(writingSuffix) ||
-        machineLocal.any((f) => p.equals(path, f)),
-    // The top-level `sync/` holds private keys, and restoring it would
-    // unpair this device. A project's `rootfs/` is re-fetchable and holds
-    // proot's mode-0000 stubs the walker cannot list (see `tree_ops.dart`).
-    // Matched by position: a workspace folder with either name is the
-    // user's data.
-    skipDir: (path) {
-      final parts = p.split(p.relative(path, from: dataDir));
-      return (parts.length == 1 && parts[0] == "sync") ||
-          (parts.length == 3 && parts[0] == "projects" && parts[2] == "rootfs");
-    },
-    // What a backup holds is the data directory's: a link that leads out of
-    // every project's workspace goes in as the link, not what it reaches.
-    // Against the real path, since the data directory may sit under a link.
-    followInto: (real) {
-      final parts = p.split(p.relative(real, from: realDataDir));
-      return parts.length >= 3 &&
-          parts[0] == "projects" &&
-          parts[2] == "workspace";
-    },
-    extra: [
-      ArchiveFile.string(
-        manifestName,
-        jsonEncode({
-          "format": backupFormat,
-          "version": backupVersion,
-          "createdAt": DateTime.now().toUtc().toIso8601String(),
-        }),
-      ),
-    ],
-    onMember: (name) {
-      final parts = p.split(name);
-      final folder = p.joinAll(parts.take(parts.length > 2 ? 2 : 1));
-      if (folder != last) progress.send("Adding ${last = folder}");
-    },
-  );
+  try {
+    final realDataDir = Directory(dataDir).resolveSymbolicLinksSync();
+    await zipTo(
+      to,
+      [dataDir],
+      base: dataDir,
+      // The half of a rename that a kill landed in. Nothing reads one, and a
+      // restore that put it back would put back a torn write.
+      skip: (path) =>
+          path.endsWith(writingSuffix) ||
+          machineLocal.any((f) => p.equals(path, f)),
+      // The top-level `sync/` holds private keys, and restoring it would
+      // unpair this device. A project's `rootfs/` is re-fetchable and holds
+      // proot's mode-0000 stubs the walker cannot list (see `tree_ops.dart`).
+      // Matched by position: a workspace folder with either name is the
+      // user's data.
+      skipDir: (path) {
+        final parts = p.split(p.relative(path, from: dataDir));
+        return (parts.length == 1 && parts[0] == "sync") ||
+            (parts.length == 3 &&
+                parts[0] == "projects" &&
+                parts[2] == "rootfs");
+      },
+      // What a backup holds is the data directory's: a link that leads out of
+      // every project's workspace goes in as the link, not what it reaches.
+      // Against the real path, since the data directory may sit under a link.
+      followInto: (real) {
+        final parts = p.split(p.relative(real, from: realDataDir));
+        return parts.length >= 3 &&
+            parts[0] == "projects" &&
+            parts[2] == "workspace";
+      },
+      extra: [
+        ArchiveFile.string(
+          manifestName,
+          jsonEncode({
+            "format": backupFormat,
+            "version": backupVersion,
+            "createdAt": DateTime.now().toUtc().toIso8601String(),
+          }),
+        ),
+      ],
+      onMember: (name) {
+        final parts = p.split(name);
+        final folder = p.joinAll(parts.take(parts.length > 2 ? 2 : 1));
+        if (folder != last) progress.send("Adding ${last = folder}");
+      },
+    );
+  } finally {
+    progress.send(null);
+  }
 }
 
 /// Open the backup at [path] and check the manifest, on an isolate of its own:

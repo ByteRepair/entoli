@@ -824,8 +824,7 @@ exit 0""");
   });
 
   // The workspace holds the skills, locked read-only between the app's own
-  // writes; the delete goes through the platform's deleteTree, which unlocks
-  // them where no chmod process can run.
+  // writes.
   test(
     "deleteEnvironment takes a locked tree and says what it deletes",
     () async {

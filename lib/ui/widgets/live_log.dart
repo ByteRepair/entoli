@@ -4,15 +4,12 @@ import "package:entoli_core/view/chat/widgets/shell_run.dart"
 
 import "../../app/live_log.dart";
 
-export "../../app/live_log.dart" show LiveLog;
-
 /// [log] folded under a "Log" row until it is opened, and nothing at all while
 /// the log is empty. Opened, it follows the log as it grows.
 class LogPanel extends StatelessWidget {
-  const LogPanel(this.log, {super.key, this.title = "Log"});
+  const LogPanel(this.log, {super.key});
 
   final LiveLog log;
-  final String title;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -20,7 +17,7 @@ class LogPanel extends StatelessWidget {
     builder: (context, _) => log.isEmpty
         ? const SizedBox.shrink()
         : ExpansionTile(
-            title: Text(title, style: Theme.of(context).textTheme.bodyMedium),
+            title: Text("Log", style: Theme.of(context).textTheme.bodyMedium),
             tilePadding: const EdgeInsets.symmetric(horizontal: 16),
             childrenPadding: const EdgeInsets.symmetric(horizontal: 16),
             shape: const Border(),
