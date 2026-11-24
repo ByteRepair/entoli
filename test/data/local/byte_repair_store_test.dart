@@ -19,8 +19,8 @@ import "../../harness.dart";
 /// What the setup contract is: where the script installs is the store's to
 /// say, and the script answers to what it is told — never to what it can
 /// probe. The script is exercised as a real process, over a PATH the test
-/// lays down itself, so a run reads the same on a machine with make, gh and
-/// esbmc already on it as on one with none of them.
+/// lays down itself, so a run reads the same on a machine with make, gh,
+/// python3 and esbmc already on it as on one with none of them.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -182,7 +182,7 @@ echo "$url" >> '''
     expect(result.exitCode, 0, reason: result.stderr);
     expect(
       result.stderr,
-      contains("No package manager was provided; skipping: make gh"),
+      contains("No package manager was provided; skipping: make gh python3"),
     );
   });
 
@@ -206,7 +206,7 @@ echo "$url" >> '''
     // cost batching exists to avoid — and gh is github-cli on apk.
     expect(
       apkLog.readAsStringSync(),
-      contains("add --no-cache make github-cli"),
+      contains("add --no-cache make github-cli python3"),
     );
   });
 
@@ -226,7 +226,7 @@ echo "$url" >> '''
 
     expect(result.exitCode, 0, reason: result.stderr);
     // No index refresh or whole-system upgrade, and gh is left alone.
-    expect(apkLog.readAsLinesSync(), ["add --no-cache make"]);
+    expect(apkLog.readAsLinesSync(), ["add --no-cache make python3"]);
   });
 
   test(
@@ -293,7 +293,7 @@ echo "$url" >> '''
       expect(installed.readAsStringSync(), contains("8.5 stub"));
       expect(
         apkLog.readAsStringSync(),
-        contains("add --no-cache make github-cli"),
+        contains("add --no-cache make github-cli python3"),
       );
     },
   );
@@ -459,8 +459,10 @@ echo "env \$HOMEBREW_NO_INSTALL_UPGRADE \$HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK
 echo "install \$*" >> "${log.path}"
 for f in "\$@"; do
   case "\$f" in
-    make) d="$prefix/opt/make/libexec/gnubin" ;;
-    *)    d="$prefix/bin" ;;
+    make)   d="$prefix/opt/make/libexec/gnubin" ;;
+    # The python formula's binary is python3, as the real one's is.
+    python) d="$prefix/bin"; f=python3 ;;
+    *)      d="$prefix/bin" ;;
   esac
   /bin/mkdir -p "\$d"
   printf '#!/bin/sh\\necho "%s from brew"\\n' "\$f" > "\$d/\$f"
@@ -502,8 +504,11 @@ done""");
       });
 
       expect(result.exitCode, 0, reason: result.stderr);
-      // make and gh in one call, then the formula, never the release zip.
-      expect(brew.log.readAsLinesSync(), ["install make gh", "install esbmc"]);
+      // The tools in one call, then the formula, never the release zip.
+      expect(brew.log.readAsLinesSync(), [
+        "install make gh python",
+        "install esbmc",
+      ]);
       expect(
         Link(p.join(bin, "esbmc")).targetSync(),
         p.join(brew.prefix, "bin", "esbmc"),
@@ -515,6 +520,10 @@ done""");
       expect(
         Link(p.join(bin, "make")).targetSync(),
         p.join(brew.prefix, "opt", "make", "libexec", "gnubin", "make"),
+      );
+      expect(
+        Link(p.join(bin, "python3")).targetSync(),
+        p.join(brew.prefix, "bin", "python3"),
       );
       expect(result.stdout, contains("esbmc from brew"));
       // Nothing the user already has is upgraded on the way.
@@ -547,6 +556,7 @@ exit 0""");
       final brew = await stubBrew();
       await stubTool("make", "echo make");
       await stubTool("gh", "echo gh");
+      await stubTool("python3", "echo python3");
       Directory(bin).createSync(recursive: true);
       // A link to a keg an upgrade took away: present, unstartable.
       Link(p.join(bin, "esbmc")).createSync(p.join(brew.prefix, "gone"));

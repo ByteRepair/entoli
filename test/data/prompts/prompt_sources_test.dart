@@ -4,7 +4,11 @@ import "dart:io";
 import "package:crypto/crypto.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
+import "package:entoli_core/agent/tools/agent_tool.dart";
+import "package:entoli_core/agent/tools/registry.dart";
+import "package:entoli_core/model/agent_definition.dart";
 import "package:entoli_core/model/agent_face.dart";
+import "package:entoli_core/model/builtin_project.dart";
 import "package:entoli_core/model/config.dart";
 import "package:entoli_core/model/read_only_dirs.dart";
 import "package:entoli_shell/file_modes.dart";
@@ -60,6 +64,25 @@ void seedAgent(
 }
 
 void main() {
+  test("every bundled agent's tools name tools that exist", () async {
+    final known = {
+      for (final tool in agentTools(const ToolOffer()))
+        if (tool.group != null) tool.id,
+    };
+    for (final project in [null, ...builtinProjects.map((b) => b.dir)]) {
+      for (final document in await BundledPrompts(
+        project: project,
+      ).load(CompletionKind.agent)) {
+        final tools = AgentDefinition.of(document).tools ?? const {};
+        expect(
+          tools.difference(known),
+          isEmpty,
+          reason: "${document.name} in ${project ?? "default"}",
+        );
+      }
+    }
+  });
+
   test(
     "the presets are embedded in code, and written to disk for bash",
     () async {
@@ -145,10 +168,15 @@ void main() {
       }),
     );
 
-    expect(calls, [
-      (root.path, true),
-      (root.path, false),
-    ], reason: "the default project's root is unlocked, written and relocked");
+    // Byte Repair ships a skill of its own, so its root is the second.
+    final roots = [root.path, config.bundledSkillsDir(project: "byte-repair")];
+    expect(
+      calls,
+      unorderedEquals([
+        for (final r in roots) ...[(r, true), (r, false)],
+      ]),
+      reason: "each shipping project's root is unlocked, written and relocked",
+    );
     final skill = File(p.join(root.path, "artifact", "SKILL.md"));
     expect(skill.existsSync(), isTrue);
     expect(
@@ -442,8 +470,8 @@ void main() {
       },
     );
 
-    test("byte-repair inherits the default's agents and adds esbmc-verifier, "
-        "and ships no skills of its own", () async {
+    test("byte-repair inherits the default's agents and skills, and adds its "
+        "verifier and its skills", () async {
       final config = tempConfig();
       await install(config);
       final skills = await BundledPrompts(
@@ -454,7 +482,13 @@ void main() {
         project: "byte-repair",
       ).load(CompletionKind.agent);
 
-      expect(skills.map((s) => s.name).toSet(), equals(localSkills));
+      expect(skills.map((s) => s.name).toSet(), {
+        ...localSkills,
+        "byte-repair-spec",
+        "byte-repair-contracts",
+        "byte-repair-verify",
+        "verification-report",
+      });
       expect(agents.map((a) => a.name).toSet(), {
         "athena",
         "explore",

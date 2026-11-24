@@ -1923,6 +1923,42 @@ void main() {
       expect(File(p.join(agent.workspace, "shared.txt")).existsSync(), isFalse);
     });
 
+    // A path copied out of a command still lands where it meant, and the
+    // result says which word the file tools use, so the model learns it.
+    test(
+      "a workspace variable writes where its prefix would, with a note",
+      () async {
+        final client = FakeLlmClient([
+          [writeCall(r"$ENTOLI_PROJECT_WORKSPACE/shared.txt", "from project")],
+          [finish],
+        ]);
+        final agent = agentOver(client);
+        final events = await agent
+            .run(userMessage("write to project"))
+            .toList();
+
+        expect(
+          File(p.join(agent.projectWorkspace, "shared.txt")).readAsStringSync(),
+          "from project",
+        );
+        final result = events.whereType<ToolResultEvent>().single.result;
+        expect(result.returnCode, 0);
+        expect(result.notes.single, contains("was read as `project:`"));
+      },
+    );
+
+    test("a prefixed path carries no note", () async {
+      final client = FakeLlmClient([
+        [writeCall("project:shared.txt", "from project")],
+        [finish],
+      ]);
+      final events = await agentOver(
+        client,
+      ).run(userMessage("write to project")).toList();
+
+      expect(events.whereType<ToolResultEvent>().single.result.notes, isEmpty);
+    });
+
     test("read on a missing file returns an error", () async {
       final client = FakeLlmClient([
         [readCall("nope.txt")],

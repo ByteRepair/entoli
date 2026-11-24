@@ -216,7 +216,7 @@ class IshShell extends Shell {
         guestCwd: guestCwd,
         script: command,
         timeout: timeout,
-        environment: _compose(extra: environment),
+        environment: _compose(home: home, cwd: cwd, extra: environment),
         readOnly: readOnly,
         transport: _transportFor(),
       );
@@ -291,12 +291,21 @@ class IshShell extends Shell {
     _sessions.remove(cwd)?.close();
   }
 
-  Map<String, String> _compose({Map<String, String>? extra}) => {
+  Map<String, String> _compose({
+    required String home,
+    required String cwd,
+    Map<String, String>? extra,
+  }) => {
     "PATH": _hostTools != null ? "${HostTools.guestBin}:$guestPath" : guestPath,
     ...defaultShellEnvironment,
     "HOME": guestRoot ?? "/",
     ...environment(),
     ...?extra,
+    ...workspaceEnvironment(
+      projectWorkspace: home,
+      workspace: cwd,
+      guestRoot: guestRoot,
+    ),
   };
 }
 
@@ -385,7 +394,11 @@ class _IshSession {
           dataDir: _shell.dataDir,
           home: _workspaceHome,
           cwd: _guestCwd,
-          env: _shell._compose(extra: environment),
+          env: _shell._compose(
+            home: _workspaceHome,
+            cwd: _cwdPath,
+            extra: environment,
+          ),
           readOnly: readOnly,
         );
         // The transport's answer where iSH is not linked, which is a build

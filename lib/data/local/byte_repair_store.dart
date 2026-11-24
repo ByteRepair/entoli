@@ -59,7 +59,12 @@ class ByteRepairStore {
   /// [installDir]. See "Tools the host runs" in ios/AGENTS.md.
   final String? scratchDir;
 
-  static const tools = {"ESBMC": "esbmc", "make": "make", "gh": "gh"};
+  static const tools = {
+    "ESBMC": "esbmc",
+    "make": "make",
+    "gh": "gh",
+    "Python": "python3",
+  };
 
   Future<ShellResult> _run(
     Shell shell,
@@ -240,7 +245,7 @@ class ByteRepairStore {
   /// the line above Run Setup: null where it installs nowhere else.
   String? get setupNotice => _usesHomebrew
       ? "On this Mac, Run Setup uses Homebrew to install whichever of make, "
-            "GitHub CLI and ESBMC are missing. They are installed into the "
+            "GitHub CLI, Python and ESBMC are missing. They are installed into the "
             "system, not the app, so deleting the Byte Repair data leaves them "
             "installed."
       : null;

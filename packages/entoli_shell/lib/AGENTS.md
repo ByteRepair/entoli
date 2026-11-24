@@ -55,6 +55,21 @@ bash's children with it, and the interrupt step is skipped. The AppImage
 runtime's `APPIMAGE`, `APPDIR`, `ARGV0` and `OWD` are stripped from every
 command's environment; they describe the app, not the machine.
 
+**Every command is told where the workspaces are.** `ENTOLI_PROJECT_WORKSPACE`
+and `ENTOLI_CHAT_WORKSPACE`, in every project, set last so no setting can point
+them elsewhere (`workspaceEnvironment`, which both `LocalShell` and `IshShell`
+compose). Inside a guest they are the guest's words for the two — the guest
+root and the chat's path under it — and the host paths everywhere else. `HOME`
+answers the same question only inside a guest; on a desktop it is the user's
+own, and a script wanting the project workspace — a skill's, keeping state
+there — had nothing to go on but a path the model copied out of its prompt.
+The file tools keep their own words, `project:` and `chat:`: a prefixed path
+cannot climb out. A model copies paths between the two all the same, so
+`resolveWorkspacePath` reads a leading `$ENTOLI_…` as its prefix, sanitised
+alike, and the result carries a note naming the prefix in
+`ToolResult.notes`, beside a background job's, so a reload tells the model
+the same.
+
 **The shell creates the directory it is told to stand in if it is not there.** A
 spawn `workingDirectory` that does not exist fails with an ENOENT that names
 neither the directory nor the reason, and the cwds the app hands the shell are
