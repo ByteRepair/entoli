@@ -166,7 +166,8 @@ must say exactly what ESBMC found:
     }
 
 - `status`: PASS, FAIL or SKIP, from the last run of the check.
-- `blame`: for a FAIL only, `code` or `contract`, whichever you found wrong.
+- `blame`: for a FAIL only, `code` or `contract`, whichever your trace points
+  to. The agent that delegated to you traces it again before acting on it.
 - `detail`: one line. For a PASS, the number of properties checked; for a
   FAIL, the counterexample's inputs and what went wrong; for a SKIP, why.
 - `bounds`: the loop bounds and sizes your harness used.

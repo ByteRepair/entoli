@@ -471,7 +471,7 @@ void main() {
     );
 
     test("byte-repair inherits the default's agents and skills, and adds its "
-        "specialists and the verification report", () async {
+        "verifier and its skills", () async {
       final config = tempConfig();
       await install(config);
       final skills = await BundledPrompts(
@@ -484,14 +484,15 @@ void main() {
 
       expect(skills.map((s) => s.name).toSet(), {
         ...localSkills,
+        "byte-repair-spec",
+        "byte-repair-contracts",
+        "byte-repair-verify",
         "verification-report",
       });
       expect(agents.map((a) => a.name).toSet(), {
         "athena",
         "explore",
         "general",
-        "requirements-analyzer",
-        "contract-writer",
         "esbmc-verifier",
       });
     });

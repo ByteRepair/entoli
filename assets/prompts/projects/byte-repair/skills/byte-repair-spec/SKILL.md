@@ -1,24 +1,22 @@
 ---
-description: Turns a request for C code into a written specification that contracts can be derived from. Use first in a Byte Repair task, before any code or contract is written.
-tools: read, write, edit, bash(readonly)
+name: byte-repair-spec
+description: Write or revise a Byte Repair project's spec.md, the specification its ESBMC contracts are derived from. Use first in a Byte Repair task, before any code or contract is written, and again when a counterexample shows the spec is wrong.
 ---
 
-You turn a request for C code into a specification. You write one file,
-`<task>/spec.md`, and nothing else: no code, no contracts, no harnesses.
+This turns a request for C code into `<project>/spec.md`. You write the spec
+yourself, in this conversation, so you can ask the user as you go; no code,
+contracts or harnesses come out of this step.
 
-Your task names the project and describes what the user wants. It names the
-project two ways: as the file tools take it, such as `project:ini-parser`, and
-as a command takes it, such as `$ENTOLI_PROJECT_WORKSPACE/ini-parser`. Use the
-first with `read` and `write`, the second in `bash`. Each command runs in a
-fresh shell that starts in the workspace, so a `cd` does not carry over. If
-the project already has a `spec.md`,
-you are revising it: read it first and keep what the task does not change. If
-`src/` exists, read it to see what is there, but specify what the code should
-do, not what it does.
+## Before writing
 
-You cannot ask the user anything. Where the request is ambiguous, pick the
-reading a careful engineer would, write it under Assumptions, and list the
-question under Open questions.
+If the project already has a `spec.md`, you are revising it: read it first
+and keep what the request does not change. If `src/` exists, read it to see
+what is there, but specify what the code should do, not what it does.
+
+Where the request leaves something open that would change a Requires or
+Ensures line, ask the user with `ask_user`, all such questions in one call,
+before writing. Anything smaller, pick the reading a careful engineer would
+and write it under Assumptions.
 
 ## Decomposition
 
@@ -33,7 +31,7 @@ functions around them. Mark each function as core (to be verified) or shell
 
 Use these sections, in this order:
 
-    # <task>
+    # <project>
 
     ## Purpose
     One paragraph: what the code is for.
@@ -59,8 +57,7 @@ Use these sections, in this order:
     - Writes: what it may modify, or nothing.
 
     ## Open questions
-    Questions for the user, each marked blocking (the answer would change a
-    Requires or Ensures line) or not.
+    Questions the user has not answered yet, none of them blocking.
 
 Write conditions precisely enough to become `__ESBMC_requires` and
 `__ESBMC_ensures` statements: name the parameters, say what happens at the
@@ -68,7 +65,10 @@ boundaries (empty input, maximum length, overflow), and give the result for
 every error case. A postcondition that only restates the code ("returns the
 result of the loop") is no use; say what the result means.
 
-## Report
+## Done when
 
-Reply with the path of `spec.md`, the core and shell functions by name, and
-the open questions, blocking ones first. Then stop.
+- Every function has a Kind, and every core one has Requires, Ensures and
+  Writes lines.
+- Every error case has a stated result.
+- Every size a contract will need is in Bounds.
+- No blocking question is left unasked.
