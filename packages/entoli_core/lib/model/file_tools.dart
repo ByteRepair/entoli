@@ -142,9 +142,78 @@ String guestWorkspacePath(
   return "$guestRoot$suffix";
 }
 
+/// The workspaces as every command's environment names them, in the words of
+/// wherever the command runs: [guestRoot] and the guest path inside a guest,
+/// the host paths otherwise. They are there in every project because `HOME`
+/// is the project workspace only inside a guest; on a desktop it is the
+/// user's own, and a script had no way to find the workspace but a path the
+/// model copied out of its prompt.
+Map<String, String> workspaceEnvironment({
+  required String projectWorkspace,
+  required String workspace,
+  String? guestRoot,
+}) => {
+  _projectVariable: guestRoot ?? projectWorkspace,
+  _chatVariable: guestRoot != null
+      ? guestWorkspacePath(guestRoot, projectWorkspace, workspace)
+      : workspace,
+};
+
+const _projectVariable = "ENTOLI_PROJECT_WORKSPACE";
+const _chatVariable = "ENTOLI_CHAT_WORKSPACE";
+
+/// The variables a command names the workspaces by, and the prefix each one
+/// means to a file tool. A model copies paths between the two, and without
+/// this `$ENTOLI_PROJECT_WORKSPACE/x` in a `write` landed in a directory of
+/// that literal name inside the chat's workspace, silently.
+const _workspaceVariables = {
+  _projectVariable: "project:",
+  _chatVariable: "chat:",
+};
+
+/// The workspace variables' names, which a command may lead a word with.
+const workspaceVariableNames = {_projectVariable, _chatVariable};
+
+/// The workspace variable [path] starts with, `$NAME` or `${NAME}`, with the
+/// prefix it means and the path after it; null where it starts with none.
+/// The variable must be the whole first segment, so a longer name that merely
+/// starts the same is not it.
+({String variable, String prefix, String rest})? _workspaceVariable(
+  String path,
+) {
+  for (final MapEntry(key: name, value: prefix)
+      in _workspaceVariables.entries) {
+    for (final form in ["\${$name}", "\$$name"]) {
+      if (!path.startsWith(form)) continue;
+      final rest = path.substring(form.length);
+      if (rest.isEmpty || rest.startsWith("/") || rest.startsWith(r"\")) {
+        return (
+          variable: name,
+          prefix: prefix,
+          rest: rest.isEmpty ? "" : rest.substring(1),
+        );
+      }
+    }
+  }
+  return null;
+}
+
+/// What a file tool tells the model when [path] named a workspace by its
+/// variable: the call worked, and the prefix is the tool's own word for it.
+/// Null for any other path.
+String? workspaceVariableNote(String path) {
+  final v = _workspaceVariable(path);
+  if (v == null) return null;
+  return "Note: `\$${v.variable}` was read as `${v.prefix}`. The file tools "
+      "take `project:` and `chat:`; the variables are for commands.";
+}
+
 /// Resolve a file tool's path. A path starting with `project:` is joined onto
 /// [projectWorkspace]; anything else — `chat:` included, which names it
-/// explicitly — is joined onto [workspace]. A relative path is sanitised by
+/// explicitly — is joined onto [workspace]. A leading
+/// `$ENTOLI_PROJECT_WORKSPACE` or `$ENTOLI_CHAT_WORKSPACE`, a command's words
+/// for the same places, is read as `project:` or `chat:`, sanitised the same
+/// way. A relative path is sanitised by
 /// [safeRelativePath] before joining, so `..` and a leading separator cannot
 /// escape. An absolute path is the machine naming a place of its own: it is
 /// used as written, normalised.
@@ -163,13 +232,17 @@ String resolveWorkspacePath(
   String? guestRoot,
   String? homePath,
 }) {
-  final project = path.startsWith("project:");
+  final variable = _workspaceVariable(path);
+  final named = variable == null ? path : variable.prefix + variable.rest;
+  final project = named.startsWith("project:");
   var rest = project
-      ? path.substring("project:".length)
-      : path.startsWith("chat:")
-      ? path.substring("chat:".length)
-      : path;
+      ? named.substring("project:".length)
+      : named.startsWith("chat:")
+      ? named.substring("chat:".length)
+      : named;
   final base = project ? projectWorkspace : workspace;
+  // A bare variable is the directory itself, as it is to the shell.
+  if (variable != null && rest.isEmpty) return base;
   if (rest.startsWith("~/")) {
     rest = p.join(homePath ?? projectWorkspace, rest.substring(2));
   } else if (rest == "~") {

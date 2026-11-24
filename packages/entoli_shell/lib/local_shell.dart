@@ -305,6 +305,7 @@ class LocalShell extends Shell {
         timeout: timeout,
         environment: _compose(
           home: home,
+          cwd: cwd,
           driver: driver,
           environment: environment,
         ),
@@ -340,12 +341,14 @@ class LocalShell extends Shell {
   /// driver is one that reaches a guest, where a host `PATH` names directories
   /// that are not there — and the app's variables over it, so a variable the
   /// user set wins, `PATH` being the one they are likely to disagree about,
-  /// and a project's over the app's.
+  /// and a project's over the app's. The workspace variables go last: they
+  /// are facts about where the command runs, not settings to disagree with.
   @visibleForTesting
   static Map<String, String> composeEnvironment({
     required Map<String, String> defaults,
     ShellDriver? driver,
     required String home,
+    required String cwd,
     required Map<String, String> app,
     Map<String, String>? project,
   }) => {
@@ -356,16 +359,23 @@ class LocalShell extends Shell {
     if (driver?.projectHome ?? false) "HOME": driver?.guestRoot ?? home,
     ...app,
     ...?project,
+    ...workspaceEnvironment(
+      projectWorkspace: home,
+      workspace: cwd,
+      guestRoot: driver?.guestRoot,
+    ),
   };
 
   Map<String, String> _compose({
     required String home,
+    required String cwd,
     required ShellDriver? driver,
     Map<String, String>? environment,
   }) => composeEnvironment(
     defaults: defaultShellEnvironment,
     driver: driver,
     home: home,
+    cwd: cwd,
     app: _environment(),
     project: environment,
   );
@@ -630,6 +640,7 @@ class _Session {
     }
     final env = _shell._compose(
       home: _home,
+      cwd: _cwdPath,
       driver: driver,
       environment: environment,
     );

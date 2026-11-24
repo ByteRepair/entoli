@@ -254,7 +254,7 @@ final byteRepairStoreProvider = Provider<ByteRepairStore>(
   (ref) => throw UnimplementedError(),
 );
 
-/// The version of each tool the setup installs (ESBMC, make, gh), or null
+/// The version of each tool the setup installs (ESBMC, make, gh, Python), or null
 /// where one is not installed. Refreshed by the settings page after a setup run.
 ///
 /// What is on the machine, asked of it whatever the setup marker says: the

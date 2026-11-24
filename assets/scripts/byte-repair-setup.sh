@@ -1,4 +1,4 @@
-# Byte Repair setup: installs make, github-cli and ESBMC so they are on PATH
+# Byte Repair setup: installs make, github-cli, python3 and ESBMC so they are on PATH
 # for every agent turn in the project. The caller decides, the script obeys:
 # - ENV_INSTALL_DIR: where the tools land. Required.
 # - ENV_PACKAGE_MANAGER: apk in a guest, brew on a mac, unset on a host whose
@@ -48,7 +48,7 @@ mkdir -p "$BIN"
 if [ "$PM" = brew ]; then
   BREW="${ENV_BREW:-}"
   if [ -z "$BREW" ] || [ ! -x "$BREW" ]; then
-    echo "Homebrew is not installed, and setup installs make, GitHub CLI and ESBMC with it. Install it by pasting this into a terminal, then run setup again:" >&2
+    echo "Homebrew is not installed, and setup installs make, GitHub CLI, Python and ESBMC with it. Install it by pasting this into a terminal, then run setup again:" >&2
     fail '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
   fi
   BREW_PREFIX=$("$BREW" --prefix)
@@ -70,12 +70,14 @@ link_tool() {
   works "$BIN/$1" || fail "$1 was installed, but $BIN/$1 does not run; setup did not succeed"
 }
 
-# --- make and github-cli ------------------------------------------------------
+# --- make, github-cli and python3 ---------------------------------------------
+# python3 runs the verification-report skill's script.
 missing=""
 step "Checking for make"
 works make || missing="make"
 step "Checking for gh"
 works gh || missing="${missing:+$missing }gh"
+works python3 || missing="${missing:+$missing }python3"
 if [ -n "$missing" ]; then
   case "$PM" in
     "")
@@ -96,12 +98,21 @@ if [ -n "$missing" ]; then
       ;;
     brew)
       step "Installing with Homebrew: $missing"
-      "$BREW" install $missing || fail "brew could not install: $missing"
+      # The formula for python3 is python.
+      formulae=""
+      for tool in $missing; do
+        case "$tool" in
+          python3) formulae="$formulae python" ;;
+          *)       formulae="$formulae $tool" ;;
+        esac
+      done
+      "$BREW" install $formulae || fail "brew could not install:$formulae"
       for tool in $missing; do
         case "$tool" in
           # Homebrew's make is gmake on PATH; the make name is in gnubin.
-          make) link_tool make "$BREW_PREFIX/opt/make/libexec/gnubin/make" ;;
-          gh)   link_tool gh "$BREW_PREFIX/bin/gh" ;;
+          make)    link_tool make "$BREW_PREFIX/opt/make/libexec/gnubin/make" ;;
+          gh)      link_tool gh "$BREW_PREFIX/bin/gh" ;;
+          python3) link_tool python3 "$BREW_PREFIX/bin/python3" ;;
         esac
       done
       ;;

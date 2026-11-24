@@ -261,8 +261,9 @@ class MyTeamProject extends BuiltinProject {
       "Speak to a team of collaborating agents. Use @ to converse.";
 }
 
-/// A chat for secure coding: the agent writes C with ESBMC contracts and
-/// delegates formal verification to the @esbmc-verifier sub-agent. Full
+/// A chat for secure coding: the agent writes C against ESBMC contracts,
+/// delegating the spec, the contracts and the verification to its
+/// requirements-analyzer, contract-writer and esbmc-verifier sub-agents. Full
 /// capabilities — profile, memory and a shared workspace are all there, since
 /// verification work benefits from continuity — and the note stands in for the
 /// instruction files, the way the anonymous one does.

@@ -650,6 +650,7 @@ void main() {
         defaults: const {"PAGER": "cat", "TERM": "dumb"},
         driver: host,
         home: "/home",
+        cwd: "/home/chats/c1",
         app: const {},
       );
 
@@ -657,8 +658,44 @@ void main() {
         "PAGER": "less",
         "TERM": "dumb",
         "GIT_EXEC_PATH": "/data/tools/libexec",
+        "ENTOLI_PROJECT_WORKSPACE": "/home",
+        "ENTOLI_CHAT_WORKSPACE": "/home/chats/c1",
       });
       expect(env.containsKey("HOME"), isFalse);
+    });
+
+    // A script finds the workspaces by name in every project, in the words of
+    // wherever it runs, and no setting can point them elsewhere.
+    test("the workspaces are named, as the guest sees them inside one", () {
+      final guest = ShellDriver(
+        commandFor: _hostCommand,
+        environment: const {},
+        projectHome: true,
+        guestRoot: "/root",
+        description: "guest",
+      );
+      final inGuest = LocalShell.composeEnvironment(
+        defaults: const {},
+        driver: guest,
+        home: "/data/projects/p/workspace",
+        cwd: "/data/projects/p/workspace/chats/c1",
+        app: const {"ENTOLI_PROJECT_WORKSPACE": "/elsewhere"},
+      );
+      expect(inGuest["ENTOLI_PROJECT_WORKSPACE"], "/root");
+      expect(inGuest["ENTOLI_CHAT_WORKSPACE"], "/root/chats/c1");
+
+      final onHost = LocalShell.composeEnvironment(
+        defaults: const {},
+        driver: host,
+        home: "/data/projects/p/workspace",
+        cwd: "/data/projects/p/workspace/chats/c1",
+        app: const {},
+      );
+      expect(onHost["ENTOLI_PROJECT_WORKSPACE"], "/data/projects/p/workspace");
+      expect(
+        onHost["ENTOLI_CHAT_WORKSPACE"],
+        "/data/projects/p/workspace/chats/c1",
+      );
     });
 
     test("the app's variables win over the driver's, and the project's over "
@@ -668,6 +705,7 @@ void main() {
         defaults: const {},
         driver: host,
         home: "/home",
+        cwd: "/home/chats/c1",
         app: const {"PAGER": "most", "ENV_INSTALL_DIR": "/somewhere/else"},
         project: const {"ENV_INSTALL_DIR": "/cache/byte-repair/bin"},
       );
@@ -689,6 +727,7 @@ void main() {
           defaults: const {},
           driver: guest,
           home: "/workspace",
+          cwd: "/workspace/chats/c1",
           app: const {},
         )["HOME"],
         "/workspace",
@@ -698,6 +737,7 @@ void main() {
           defaults: const {},
           driver: host,
           home: "/workspace",
+          cwd: "/workspace/chats/c1",
           app: const {},
         ).containsKey("HOME"),
         isFalse,

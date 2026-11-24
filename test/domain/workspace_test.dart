@@ -323,6 +323,39 @@ void main() {
       expect(outside("chat:notes/a.txt"), isFalse);
     });
 
+    // A path copied out of a command into a file tool lands where the command
+    // meant, not in a directory named after the variable.
+    test("a workspace variable is read as the prefix it stands for", () {
+      expect(
+        resolve(r"$ENTOLI_PROJECT_WORKSPACE/notes/a.txt"),
+        "$dir/notes/a.txt",
+      );
+      expect(
+        resolve(r"${ENTOLI_PROJECT_WORKSPACE}/notes/a.txt"),
+        "$dir/notes/a.txt",
+      );
+      expect(
+        resolve(r"$ENTOLI_CHAT_WORKSPACE/notes/a.txt"),
+        "$dir/$workspace/notes/a.txt",
+      );
+      expect(resolve(r"$ENTOLI_CHAT_WORKSPACE"), "$dir/$workspace");
+      expect(outside(r"$ENTOLI_PROJECT_WORKSPACE/notes/a.txt"), isFalse);
+    });
+
+    test("and sanitised like one, so it cannot climb out", () {
+      expect(
+        resolve(r"$ENTOLI_PROJECT_WORKSPACE/../../etc/passwd"),
+        "$dir/etc/passwd",
+      );
+    });
+
+    test("a longer name that only starts the same is not the variable", () {
+      expect(
+        resolve(r"$ENTOLI_PROJECT_WORKSPACE_OLD/a.txt"),
+        "$dir/$workspace/\$ENTOLI_PROJECT_WORKSPACE_OLD/a.txt",
+      );
+    });
+
     test("`~` follows the home it is given, the way the shell's would", () {
       expect(
         resolve("~/notes/a.txt", homePath: "$dir/$workspace"),

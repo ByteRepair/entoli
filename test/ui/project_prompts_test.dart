@@ -129,7 +129,7 @@ void main() {
   });
 
   group("the built-in's pages", () {
-    testWidgets("Byte Repair's page lists its bundled agent read-only", (
+    testWidgets("Byte Repair's page lists its bundled agents read-only", (
       tester,
     ) async {
       await pumpProjectPrompts(
@@ -140,10 +140,12 @@ void main() {
       );
       await reloadLibrary(tester, app, project: "byte-repair");
 
-      // Its own bundled agent, and the three defaults it inherits — all
+      // Its own bundled agents, and the three defaults it inherits — all
       // bundled, all inert.
+      expect(find.text("requirements-analyzer"), findsOneWidget);
+      expect(find.text("contract-writer"), findsOneWidget);
       expect(find.text("esbmc-verifier"), findsOneWidget);
-      expect(find.text("Bundled"), findsNWidgets(4));
+      expect(find.text("Bundled"), findsNWidgets(6));
       expect(find.text("Inherited"), findsNothing);
       expect(find.text("Add agent"), findsNothing);
       expect(find.byIcon(Icons.edit_outlined), findsNothing);
