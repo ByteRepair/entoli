@@ -21,6 +21,28 @@ void main() {
       expect(provider.client(null), isA<GeminiClient>());
     });
 
+    // An entry added before the preset's default changed still names the old.
+    test("takes the preset's default models over the entry's", () {
+      final stale = OllamaCloudProvider.preset.copyWith(
+        id: "ollama",
+        defaultLightModelId: "nemotron-3-nano:30b",
+      );
+      final config = withPresetDefaults(stale);
+      expect(
+        config.defaultLightModelId,
+        OllamaCloudProvider.preset.defaultLightModelId,
+      );
+      expect(config.id, "ollama");
+
+      const custom = LlmProviderConfig(
+        id: "vllm",
+        api: LlmApi.openai,
+        baseUrl: "http://gpu.local:8000/v1",
+        defaultModelId: "mine",
+      );
+      expect(withPresetDefaults(custom).defaultModelId, "mine");
+    });
+
     test("reads an endpoint typed in by hand by its wire format", () {
       const custom = LlmProviderConfig(
         id: "vllm",

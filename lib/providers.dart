@@ -78,7 +78,7 @@ import "../core/platform/platform.dart"
     show createFileWatches, createPromptSources, processEnv, setupComplete;
 import "data/builtin/llm/on_device_provider.dart" show OnDeviceProvider;
 import "data/builtin/llm/providers/presets.dart"
-    show CliProvider, cliProviderPresets, providerOf;
+    show CliProvider, cliProviderPresets, providerOf, withPresetDefaults;
 import "data/local/apple_fm.dart" show AppleFm;
 import "data/local/local_engine.dart";
 import "data/local/file_trigger_store.dart";
@@ -685,6 +685,13 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
           _assign(defaulted, role, apple);
         }
       }
+    }
+    // The presets' current default models, unsaved too: the next save writes
+    // them.
+    if (loaded.llmProviders.isNotEmpty) {
+      defaulted.llmProviders = [
+        for (final p in loaded.llmProviders) withPresetDefaults(p),
+      ];
     }
     return defaulted;
   }

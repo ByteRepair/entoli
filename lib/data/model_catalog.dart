@@ -12,18 +12,11 @@ import "builtin_models.dart";
 
 final modelsDevUrl = Uri.parse("https://models.dev/api.json");
 
-/// The catalog the app starts with — the presets' defaults, built in — then
-/// the cached models.dev over it, then a fresh fetch where [fetch] and the
-/// cache is a day old or missing. The file is 6 MB, so a launch does not fetch
-/// it every time.
-Future<void> loadModelCatalog(
-  AppConfig config,
-  http.Client client, {
-  required bool fetch,
-}) async {
+/// The catalog the app starts with: the presets' defaults, built in, then
+/// the cached models.dev over it.
+Future<void> loadModelCatalog(AppConfig config) async {
   ModelCatalog.notifier.value = ModelCatalog.parse(builtinModelsJson);
   final file = File(config.modelsFile);
-  DateTime? fetched;
   try {
     if (file.existsSync()) {
       // Off the UI isolate, as the fetch's parse is: the cache is most of it.
@@ -31,16 +24,22 @@ Future<void> loadModelCatalog(
         ModelCatalog.parse,
         await file.readAsString(),
       );
-      fetched = ModelCatalog.current.fetched;
     }
   } catch (e) {
     logFailure("models", "the cached model catalog would not read", e);
   }
-  if (!fetch) return;
-  if (fetched != null &&
-      DateTime.now().difference(fetched) < const Duration(days: 1)) {
-    return;
-  }
+}
+
+/// Whether the catalog in hand is a day old or was never fetched. The file is
+/// 6 MB, so it is not fetched more often than that.
+bool get modelCatalogStale {
+  final fetched = ModelCatalog.current.fetched;
+  return fetched == null ||
+      DateTime.now().difference(fetched) >= const Duration(days: 1);
+}
+
+/// A fresh models.dev over the catalog in hand.
+Future<void> refreshModelCatalog(AppConfig config, http.Client client) async {
   try {
     final response = await client
         .get(modelsDevUrl)
