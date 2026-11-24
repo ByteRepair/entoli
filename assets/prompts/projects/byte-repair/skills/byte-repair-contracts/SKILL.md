@@ -25,8 +25,6 @@ signature. The constructs, which need no header:
   dereferences.
 
 That is all the syntax you need. Do not search the web or probe ESBMC for it.
-Write files containing `__ESBMC_` text with the `write` or `edit` tool, not a
-heredoc in `bash`: the command safety check wrongly flags that text.
 
 ## Writing the stubs
 

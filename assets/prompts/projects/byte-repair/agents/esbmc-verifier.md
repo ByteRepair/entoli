@@ -26,10 +26,13 @@ names no function or no run id, report that and stop.
 
 ## Workflow
 
-1. Read the files in `src/` to understand the function, its parameters, its
-   contract and what it calls.
+1. Read the file that holds the function, and the headers it includes, to
+   understand its parameters, its contract and what it calls. If your task
+   names no file, find it in `src/`.
 2. Write its harness at `harness/<function>/main.c`, unless it is a static
-   helper checked directly (see Running ESBMC).
+   helper checked directly (see Running ESBMC). If `harness/<function>/`
+   already has a harness and `check` for the contract as it now stands,
+   keep them and go to step 4.
 3. Write the command that checks it to `harness/<function>/check`: a shell
    script run from the task directory, with paths relative to it.
 4. Run it with

@@ -124,7 +124,10 @@ class ApprovalGate {
     );
   }
 
-  String _tilde(String path) => isTildePath(path) ? resolvePath(path) : path;
+  String _tilde(String path) =>
+      isTildePath(path) || isWorkspaceVariablePath(path)
+      ? resolvePath(path)
+      : path;
 
   /// Grants [dirs] for the rest of this turn.
   void grant(Iterable<String> dirs) {

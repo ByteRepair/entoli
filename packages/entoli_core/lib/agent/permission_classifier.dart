@@ -206,6 +206,9 @@ that must never run. A write you are merely unsure about is ask.
         "Description (the agent's claim): ${_head(description, _asideCap)}",
       "Arguments: $args",
       "Workspace: $workspace",
+      // The app pins both, so a command naming them names known places.
+      "In a command, \$ENTOLI_CHAT_WORKSPACE is the workspace above and "
+          "\$ENTOLI_PROJECT_WORKSPACE is the project workspace that holds it.",
       if (alsoWritable.isNotEmpty) "Also writable: ${alsoWritable.join(", ")}",
       if (findings.isNotEmpty)
         "Parse findings:\n${[for (final f in findings) "- $f"].join("\n")}",

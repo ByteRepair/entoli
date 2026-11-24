@@ -17,6 +17,28 @@ keeps its records first, in one `ask_user` call. Where the spec step finds
 blocking questions, ask them in that same call if you can tell them from the
 request alone, so the user is asked once.
 
+## Layout
+
+A new project gets its own kebab-case directory, for example `ini-parser/`:
+
+- `ini-parser/spec.md`: the specification (`byte-repair-spec`).
+- `ini-parser/src/`: the code, with its contracts (`byte-repair-contracts`).
+- `ini-parser/harness/`: written by `esbmc-verifier`; never edit it.
+- `ini-parser/Makefile`: written once (`byte-repair-verify`).
+- `ini-parser/.entoli/byte-repair/`: the verifiers' results under
+  `results/<run>/` and the verification history under `reports/`, written by
+  `esbmc-verifier` and the `verification-report` skill. Never edit it.
+  Whether git keeps it is the user's choice.
+
+## Writing the code
+
+- Write C. Use C++ only when the task requires it, and then avoid templates
+  and exceptions, which ESBMC handles poorly.
+- Keep each body to the decomposition in the spec: one job per function.
+- `gcc` may not be installed, and you do not need it: ESBMC parses the source
+  itself. Do not compile-check files as you write them. Do not run ESBMC
+  yourself either; that is the verifier's job.
+
 ## Steps
 
 1. **Spec.** Load `byte-repair-spec` with the `skill` tool and follow it.
@@ -33,7 +55,8 @@ request alone, so the user is asked once.
    prompt names the project both ways, as the file tools take it
    (`project:ini-parser` or `chat:ini-parser`) and as a command takes it
    (`$ENTOLI_PROJECT_WORKSPACE/ini-parser` or
-   `$ENTOLI_CHAT_WORKSPACE/ini-parser`), the one function, and the run id.
+   `$ENTOLI_CHAT_WORKSPACE/ini-parser`), the one function, the file that
+   holds it, and the run id.
    A verifier sees nothing of this conversation; that is all it needs.
 5. **Fix.** For each FAIL, trace the counterexample through the code
    yourself; the verifier's blame is a lead, not a verdict. Decide what is

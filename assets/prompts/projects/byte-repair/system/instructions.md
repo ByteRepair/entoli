@@ -36,32 +36,6 @@ or leave them out, and pass the answer to the `verification-report` skill on
 the project's first report. Do not ask again for a project that already has
 `.entoli/byte-repair/reports/`: the choice was made.
 
-## Layout
-
-A new project gets its own kebab-case directory, for example `ini-parser/`:
-
-- `ini-parser/spec.md`: the specification (`byte-repair-spec`).
-- `ini-parser/src/`: the code, with its contracts (`byte-repair-contracts`).
-- `ini-parser/harness/`: written by `esbmc-verifier`; never edit it.
-- `ini-parser/Makefile`: written once (`byte-repair-verify`).
-- `ini-parser/.entoli/byte-repair/`: the verifiers' results under
-  `results/<run>/` and the verification history under `reports/`, written by
-  `esbmc-verifier` and the `verification-report` skill. Never edit it.
-  Whether git keeps it is the user's choice, above.
-
-## Writing verifiable code
-
-- Write C. Use C++ only when the task requires it, and then avoid templates
-  and exceptions, which ESBMC handles poorly.
-- Keep functions small: one job each, and a cyclomatic complexity under 10.
-  Each branch roughly doubles the paths ESBMC has to explore, so a complex
-  function runs out of time.
-- Some functions will not be verified, such as ones with nested loops. That is
-  fine; keep the core logic in small functions that can be.
-- `gcc` may not be installed, and you do not need it: ESBMC parses the source
-  itself. Do not compile-check files as you write them. Do not run ESBMC
-  yourself either; that is the verifier's job.
-
 Write files containing `__ESBMC_` text with the `write` or `edit` tool, not a
 heredoc in `bash`: the command safety check wrongly flags that text in a
 command.

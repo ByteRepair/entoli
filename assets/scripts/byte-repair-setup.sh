@@ -78,34 +78,33 @@ works make || missing="make"
 step "Checking for gh"
 works gh || missing="${missing:+$missing }gh"
 works python3 || missing="${missing:+$missing }python3"
+# The package each package manager ships a tool as: gh is github-cli on
+# Alpine, and Homebrew's formula for python3 is python.
+packages() {
+  pm=$1
+  shift
+  for tool in "$@"; do
+    case "$pm:$tool" in
+      apk:gh)       printf ' github-cli' ;;
+      brew:python3) printf ' python' ;;
+      *)            printf ' %s' "$tool" ;;
+    esac
+  done
+}
 if [ -n "$missing" ]; then
   case "$PM" in
     "")
       echo "No package manager was provided; skipping: $missing" >&2
       ;;
     apk)
-      # One call for both: --no-cache fetches the index on every call. gh is
-      # github-cli on Alpine.
-      pkgs=""
-      for tool in $missing; do
-        case "$tool" in
-          gh) pkgs="$pkgs github-cli" ;;
-          *)  pkgs="$pkgs $tool" ;;
-        esac
-      done
+      # One call for all: --no-cache fetches the index on every call.
+      pkgs=$(packages apk $missing)
       step "Installing with apk:$pkgs"
       apk add --no-cache $pkgs || fail "apk could not install:$pkgs"
       ;;
     brew)
       step "Installing with Homebrew: $missing"
-      # The formula for python3 is python.
-      formulae=""
-      for tool in $missing; do
-        case "$tool" in
-          python3) formulae="$formulae python" ;;
-          *)       formulae="$formulae $tool" ;;
-        esac
-      done
+      formulae=$(packages brew $missing)
       "$BREW" install $formulae || fail "brew could not install:$formulae"
       for tool in $missing; do
         case "$tool" in

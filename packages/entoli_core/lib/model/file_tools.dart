@@ -172,7 +172,7 @@ const _workspaceVariables = {
 };
 
 /// The workspace variables' names, which a command may lead a word with.
-const workspaceVariableNames = {_projectVariable, _chatVariable};
+final workspaceVariableNames = _workspaceVariables.keys.toSet();
 
 /// The workspace variable [path] starts with, `$NAME` or `${NAME}`, with the
 /// prefix it means and the path after it; null where it starts with none.
@@ -181,6 +181,7 @@ const workspaceVariableNames = {_projectVariable, _chatVariable};
 ({String variable, String prefix, String rest})? _workspaceVariable(
   String path,
 ) {
+  if (!path.startsWith(r"$")) return null;
   for (final MapEntry(key: name, value: prefix)
       in _workspaceVariables.entries) {
     for (final form in ["\${$name}", "\$$name"]) {
@@ -197,6 +198,10 @@ const workspaceVariableNames = {_projectVariable, _chatVariable};
   }
   return null;
 }
+
+/// Whether [path] starts with a workspace variable, which [resolveWorkspacePath]
+/// reads as the workspace it names.
+bool isWorkspaceVariablePath(String path) => _workspaceVariable(path) != null;
 
 /// What a file tool tells the model when [path] named a workspace by its
 /// variable: the call worked, and the prefix is the tool's own word for it.
@@ -232,17 +237,18 @@ String resolveWorkspacePath(
   String? guestRoot,
   String? homePath,
 }) {
-  final variable = _workspaceVariable(path);
-  final named = variable == null ? path : variable.prefix + variable.rest;
-  final project = named.startsWith("project:");
+  if (_workspaceVariable(path) case (:final prefix, :final rest, variable: _)) {
+    final base = prefix == "project:" ? projectWorkspace : workspace;
+    // A bare variable is the directory itself, as it is to the shell.
+    return rest.isEmpty ? base : p.join(base, safeRelativePath(rest));
+  }
+  final project = path.startsWith("project:");
   var rest = project
-      ? named.substring("project:".length)
-      : named.startsWith("chat:")
-      ? named.substring("chat:".length)
-      : named;
+      ? path.substring("project:".length)
+      : path.startsWith("chat:")
+      ? path.substring("chat:".length)
+      : path;
   final base = project ? projectWorkspace : workspace;
-  // A bare variable is the directory itself, as it is to the shell.
-  if (variable != null && rest.isEmpty) return base;
   if (rest.startsWith("~/")) {
     rest = p.join(homePath ?? projectWorkspace, rest.substring(2));
   } else if (rest == "~") {

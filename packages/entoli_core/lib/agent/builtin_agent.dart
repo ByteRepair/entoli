@@ -786,20 +786,13 @@ class BuiltinAgent implements Turn {
   /// shell's home, so every call site carries the translation without
   /// spelling it out.
   @override
-  String resolvePath(String path) {
-    _pathNote ??= workspaceVariableNote(path);
-    return resolveWorkspacePath(
-      path,
-      workspace,
-      projectWorkspace,
-      guestRoot: shell.guestRoot,
-      homePath: shell.homeFor(projectWorkspace),
-    );
-  }
-
-  /// The note a path named by a workspace variable earns, set where the call
-  /// resolved it and carried on that call's result by [_withNotes].
-  String? _pathNote;
+  String resolvePath(String path) => resolveWorkspacePath(
+    path,
+    workspace,
+    projectWorkspace,
+    guestRoot: shell.guestRoot,
+    homePath: shell.homeFor(projectWorkspace),
+  );
 
   @override
   Map<String, FileStamp> get readFiles => session.readFiles;
@@ -1324,7 +1317,6 @@ class BuiltinAgent implements Turn {
       gate.nextCall();
       if (_plannedLast) _planTaskHeld = null;
       _plannedLast = writesPlan(call.name);
-      _pathNote = null;
       if (_cancelled) {
         // The call as well as the answer: a result whose call is not in the
         // parts is a result the projection has nothing to pair it to.
@@ -1336,9 +1328,13 @@ class BuiltinAgent implements Turn {
           ? toolRejected(call, unknownTool(call.name, tools.keys))
           : tool.run(call, this);
       final saved = _savingLarge(tool?.inlineLimit, {call.id}, ran);
-      await for (final event in _withNotes(call, saved)) {
-        if (event is ToolResultEvent && event.result.violations.isNotEmpty) {
-          _refused[event.result.callId] = event.result.violations;
+      final pathNote = _pathNote(call);
+      await for (var event in saved) {
+        if (event is ToolResultEvent && event.result.callId == call.id) {
+          event = _withNotes(event, pathNote);
+          if (event.result.violations.isNotEmpty) {
+            _refused[event.result.callId] = event.result.violations;
+          }
         }
         yield event;
       }
@@ -1383,24 +1379,33 @@ class BuiltinAgent implements Turn {
     }
   }
 
-  /// [events] with what [call]'s result should also say carried on it — the
-  /// workspace variable its path named, where it succeeded, and how the
-  /// background jobs that ended since the last call ended: on the result,
-  /// so a reload words it the same.
-  Stream<AgentEvent> _withNotes(
-    LlmToolCall call,
-    Stream<AgentEvent> events,
-  ) async* {
-    await for (final event in events) {
-      if (event is ToolResultEvent && event.result.callId == call.id) {
-        final path = event.result.returnCode == 0 ? _pathNote : null;
-        final notes = [?path, ...?backgroundJobs?.takeNotes()];
-        if (notes.isNotEmpty) {
-          yield ToolResultEvent(event.result.copyWith(notes: notes));
-          continue;
-        }
-      }
-      yield event;
+  /// [event] with what its result should also say carried on it — the
+  /// workspace variable its call's path named, where it succeeded, and how
+  /// the background jobs that ended since the last call ended: on the
+  /// result, so a reload words it the same.
+  ToolResultEvent _withNotes(ToolResultEvent event, String? pathNote) {
+    final notes = [
+      if (event.result.returnCode == 0) ?pathNote,
+      ...?backgroundJobs?.takeNotes(),
+    ];
+    return notes.isEmpty
+        ? event
+        : ToolResultEvent(event.result.copyWith(notes: notes));
+  }
+
+  /// The note [call]'s `path` argument earns when it names a workspace by its
+  /// variable; null for every other call.
+  static String? _pathNote(LlmToolCall call) {
+    if (!call.argumentsJson.contains(r"$ENTOLI_") &&
+        !call.argumentsJson.contains(r"${ENTOLI_")) {
+      return null;
+    }
+    try {
+      final args = jsonDecode(call.argumentsJson);
+      final path = args is Map ? args["path"] : null;
+      return path is String ? workspaceVariableNote(path) : null;
+    } on FormatException {
+      return null;
     }
   }
 

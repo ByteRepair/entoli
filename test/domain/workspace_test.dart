@@ -7,6 +7,7 @@ import "package:entoli_core/model/config.dart";
 import "package:entoli_core/model/file_handoff.dart";
 import "package:entoli_core/model/file_tools.dart"
     show outsideWorkspaces, resolveWorkspacePath;
+import "package:entoli_core/model/shell.dart" show cdTarget, commandPath;
 import "package:entoli_core/model/workspace.dart";
 import "package:path/path.dart" as p;
 
@@ -346,6 +347,23 @@ void main() {
       expect(
         resolve(r"$ENTOLI_PROJECT_WORKSPACE/../../etc/passwd"),
         "$dir/etc/passwd",
+      );
+    });
+
+    // A `cd` or `make -C` into a variable names the workspace, so the
+    // sandbox's directories and a grant name it too.
+    test("a command's variable-led path goes through the same resolver", () {
+      expect(
+        commandPath(
+          r"$ENTOLI_PROJECT_WORKSPACE/ini",
+          "$dir/$workspace",
+          resolve,
+        ),
+        "$dir/ini",
+      );
+      expect(
+        cdTarget(["cd", r"$ENTOLI_CHAT_WORKSPACE"], "/elsewhere", resolve),
+        "$dir/$workspace",
       );
     });
 

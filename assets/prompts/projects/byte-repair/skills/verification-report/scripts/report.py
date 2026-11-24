@@ -289,6 +289,8 @@ def summary_line(run):
             f"{counts['SKIP']} skipped.")
 
 
+MARKDOWN_RUNS = 5
+
 CAVEAT = ("A PASS holds only up to the loop bounds used; a SKIP is not verified "
           "at all.")
 
@@ -366,13 +368,19 @@ def render_markdown(history):
     out += ["", "## Coverage", ""]
     out.append("| Run | Date | " + " | ".join(names) + " |")
     out.append("| --- | --- | " + " | ".join("---" for _ in names) + " |")
-    for i, h in enumerate(history, 1):
+    # The reply echoes this, so it shows the latest runs; the artifact has all.
+    first = max(len(history) - MARKDOWN_RUNS, 0)
+    recent = list(enumerate(history, 1))[first:]
+    for i, h in recent:
         cells = [fmt_pct(h["coverage"].get(n)) for n in names]
         out.append(f"| {i} | {fmt_time(h['time'])} | " + " | ".join(cells) + " |")
+    if first:
+        out.append("")
+        out.append(f"Runs 1 to {first} are in the published report.")
     out.append("")
     out.append("```")
     width = len(str(len(history)))
-    for i, h in enumerate(history, 1):
+    for i, h in recent:
         value = h["coverage"][FUNCTIONS_METRIC]
         out.append(f"run {i:>{width}}  {bar(value)}  {value:g}%")
     out.append("```")
@@ -560,7 +568,7 @@ def function_page(r, pid, past):
     if r.get("carried"):
         src = next((p for i, _, p in past if i == r["carried"]), r)
         r = {**src, **r}
-    log = block("Verifier output", r.get("log", ""), "") if r.get("log") else ""
+    log = block("Verifier output", r["log"], "") if r.get("log") else ""
     return f"""<section class="fn-page" id="{pid}" hidden>
 <a class="back" href="#overview">&larr; Verification Report</a>
 <h1><code>{e(r['function'])}</code></h1>
