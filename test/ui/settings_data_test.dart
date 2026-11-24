@@ -71,6 +71,11 @@ void main() {
     );
     expect(backup.chats, 1);
     expect(backup.members, contains(endsWith("state.json")));
+
+    await tester.tap(find.text("Log"));
+    await settle(tester);
+    expect(find.textContaining("Adding projects/default"), findsOneWidget);
+    expect(find.textContaining("Wrote "), findsOneWidget);
   });
 
   testWidgets("Import asks before it replaces anything", (tester) async {

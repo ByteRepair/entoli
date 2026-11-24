@@ -11,7 +11,7 @@ import "package:entoli_core/model/rootfs_store.dart";
 import "package:entoli_core/model/shell.dart";
 
 import "../../core/platform/form_factor.dart";
-import "package:entoli_shell/entoli_shell.dart" show removeTree;
+import "package:entoli_shell/entoli_shell.dart" show deleteTree;
 
 /// Installs and queries the Byte Repair tooling — make, github-cli and ESBMC —
 /// so they are on PATH for every agent turn in the project. The install runs
@@ -159,19 +159,22 @@ class ByteRepairStore {
   }
 
   /// Deletes this project's setup data, workspace and marker, plus desktop
-  /// tools. Shared guest packages remain installed for other projects. Null on
-  /// success, an error message on failure.
-  Future<String?> deleteEnvironment() async {
-    final errors = await Future.wait([
-      removeTree(config.projectWorkspaceDir(project: project)),
-      if (_hostInstallDir != null) removeTree(p.dirname(_hostInstallDir!)),
-    ]);
-    final err = errors.where((e) => e != null).firstOrNull;
-    if (err != null) {
-      logFailure("byte-repair", "delete environment failed", err);
-      return err;
-    }
+  /// tools, saying each to [log]. Shared guest packages remain installed for
+  /// other projects. Null on success, an error message on failure.
+  ///
+  /// Through [deleteTree], the platform's, not `removeTree`: the workspace
+  /// holds the read-only skills, and on iOS, where no `chmod` process can
+  /// run, only [deleteTree] unlocks them first.
+  Future<String?> deleteEnvironment({StringSink? log}) async {
+    final trees = [
+      config.projectWorkspaceDir(project: project),
+      if (_hostInstallDir != null) p.dirname(_hostInstallDir!),
+    ];
     try {
+      for (final tree in trees) {
+        log?.writeln("Deleting $tree");
+        await deleteTree(tree);
+      }
       final marker = File(config.setupCompleteFile(project: project));
       if (marker.existsSync()) await marker.delete();
       return null;

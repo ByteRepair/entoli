@@ -2,14 +2,13 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:entoli_core/model/file_picker.dart";
 import "package:entoli_core/view/chat/widgets/code_block.dart";
-import "package:entoli_core/view/chat/widgets/shell_run.dart"
-    show LiveShellOutput;
 import "package:entoli_core/view/widgets/busy.dart";
 
 import "../../app/byte_repair.dart";
 import "../../data/local/byte_repair_store.dart";
 import "../../providers.dart";
 import "../widgets/destructive_button.dart";
+import "../widgets/live_log.dart";
 import "../widgets/section_header.dart";
 import "../widgets/settings_warning_banner.dart";
 
@@ -116,7 +115,6 @@ class ByteRepairSettings extends ConsumerWidget {
           ],
           const SizedBox(height: 16),
           const _ToolStatusList(),
-          if (run.log case final log? when log.isNotEmpty) _SetupLog(log),
         ],
         if (error != null) ...[
           const SizedBox(height: 8),
@@ -139,34 +137,17 @@ class ByteRepairSettings extends ConsumerWidget {
           onConfirmed: () => guarded(context, runner.delete),
           enabled: !run.running,
         ),
+        // Setup's and the delete's alike, so it is outside the branch that
+        // hides the setup buttons.
+        LogPanel(runner.log),
       ],
     );
   }
 }
 
-/// What the setup printed, folded away until asked for.
-class _SetupLog extends StatelessWidget {
-  const _SetupLog(this.log);
-
-  final String log;
-
-  @override
-  Widget build(BuildContext context) => ExpansionTile(
-    title: Text("Log", style: Theme.of(context).textTheme.bodyMedium),
-    tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-    childrenPadding: const EdgeInsets.symmetric(horizontal: 16),
-    shape: const Border(),
-    children: [
-      ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 240),
-        child: SelectionArea(child: LiveShellOutput(code: log)),
-      ),
-    ],
-  );
-}
-
 /// Each tool and the version found, "Not installed" where none was — a probe
-/// that failed outright included.
+/// that failed outright included — and "Checking…" while the probe runs, in
+/// the rows' own place rather than a spinner the list would stretch.
 class _ToolStatusList extends ConsumerWidget {
   const _ToolStatusList();
 
@@ -174,16 +155,7 @@ class _ToolStatusList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final versions = ref.watch(byteRepairToolVersionsProvider);
     final theme = Theme.of(context);
-    if (versions.isLoading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16),
-        child: SizedBox(
-          height: 20,
-          width: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      );
-    }
+    final checking = versions.isLoading;
     final found = versions.asData?.value ?? const <String, String?>{};
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -201,9 +173,9 @@ class _ToolStatusList extends ConsumerWidget {
                   ),
                   Expanded(
                     child: Text(
-                      found[tool] ?? "Not installed",
+                      checking ? "Checking…" : found[tool] ?? "Not installed",
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: found[tool] != null
+                        color: checking || found[tool] != null
                             ? theme.colorScheme.onSurfaceVariant
                             : theme.colorScheme.error,
                       ),

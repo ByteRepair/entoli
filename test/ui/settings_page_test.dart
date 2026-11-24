@@ -5,6 +5,7 @@ import "package:flutter/foundation.dart"
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
+import "package:entoli_core/model/builtin_project.dart" show ByteRepairProject;
 import "package:agent_chat/data/builtin/llm/providers/presets.dart"
     show CodexCliProvider;
 import "package:entoli_core/model/app_settings.dart";
@@ -775,6 +776,38 @@ void main() {
           "This deletes the Byte Repair workspace (cloned repos, scratch "
           "files) and all chats in the project.",
         );
+      },
+    );
+
+    // The delete says what it took, under the same Log row setup's output
+    // folds into.
+    targetTest(
+      "the delete empties the workspace and logs it on iOS",
+      TargetPlatform.iOS,
+      (tester) async {
+        final workspace = app.config.projectWorkspaceDir(
+          project: ByteRepairProject().dir,
+        );
+        await io(
+          tester,
+          () async =>
+              File(p.join(workspace, "cloned.txt"))
+                ..createSync(recursive: true),
+        );
+        await pumpSettings(tester, app, SettingsCategory.byteRepair);
+        expect(find.text("Log"), findsNothing);
+
+        await scrollTo(tester, find.text("Delete Byte Repair Data"));
+        await tester.tap(find.text("Delete Byte Repair Data"));
+        await settleIo(tester);
+        await tester.tap(find.widgetWithText(TextButton, "Delete"));
+        await settleIo(tester, least: 20, tries: 200);
+
+        expect(Directory(workspace).existsSync(), isFalse);
+        await scrollTo(tester, find.text("Log"));
+        await tester.tap(find.text("Log"));
+        await settleIo(tester);
+        expect(find.textContaining("Deleting $workspace"), findsOneWidget);
       },
     );
 

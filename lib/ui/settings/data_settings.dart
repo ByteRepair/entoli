@@ -7,6 +7,7 @@ import "package:entoli_core/view/widgets/dialogs.dart";
 import "../../app/backup_actions.dart";
 import "../../data/backup.dart" show Backup, BackupFormatException;
 import "../widgets/add_button_row.dart";
+import "../widgets/live_log.dart";
 import "../widgets/section_header.dart";
 
 /// Settings > Data: everything as one file, out and back in. The work is
@@ -88,6 +89,7 @@ class DataSettings extends ConsumerWidget {
           height: 2,
           child: busy ? const LinearProgressIndicator(minHeight: 2) : null,
         ),
+        LogPanel(ref.read(backupBusyProvider.notifier).log),
       ],
     );
   }
