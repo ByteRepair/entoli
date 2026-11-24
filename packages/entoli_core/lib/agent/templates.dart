@@ -104,6 +104,16 @@ String turnPrompt({
         "conversation is already\nthere for the next.";
   }
 
+  // The file tools resolve `chat:` and `project:` themselves; a command is
+  // text the shell runs as typed, so it gets the paths by variable.
+  final names = sharedWorkspace
+      ? "\n\n"
+            "In a command, `\$ENTOLI_CHAT_WORKSPACE` and "
+            "`\$ENTOLI_PROJECT_WORKSPACE` hold these two\npaths. The file tools "
+            "do not need them: they take `chat:` and `project:` instead."
+      : "\n\n"
+            "In a command, `\$ENTOLI_CHAT_WORKSPACE` holds this path. The file "
+            "tools do not need\nit: they take paths relative to it.";
   // Models write scratch to a literal /tmp out of habit unless told
   // otherwise. The sandbox's TMPDIR is this same directory.
   final tmp =
@@ -117,7 +127,7 @@ String turnPrompt({
 
 Your shell starts in this conversation's own workspace: $workspaceDisplay
 It is yours; the files in it survive between turns, and nothing else writes
-there. $scope$tmp$shared${home()}""",
+there. $scope$tmp$shared${home()}$names""",
     if (canRunCommands && workFolders.isNotEmpty) _workFolders(workFolders),
     if (instructions != null && instructions.isNotEmpty)
       "## Workspace instructions\n\n$instructions",

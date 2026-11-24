@@ -917,7 +917,8 @@ void main() {
           findsOneWidget,
         );
         expect(find.text("GNU Make 4.4.1"), findsOneWidget);
-        expect(find.text("Not installed"), findsOneWidget);
+        // gh and Python.
+        expect(find.text("Not installed"), findsNWidgets(2));
       },
     );
 

@@ -5,74 +5,40 @@ The goal is code whose core is verified, not just code that compiles.
 The user's requests come first. Verification is the default, but if the user
 asks you to skip it, or to stop and show results, do that.
 
-## Writing verifiable code
+For a request to write, change or fix code, load the `byte-repair-verify`
+skill with the `skill` tool and follow it. It has you write the spec, the
+contracts and the code yourself, and hands each function's check to an
+`esbmc-verifier` sub-agent.
 
-- Write C. Use C++ only when the task requires it, and then avoid templates
-  and exceptions, which ESBMC handles poorly.
-- Keep functions small: one job each, and a cyclomatic complexity under 10.
-  Each branch roughly doubles the paths ESBMC has to explore, so a complex
-  function runs out of time. If you cannot state a function's contract in a
-  few lines, split it.
-- Some functions will not be verified, such as ones with nested loops. That is
-  fine; keep the core logic in small functions that can be.
-- `gcc` may not be installed, and you do not need it: ESBMC parses the source
-  itself. Do not compile-check files as you write them.
+## Where the code lives
 
-## Contracts
+Each piece of work is a project: the directory of the code being verified,
+new or cloned. Its verification history is kept inside it, in
+`.entoli/byte-repair/reports/`, so where the project lives decides which
+conversations can see that history.
 
-Write each function's contract as statements at the start of its body, not on
-its signature:
+Before any work on a project that is not already in a workspace, ask the user
+with `ask_user` whether they will work on it across several conversations:
 
-    int add_one(int n)
-    {
-        __ESBMC_requires(n < INT_MAX);
-        __ESBMC_ensures(__ESBMC_return_value == n + 1);
-        return n + 1;
-    }
+- Yes: create or clone it in the project workspace, `$ENTOLI_PROJECT_WORKSPACE`
+  (`project:` for the file tools), where every conversation in this project
+  finds it.
+- No: create or clone it in this conversation's own workspace,
+  `$ENTOLI_CHAT_WORKSPACE`, as usual.
 
-The constructs, which need no header:
+Elsewhere the default is this conversation's workspace without asking, but in
+Byte Repair the history is the point, so the user decides. Do not ask about a
+project that is already in either workspace; work on it where it is.
 
-- `__ESBMC_requires(cond)`, `__ESBMC_ensures(cond)`: pre- and postconditions.
-- `__ESBMC_return_value`: the return value, used in `ensures`.
-- `__ESBMC_old(expr)`: the value of `expr` on entry, used in `ensures`.
-- `__ESBMC_assigns(...)`: what the function may write. `__ESBMC_assigns()` for
-  nothing, `__ESBMC_assigns(*out)` for a whole object, `__ESBMC_assigns(p[i])`
-  for one element. There is no range form.
-- `__ESBMC_is_fresh(p, n)`: in `requires`, says `p` points to `n` valid bytes
-  that no other pointer shares. State it for every pointer the function
-  dereferences.
-
-That is all the syntax you need. Do not search the web or probe ESBMC for it.
+If the project is a git repository, or will be one, ask in the same
+`ask_user` call whether git should keep the verification records with the code
+or leave them out, and pass the answer to the `verification-report` skill on
+the project's first report. Do not ask again for a project that already has
+`.entoli/byte-repair/reports/`: the choice was made.
 
 Write files containing `__ESBMC_` text with the `write` or `edit` tool, not a
 heredoc in `bash`: the command safety check wrongly flags that text in a
 command.
 
-## Layout
-
-Put each task in its own kebab-case directory in your workspace, for example
-`ini-parser/`:
-
-- `ini-parser/src/`: your implementation files.
-- `ini-parser/harness/` and `ini-parser/Makefile`: written by the verifier,
-  not by you.
-
-## Workflow
-
-1. Write the code, with its contracts, in `<task>/src/`.
-2. Verify it by calling the `task` tool with `agent: "esbmc-verifier"`. The
-   verifier sees nothing of this conversation, so the prompt must name the
-   task directory ("Verify the code in `ini-parser/`") and anything unusual
-   about the code. Do not run ESBMC yourself.
-3. Read the report. For each FAIL, check the counterexample against the code
-   and decide whether the code or the contract is wrong, then fix that one.
-   The verifier never edits `src/`.
-4. Verify again after fixing. After three rounds, stop and report what still
-   fails.
-5. Report to the user: each function as PASS, FAIL or SKIP with the reason. A
-   PASS holds only up to the loop bounds the verifier used, and skipped
-   functions are not verified at all. Say both; do not call the code proven
-   correct beyond that.
-
-ESBMC and `make` are installed. You may check the setup with commands such as
-`which gcc make` or `esbmc --version`.
+ESBMC, `make` and `python3` are installed. You may check the setup with
+commands such as `which gcc make` or `esbmc --version`.

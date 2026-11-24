@@ -9,6 +9,7 @@
 library;
 
 import "log.dart" show logFailure;
+import "file_tools.dart" show workspaceVariableNames;
 
 /// One command's parse. [isWindows] is the answer of a platform whose shell
 /// this does not model: nothing is classified there statically, which is what
@@ -250,7 +251,8 @@ List<String> _segmentsOf(String command, List<_Tok> tokens) {
 /// one with no target), the redirects' own syntax and any here-document body
 /// left out of the words. Null where any of it is not plain text — an
 /// expansion, a substitution, a group — or the segment does not tokenize,
-/// the same answer the whole-command parse gives.
+/// the same answer the whole-command parse gives. A word led by a workspace
+/// variable is kept as written: see [_plainWord].
 ///
 /// [expandedTargets] lets a redirect target through that names its file by
 /// a variable (`> $B/out`), its write then null: the words are what a rule
@@ -271,7 +273,7 @@ List<String> _segmentsOf(String command, List<_Tok> tokens) {
   final parsed = _Pipeline._of(tokens);
   final words = <String>[];
   for (final word in parsed.argv) {
-    final text = _plain(word);
+    final text = _plainWord(word);
     if (text == null) return null;
     words.add(text);
   }
@@ -592,6 +594,22 @@ String? _plainOf(_Tok tok) => _plain(tok.pieces!);
 
 String? _plain(List<Object> pieces) =>
     pieces.every((piece) => piece is String) ? pieces.join() : null;
+
+/// [_plain], except that a word led by a workspace variable is read as the
+/// variable's name and the text after it. The app sets those last, after
+/// every setting, to an absolute workspace path, so the word names a path
+/// and never a flag — which is all a reading of the words needs. Only in
+/// the lead: `-o$ENTOLI_CHAT_WORKSPACE/x` would make the variable part of a
+/// flag, and stays unread.
+String? _plainWord(List<Object> pieces) {
+  if (pieces.firstOrNull case _Expansion(
+    :final name,
+  ) when workspaceVariableNames.contains(name)) {
+    final rest = _plain(pieces.sublist(1));
+    return rest == null ? null : "\$$name$rest";
+  }
+  return _plain(pieces);
+}
 
 final _descriptor = RegExp(r"^(\d+|-)$");
 

@@ -148,6 +148,10 @@ hands the rest to `bash`, whose gate and rules still apply. It offers no
 and would only raise a banner. The refusal is the
 tool's rather than the mode's because a sub-agent runs under `never`: without
 it, nothing but the agent's own prompt stood between `explore` and a write.
+A word led by `$ENTOLI_PROJECT_WORKSPACE` or `$ENTOLI_CHAT_WORKSPACE` reads as
+a path (`plainCommand`), since the app sets both last to a workspace and a
+sub-agent's commands start in the chat's, not the project's: without it, a
+read-only agent could not list the project it was sent to.
 
 **What a running tool may reach is `Turn`** (`tools/turn.dart`): the
 workspaces and the shell, the gate, the user (`approve`, `answer`), the

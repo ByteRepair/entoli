@@ -7,6 +7,7 @@ import "package:entoli_core/model/config.dart";
 import "package:entoli_core/model/file_handoff.dart";
 import "package:entoli_core/model/file_tools.dart"
     show outsideWorkspaces, resolveWorkspacePath;
+import "package:entoli_core/model/shell.dart" show cdTarget, commandPath;
 import "package:entoli_core/model/workspace.dart";
 import "package:path/path.dart" as p;
 
@@ -321,6 +322,56 @@ void main() {
     test("a chat-relative path lands in the chat's own, explicitly", () {
       expect(resolve("chat:notes/a.txt"), "$dir/$workspace/notes/a.txt");
       expect(outside("chat:notes/a.txt"), isFalse);
+    });
+
+    // A path copied out of a command into a file tool lands where the command
+    // meant, not in a directory named after the variable.
+    test("a workspace variable is read as the prefix it stands for", () {
+      expect(
+        resolve(r"$ENTOLI_PROJECT_WORKSPACE/notes/a.txt"),
+        "$dir/notes/a.txt",
+      );
+      expect(
+        resolve(r"${ENTOLI_PROJECT_WORKSPACE}/notes/a.txt"),
+        "$dir/notes/a.txt",
+      );
+      expect(
+        resolve(r"$ENTOLI_CHAT_WORKSPACE/notes/a.txt"),
+        "$dir/$workspace/notes/a.txt",
+      );
+      expect(resolve(r"$ENTOLI_CHAT_WORKSPACE"), "$dir/$workspace");
+      expect(outside(r"$ENTOLI_PROJECT_WORKSPACE/notes/a.txt"), isFalse);
+    });
+
+    test("and sanitised like one, so it cannot climb out", () {
+      expect(
+        resolve(r"$ENTOLI_PROJECT_WORKSPACE/../../etc/passwd"),
+        "$dir/etc/passwd",
+      );
+    });
+
+    // A `cd` or `make -C` into a variable names the workspace, so the
+    // sandbox's directories and a grant name it too.
+    test("a command's variable-led path goes through the same resolver", () {
+      expect(
+        commandPath(
+          r"$ENTOLI_PROJECT_WORKSPACE/ini",
+          "$dir/$workspace",
+          resolve,
+        ),
+        "$dir/ini",
+      );
+      expect(
+        cdTarget(["cd", r"$ENTOLI_CHAT_WORKSPACE"], "/elsewhere", resolve),
+        "$dir/$workspace",
+      );
+    });
+
+    test("a longer name that only starts the same is not the variable", () {
+      expect(
+        resolve(r"$ENTOLI_PROJECT_WORKSPACE_OLD/a.txt"),
+        "$dir/$workspace/\$ENTOLI_PROJECT_WORKSPACE_OLD/a.txt",
+      );
     });
 
     test("`~` follows the home it is given, the way the shell's would", () {

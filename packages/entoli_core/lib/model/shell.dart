@@ -10,6 +10,7 @@ import "package:file/file.dart";
 import "package:flutter/foundation.dart" show ValueListenable;
 import "package:path/path.dart" as p;
 
+import "file_tools.dart" show isWorkspaceVariablePath;
 import "shell_command_analysis.dart" show plainCommand;
 
 /// The command tool's name: the log records it, the chat draws it, and the
@@ -158,10 +159,11 @@ class CommandSandbox {
 /// resolves in its own terms — a guest's home or the machine's.
 bool isTildePath(String path) => path == "~" || path.startsWith("~/");
 
-/// [path] as a command standing in [at] means it: `~` read by [tilde],
-/// a relative path joined to [at].
+/// [path] as a command standing in [at] means it: `~` and a leading
+/// workspace variable read by [tilde], which resolves both as the file tools
+/// do, a relative path joined to [at].
 String commandPath(String path, String at, String Function(String) tilde) =>
-    isTildePath(path)
+    isTildePath(path) || isWorkspaceVariablePath(path)
     ? tilde(path)
     : p.normalize(p.isAbsolute(path) ? path : p.join(at, path));
 

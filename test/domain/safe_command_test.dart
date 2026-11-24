@@ -216,4 +216,32 @@ void main() {
       }
     });
   });
+
+  group("a workspace variable", () {
+    test("leading a word is a path, and a read through it reads only", () {
+      for (final segment in [
+        r'ls "$ENTOLI_PROJECT_WORKSPACE/ini-parser/src"',
+        r'cd "$ENTOLI_PROJECT_WORKSPACE/ini-parser"',
+        r'find ${ENTOLI_PROJECT_WORKSPACE}/ini-parser -name "*.c"',
+        r'cat $ENTOLI_CHAT_WORKSPACE/notes.txt',
+      ]) {
+        expect(readsOnly(segment), isTrue, reason: segment);
+      }
+    });
+
+    test(
+      "does not make a write, a guarded flag or any other variable a read",
+      () {
+        for (final segment in [
+          r'echo hi > "$ENTOLI_PROJECT_WORKSPACE/out.txt"',
+          r'find "$ENTOLI_PROJECT_WORKSPACE" -delete',
+          r'sort -o$ENTOLI_CHAT_WORKSPACE/x input',
+          r'ls "$HOME/x"',
+          r'ls "x$ENTOLI_PROJECT_WORKSPACE"',
+        ]) {
+          expect(readsOnly(segment), isFalse, reason: segment);
+        }
+      },
+    );
+  });
 }

@@ -1126,6 +1126,21 @@ void main() {
       );
     });
 
+    // `bash` runs its text as typed, so `project:` there is a directory name;
+    // the prompt says which form goes where.
+    test("the workspace prompt names the variables for commands and the "
+        "prefixes for the file tools", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      await send(backend, "hi");
+
+      final system = client.sent.first[1].text;
+      expect(system, contains(r"`$ENTOLI_CHAT_WORKSPACE`"));
+      expect(system, contains(r"`$ENTOLI_PROJECT_WORKSPACE`"));
+      expect(system, contains("they take `chat:` and `project:` instead"));
+    });
+
     // A project that does not share a workspace is the answer to "a chat that
     // must not reach past itself": the prompt names the chat's own workspace
     // and nothing of a shared one.

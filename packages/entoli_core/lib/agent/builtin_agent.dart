@@ -1327,12 +1327,14 @@ class BuiltinAgent implements Turn {
       final ran = tool == null
           ? toolRejected(call, unknownTool(call.name, tools.keys))
           : tool.run(call, this);
-      final jobs = backgroundJobs;
       final saved = _savingLarge(tool?.inlineLimit, {call.id}, ran);
-      await for (final event
-          in jobs == null ? saved : _withJobNotes(jobs, call, saved)) {
-        if (event is ToolResultEvent && event.result.violations.isNotEmpty) {
-          _refused[event.result.callId] = event.result.violations;
+      final pathNote = _pathNote(call);
+      await for (var event in saved) {
+        if (event is ToolResultEvent && event.result.callId == call.id) {
+          event = _withNotes(event, pathNote);
+          if (event.result.violations.isNotEmpty) {
+            _refused[event.result.callId] = event.result.violations;
+          }
         }
         yield event;
       }
@@ -1377,23 +1379,33 @@ class BuiltinAgent implements Turn {
     }
   }
 
-  /// [events] with how the background jobs that ended since the last call
-  /// ended carried on [call]'s result: on the result, so a reload words it
-  /// the same.
-  Stream<AgentEvent> _withJobNotes(
-    ChatJobs jobs,
-    LlmToolCall call,
-    Stream<AgentEvent> events,
-  ) async* {
-    await for (final event in events) {
-      if (event is ToolResultEvent && event.result.callId == call.id) {
-        final notes = jobs.takeNotes();
-        if (notes.isNotEmpty) {
-          yield ToolResultEvent(event.result.copyWith(notes: notes));
-          continue;
-        }
-      }
-      yield event;
+  /// [event] with what its result should also say carried on it — the
+  /// workspace variable its call's path named, where it succeeded, and how
+  /// the background jobs that ended since the last call ended: on the
+  /// result, so a reload words it the same.
+  ToolResultEvent _withNotes(ToolResultEvent event, String? pathNote) {
+    final notes = [
+      if (event.result.returnCode == 0) ?pathNote,
+      ...?backgroundJobs?.takeNotes(),
+    ];
+    return notes.isEmpty
+        ? event
+        : ToolResultEvent(event.result.copyWith(notes: notes));
+  }
+
+  /// The note [call]'s `path` argument earns when it names a workspace by its
+  /// variable; null for every other call.
+  static String? _pathNote(LlmToolCall call) {
+    if (!call.argumentsJson.contains(r"$ENTOLI_") &&
+        !call.argumentsJson.contains(r"${ENTOLI_")) {
+      return null;
+    }
+    try {
+      final args = jsonDecode(call.argumentsJson);
+      final path = args is Map ? args["path"] : null;
+      return path is String ? workspaceVariableNote(path) : null;
+    } on FormatException {
+      return null;
     }
   }
 
