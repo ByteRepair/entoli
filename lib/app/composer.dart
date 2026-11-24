@@ -35,8 +35,6 @@ enum ComposerAction {
   stop,
   voice,
   attachImage,
-
-  /// A photo from the camera, where [ComposerModel.camera] says there is one.
   takePhoto,
   attachFile,
   insertSkill,

@@ -43,7 +43,6 @@ abstract interface class FilePicker {
   /// Whether [photo] has a camera to open here.
   bool get canTakePhoto;
 
-  /// The photo the user took, or null if they cancelled or none could be
-  /// taken.
+  /// The photo taken, or null if cancelled or failed.
   Future<PickedFile?> photo();
 }

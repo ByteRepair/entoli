@@ -1,3 +1,4 @@
+import "dart:io" show Platform;
 import "dart:typed_data";
 
 import "package:file_selector/file_selector.dart";
@@ -7,21 +8,27 @@ import "package:entoli_core/model/file_picker.dart";
 import "package:entoli_core/model/log.dart";
 
 /// The platform's own folder and file choosers, through `file_selector` — one
-/// plugin covering every platform the app runs on — and, where [canTakePhoto],
-/// the camera through `image_picker`.
+/// plugin covering every platform the app runs on — and the phones' camera
+/// through `image_picker`.
 class FileSelectorFilePicker implements FilePicker {
-  const FileSelectorFilePicker({this.canTakePhoto = false});
+  const FileSelectorFilePicker();
 
+  // The desktops' image_picker would only open a file chooser.
   @override
-  final bool canTakePhoto;
+  bool get canTakePhoto => Platform.isAndroid || Platform.isIOS;
 
   @override
   Future<PickedFile?> photo() async {
     try {
-      final file = await ImagePicker().pickImage(source: ImageSource.camera);
+      // A phone's photo is 12 MP and more; a model reads no more than this.
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        maxWidth: 2048,
+        maxHeight: 2048,
+        imageQuality: 85,
+      );
       return file == null ? null : _Picked(file);
     } on PlatformException catch (e) {
-      // camera_access_denied, no_available_camera.
       logFailure("files", "camera: ${e.code}", e.message);
       return null;
     }
