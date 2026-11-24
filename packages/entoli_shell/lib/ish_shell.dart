@@ -1,7 +1,7 @@
 import "dart:async";
 import "dart:convert";
 import "dart:ffi";
-import "dart:io" show Directory;
+import "dart:io" show Directory, FileSystemException;
 import "dart:isolate" show Isolate, ReceivePort, SendPort;
 import "dart:typed_data" show Uint8List;
 
@@ -203,6 +203,13 @@ class IshShell extends Shell {
     _startHostTools();
     final busy = _claimHome(home);
     if (busy != null) return _IshUnavailableRun(busy);
+    // The bridge binds only a directory that is there, and a delete (Byte
+    // Repair's) takes the workspace away.
+    try {
+      Directory(home).createSync(recursive: true);
+    } on FileSystemException catch (e) {
+      logFailure("ish", "could not make the workspace", e.osError ?? e);
+    }
     // The guest's view of the chat workspace: the project workspace is bound
     // at [guestRoot], so the chat's own is that plus its suffix past the
     // project workspace — the same words the prompt tells the model.
