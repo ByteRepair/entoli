@@ -111,7 +111,9 @@ class ChatController extends Notifier<ChatViewState>
     String text, {
     List<Attachment> attachments = const [],
     bool queue = false,
-  }) => _room.send(text, attachments: attachments, queue: queue);
+    bool spoken = false,
+  }) =>
+      _room.send(text, attachments: attachments, queue: queue, spoken: spoken);
 
   @override
   Future<void> queueSteer(String id) => _room.queueSteer(id);

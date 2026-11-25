@@ -416,7 +416,7 @@ class VoiceController extends Notifier<VoiceViewState> {
     // Sent whether or not the session is still on — these words were heard
     // while it was. The status is not: a stopped session is not thinking.
     if (state.isOn) _show(VoiceStatus.thinking);
-    await _chat.send(text);
+    await _chat.send(text, spoken: true);
   }
 
   /// The first word of a session started with nothing to speak into, and one
@@ -457,7 +457,7 @@ class VoiceController extends Notifier<VoiceViewState> {
       // interrupted turn, which is what the resume bar here is for — and only
       // what arrives from now on is new. `add`'s return is what would have
       // been said, and is dropped on purpose.
-      _sentences.add(_speakable.of(last.plainText));
+      _heard(last);
       _read = last.parts;
     }
     // An approval, a question, a sub-agent starting: state changes that carry
@@ -479,6 +479,11 @@ class VoiceController extends Notifier<VoiceViewState> {
     }
   }
 
+  /// [reply]'s new whole sentences. `textEnded` is what lets "Let me look." be
+  /// said while the tool after it runs.
+  List<String> _heard(Message reply) =>
+      _sentences.add(_speakable.of(reply.plainText), ended: reply.textEnded);
+
   /// Whatever has become a whole sentence since the last look.
   void _readOn() {
     _due?.cancel();
@@ -487,7 +492,7 @@ class VoiceController extends Notifier<VoiceViewState> {
     final messages = ref.read(chatControllerProvider(_chatId!)).chat?.messages;
     final last = messages == null || messages.isEmpty ? null : messages.last;
     if (last == null || last.id != _reading) return;
-    for (final sentence in _sentences.add(_speakable.of(last.plainText))) {
+    for (final sentence in _heard(last)) {
       _speak(sentence);
     }
   }

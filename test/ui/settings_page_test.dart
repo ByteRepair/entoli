@@ -961,6 +961,11 @@ void main() {
         app = TestApp.create(
           linuxHost: const ProotLinux("arm64-v8a"),
           linuxes: const {"alpine"},
+          // The rows' `--version` probes, which a real shell runs as processes
+          // whose timeout timers can outlive the test on a slow runner.
+          shell: FakeShell(
+            (_) => const ShellResult(returnCode: 127, output: ""),
+          ),
         );
         await io(
           tester,

@@ -787,7 +787,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       reactions: reactions,
       actions: MessageActions.of(row, view, editing),
       onSpeak: speechReady && message.hasText
-          ? () => readAloud(context, ref, message.id, message.plainText)
+          ? () => readAloud(context, ref, message.id, message.finalText)
           : null,
       isSpeaking: reading == message.id,
       steerKey: steerKey,

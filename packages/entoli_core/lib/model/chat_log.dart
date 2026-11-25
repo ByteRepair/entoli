@@ -88,6 +88,9 @@ sealed class ChatRecord with _$ChatRecord {
 
     /// See [Message.omadaOn]. About the message, like [references].
     bool? omadaOn,
+
+    /// See [Message.spoken]. About the message, like [references].
+    bool? spoken,
   }) = MessageRecord;
 
   /// One part of a message. Written again with the same [index] to supersede
@@ -306,6 +309,7 @@ Replayed replayTree(Iterable<ChatRecord> records) {
         :final author,
         :final addressees,
         :final omadaOn,
+        :final spoken,
       ):
         // A branch of a message that has since been deleted goes on the end
         // instead, which is where it would have gone naming nothing at all.
@@ -326,6 +330,7 @@ Replayed replayTree(Iterable<ChatRecord> records) {
           author: author,
           addressees: addressees,
           omadaOn: omadaOn,
+          spoken: spoken,
         );
         // After this one has joined them, so what it replaces is still there to
         // be found — and so that one record says the whole of where a message
@@ -558,6 +563,7 @@ List<ChatRecord> recordsOf(
       author: message.author,
       addressees: message.addressees,
       omadaOn: message.omadaOn,
+      spoken: message.spoken,
       siblingOf: at == 0 ? siblingOf : null,
       replacesSibling: at == 0 && replacing,
     ),

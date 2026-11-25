@@ -598,6 +598,25 @@ void main() {
     expect(replay(records).map((m) => m.omadaOn), [null, true]);
   });
 
+  test("a spoken say survives the round trip and the replay", () {
+    final say = Message(
+      id: "m2",
+      role: MessageRole.user,
+      createdAt: at,
+      spoken: true,
+    );
+    final records = [
+      message("m1"),
+      ...recordsOf([say]),
+    ];
+
+    final back = ChatRecord.fromJson(
+      jsonDecode(jsonEncode(records[1].toJson())) as Map<String, dynamic>,
+    );
+    expect((back as MessageRecord).spoken, isTrue);
+    expect(replay(records).map((m) => m.spoken), [null, true]);
+  });
+
   test("a compaction record rides the round trip and lands on the thread", () {
     final records = [
       message("m1"),

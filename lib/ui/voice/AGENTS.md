@@ -26,6 +26,11 @@ from playing.
 The button stays up while it reads, uncovered or not: stopping must not mean
 going looking for the button that started it.
 
+**What it reads is the answer**, `finalText`: the text after the turn's last
+tool call, not the "let me look" narration between calls. Voice mode reads the
+narration, and has to: it speaks as the reply streams, and which text is last
+is not known until the turn ends.
+
 ## The screen
 
 An orb of light, under the word for what voice mode is doing. It breathes on a
@@ -189,6 +194,14 @@ whole reason the button is on pointer-down is that the first half second is the
 half nobody hears.
 
 ## Taking turns
+
+**What is said is marked as said**, `Message.spoken` on the log, and the
+projection adds `spokenNote` to it: the reply will be heard, so code, paths and
+URLs go in backticks and are named in words. That is what makes `speakable`
+dropping them leave a sentence behind. A note on the turn rather than a voice
+system prompt, since a prompt that changed between typed and spoken turns of
+one chat would miss the provider's prompt cache at every switch. An edit of a
+spoken say is typed, and is not marked.
 
 **A session can exist before the chat does.** `voiceControllerProvider` is keyed
 on `String?`, and null is a session started from the new-chat screen with

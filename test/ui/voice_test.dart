@@ -161,6 +161,7 @@ void main() {
             .chat!
             .messages;
         expect(messages.first.plainText, "list the files");
+        expect(messages.first.spoken, isTrue);
         expect(messages.last.plainText, "Right away.");
       },
     );

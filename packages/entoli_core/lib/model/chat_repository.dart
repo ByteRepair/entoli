@@ -659,11 +659,13 @@ class ChatRepository {
   ///
   /// [files] are already under the chat's `resources/`: the composer saves what
   /// it is holding with [saveAttachments] first, and a resend passes on the
-  /// parts the message it branches from already had.
+  /// parts the message it branches from already had. [spoken] is a say from
+  /// voice mode: see [Message.spoken].
   Message composeUserPrompt(
     String text, {
     String? project,
     List<MessagePart> files = const [],
+    bool spoken = false,
   }) => Message(
     id: const Uuid().v4(),
     role: MessageRole.user,
@@ -674,6 +676,7 @@ class ChatRepository {
       MessagePart.text(text: text),
     ],
     references: promptReferences(text, _libraryFor(project)),
+    spoken: spoken ? true : null,
   );
 
   /// Save what the user attached and describe it as the parts that outlive the

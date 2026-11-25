@@ -462,6 +462,20 @@ void main() {
     expect(projected[2].toolCallId, "c2");
   });
 
+  test("a say from voice mode tells the model it will be heard", () async {
+    final projected = await project([
+      asked("what time is it").copyWith(spoken: true),
+      said(MessageRole.assistant, const [MessagePart.text(text: "Noon.")]),
+      asked("thanks"),
+    ]);
+
+    expect(
+      projected.first.text,
+      userTurnText("what time is it\n\n$spokenNote", at: at, first: true),
+    );
+    expect(projected.last.text, isNot(contains(spokenNote)));
+  });
+
   test("what the user attached is named and sent", () async {
     final projected = await projectionOf([
       said(MessageRole.user, const [

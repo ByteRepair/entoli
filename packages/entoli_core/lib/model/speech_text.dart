@@ -4,14 +4,79 @@ library;
 
 final _fence = RegExp(r"^\s*(```|~~~)");
 final _rule = RegExp(r"^\s*([-*_])\s*\1\s*\1[\s\-*_]*$");
-final _bullet = RegExp(r"^\s*([-*+]|\d+[.)])\s+");
-final _quote = RegExp(r"^\s*>+\s?");
-final _heading = RegExp(r"^\s*#{1,6}\s+");
-final _image = RegExp(r"!\[[^\]]*\]\([^)]*\)");
-final _link = RegExp(r"\[([^\]]*)\]\([^)]*\)");
-final _emphasis = RegExp(r"(\*{1,3}|_{1,3}|~~)(?=\S)(.*?)(?<=\S)\1");
-final _tag = RegExp(r"<[^>\s][^>]*>");
+final _trailing = RegExp(r"[.,;:!?)\]]+$");
+final _closers = RegExp(r"""[.,;:!?)\]*_"']+$""");
+final _notStop = RegExp(r"[^.,;:!?]");
+final _www = RegExp(r"^www\.");
+
+/// What inline code may hold and still be read out: a word or three, not a
+/// path, a URL, an expression or a flag.
+final _sayable = RegExp(r"^[\w .'+-]{1,32}$");
+final _flag = RegExp(r"(^|\s)--?\w");
 final _blanks = RegExp(r"\n{3,}");
+
+/// One rewrite a line goes through on its way to being said.
+///
+/// [needs] is every character the rule cannot match without, and is what lets
+/// [SpeakableText] leave a line holding none of them alone. Null for a rule
+/// anchored to the start of a line, which [_marked] answers for instead, and
+/// for an id rule, which needs a run of hex digits: see [SpeakableText._plain].
+/// [growingOnly] applies only to the line a reply is still writing.
+class _Rewrite {
+  _Rewrite(String pattern, this.replace, {this.needs, this.growingOnly = false})
+    : pattern = RegExp(pattern);
+
+  final RegExp pattern;
+  final String Function(Match) replace;
+  final String? needs;
+  final bool growingOnly;
+
+  String apply(String line) => line.replaceAllMapped(pattern, replace);
+}
+
+String _nothing(Match _) => "";
+
+/// In order. Each one that drops something takes one space before it, so the
+/// words either side meet with one between them and a full stop after it
+/// stays put.
+final _rewrites = [
+  _Rewrite(r"( ?)`+([^`]+)`+", _sayableCode, needs: "`"),
+  // A span still open on the line being written: hidden until it closes,
+  // since it may be about to be dropped.
+  _Rewrite(r" ?`[^`]*$", _nothing, needs: "`", growingOnly: true),
+  _Rewrite(" ?`", _nothing, needs: "`"),
+  _Rewrite(r"^\s*>+\s?", _nothing),
+  _Rewrite(r"^\s*#{1,6}\s+", _nothing),
+  _Rewrite(r"^\s*([-*+]|\d+[.)])\s+", _nothing),
+  _Rewrite(r"!\[[^\]]*\]\([^)]*\)", _nothing, needs: "["),
+  _Rewrite(r"\[([^\]]*)\]\([^)]*\)", (m) => m[1] ?? "", needs: "["),
+  _Rewrite(r"<?\bhttps?://([^\s<>/?#]+)[^\s<>]*>?", _sayableUrl, needs: "/"),
+  // With whatever opens it, a bracket, a quote or emphasis, and only the
+  // sentence's stop of what closes it.
+  _Rewrite(
+    r"""(^|\s)[(\["'*_]*(~|\.{1,2})?/\S*/\S*""",
+    (m) => (_closers.firstMatch(m[0]!)?[0] ?? "").replaceAll(_notStop, ""),
+    needs: "/",
+  ),
+  // Both hold a digit, which is what the fast path looks for in a hex run.
+  _Rewrite(
+    r" ?(?<![\w-])(?=[0-9a-fA-F-]{0,35}\d)"
+    r"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}(?![\w-])",
+    _nothing,
+  ),
+  // A word of hex digits with a digit and a letter in it; a hyphen joins it
+  // to the word beside it, which makes it prose.
+  _Rewrite(
+    r" ?(?<![\w-])(?=[0-9a-fA-F]*\d)(?=[0-9a-fA-F]*[a-fA-F])[0-9a-fA-F]{7,}(?![\w-])",
+    _nothing,
+  ),
+  _Rewrite(
+    r"(\*{1,3}|_{1,3}|~~)(?=\S)(.*?)(?<=\S)\1",
+    (m) => m[2] ?? "",
+    needs: "*_~",
+  ),
+  _Rewrite(r"<[^>\s][^>]*>", _nothing, needs: "<"),
+];
 final _tableRule = RegExp(r"^[\s|:-]+$");
 
 /// How a line has to start for any of the anchored rules to reach it, or for
@@ -22,16 +87,25 @@ final _marked = RegExp(r"^\s*([-*_+>#:|]|\d+[.)])");
 /// most of its punctuation is layout. **Fenced code is dropped whole** rather
 /// than flattened — a command read out character by character is unusable to
 /// listen to and unusable to type from, and the conversation is still on
-/// screen.
-String speakable(String markdown) {
+/// screen. So is inline code past a word or three, a path and a long hex id,
+/// and a bare URL is said as its host. Dropped rather than given a stand-in
+/// word: a reply written to be heard already says what the span was.
+///
+/// [growing] is a reply still being written, whose last line is unfinished.
+String speakable(String markdown, {bool growing = false}) {
   final out = <String>[];
   var inFence = false;
-  for (final line in markdown.split("\n")) {
+  final lines = markdown.split("\n");
+  for (final (at, line) in lines.indexed) {
     if (_fence.hasMatch(line)) {
       inFence = !inFence;
       continue;
     }
-    final said = _spoken(line, inFence);
+    final said = _spoken(
+      line,
+      inFence,
+      growing: growing && at == lines.length - 1,
+    );
     if (said != null) out.add(said);
   }
   return _joined(out);
@@ -40,18 +114,14 @@ String speakable(String markdown) {
 /// One line as it should be read, or null where it is layout rather than
 /// words. Whether it is inside a fence is the caller's: it is the only thing
 /// that carries from one line to the next, and so the only thing
-/// [SpeakableText] has to keep.
-String? _spoken(String line, bool inFence) {
+/// [SpeakableText] has to keep. [growing] is the line a reply is writing.
+String? _spoken(String line, bool inFence, {bool growing = false}) {
   if (inFence || _rule.hasMatch(line)) return null;
-  var text = line
-      .replaceAll(_quote, "")
-      .replaceAll(_heading, "")
-      .replaceAll(_bullet, "")
-      .replaceAll(_image, "")
-      .replaceAllMapped(_link, (m) => m[1] ?? "")
-      .replaceAllMapped(_emphasis, (m) => m[2] ?? "")
-      .replaceAll(_tag, "")
-      .replaceAll("`", "");
+  var text = line;
+  for (final rewrite in _rewrites) {
+    if (rewrite.growingOnly && !growing) continue;
+    text = rewrite.apply(text);
+  }
   // A table row read aloud is a run of pipes; the cells are still words.
   if (text.trimLeft().startsWith("|")) {
     if (_tableRule.hasMatch(text)) return null;
@@ -64,6 +134,27 @@ String? _spoken(String line, bool inFence) {
   return text.trimRight();
 }
 
+String _sayableCode(Match m) {
+  final code = m[2]!;
+  final keep =
+      _sayable.hasMatch(code) &&
+      !_flag.hasMatch(code) &&
+      code.trim().split(" ").length <= 3;
+  return keep ? "${m[1]}$code" : "";
+}
+
+String _sayableUrl(Match m) {
+  final whole = m[0]!;
+  final quoted = whole.endsWith(">");
+  final after = quoted ? "" : _trailing.firstMatch(whole)?[0] ?? "";
+  final url = whole
+      .substring(0, whole.length - (quoted ? 1 : after.length))
+      .replaceFirst("<", "");
+  final parsed = Uri.tryParse(url)?.host ?? "";
+  final host = parsed.isEmpty ? m[1]! : parsed;
+  return "a link to ${host.replaceFirst(_www, "")}$after";
+}
+
 String _joined(List<String> lines) =>
     lines.join("\n").replaceAll(_blanks, "\n\n").trim();
 
@@ -73,7 +164,7 @@ String _joined(List<String> lines) =>
 ///
 /// What it saves is that a reply only ever grows: every line before the last
 /// break is settled, so it is stripped once instead of once per flush of the
-/// turn. Stripping is eight passes over each line, and the transcript is
+/// turn. Stripping is a dozen passes over each line, and the transcript is
 /// redrawn about sixty times a second, so on the whole reply each time the
 /// cost over a turn is quadratic.
 ///
@@ -104,6 +195,11 @@ class SpeakableText {
   var _scanned = 0;
   var _dirty = false;
 
+  /// The run of hex digits (and hyphens, for a UUID) the scan is in, and
+  /// whether it holds a digit: what an id rule needs, short of markup.
+  var _hexRun = 0;
+  var _hexDigit = false;
+
   String of(String markdown) {
     // The same reply again, which is most looks: a turn changes more than its
     // text and the transcript is redrawn for all of it. Identity first, since
@@ -114,8 +210,7 @@ class SpeakableText {
       _prefix = "";
       _done = 0;
       _inFence = false;
-      _scanned = 0;
-      _dirty = false;
+      _rescan(0);
     } else if (markdown.length == _text.length) {
       return _was;
     }
@@ -132,8 +227,7 @@ class SpeakableText {
         if (said != null) _settle(said);
       }
       _done = settled;
-      _scanned = settled;
-      _dirty = false;
+      _rescan(settled);
     }
 
     // The line still being written: stripped afresh every time, and its fence
@@ -143,7 +237,9 @@ class SpeakableText {
     if (_plain(tail)) {
       said = tail.trimRight();
     } else {
-      said = _fence.hasMatch(tail) ? null : _spoken(tail, _inFence);
+      said = _fence.hasMatch(tail)
+          ? null
+          : _spoken(tail, _inFence, growing: true);
     }
     final out = said == null || said.isEmpty ? _prefix : _with(said);
     return _was = out.trim();
@@ -152,17 +248,42 @@ class SpeakableText {
   /// Whether [_spoken] would do no more to the line being written than trim it,
   /// which is what a paragraph of prose is. The anchored rules read only how
   /// the line starts and the rest read only the characters in [_markup], so a
-  /// line with neither is one all eight passes are about to leave alone.
+  /// line with neither is one every rewrite is about to leave alone. An id
+  /// rule needs seven hex digits in a row with a digit among them, so a number
+  /// in prose leaves a line plain.
   bool _plain(String tail) {
     for (; _scanned < _text.length; _scanned++) {
-      if (_markup.contains(_text.codeUnitAt(_scanned))) {
+      final c = _text.codeUnitAt(_scanned);
+      if (_markup.contains(c)) {
         _dirty = true;
+      } else if (_isDigit(c)) {
+        _hexRun++;
+        _hexDigit = true;
+      } else if (_isHexLetter(c) || c == 0x2D) {
+        _hexRun++;
+      } else {
+        _hexRun = 0;
+        _hexDigit = false;
+      }
+      if (_hexRun >= 7 && _hexDigit) _dirty = true;
+      if (_dirty) {
         _scanned = _text.length;
         break;
       }
     }
     return !_dirty && !_inFence && !_marked.hasMatch(tail);
   }
+
+  void _rescan(int from) {
+    _scanned = from;
+    _dirty = false;
+    _hexRun = 0;
+    _hexDigit = false;
+  }
+
+  static bool _isDigit(int c) => c >= 0x30 && c <= 0x39;
+  static bool _isHexLetter(int c) =>
+      (c >= 0x41 && c <= 0x46) || (c >= 0x61 && c <= 0x66);
 
   void _settle(String line) {
     // Two blank lines in a row is the `\n{3,}` collapse, done as they arrive.
@@ -174,11 +295,14 @@ class SpeakableText {
 
   String _with(String line) => _prefix.isEmpty ? line : "$_prefix\n$line";
 
-  /// What the rules that are not anchored to the start of a line act on:
-  /// ``* _ ~ ` [ <`` and `|`. Code units rather than characters, for the reason
+  /// What the rewrites not anchored to the start of a line need, and `|` for a
+  /// table row. Code units rather than characters, for the reason
   /// [SentenceSplitter._endOfSentence] reads them — this runs over each
   /// character of a reply once.
-  static const _markup = {0x2A, 0x5F, 0x7E, 0x60, 0x5B, 0x3C, 0x7C};
+  static final _markup = {
+    for (final rewrite in _rewrites) ...?rewrite.needs?.codeUnits,
+    "|".codeUnitAt(0),
+  };
 }
 
 /// Sentence-sized pieces out of a reply that is still being written, so the
@@ -189,20 +313,34 @@ class SentenceSplitter {
   var _spoken = 0;
   var _text = "";
 
+  /// `_text` up to [_spoken]: what has been said.
+  var _said = "";
+  var _ended = false;
+
   /// Anything that has become a whole sentence since the last call. [text] is
-  /// the reply so far; a shorter one than last time is a different reply, and
-  /// starts this over.
-  List<String> add(String text) {
+  /// the reply so far; one that no longer starts with what was said is a
+  /// different reply, and starts this over. The unsaid tail may change: a
+  /// stripped reply's does, when a URL or a code span in it completes.
+  ///
+  /// [ended] says the text's last word is whole (`Message.textEnded`), so a
+  /// stop at the very end of it ends a sentence.
+  List<String> add(String text, {bool ended = false}) {
     // Length first: `startsWith` walks the whole reply, and this is asked on
     // every look at a reply that only ever grows.
-    if (text.length < _text.length || !text.startsWith(_text)) _spoken = 0;
+    if (text.length < _spoken || !text.startsWith(_said)) {
+      _spoken = 0;
+      _said = "";
+    }
     _text = text;
+    _ended = ended;
+    final from = _spoken;
     final out = <String>[];
     for (var end = _endOfSentence(); end != null; end = _endOfSentence()) {
       final piece = _text.substring(_spoken, end).trim();
       _spoken = end;
       if (piece.isNotEmpty) out.add(piece);
     }
+    if (_spoken != from) _said = _text.substring(0, _spoken);
     return out;
   }
 
@@ -210,19 +348,22 @@ class SentenceSplitter {
   void reset() {
     _spoken = 0;
     _text = "";
+    _said = "";
   }
 
   /// The tail, once nothing more is coming. Empty if it was all spoken.
   String flush() {
     final rest = _text.substring(_spoken).trim();
     _spoken = _text.length;
+    _said = _text;
     return rest;
   }
 
   /// Where the next sentence ends, or null while none has. A terminator counts
   /// only before whitespace, so `3.14` and `file.dart` are not two sentences,
   /// and a line break ends one however it was punctuated — a heading and a
-  /// bullet are sentences with no full stop.
+  /// bullet are sentences with no full stop. The end of the text is
+  /// whitespace only where it has [_ended]: `3.` may be about to be `3.14`.
   /// Code units rather than characters: `_text[i]` allocates a one-character
   /// string per character scanned, and this runs over the tail of a growing
   /// reply every time one is looked at.
@@ -236,8 +377,11 @@ class SentenceSplitter {
         continue;
       }
       if (_terminators.contains(c)) {
-        final next = i + 1 < _text.length ? _text.codeUnitAt(i + 1) : _space;
-        if (_isSpace(next) && !_abbreviates(i)) return i + 1;
+        final last = i + 1 == _text.length;
+        final next = last ? _space : _text.codeUnitAt(i + 1);
+        if ((!last || _ended) && _isSpace(next) && !_abbreviates(i)) {
+          return i + 1;
+        }
       }
       final space = _isSpace(c);
       if (!space) said = true;

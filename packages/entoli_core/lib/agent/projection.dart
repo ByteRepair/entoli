@@ -272,9 +272,10 @@ String _userText(
 ) {
   final reaction = message.reaction;
   if (reaction != null) return reactionTurnText(reaction);
-  final text =
+  final said =
       _goalText(message.plainText) ??
       expandedPrompt(message.plainText, message.references, library).trim();
+  final text = message.spoken == true ? "$said\n\n$spokenNote" : said;
   if (message.files.isEmpty) return text;
   final files = message.files
       .map(

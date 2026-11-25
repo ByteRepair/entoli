@@ -1,4 +1,5 @@
 import "package:entoli_core/model/speech_text.dart";
+import "package:entoli_core/model/models.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {
@@ -10,8 +11,72 @@ void main() {
       );
     });
 
-    test("keeps what inline code says, without the backticks", () {
+    test("keeps inline code that is a word or two, without the backticks", () {
       expect(speakable("Open `main.dart` first."), "Open main.dart first.");
+      expect(speakable("Run `flutter test` now."), "Run flutter test now.");
+    });
+
+    test("drops inline code that is not words", () {
+      expect(speakable("Run `rm -rf build` first."), "Run first.");
+      expect(speakable("Edit `lib/ui/a.dart`."), "Edit.");
+      expect(speakable("Set `x = foo(1)` here."), "Set here.");
+      expect(speakable("Use `--debug`."), "Use.");
+    });
+
+    test("says a bare URL as its host", () {
+      expect(
+        speakable("It is at https://www.github.com/a/b?c=1."),
+        "It is at a link to github.com.",
+      );
+      expect(
+        speakable("(see http://localhost:8080/x)"),
+        "(see a link to localhost)",
+      );
+      expect(speakable("<https://example.com/x>"), "a link to example.com");
+    });
+
+    test("says a link whose text is its URL as its host", () {
+      expect(
+        speakable("[https://example.com/a](https://example.com/a)"),
+        "a link to example.com",
+      );
+    });
+
+    test("drops a path, keeping the stop after it", () {
+      expect(speakable("Saved to /home/me/out/report.txt."), "Saved to.");
+      expect(speakable("Look in ~/src/app first."), "Look in first.");
+      expect(speakable("and/or 1/2"), "and/or 1/2");
+    });
+
+    test("drops a path in brackets, quotes or bold, with what wraps it", () {
+      expect(speakable("Edit it (/etc/nginx/nginx.conf) now."), "Edit it now.");
+      expect(speakable("It is **/home/me/out/x.txt**."), "It is.");
+      expect(speakable('Open "~/src/app/main.c" first.'), "Open first.");
+    });
+
+    test("keeps the rest of a finished line with a lone backtick", () {
+      expect(
+        speakable("Press the ` key to open the console."),
+        "Press the key to open the console.",
+      );
+      expect(speakable("Open `src/a", growing: true), "Open");
+    });
+
+    test("drops a hex id, and leaves numbers and words alone", () {
+      expect(speakable("Commit 6cca6ea1 is in."), "Commit is in.");
+      expect(
+        speakable("Job 3f2a1b4c-9d8e-4f00-a1b2-c3d4e5f60718 started."),
+        "Job started.",
+      );
+      expect(
+        speakable("In 2026 there were 1234567 of them."),
+        "In 2026 there were 1234567 of them.",
+      );
+      expect(speakable("A deadbeef facade."), "A deadbeef facade.");
+      expect(
+        speakable("The wall was defaced-2 times, x-1234abc."),
+        "The wall was defaced-2 times, x-1234abc.",
+      );
     });
 
     test("reads a heading as the words in it", () {
@@ -78,10 +143,98 @@ void main() {
       ]);
     });
 
+    // A stripped reply's tail changes as a URL or a code span in it completes;
+    // only what was said must stay put.
+    test("does not repeat itself when the unsaid tail changes", () {
+      final splitter = SentenceSplitter();
+      expect(splitter.add("Done. See https:"), ["Done."]);
+      expect(splitter.add("Done. See a link to e"), isEmpty);
+      expect(splitter.add("Done. See a link to example.com for this. Next"), [
+        "See a link to example.com for this.",
+      ]);
+    });
+
+    test("does not end a sentence at the end of the text", () {
+      final splitter = SentenceSplitter();
+      expect(splitter.add("The version is 3."), isEmpty);
+      expect(splitter.add("The version is 3.14 now. "), [
+        "The version is 3.14 now.",
+      ]);
+    });
+
     test("breaks a run-on rather than holding the first sound back", () {
       final splitter = SentenceSplitter();
       final long = List.filled(80, "word").join(" ");
       expect(splitter.add(long), isNotEmpty);
+    });
+  });
+
+  // What voice mode does: every length a reply streams through, stripped and
+  // split. Each sentence is said once, in order, whatever the tail did.
+  group("a streamed reply", () {
+    Message reply(List<MessagePart> parts) => Message(
+      id: "r",
+      role: MessageRole.assistant,
+      createdAt: DateTime(2026),
+      parts: parts,
+    );
+
+    List<String> heard(
+      SpeakableText growing,
+      SentenceSplitter splitter,
+      Message m,
+    ) => splitter.add(growing.of(m.plainText), ended: m.textEnded);
+
+    void saidOnce(String text) {
+      final growing = SpeakableText();
+      final splitter = SentenceSplitter();
+      final said = <String>[];
+      for (var i = 0; i <= text.length; i++) {
+        final so = reply([MessagePart.text(text: text.substring(0, i))]);
+        said.addAll(heard(growing, splitter, so));
+      }
+      said.add(splitter.flush());
+      expect(
+        said.where((s) => s.isNotEmpty).join(" "),
+        speakable(text).replaceAll("\n", " "),
+      );
+    }
+
+    test("a path that looks finished and keeps growing", () {
+      saidOnce("Done. It is saved under /home/me/report.txt for you. Next.");
+    });
+
+    test("a host that looks finished and keeps growing", () {
+      saidOnce("Done. See https://www.github.com/a for it. Next.");
+    });
+
+    test("a sentence is said once the space after it arrives", () {
+      final growing = SpeakableText();
+      final splitter = SentenceSplitter();
+      MessagePart says(String text) => MessagePart.text(text: text);
+      expect(
+        heard(growing, splitter, reply([says("A long answer.")])),
+        isEmpty,
+      );
+      expect(heard(growing, splitter, reply([says("A long answer. ")])), [
+        "A long answer.",
+      ]);
+    });
+
+    test("a part a tool call follows has its last sentence said", () {
+      final growing = SpeakableText();
+      final splitter = SentenceSplitter();
+      final looked = reply(const [
+        MessagePart.text(text: "Let me look."),
+        MessagePart.toolCall(
+          toolCall: ToolCall(id: "c", name: "bash"),
+        ),
+      ]);
+      expect(heard(growing, splitter, looked), ["Let me look."]);
+    });
+
+    test("code, a decimal and bold mid-sentence", () {
+      saidOnce("Run `rm -rf x` first. It is 3.14 wide. It is **big**. End.");
     });
   });
 
@@ -93,7 +246,11 @@ void main() {
       final growing = SpeakableText();
       for (var i = 0; i <= reply.length; i++) {
         final so = reply.substring(0, i);
-        expect(growing.of(so), speakable(so), reason: "at $i characters");
+        expect(
+          growing.of(so),
+          speakable(so, growing: true),
+          reason: "at $i characters",
+        );
       }
     }
 
@@ -137,6 +294,22 @@ void main() {
     test("agrees where the markup arrives late in a line", () {
       agreesGrowing(
         "Prose for a while, and then **bold** turns up, then more.",
+      );
+    });
+
+    test("agrees over code, URLs, paths and ids mid-line", () {
+      agreesGrowing(
+        "Run `rm -rf build` then `flutter test`. See https://example.com/a. "
+        "It wrote /tmp/x/out.txt for commit 6cca6ea1, done.\nNext line.",
+      );
+    });
+
+    // The id rules are reached by a run of hex digits rather than by markup,
+    // so a number in prose stays on the fast path and an id does not.
+    test("agrees over numbers, hex words and ids", () {
+      agreesGrowing(
+        "In 2026 there were 3 files and a deadbeef facade, then commit "
+        "6cca6ea1 and job 3f2a1b4c-9d8e-4f00-a1b2-c3d4e5f60718 ran.",
       );
     });
 
