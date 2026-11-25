@@ -8,6 +8,7 @@ import "package:entoli_core/model/installable.dart";
 import "package:entoli_core/model/local_llm.dart";
 import "package:entoli_core/model/local_model.dart";
 import "package:entoli_core/model/local_model_store.dart";
+import "package:entoli_core/model/model_budget.dart";
 import "package:entoli_core/model/voice_model.dart";
 import "package:entoli_core/model/voice_model_store.dart";
 import "package:entoli_core/view/widgets/busy.dart";
@@ -232,11 +233,18 @@ class _TextModels extends ConsumerWidget {
     final loaded = ref.watch(localLlmStateProvider);
     final store = engine.store;
     // A catalog entry too heavy for this device is not offered, unless it is
-    // downloaded already, which keeps its row and runs as before.
+    // downloaded already, which keeps its row and runs as before. It is still
+    // listed, greyed, so an empty list says why it is empty.
+    bool fits(LocalModel model) =>
+        engine.offers(model) || installed.contains(model.id);
     final offered = [
       for (final model in engine.catalog)
-        if (engine.offers(model) || installed.contains(model.id)) model,
+        if (fits(model)) model,
       ...added,
+    ];
+    final tooLarge = [
+      for (final model in engine.catalog)
+        if (!fits(model)) model,
     ];
     final listed = {for (final model in offered) model.id};
     // A model added by link in an earlier session, or one an older catalog
@@ -264,6 +272,8 @@ class _TextModels extends ConsumerWidget {
             deleteMessage: (m) =>
                 textModelDeleteMessage(m, loaded, again: true),
           ),
+        for (final model in tooLarge)
+          _TooLargeTile(model: model, allowed: engine.budget.bytes),
         for (final model in others)
           ModelDownloadTile(
             model: InstallableLocalModel(model, store),
@@ -282,6 +292,36 @@ class _TextModels extends ConsumerWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// A catalog entry this device's budget does not offer: named, with what it
+/// needs beside what the device allows, and nothing to press.
+class _TooLargeTile extends StatelessWidget {
+  const _TooLargeTile({required this.model, required this.allowed});
+
+  final LocalModel model;
+  final int? allowed;
+
+  @override
+  Widget build(BuildContext context) {
+    final needs = formatSize(ModelBudget.footprintOf(model));
+    final limit = allowed;
+    return Opacity(
+      opacity: 0.6,
+      child: CatalogTile(
+        title: Text(model.name),
+        summary: limit == null
+            ? "Too large for this device"
+            : "Too large for this device: needs $needs, "
+                  "this device allows ${formatSize(limit)}",
+        trailing: const IconButton(
+          tooltip: "Too large for this device",
+          icon: Icon(Icons.download),
+          onPressed: null,
+        ),
+      ),
     );
   }
 }

@@ -30,8 +30,11 @@ abstract class LocalEngine {
   /// Every model this engine's catalog has.
   List<LocalModel> get catalog;
 
+  /// What this device can give a model, which narrows what it [offers].
+  ModelBudget get budget => const ModelBudget.unknown();
+
   /// Whether [model] is offered to this device: whether it runs here.
-  bool offers(LocalModel model) => true;
+  bool offers(LocalModel model) => budget.fits(model);
 
   LocalModelStore get store;
 
@@ -117,11 +120,8 @@ abstract class RuntimeEngine extends LocalEngine {
 
   final LocalRuntime runtime;
 
-  /// What this device can give a model, which narrows what it [offers].
-  final ModelBudget budget;
-
   @override
-  bool offers(LocalModel model) => budget.fits(model);
+  final ModelBudget budget;
 
   @override
   final LocalModelStore store;

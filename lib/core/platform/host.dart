@@ -5,6 +5,7 @@ import "dart:io";
 import "package:ffi/ffi.dart";
 import "package:flutter/services.dart" show MethodChannel;
 import "package:path/path.dart" as p;
+import "package:entoli_core/model/local_model.dart" show mlxCatalog;
 import "package:entoli_core/model/model_budget.dart";
 import "package:entoli_core/model/model_process.dart";
 import "package:entoli_core/model/app_settings.dart";
@@ -262,18 +263,7 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
     return AppleFmProbe(
       handshake["reason"] as String? ?? "other",
       mlx: handshake["mlx"] as bool? ?? false,
-      // A phone's binding limit is the one it may not have said, and a
-      // budget without it would be the Mac's guess: nothing measured then.
-      budget: switch ((workingSet, available)) {
-        (final workingSet?, _) when Platform.isMacOS => ModelBudget.mac(
-          workingSet,
-        ),
-        (final workingSet?, final available?) => ModelBudget.phone(
-          workingSet: workingSet,
-          available: available,
-        ),
-        _ => const ModelBudget.unknown(),
-      },
+      budget: _budgetOf(workingSet, available),
     );
   } catch (e) {
     logFailure("apple-fm", "handshake failed", e);
@@ -282,6 +272,31 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
 }();
 
 Future<AppleFmProbe?>? _appleHandshake;
+
+/// A phone's binding limit is the one it may not have said, and a budget
+/// without it would be the Mac's guess: nothing measured then. Zero is not a
+/// measure either, `os_proc_available_memory` answering it where it has
+/// nothing to say, and a budget of 0 offers nothing.
+ModelBudget _budgetOf(int? workingSet, int? available) {
+  final budget = switch ((workingSet, available)) {
+    (final w?, _) when Platform.isMacOS && w > 0 => ModelBudget.mac(w),
+    (final w?, final a?) when w > 0 && a > 0 => ModelBudget.phone(
+      workingSet: w,
+      available: a,
+    ),
+    _ => const ModelBudget.unknown(),
+  };
+  // The page says what the smallest model needs; this says what the budget
+  // was made of, which is what tuning the share wants.
+  if (!mlxCatalog.any(budget.fits)) {
+    logFailure(
+      "apple-fm",
+      "no MLX model fits",
+      "workingSet=$workingSet available=$available budget=${budget.bytes}",
+    );
+  }
+  return budget;
+}
 
 /// The bundle's `lib/` beside the running executable, the one its `$ORIGIN`
 /// rpath resolves. Takes [executablePath] so a test can pin each shape.

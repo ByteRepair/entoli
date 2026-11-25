@@ -336,7 +336,11 @@ release that reads its architecture.
 (`packages/entoli_core/lib/model/model_budget.dart`) holds a model to its
 footprint — its weights and the `kvBudgetBytes` every loaded model may have —
 against what the device says it can give, and the page offers only the entries
-that fit (`LocalEngine.offers`). A list of devices and what each can run would
+that fit (`LocalEngine.offers`). One that does not is still listed, greyed out,
+with what it needs beside what the device allows: hidden, a phone that fits
+nothing showed an empty section and no reason, and the numbers are what tuning
+the shares below wants. So is the `[apple-fm] no MLX model fits` line, which
+gives the two readings the budget was made of. A list of devices and what each can run would
 be a list to keep; the device can answer for itself. Android's RAM comes from
 the tools channel (`ActivityManager`'s `totalMem`), Linux's from
 `/proc/meminfo`. llama.cpp gets three fifths of a Linux machine's and half a
@@ -349,6 +353,8 @@ is what ends an app there, and a phone gets three fifths of the smaller — on a
 8 GB iPhone nothing at all, being short of the 4B, since a model that slows the
 UI slows the whole phone with it. A model already downloaded keeps its row
 whatever it measures, and a device that answers nothing is offered everything.
+A reading of zero is no answer: `os_proc_available_memory` returns it where it
+has nothing to say, and as a measure it offered nothing at all.
 
 ### What the NPU actually is
 

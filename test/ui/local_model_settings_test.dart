@@ -5,6 +5,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/local/local_instance.dart" show LocalUsage;
 import "package:entoli_core/model/local_llm.dart";
 import "package:entoli_core/model/local_model.dart";
+import "package:entoli_core/model/formatting.dart";
 import "package:entoli_core/model/model_budget.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
@@ -75,8 +76,8 @@ void main() {
     expect(find.text("Max LLMs running"), findsNothing);
   });
 
-  testWidgets("a model too heavy for the device is not offered, unless it is "
-      "downloaded already", (tester) async {
+  testWidgets("a model too heavy for the device is listed with why and no "
+      "download, unless it is downloaded already", (tester) async {
     final heavy = ggufCatalog.last;
     // Room for every model but the largest.
     final budget = ModelBudget(ModelBudget.footprintOf(heavy) - 1);
@@ -84,7 +85,16 @@ void main() {
     await pumpOnDevice(tester);
 
     expect(find.text(model.name), findsOneWidget);
-    expect(find.text(heavy.name), findsNothing);
+    expect(find.text(heavy.name), findsOneWidget);
+    expect(
+      find.text(
+        "Too large for this device: needs "
+        "${formatSize(ModelBudget.footprintOf(heavy))}, this device allows "
+        "${formatSize(budget.bytes!)}",
+      ),
+      findsOneWidget,
+    );
+    expect(find.byTooltip("Too large for this device"), findsOneWidget);
     app.dispose();
 
     // Downloaded on a device it fits, or before there was a measure: kept,
