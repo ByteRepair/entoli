@@ -4,26 +4,6 @@ library;
 
 final _fence = RegExp(r"^\s*(```|~~~)");
 final _rule = RegExp(r"^\s*([-*_])\s*\1\s*\1[\s\-*_]*$");
-final _bullet = RegExp(r"^\s*([-*+]|\d+[.)])\s+");
-final _quote = RegExp(r"^\s*>+\s?");
-final _heading = RegExp(r"^\s*#{1,6}\s+");
-final _image = RegExp(r"!\[[^\]]*\]\([^)]*\)");
-final _link = RegExp(r"\[([^\]]*)\]\([^)]*\)");
-final _emphasis = RegExp(r"(\*{1,3}|_{1,3}|~~)(?=\S)(.*?)(?<=\S)\1");
-final _tag = RegExp(r"<[^>\s][^>]*>");
-
-// Each rule that drops something takes one space before it, so the words
-// either side meet with one between them and a full stop after one stays put.
-final _code = RegExp(r"( ?)`+([^`]+)`+");
-
-/// An inline span still open on the line being written: hidden until it
-/// closes, since it may be about to be dropped.
-final _openCode = RegExp(r" ?`[^`]*$");
-final _url = RegExp(r"<?\bhttps?://([^\s<>/?#]+)[^\s<>]*>?");
-final _path = RegExp(r"(^|\s)(~|\.{1,2})?/\S*/\S*");
-final _hex = RegExp(
-  r" ?\b(?=[0-9a-fA-F-]*\d)(?=[0-9a-fA-F-]*[a-fA-F])[0-9a-fA-F]{7}[0-9a-fA-F-]*\b",
-);
 final _trailing = RegExp(r"[.,;:!?)\]]+$");
 final _www = RegExp(r"^www\.");
 
@@ -32,6 +12,56 @@ final _www = RegExp(r"^www\.");
 final _sayable = RegExp(r"^[\w .'+-]{1,32}$");
 final _flag = RegExp(r"(^|\s)--?\w");
 final _blanks = RegExp(r"\n{3,}");
+
+/// One rewrite a line goes through on its way to being said.
+///
+/// [needs] is every character the rule cannot match without, and is what lets
+/// [SpeakableText] leave a line holding none of them alone. Null for a rule
+/// anchored to the start of a line, which [_marked] answers for instead.
+class _Rewrite {
+  _Rewrite(String pattern, this.replace, {this.needs})
+    : pattern = RegExp(pattern);
+
+  final RegExp pattern;
+  final String Function(Match) replace;
+  final String? needs;
+
+  String apply(String line) => line.replaceAllMapped(pattern, replace);
+}
+
+String _nothing(Match _) => "";
+
+/// In order. Each one that drops something takes one space before it, so the
+/// words either side meet with one between them and a full stop after it
+/// stays put.
+final _rewrites = [
+  _Rewrite(r"( ?)`+([^`]+)`+", _sayableCode, needs: "`"),
+  // A span still open on the line being written: hidden until it closes,
+  // since it may be about to be dropped.
+  _Rewrite(r" ?`[^`]*$", _nothing, needs: "`"),
+  _Rewrite(r"^\s*>+\s?", _nothing),
+  _Rewrite(r"^\s*#{1,6}\s+", _nothing),
+  _Rewrite(r"^\s*([-*+]|\d+[.)])\s+", _nothing),
+  _Rewrite(r"!\[[^\]]*\]\([^)]*\)", _nothing, needs: "["),
+  _Rewrite(r"\[([^\]]*)\]\([^)]*\)", (m) => m[1] ?? "", needs: "["),
+  _Rewrite(r"<?\bhttps?://([^\s<>/?#]+)[^\s<>]*>?", _sayableUrl, needs: ":"),
+  _Rewrite(
+    r"(^|\s)(~|\.{1,2})?/\S*/\S*",
+    (m) => _trailing.firstMatch(m[0]!)?[0] ?? "",
+    needs: "/",
+  ),
+  _Rewrite(
+    r" ?\b(?=[0-9a-fA-F-]*\d)(?=[0-9a-fA-F-]*[a-fA-F])[0-9a-fA-F]{7}[0-9a-fA-F-]*\b",
+    _nothing,
+    needs: "0123456789",
+  ),
+  _Rewrite(
+    r"(\*{1,3}|_{1,3}|~~)(?=\S)(.*?)(?<=\S)\1",
+    (m) => m[2] ?? "",
+    needs: "*_~",
+  ),
+  _Rewrite(r"<[^>\s][^>]*>", _nothing, needs: "<"),
+];
 final _tableRule = RegExp(r"^[\s|:-]+$");
 
 /// How a line has to start for any of the anchored rules to reach it, or for
@@ -65,19 +95,10 @@ String speakable(String markdown) {
 /// [SpeakableText] has to keep.
 String? _spoken(String line, bool inFence) {
   if (inFence || _rule.hasMatch(line)) return null;
-  var text = line
-      .replaceAllMapped(_code, _sayableCode)
-      .replaceAll(_openCode, "")
-      .replaceAll(_quote, "")
-      .replaceAll(_heading, "")
-      .replaceAll(_bullet, "")
-      .replaceAll(_image, "")
-      .replaceAllMapped(_link, (m) => m[1] ?? "")
-      .replaceAllMapped(_url, _sayableUrl)
-      .replaceAllMapped(_path, (m) => _trailing.firstMatch(m[0]!)?[0] ?? "")
-      .replaceAll(_hex, "")
-      .replaceAllMapped(_emphasis, (m) => m[2] ?? "")
-      .replaceAll(_tag, "");
+  var text = line;
+  for (final rewrite in _rewrites) {
+    text = rewrite.apply(text);
+  }
   // A table row read aloud is a run of pipes; the cells are still words.
   if (text.trimLeft().startsWith("|")) {
     if (_tableRule.hasMatch(text)) return null;
@@ -123,7 +144,7 @@ String _joined(List<String> lines) =>
 ///
 /// What it saves is that a reply only ever grows: every line before the last
 /// break is settled, so it is stripped once instead of once per flush of the
-/// turn. Stripping is eight passes over each line, and the transcript is
+/// turn. Stripping is a dozen passes over each line, and the transcript is
 /// redrawn about sixty times a second, so on the whole reply each time the
 /// cost over a turn is quadratic.
 ///
@@ -202,7 +223,7 @@ class SpeakableText {
   /// Whether [_spoken] would do no more to the line being written than trim it,
   /// which is what a paragraph of prose is. The anchored rules read only how
   /// the line starts and the rest read only the characters in [_markup], so a
-  /// line with neither is one all eight passes are about to leave alone.
+  /// line with neither is one every rewrite is about to leave alone.
   bool _plain(String tail) {
     for (; _scanned < _text.length; _scanned++) {
       if (_markup.contains(_text.codeUnitAt(_scanned))) {
@@ -224,14 +245,13 @@ class SpeakableText {
 
   String _with(String line) => _prefix.isEmpty ? line : "$_prefix\n$line";
 
-  /// What the rules that are not anchored to the start of a line act on:
-  /// ``* _ ~ ` [ <`` and `|`, `:` and `/` for a URL or a path, and the digits
-  /// a hex id must hold. Code units rather than characters, for the reason
+  /// What the rewrites not anchored to the start of a line need, and `|` for a
+  /// table row. Code units rather than characters, for the reason
   /// [SentenceSplitter._endOfSentence] reads them — this runs over each
   /// character of a reply once.
-  static const _markup = {
-    0x2A, 0x5F, 0x7E, 0x60, 0x5B, 0x3C, 0x7C, 0x3A, 0x2F, //
-    0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39,
+  static final _markup = {
+    for (final rewrite in _rewrites) ...?rewrite.needs?.codeUnits,
+    "|".codeUnitAt(0),
   };
 }
 
