@@ -133,6 +133,8 @@ void main() {
 
     test("an attach runs the page's picker and attaches", () async {
       await logic.run(ComposerAction.attachImage);
+      // No camera here, so nothing to open.
+      await logic.run(ComposerAction.takePhoto);
       await logic.run(ComposerAction.attachFile);
       expect(picked, [AttachmentKind.image, AttachmentKind.file]);
       expect(

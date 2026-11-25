@@ -32,7 +32,8 @@ here rather than as a comment beside the key because Xcode rewrites
 
 App Store processing reads the binary, not the UI, so a key is owed for
 whatever is linked, offered or not. `NSCameraUsageDescription` is the
-prompt the pairing scanner raises, and would be owed even without it, since
+prompt the pairing scanner and the composer's Camera raise, one string for
+both, and would be owed even without them, since
 `mobile_scanner` and WebRTC link `AVCaptureDevice`; an upload without it is
 refused.
 `NSLocalNetworkUsageDescription` is the wording of the prompt the first
@@ -502,7 +503,11 @@ host path (`bind_data_dir`, a second `realfs` mount), so a host-shaped path
 still resolves inside the guest — the fallback spelling, not the one the
 model is given. Both binds are made in `ish_session_init`, before the shell's
 working directory is opened; a bind that does not land is logged and the
-shell starts anyway.
+shell starts anyway. A realfs mount holds the directory it was made on, not
+its path, so the workspace bind is made again when the directory at the path
+is another one (its device and inode, not its name) — a workspace deleted
+and made again, as Byte Repair's delete does — and `IshShell` makes the
+workspace before each start, since there is nothing to bind otherwise.
 
 The guest has one mount table for every session, so `/root` names **one
 project at a time**. The data-dir bind is made once per process; the

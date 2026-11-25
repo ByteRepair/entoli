@@ -22,6 +22,19 @@ A filter names extensions, MIME types and uniform type identifiers together,
 since each platform reads only its own field: the desktops the extension,
 Android the MIME type, Apple's the UTI.
 
+## The camera
+
+The composer's Camera is `FilePicker.photo`, `image_picker` with
+`ImageSource.camera` returning the same `XFile`, and `pickAttachments` reads
+it like an Image pick, scaled to 2048 pixels at most. `canTakePhoto` is the
+phones alone, and the composer leaves the entry out of the `+` menu without
+it: the desktops' `image_picker` would only open a file chooser.
+
+The app's manifest declares `CAMERA` for the pairing scanner, and a declared
+`CAMERA` not yet granted makes `ACTION_IMAGE_CAPTURE` throw; the plugin asks
+for the grant itself, so nothing here does. iOS's prompt is
+`NSCameraUsageDescription`, one string for this and the scanner.
+
 ## The hand-offs
 
 `FileHandoff` is what the workspace explorer does past showing a file, and

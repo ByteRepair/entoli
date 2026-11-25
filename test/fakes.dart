@@ -387,6 +387,16 @@ class FakeFilePicker implements FilePicker {
       for (final attachment in scriptedAttachments) _HeldFile(attachment),
     ];
   }
+
+  @override
+  bool canTakePhoto = false;
+
+  /// What the next photo returns, held in memory. Null is a cancelled camera.
+  Attachment? scriptedPhoto;
+
+  @override
+  Future<PickedFile?> photo() async =>
+      scriptedPhoto == null ? null : _HeldFile(scriptedPhoto!);
 }
 
 class _HeldFile implements PickedFile {
