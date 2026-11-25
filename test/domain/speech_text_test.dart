@@ -47,6 +47,20 @@ void main() {
       expect(speakable("and/or 1/2"), "and/or 1/2");
     });
 
+    test("drops a path in brackets, quotes or bold, with what wraps it", () {
+      expect(speakable("Edit it (/etc/nginx/nginx.conf) now."), "Edit it now.");
+      expect(speakable("It is **/home/me/out/x.txt**."), "It is.");
+      expect(speakable('Open "~/src/app/main.c" first.'), "Open first.");
+    });
+
+    test("keeps the rest of a finished line with a lone backtick", () {
+      expect(
+        speakable("Press the ` key to open the console."),
+        "Press the key to open the console.",
+      );
+      expect(speakable("Open `src/a", growing: true), "Open");
+    });
+
     test("drops a hex id, and leaves numbers and words alone", () {
       expect(speakable("Commit 6cca6ea1 is in."), "Commit is in.");
       expect(
@@ -58,6 +72,10 @@ void main() {
         "In 2026 there were 1234567 of them.",
       );
       expect(speakable("A deadbeef facade."), "A deadbeef facade.");
+      expect(
+        speakable("The wall was defaced-2 times, x-1234abc."),
+        "The wall was defaced-2 times, x-1234abc.",
+      );
     });
 
     test("reads a heading as the words in it", () {
@@ -135,10 +153,65 @@ void main() {
       ]);
     });
 
+    test("does not end a sentence at the end of the text", () {
+      final splitter = SentenceSplitter();
+      expect(splitter.add("The version is 3."), isEmpty);
+      expect(splitter.add("The version is 3.14 now. "), [
+        "The version is 3.14 now.",
+      ]);
+    });
+
     test("breaks a run-on rather than holding the first sound back", () {
       final splitter = SentenceSplitter();
       final long = List.filled(80, "word").join(" ");
       expect(splitter.add(long), isNotEmpty);
+    });
+  });
+
+  // What voice mode does: every length a reply streams through, stripped and
+  // split. Each sentence is said once, in order, whatever the tail did.
+  group("a streamed reply", () {
+    void saidOnce(String reply) {
+      final growing = SpeakableText();
+      final splitter = SentenceSplitter();
+      final said = <String>[];
+      for (var i = 0; i <= reply.length; i++) {
+        said.addAll(splitter.add(growing.forSplitter(reply.substring(0, i))));
+      }
+      said.add(splitter.flush());
+      expect(
+        said.where((s) => s.isNotEmpty).join(" "),
+        speakable(reply).replaceAll("\n", " "),
+      );
+    }
+
+    test("a path that looks finished and keeps growing", () {
+      saidOnce("Done. It is saved under /home/me/report.txt for you. Next.");
+    });
+
+    test("a host that looks finished and keeps growing", () {
+      saidOnce("Done. See https://www.github.com/a for it. Next.");
+    });
+
+    test("a sentence is said once the space after it arrives", () {
+      final growing = SpeakableText();
+      final splitter = SentenceSplitter();
+      expect(splitter.add(growing.forSplitter("A long answer.")), isEmpty);
+      expect(splitter.add(growing.forSplitter("A long answer. ")), [
+        "A long answer.",
+      ]);
+    });
+
+    test("a closed part's last sentence is said", () {
+      final growing = SpeakableText();
+      final splitter = SentenceSplitter();
+      expect(splitter.add(growing.forSplitter("Let me look.", closed: true)), [
+        "Let me look.",
+      ]);
+    });
+
+    test("code, a decimal and bold mid-sentence", () {
+      saidOnce("Run `rm -rf x` first. It is 3.14 wide. It is **big**. End.");
     });
   });
 
@@ -150,7 +223,11 @@ void main() {
       final growing = SpeakableText();
       for (var i = 0; i <= reply.length; i++) {
         final so = reply.substring(0, i);
-        expect(growing.of(so), speakable(so), reason: "at $i characters");
+        expect(
+          growing.of(so),
+          speakable(so, growing: true),
+          reason: "at $i characters",
+        );
       }
     }
 

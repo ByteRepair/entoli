@@ -5,6 +5,8 @@ library;
 final _fence = RegExp(r"^\s*(```|~~~)");
 final _rule = RegExp(r"^\s*([-*_])\s*\1\s*\1[\s\-*_]*$");
 final _trailing = RegExp(r"[.,;:!?)\]]+$");
+final _closers = RegExp(r"""[.,;:!?)\]*_"']+$""");
+final _notStop = RegExp(r"[^.,;:!?]");
 final _www = RegExp(r"^www\.");
 
 /// What inline code may hold and still be read out: a word or three, not a
@@ -18,13 +20,15 @@ final _blanks = RegExp(r"\n{3,}");
 /// [needs] is every character the rule cannot match without, and is what lets
 /// [SpeakableText] leave a line holding none of them alone. Null for a rule
 /// anchored to the start of a line, which [_marked] answers for instead.
+/// [growingOnly] applies only to the line a reply is still writing.
 class _Rewrite {
-  _Rewrite(String pattern, this.replace, {this.needs})
+  _Rewrite(String pattern, this.replace, {this.needs, this.growingOnly = false})
     : pattern = RegExp(pattern);
 
   final RegExp pattern;
   final String Function(Match) replace;
   final String? needs;
+  final bool growingOnly;
 
   String apply(String line) => line.replaceAllMapped(pattern, replace);
 }
@@ -38,20 +42,30 @@ final _rewrites = [
   _Rewrite(r"( ?)`+([^`]+)`+", _sayableCode, needs: "`"),
   // A span still open on the line being written: hidden until it closes,
   // since it may be about to be dropped.
-  _Rewrite(r" ?`[^`]*$", _nothing, needs: "`"),
+  _Rewrite(r" ?`[^`]*$", _nothing, needs: "`", growingOnly: true),
+  _Rewrite(" ?`", _nothing, needs: "`"),
   _Rewrite(r"^\s*>+\s?", _nothing),
   _Rewrite(r"^\s*#{1,6}\s+", _nothing),
   _Rewrite(r"^\s*([-*+]|\d+[.)])\s+", _nothing),
   _Rewrite(r"!\[[^\]]*\]\([^)]*\)", _nothing, needs: "["),
   _Rewrite(r"\[([^\]]*)\]\([^)]*\)", (m) => m[1] ?? "", needs: "["),
   _Rewrite(r"<?\bhttps?://([^\s<>/?#]+)[^\s<>]*>?", _sayableUrl, needs: ":"),
+  // With whatever opens it, a bracket, a quote or emphasis, and only the
+  // sentence's stop of what closes it.
   _Rewrite(
-    r"(^|\s)(~|\.{1,2})?/\S*/\S*",
-    (m) => _trailing.firstMatch(m[0]!)?[0] ?? "",
+    r"""(^|\s)[(\["'*_]*(~|\.{1,2})?/\S*/\S*""",
+    (m) => (_closers.firstMatch(m[0]!)?[0] ?? "").replaceAll(_notStop, ""),
     needs: "/",
   ),
   _Rewrite(
-    r" ?\b(?=[0-9a-fA-F-]*\d)(?=[0-9a-fA-F-]*[a-fA-F])[0-9a-fA-F]{7}[0-9a-fA-F-]*\b",
+    r" ?(?<![\w-])[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}(?![\w-])",
+    _nothing,
+    needs: "0123456789",
+  ),
+  // A word of hex digits with a digit and a letter in it; a hyphen joins it
+  // to the word beside it, which makes it prose.
+  _Rewrite(
+    r" ?(?<![\w-])(?=[0-9a-fA-F]*\d)(?=[0-9a-fA-F]*[a-fA-F])[0-9a-fA-F]{7,}(?![\w-])",
     _nothing,
     needs: "0123456789",
   ),
@@ -75,15 +89,22 @@ final _marked = RegExp(r"^\s*([-*_+>#:|]|\d+[.)])");
 /// screen. So is inline code past a word or three, a path and a long hex id,
 /// and a bare URL is said as its host. Dropped rather than given a stand-in
 /// word: a reply written to be heard already says what the span was.
-String speakable(String markdown) {
+///
+/// [growing] is a reply still being written, whose last line is unfinished.
+String speakable(String markdown, {bool growing = false}) {
   final out = <String>[];
   var inFence = false;
-  for (final line in markdown.split("\n")) {
+  final lines = markdown.split("\n");
+  for (final (at, line) in lines.indexed) {
     if (_fence.hasMatch(line)) {
       inFence = !inFence;
       continue;
     }
-    final said = _spoken(line, inFence);
+    final said = _spoken(
+      line,
+      inFence,
+      growing: growing && at == lines.length - 1,
+    );
     if (said != null) out.add(said);
   }
   return _joined(out);
@@ -92,11 +113,12 @@ String speakable(String markdown) {
 /// One line as it should be read, or null where it is layout rather than
 /// words. Whether it is inside a fence is the caller's: it is the only thing
 /// that carries from one line to the next, and so the only thing
-/// [SpeakableText] has to keep.
-String? _spoken(String line, bool inFence) {
+/// [SpeakableText] has to keep. [growing] is the line a reply is writing.
+String? _spoken(String line, bool inFence, {bool growing = false}) {
   if (inFence || _rule.hasMatch(line)) return null;
   var text = line;
   for (final rewrite in _rewrites) {
+    if (rewrite.growingOnly && !growing) continue;
     text = rewrite.apply(text);
   }
   // A table row read aloud is a run of pipes; the cells are still words.
@@ -175,6 +197,19 @@ class SpeakableText {
   var _scanned = 0;
   var _dirty = false;
 
+  /// [of], for [SentenceSplitter]: with a break after it where the text is
+  /// [closed] (a part that is not text follows it), and a space where it ends
+  /// in one. The end of the text does not end a sentence, since its last word
+  /// may still grow; these are what say it will not.
+  String forSplitter(String markdown, {bool closed = false}) {
+    final said = of(markdown);
+    if (closed) return "$said\n";
+    final ended =
+        markdown.isNotEmpty &&
+        SentenceSplitter._isSpace(markdown.codeUnitAt(markdown.length - 1));
+    return ended ? "$said " : said;
+  }
+
   String of(String markdown) {
     // The same reply again, which is most looks: a turn changes more than its
     // text and the transcript is redrawn for all of it. Identity first, since
@@ -214,7 +249,9 @@ class SpeakableText {
     if (_plain(tail)) {
       said = tail.trimRight();
     } else {
-      said = _fence.hasMatch(tail) ? null : _spoken(tail, _inFence);
+      said = _fence.hasMatch(tail)
+          ? null
+          : _spoken(tail, _inFence, growing: true);
     }
     final out = said == null || said.isEmpty ? _prefix : _with(said);
     return _was = out.trim();
@@ -307,7 +344,9 @@ class SentenceSplitter {
   /// Where the next sentence ends, or null while none has. A terminator counts
   /// only before whitespace, so `3.14` and `file.dart` are not two sentences,
   /// and a line break ends one however it was punctuated — a heading and a
-  /// bullet are sentences with no full stop.
+  /// bullet are sentences with no full stop. The end of the text is not
+  /// whitespace: `3.` may be about to be `3.14`, and the last sentence is
+  /// [flush]'s.
   /// Code units rather than characters: `_text[i]` allocates a one-character
   /// string per character scanned, and this runs over the tail of a growing
   /// reply every time one is looked at.
@@ -320,8 +359,8 @@ class SentenceSplitter {
         if (said) return i + 1;
         continue;
       }
-      if (_terminators.contains(c)) {
-        final next = i + 1 < _text.length ? _text.codeUnitAt(i + 1) : _space;
+      if (_terminators.contains(c) && i + 1 < _text.length) {
+        final next = _text.codeUnitAt(i + 1);
         if (_isSpace(next) && !_abbreviates(i)) return i + 1;
       }
       final space = _isSpace(c);
