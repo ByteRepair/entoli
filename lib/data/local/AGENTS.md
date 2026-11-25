@@ -349,6 +349,10 @@ is what ends an app there, and a phone gets three fifths of the smaller — on a
 8 GB iPhone nothing at all, being short of the 4B, since a model that slows the
 UI slows the whole phone with it. A model already downloaded keeps its row
 whatever it measures, and a device that answers nothing is offered everything.
+The page shows Apple's two readings live under Running models, loaded or not
+(`LocalEngine.deviceMemory`, the channel's `memory`), and a catalog that fits
+nothing says so with what its smallest entry needs, since otherwise it is an
+empty list and no reason.
 
 ### What the NPU actually is
 

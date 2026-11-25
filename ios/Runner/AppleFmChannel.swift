@@ -74,6 +74,8 @@ final class AppleFmChannel: GenerationChannel {
     switch call.method {
     case "handshake":
       result(["reason": availabilityReason(), "mlx": Mlx.isAvailable, "memory": memory()])
+    case "memory":
+      result(memory())
     case "generate":
       startGeneration(call, result, generate)
     default:

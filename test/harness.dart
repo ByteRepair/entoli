@@ -189,6 +189,7 @@ class TestApp {
     Set<String> localModels = const {},
     FakeLocalRuntime? localRuntime,
     ModelBudget localBudget = const ModelBudget.unknown(),
+    DeviceMemory? deviceMemory,
     bool localEngineMissing = false,
     bool prefill = false,
     int? systemAccent,
@@ -222,7 +223,12 @@ class TestApp {
     final onDevice = FakeLocalModelStore(installed: localModels);
     final runtime = localRuntime ?? FakeLocalRuntime();
     final LocalEngine engine = localRuntime != null
-        ? LlamaEngine(runtime, onDevice, budget: localBudget)
+        ? LlamaEngine(
+            runtime,
+            onDevice,
+            budget: localBudget,
+            memory: () async => deviceMemory,
+          )
         : NoLocalEngine(missingFromBuild: localEngineMissing);
     final work = FakeBackgroundWork();
     // The real one over the two fakes it sits between: what a page shows of a

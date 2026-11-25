@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:collection/collection.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:entoli_core/model/formatting.dart";
@@ -8,6 +9,7 @@ import "package:entoli_core/model/installable.dart";
 import "package:entoli_core/model/local_llm.dart";
 import "package:entoli_core/model/local_model.dart";
 import "package:entoli_core/model/local_model_store.dart";
+import "package:entoli_core/model/model_budget.dart";
 import "package:entoli_core/model/voice_model.dart";
 import "package:entoli_core/model/voice_model_store.dart";
 import "package:entoli_core/view/widgets/busy.dart";
@@ -40,6 +42,7 @@ class OnDeviceSection extends ConsumerWidget {
       children: [
         if (engine.available) ...[
           const _RunningModels(),
+          const _DeviceMemory(),
           ListTile(
             title: const Text("LLM settings"),
             subtitle: const Text("Hardware, context and caching"),
@@ -119,6 +122,41 @@ class _RunningModels extends ConsumerWidget {
             subtitle: const Text("Frees what every loaded model holds."),
           ),
         ],
+      ],
+    );
+  }
+}
+
+/// What the device has to give a model, loaded or not: the readings the
+/// catalog's budget is made from, so a catalog that offers nothing shows why.
+class _DeviceMemory extends ConsumerWidget {
+  const _DeviceMemory();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final device = ref.watch(runningUsageProvider)?.device;
+    final graphics = device?.graphics;
+    final headroom = device?.headroom;
+    if (graphics == null && headroom == null) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (graphics != null)
+          ListTile(
+            title: const Text("Graphics memory"),
+            subtitle: Text(
+              "${formatSize(graphics)} · what the GPU keeps resident before "
+              "it pages",
+            ),
+          ),
+        if (headroom != null)
+          ListTile(
+            title: const Text("App headroom"),
+            subtitle: Text(
+              "${formatSize(headroom)} · what the system still lets this app "
+              "grow by",
+            ),
+          ),
       ],
     );
   }
@@ -246,6 +284,8 @@ class _TextModels extends ConsumerWidget {
         if (!listed.contains(model.id))
           OnDiskModel(id: model.id, name: model.name, source: model.url),
     ];
+    final allowed = engine.budget.bytes;
+    final smallest = engine.catalog.map(ModelBudget.footprintOf).minOrNull;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -257,6 +297,18 @@ class _TextModels extends ConsumerWidget {
               "They are stored outside the app's data and are not included in "
               "backups.",
         ),
+        if (allowed != null &&
+            smallest != null &&
+            !engine.catalog.any(engine.offers))
+          ListTile(
+            title: const Text(
+              "No models fit this device's hardware requirements",
+            ),
+            subtitle: Text(
+              "The smallest needs ${formatSize(smallest)}; this device allows "
+              "${formatSize(allowed)}.",
+            ),
+          ),
         for (final model in offered)
           ModelDownloadTile(
             model: InstallableLocalModel(model, store),

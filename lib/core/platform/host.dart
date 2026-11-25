@@ -174,6 +174,7 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
             _modelProcess,
             prompts: PromptCache(_kvCacheDir(cacheDir)),
             budget: probe.budget,
+            memory: _appleMemory,
           )
         : const NoLocalEngine();
   }
@@ -256,9 +257,9 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
         .invokeMethod<Object?>("handshake")
         .timeout(const Duration(seconds: 3));
     final handshake = answer as Map<Object?, Object?>? ?? const {};
-    final memory = handshake["memory"] as Map<Object?, Object?>? ?? const {};
-    final workingSet = memory["workingSet"] as int?;
-    final available = memory["available"] as int?;
+    final (graphics: workingSet, headroom: available) = _memoryOf(
+      handshake["memory"],
+    );
     return AppleFmProbe(
       handshake["reason"] as String? ?? "other",
       mlx: handshake["mlx"] as bool? ?? false,
@@ -282,6 +283,18 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
 }();
 
 Future<AppleFmProbe?>? _appleHandshake;
+
+DeviceMemory _memoryOf(Object? answer) {
+  final memory = answer as Map<Object?, Object?>? ?? const {};
+  return (
+    graphics: memory["workingSet"] as int?,
+    headroom: memory["available"] as int?,
+  );
+}
+
+/// The handshake's readings asked again: the headroom moves as the app grows.
+Future<DeviceMemory?> _appleMemory() async =>
+    _memoryOf(await appleChannel.invokeMethod<Object?>("memory"));
 
 /// The bundle's `lib/` beside the running executable, the one its `$ORIGIN`
 /// rpath resolves. Takes [executablePath] so a test can pin each shape.
