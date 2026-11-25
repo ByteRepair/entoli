@@ -11,6 +11,26 @@ final _image = RegExp(r"!\[[^\]]*\]\([^)]*\)");
 final _link = RegExp(r"\[([^\]]*)\]\([^)]*\)");
 final _emphasis = RegExp(r"(\*{1,3}|_{1,3}|~~)(?=\S)(.*?)(?<=\S)\1");
 final _tag = RegExp(r"<[^>\s][^>]*>");
+
+// Each rule that drops something takes one space before it, so the words
+// either side meet with one between them and a full stop after one stays put.
+final _code = RegExp(r"( ?)`+([^`]+)`+");
+
+/// An inline span still open on the line being written: hidden until it
+/// closes, since it may be about to be dropped.
+final _openCode = RegExp(r" ?`[^`]*$");
+final _url = RegExp(r"<?\bhttps?://([^\s<>/?#]+)[^\s<>]*>?");
+final _path = RegExp(r"(^|\s)(~|\.{1,2})?/\S*/\S*");
+final _hex = RegExp(
+  r" ?\b(?=[0-9a-fA-F-]*\d)(?=[0-9a-fA-F-]*[a-fA-F])[0-9a-fA-F]{7}[0-9a-fA-F-]*\b",
+);
+final _trailing = RegExp(r"[.,;:!?)\]]+$");
+final _www = RegExp(r"^www\.");
+
+/// What inline code may hold and still be read out: a word or three, not a
+/// path, a URL, an expression or a flag.
+final _sayable = RegExp(r"^[\w .'+-]{1,32}$");
+final _flag = RegExp(r"(^|\s)--?\w");
 final _blanks = RegExp(r"\n{3,}");
 final _tableRule = RegExp(r"^[\s|:-]+$");
 
@@ -22,7 +42,9 @@ final _marked = RegExp(r"^\s*([-*_+>#:|]|\d+[.)])");
 /// most of its punctuation is layout. **Fenced code is dropped whole** rather
 /// than flattened — a command read out character by character is unusable to
 /// listen to and unusable to type from, and the conversation is still on
-/// screen.
+/// screen. So is inline code past a word or three, a path and a long hex id,
+/// and a bare URL is said as its host. Dropped rather than given a stand-in
+/// word: a reply written to be heard already says what the span was.
 String speakable(String markdown) {
   final out = <String>[];
   var inFence = false;
@@ -44,14 +66,18 @@ String speakable(String markdown) {
 String? _spoken(String line, bool inFence) {
   if (inFence || _rule.hasMatch(line)) return null;
   var text = line
+      .replaceAllMapped(_code, _sayableCode)
+      .replaceAll(_openCode, "")
       .replaceAll(_quote, "")
       .replaceAll(_heading, "")
       .replaceAll(_bullet, "")
       .replaceAll(_image, "")
       .replaceAllMapped(_link, (m) => m[1] ?? "")
+      .replaceAllMapped(_url, _sayableUrl)
+      .replaceAllMapped(_path, (m) => _trailing.firstMatch(m[0]!)?[0] ?? "")
+      .replaceAll(_hex, "")
       .replaceAllMapped(_emphasis, (m) => m[2] ?? "")
-      .replaceAll(_tag, "")
-      .replaceAll("`", "");
+      .replaceAll(_tag, "");
   // A table row read aloud is a run of pipes; the cells are still words.
   if (text.trimLeft().startsWith("|")) {
     if (_tableRule.hasMatch(text)) return null;
@@ -62,6 +88,30 @@ String? _spoken(String line, bool inFence) {
         .join(", ");
   }
   return text.trimRight();
+}
+
+String _sayableCode(Match m) {
+  final code = m[2]!;
+  final keep =
+      _sayable.hasMatch(code) &&
+      !_flag.hasMatch(code) &&
+      code.trim().split(" ").length <= 3;
+  return keep ? "${m[1]}$code" : "";
+}
+
+String _sayableUrl(Match m) {
+  final whole = m[0]!;
+  final after = whole.endsWith(">")
+      ? ""
+      : _trailing.firstMatch(whole)?[0] ?? "";
+  final host = m[1]!
+      .split("@")
+      .last
+      .split(":")
+      .first
+      .replaceAll(_trailing, "")
+      .replaceFirst(_www, "");
+  return "a link to $host$after";
 }
 
 String _joined(List<String> lines) =>
@@ -175,10 +225,14 @@ class SpeakableText {
   String _with(String line) => _prefix.isEmpty ? line : "$_prefix\n$line";
 
   /// What the rules that are not anchored to the start of a line act on:
-  /// ``* _ ~ ` [ <`` and `|`. Code units rather than characters, for the reason
+  /// ``* _ ~ ` [ <`` and `|`, `:` and `/` for a URL or a path, and the digits
+  /// a hex id must hold. Code units rather than characters, for the reason
   /// [SentenceSplitter._endOfSentence] reads them — this runs over each
   /// character of a reply once.
-  static const _markup = {0x2A, 0x5F, 0x7E, 0x60, 0x5B, 0x3C, 0x7C};
+  static const _markup = {
+    0x2A, 0x5F, 0x7E, 0x60, 0x5B, 0x3C, 0x7C, 0x3A, 0x2F, //
+    0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39,
+  };
 }
 
 /// Sentence-sized pieces out of a reply that is still being written, so the
@@ -189,20 +243,29 @@ class SentenceSplitter {
   var _spoken = 0;
   var _text = "";
 
+  /// `_text` up to [_spoken]: what has been said.
+  var _said = "";
+
   /// Anything that has become a whole sentence since the last call. [text] is
-  /// the reply so far; a shorter one than last time is a different reply, and
-  /// starts this over.
+  /// the reply so far; one that no longer starts with what was said is a
+  /// different reply, and starts this over. The unsaid tail may change: a
+  /// stripped reply's does, when a URL or a code span in it completes.
   List<String> add(String text) {
     // Length first: `startsWith` walks the whole reply, and this is asked on
     // every look at a reply that only ever grows.
-    if (text.length < _text.length || !text.startsWith(_text)) _spoken = 0;
+    if (text.length < _spoken || !text.startsWith(_said)) {
+      _spoken = 0;
+      _said = "";
+    }
     _text = text;
+    final from = _spoken;
     final out = <String>[];
     for (var end = _endOfSentence(); end != null; end = _endOfSentence()) {
       final piece = _text.substring(_spoken, end).trim();
       _spoken = end;
       if (piece.isNotEmpty) out.add(piece);
     }
+    if (_spoken != from) _said = _text.substring(0, _spoken);
     return out;
   }
 
@@ -210,12 +273,14 @@ class SentenceSplitter {
   void reset() {
     _spoken = 0;
     _text = "";
+    _said = "";
   }
 
   /// The tail, once nothing more is coming. Empty if it was all spoken.
   String flush() {
     final rest = _text.substring(_spoken).trim();
     _spoken = _text.length;
+    _said = _text;
     return rest;
   }
 

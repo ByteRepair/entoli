@@ -868,6 +868,20 @@ extension MessageParts on Message {
   String get plainText =>
       parts.whereType<TextPart>().map((p) => p.text).join("\n");
 
+  /// The text after the last tool call: the answer, without the narration
+  /// between calls. All of it where nothing follows the last call.
+  String get finalText {
+    final last = parts.lastIndexWhere(
+      (p) => p is ToolCallPart || p is ToolResultPart,
+    );
+    final after = parts
+        .skip(last + 1)
+        .whereType<TextPart>()
+        .map((p) => p.text)
+        .join("\n");
+    return after.trim().isEmpty ? plainText : after;
+  }
+
   bool get hasText =>
       parts.whereType<TextPart>().any((p) => p.text.trim().isNotEmpty);
 

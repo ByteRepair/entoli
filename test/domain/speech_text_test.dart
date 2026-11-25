@@ -10,8 +10,54 @@ void main() {
       );
     });
 
-    test("keeps what inline code says, without the backticks", () {
+    test("keeps inline code that is a word or two, without the backticks", () {
       expect(speakable("Open `main.dart` first."), "Open main.dart first.");
+      expect(speakable("Run `flutter test` now."), "Run flutter test now.");
+    });
+
+    test("drops inline code that is not words", () {
+      expect(speakable("Run `rm -rf build` first."), "Run first.");
+      expect(speakable("Edit `lib/ui/a.dart`."), "Edit.");
+      expect(speakable("Set `x = foo(1)` here."), "Set here.");
+      expect(speakable("Use `--debug`."), "Use.");
+    });
+
+    test("says a bare URL as its host", () {
+      expect(
+        speakable("It is at https://www.github.com/a/b?c=1."),
+        "It is at a link to github.com.",
+      );
+      expect(
+        speakable("(see http://localhost:8080/x)"),
+        "(see a link to localhost)",
+      );
+      expect(speakable("<https://example.com/x>"), "a link to example.com");
+    });
+
+    test("says a link whose text is its URL as its host", () {
+      expect(
+        speakable("[https://example.com/a](https://example.com/a)"),
+        "a link to example.com",
+      );
+    });
+
+    test("drops a path, keeping the stop after it", () {
+      expect(speakable("Saved to /home/me/out/report.txt."), "Saved to.");
+      expect(speakable("Look in ~/src/app first."), "Look in first.");
+      expect(speakable("and/or 1/2"), "and/or 1/2");
+    });
+
+    test("drops a hex id, and leaves numbers and words alone", () {
+      expect(speakable("Commit 6cca6ea1 is in."), "Commit is in.");
+      expect(
+        speakable("Job 3f2a1b4c-9d8e-4f00-a1b2-c3d4e5f60718 started."),
+        "Job started.",
+      );
+      expect(
+        speakable("In 2026 there were 1234567 of them."),
+        "In 2026 there were 1234567 of them.",
+      );
+      expect(speakable("A deadbeef facade."), "A deadbeef facade.");
     });
 
     test("reads a heading as the words in it", () {
@@ -78,6 +124,17 @@ void main() {
       ]);
     });
 
+    // A stripped reply's tail changes as a URL or a code span in it completes;
+    // only what was said must stay put.
+    test("does not repeat itself when the unsaid tail changes", () {
+      final splitter = SentenceSplitter();
+      expect(splitter.add("Done. See https:"), ["Done."]);
+      expect(splitter.add("Done. See a link to e"), isEmpty);
+      expect(splitter.add("Done. See a link to example.com for this. Next"), [
+        "See a link to example.com for this.",
+      ]);
+    });
+
     test("breaks a run-on rather than holding the first sound back", () {
       final splitter = SentenceSplitter();
       final long = List.filled(80, "word").join(" ");
@@ -137,6 +194,13 @@ void main() {
     test("agrees where the markup arrives late in a line", () {
       agreesGrowing(
         "Prose for a while, and then **bold** turns up, then more.",
+      );
+    });
+
+    test("agrees over code, URLs, paths and ids mid-line", () {
+      agreesGrowing(
+        "Run `rm -rf build` then `flutter test`. See https://example.com/a. "
+        "It wrote /tmp/x/out.txt for commit 6cca6ea1, done.\nNext line.",
       );
     });
 

@@ -26,6 +26,11 @@ from playing.
 The button stays up while it reads, uncovered or not: stopping must not mean
 going looking for the button that started it.
 
+**What it reads is the answer**, `finalText`: the text after the turn's last
+tool call, not the "let me look" narration between calls. Voice mode reads the
+narration, and has to: it speaks as the reply streams, and which text is last
+is not known until the turn ends.
+
 ## The screen
 
 An orb of light, under the word for what voice mode is doing. It breathes on a
