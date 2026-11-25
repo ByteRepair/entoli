@@ -336,8 +336,8 @@ release that reads its architecture.
 (`packages/entoli_core/lib/model/model_budget.dart`) holds a model to its
 footprint — its weights and the `kvBudgetBytes` every loaded model may have —
 against what the device says it can give, and the page offers only the entries
-that fit (`LocalEngine.offers`). One that does not is still listed, greyed out,
-with what it needs beside what the device allows: hidden, a phone that fits
+that fit (`LocalEngine.offers`). One that does not is still listed, its
+download dead, with what it needs beside what the device allows: hidden, a phone that fits
 nothing showed an empty section and no reason, and the numbers are what tuning
 the shares below wants. So is the `[apple-fm] no MLX model fits` line, which
 gives the two readings the budget was made of. A list of devices and what each can run would

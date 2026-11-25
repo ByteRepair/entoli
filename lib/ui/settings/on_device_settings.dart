@@ -232,24 +232,18 @@ class _TextModels extends ConsumerWidget {
     final engine = ref.watch(localEngineProvider);
     final loaded = ref.watch(localLlmStateProvider);
     final store = engine.store;
-    // A catalog entry too heavy for this device is not offered, unless it is
-    // downloaded already, which keeps its row and runs as before. It is still
-    // listed, greyed, so an empty list says why it is empty.
-    bool fits(LocalModel model) =>
-        engine.offers(model) || installed.contains(model.id);
-    final offered = [
-      for (final model in engine.catalog)
-        if (fits(model)) model,
-      ...added,
-    ];
     final downloaded = store.downloadedSync();
-    // Not one on disk: [installed] fills after the first build, and until then
-    // [others] lists it.
-    final onDisk = {for (final model in downloaded) model.id};
-    final tooLarge = [
-      for (final model in engine.catalog)
-        if (!fits(model) && !onDisk.contains(model.id)) model,
-    ];
+    // The scan, since [installed] fills only after the first build.
+    final have = {...installed, for (final model in downloaded) model.id};
+    // A catalog entry too heavy for this device keeps its row only if it is
+    // downloaded already; otherwise it is listed with why, not offered.
+    final offered = <LocalModel>[];
+    final tooLarge = <LocalModel>[];
+    for (final model in engine.catalog) {
+      (engine.offers(model) || have.contains(model.id) ? offered : tooLarge)
+          .add(model);
+    }
+    offered.addAll(added);
     final listed = {for (final model in offered) model.id};
     // A model added by link in an earlier session, or one an older catalog
     // offered: kept, and run, until it is deleted.
@@ -272,12 +266,12 @@ class _TextModels extends ConsumerWidget {
         for (final model in offered)
           ModelDownloadTile(
             model: InstallableLocalModel(model, store),
-            installed: installed.contains(model.id),
+            installed: have.contains(model.id),
             deleteMessage: (m) =>
                 textModelDeleteMessage(m, loaded, again: true),
           ),
         for (final model in tooLarge)
-          _TooLargeTile(model: model, allowed: engine.budget.bytes),
+          _TooLargeTile(model: model, allowed: engine.budget.bytes!),
         for (final model in others)
           ModelDownloadTile(
             model: InstallableLocalModel(model, store),
@@ -300,30 +294,27 @@ class _TextModels extends ConsumerWidget {
   }
 }
 
-/// A catalog entry this device's budget does not offer: named, with what it
-/// needs beside what the device allows, and nothing to press.
+/// A catalog entry this device's budget does not offer, drawn dead the way
+/// [CatalogAction] draws a row this device cannot fetch.
 class _TooLargeTile extends StatelessWidget {
   const _TooLargeTile({required this.model, required this.allowed});
 
   final LocalModel model;
-  final int? allowed;
+  final int allowed;
 
   @override
-  Widget build(BuildContext context) {
-    final needs = formatSize(ModelBudget.footprintOf(model));
-    final limit = allowed;
-    return Opacity(
-      opacity: 0.6,
-      child: CatalogTile(
-        title: Text(model.name),
-        summary: limit == null
-            ? "Too large for this device"
-            : "Too large for this device: needs $needs, "
-                  "this device allows ${formatSize(limit)}",
-        trailing: const Icon(Icons.block),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => CatalogTile(
+    title: Text(model.name),
+    note:
+        "Too large for this device: needs "
+        "${formatSize(ModelBudget.footprintOf(model))}, this device allows "
+        "${formatSize(allowed)}",
+    trailing: const IconButton(
+      icon: Icon(Icons.download_outlined),
+      tooltip: "Download",
+      onPressed: null,
+    ),
+  );
 }
 
 /// One voice kind's catalog, every entry listed whether it is installed or

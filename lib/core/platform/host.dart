@@ -262,8 +262,7 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
     final available = memory["available"] as int?;
     final mlx = handshake["mlx"] as bool? ?? false;
     final budget = _budgetOf(workingSet, available);
-    // The page says what the smallest model needs; this says what the budget
-    // was made of, which is what tuning the share wants.
+    // Here rather than where the engine is built: the two readings are.
     if (mlx && !mlxCatalog.any(budget.fits)) {
       logFailure(
         "apple-fm",
@@ -284,22 +283,17 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
 
 Future<AppleFmProbe?>? _appleHandshake;
 
-/// Zero is not a measure: `os_proc_available_memory` answers it where it has
-/// nothing to say, and as one it offered nothing. A phone without that
-/// reading is held to Metal's alone, still a phone's share of it, so an 8 GB
-/// one is not offered what iOS would end the app for.
-ModelBudget _budgetOf(int? workingSet, int? available) => switch ((
-  workingSet,
-  available,
-)) {
-  (final w?, _) when Platform.isMacOS && w > 0 => ModelBudget.mac(w),
-  (final w?, final a?) when w > 0 && a > 0 => ModelBudget.phone(
-    workingSet: w,
-    available: a,
-  ),
-  (final w?, _) when w > 0 => ModelBudget.phone(workingSet: w, available: w),
-  _ => const ModelBudget.unknown(),
-};
+/// A zero reading is none; see "What a device is offered" in
+/// `lib/data/local/AGENTS.md`.
+ModelBudget _budgetOf(int? workingSet, int? available) =>
+    switch ((workingSet, available)) {
+      (final w?, _) when Platform.isMacOS && w > 0 => ModelBudget.mac(w),
+      (final w?, final a) when w > 0 => ModelBudget.phone(
+        workingSet: w,
+        available: a != null && a > 0 ? a : w,
+      ),
+      _ => const ModelBudget.unknown(),
+    };
 
 /// The bundle's `lib/` beside the running executable, the one its `$ORIGIN`
 /// rpath resolves. Takes [executablePath] so a test can pin each shape.
