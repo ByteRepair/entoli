@@ -2,21 +2,6 @@ import "file_picker.dart";
 import "mime.dart";
 import "models.dart";
 
-/// What the composer's Image offers where there is no photo library to pick
-/// from: the desktops' file chooser.
-const imageFileTypes = FileTypes(
-  label: "Images",
-  extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "avif"],
-  mimeTypes: [
-    "image/png",
-    "image/jpeg",
-    "image/gif",
-    "image/webp",
-    "image/bmp",
-  ],
-  uniformTypeIdentifiers: ["public.image"],
-);
-
 /// The files the user chose through [picker] as attachments, or none if they
 /// cancelled.
 Future<List<Attachment>> pickAttachments(

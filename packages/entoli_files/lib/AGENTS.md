@@ -17,13 +17,11 @@ hands back a content URI, which the plugin copies under the cache by its
 display name, so `path` is a real file there too. The composer's File is the
 core's `pickAttachments` over it, which reads the files into `Attachment`s.
 
-The composer's Image is `FilePicker.images`, which on the phones is the photo
-library rather than a file chooser: `image_picker`'s `pickMultiImage`, scaled
-like the camera's photo. That is PHPicker on iOS, and Android's Photo Picker,
-which the plugin uses by itself only from Android 16; below it the platform
-instance's `useAndroidPhotoPicker` is set first, or it opens
-`ACTION_GET_CONTENT`. The desktops have no library, and offer files filtered
-to `imageFileTypes`.
+The composer's Image is `FilePicker.images`: on the phones the photo library
+through `image_picker`'s `pickMultiImage`, scaled like the camera's photo but
+not re-encoded; on the desktops files filtered to images. Android's Photo
+Picker is the plugin's own choice only from Android 16, so
+`platformFilePicker` turns it on where the picker is bound.
 
 A filter names extensions, MIME types and uniform type identifiers together,
 since each platform reads only its own field: the desktops the extension,

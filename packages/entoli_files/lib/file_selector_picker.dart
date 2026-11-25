@@ -4,10 +4,6 @@ import "dart:typed_data";
 import "package:file_selector/file_selector.dart";
 import "package:flutter/services.dart" show PlatformException;
 import "package:image_picker/image_picker.dart" show ImagePicker, ImageSource;
-import "package:image_picker_android/image_picker_android.dart";
-import "package:image_picker_platform_interface/image_picker_platform_interface.dart"
-    show ImagePickerPlatform;
-import "package:entoli_core/model/attachment_picker.dart";
 import "package:entoli_core/model/file_picker.dart";
 import "package:entoli_core/model/log.dart";
 
@@ -22,6 +18,20 @@ class FileSelectorFilePicker implements FilePicker {
 
   // A phone's photo is 12 MP and more; a model reads no more than this.
   static const _side = 2048.0;
+
+  // Image where there is no photo library: the desktops.
+  static const _imageTypes = FileTypes(
+    label: "Images",
+    extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "avif"],
+    mimeTypes: [
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/webp",
+      "image/bmp",
+    ],
+    uniformTypeIdentifiers: ["public.image"],
+  );
 
   @override
   bool get canTakePhoto => _phone;
@@ -44,16 +54,10 @@ class FileSelectorFilePicker implements FilePicker {
 
   @override
   Future<List<PickedFile>> images() async {
-    if (!_phone) return files(types: imageFileTypes);
-    // Below Android 16 the plugin's default is the old ACTION_GET_CONTENT
-    // chooser rather than the system Photo Picker.
-    final platform = ImagePickerPlatform.instance;
-    if (platform is ImagePickerAndroid) platform.useAndroidPhotoPicker = true;
+    if (!_phone) return files(types: _imageTypes);
     try {
-      // Without full metadata iOS's PHPicker needs no Photos permission: it
-      // hands over only what was picked. No quality, unlike the camera's: it
-      // would re-encode every pick, a GIF to one frame and a screenshot lossily,
-      // where the size cap touches only what is larger.
+      // No full metadata: PHPicker then needs no Photos permission. No
+      // imageQuality: it would re-encode every pick, a GIF to one frame.
       final picked = await ImagePicker().pickMultiImage(
         maxWidth: _side,
         maxHeight: _side,
