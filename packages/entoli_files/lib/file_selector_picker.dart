@@ -22,7 +22,6 @@ class FileSelectorFilePicker implements FilePicker {
 
   // A phone's photo is 12 MP and more; a model reads no more than this.
   static const _side = 2048.0;
-  static const _quality = 85;
 
   @override
   bool get canTakePhoto => _phone;
@@ -34,7 +33,7 @@ class FileSelectorFilePicker implements FilePicker {
         source: ImageSource.camera,
         maxWidth: _side,
         maxHeight: _side,
-        imageQuality: _quality,
+        imageQuality: 85,
       );
       return file == null ? null : _Picked(file);
     } on PlatformException catch (e) {
@@ -52,11 +51,12 @@ class FileSelectorFilePicker implements FilePicker {
     if (platform is ImagePickerAndroid) platform.useAndroidPhotoPicker = true;
     try {
       // Without full metadata iOS's PHPicker needs no Photos permission: it
-      // hands over only what was picked.
+      // hands over only what was picked. No quality, unlike the camera's: it
+      // would re-encode every pick, a GIF to one frame and a screenshot lossily,
+      // where the size cap touches only what is larger.
       final picked = await ImagePicker().pickMultiImage(
         maxWidth: _side,
         maxHeight: _side,
-        imageQuality: _quality,
         requestFullMetadata: false,
       );
       return [for (final file in picked) _Picked(file)];
