@@ -4,33 +4,65 @@ import "dart:typed_data";
 import "package:file_selector/file_selector.dart";
 import "package:flutter/services.dart" show PlatformException;
 import "package:image_picker/image_picker.dart" show ImagePicker, ImageSource;
+import "package:image_picker_android/image_picker_android.dart";
+import "package:image_picker_platform_interface/image_picker_platform_interface.dart"
+    show ImagePickerPlatform;
+import "package:entoli_core/model/attachment_picker.dart";
 import "package:entoli_core/model/file_picker.dart";
 import "package:entoli_core/model/log.dart";
 
 /// The platform's own folder and file choosers, through `file_selector` — one
-/// plugin covering every platform the app runs on — and the phones' camera
-/// through `image_picker`.
+/// plugin covering every platform the app runs on — and the phones' camera and
+/// photo library through `image_picker`.
 class FileSelectorFilePicker implements FilePicker {
   const FileSelectorFilePicker();
 
   // The desktops' image_picker would only open a file chooser.
+  static bool get _phone => Platform.isAndroid || Platform.isIOS;
+
+  // A phone's photo is 12 MP and more; a model reads no more than this.
+  static const _side = 2048.0;
+  static const _quality = 85;
+
   @override
-  bool get canTakePhoto => Platform.isAndroid || Platform.isIOS;
+  bool get canTakePhoto => _phone;
 
   @override
   Future<PickedFile?> photo() async {
     try {
-      // A phone's photo is 12 MP and more; a model reads no more than this.
       final file = await ImagePicker().pickImage(
         source: ImageSource.camera,
-        maxWidth: 2048,
-        maxHeight: 2048,
-        imageQuality: 85,
+        maxWidth: _side,
+        maxHeight: _side,
+        imageQuality: _quality,
       );
       return file == null ? null : _Picked(file);
     } on PlatformException catch (e) {
       logFailure("files", "camera: ${e.code}", e.message);
       return null;
+    }
+  }
+
+  @override
+  Future<List<PickedFile>> images() async {
+    if (!_phone) return files(types: imageFileTypes);
+    // Below Android 16 the plugin's default is the old ACTION_GET_CONTENT
+    // chooser rather than the system Photo Picker.
+    final platform = ImagePickerPlatform.instance;
+    if (platform is ImagePickerAndroid) platform.useAndroidPhotoPicker = true;
+    try {
+      // Without full metadata iOS's PHPicker needs no Photos permission: it
+      // hands over only what was picked.
+      final picked = await ImagePicker().pickMultiImage(
+        maxWidth: _side,
+        maxHeight: _side,
+        imageQuality: _quality,
+        requestFullMetadata: false,
+      );
+      return [for (final file in picked) _Picked(file)];
+    } on PlatformException catch (e) {
+      logFailure("files", "photos: ${e.code}", e.message);
+      return const [];
     }
   }
 

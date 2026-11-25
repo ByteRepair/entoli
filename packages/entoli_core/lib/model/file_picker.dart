@@ -40,6 +40,10 @@ abstract interface class FilePicker {
   /// The files the user chose; none if they cancelled.
   Future<List<PickedFile>> files({String? confirmLabel, FileTypes? types});
 
+  /// The images the user chose: from the photo library on a phone, from files
+  /// offered as images elsewhere. None if they cancelled or it failed.
+  Future<List<PickedFile>> images();
+
   /// Whether [photo] has a camera to open here.
   bool get canTakePhoto;
 

@@ -542,17 +542,19 @@ void main() {
     expect(find.byType(ListView), findsNothing);
   });
 
-  testWidgets("the + button's Image and File entries open the chooser", (
-    tester,
-  ) async {
-    await pump(tester);
+  testWidgets(
+    "the + button's Image opens the photo library and File the chooser",
+    (tester) async {
+      await pump(tester);
 
-    await insertVia(tester, "Image");
-    await insertVia(tester, "File");
+      await insertVia(tester, "Image");
+      await insertVia(tester, "File");
 
-    expect(app.chooser.asked, [imageFileTypes, null]);
-    expect(controller.text, isEmpty);
-  });
+      expect(app.chooser.imagesAsked, 1);
+      expect(app.chooser.asked, [null]);
+      expect(controller.text, isEmpty);
+    },
+  );
 
   testWidgets(
     "what was chosen shows above the field and goes out with the message",

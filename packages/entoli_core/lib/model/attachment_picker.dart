@@ -2,7 +2,8 @@ import "file_picker.dart";
 import "mime.dart";
 import "models.dart";
 
-/// What the composer's Image offers.
+/// What the composer's Image offers where there is no photo library to pick
+/// from: the desktops' file chooser.
 const imageFileTypes = FileTypes(
   label: "Images",
   extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "avif"],
@@ -23,7 +24,7 @@ Future<List<Attachment>> pickAttachments(
   AttachmentKind kind,
 ) async {
   final files = switch (kind) {
-    AttachmentKind.image => await picker.files(types: imageFileTypes),
+    AttachmentKind.image => await picker.images(),
     AttachmentKind.photo => [?await picker.photo()],
     AttachmentKind.file => await picker.files(),
   };

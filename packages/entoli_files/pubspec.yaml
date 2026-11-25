@@ -22,8 +22,12 @@ dependencies:
   # Android's staging directory for what an intent is handed.
   path_provider: ^2.1.6
   file_selector: ^1.1.0
-  # The phones' camera, for the composer's Camera.
+  # The phones' camera and photo library, for the composer's Camera and Image.
   image_picker: ^1.2.4
+  # To turn on Android's Photo Picker below Android 16, through the platform
+  # instance.
+  image_picker_android: ^0.8.13
+  image_picker_platform_interface: ^2.11.2
   url_launcher: ^6.3.2
 
 dev_dependencies:
