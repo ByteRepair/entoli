@@ -242,15 +242,19 @@ class _TextModels extends ConsumerWidget {
         if (fits(model)) model,
       ...added,
     ];
+    final downloaded = store.downloadedSync();
+    // Not one on disk: [installed] fills after the first build, and until then
+    // [others] lists it.
+    final onDisk = {for (final model in downloaded) model.id};
     final tooLarge = [
       for (final model in engine.catalog)
-        if (!fits(model)) model,
+        if (!fits(model) && !onDisk.contains(model.id)) model,
     ];
     final listed = {for (final model in offered) model.id};
     // A model added by link in an earlier session, or one an older catalog
     // offered: kept, and run, until it is deleted.
     final others = [
-      for (final model in store.downloadedSync())
+      for (final model in downloaded)
         if (!listed.contains(model.id))
           OnDiskModel(id: model.id, name: model.name, source: model.url),
     ];
@@ -316,11 +320,7 @@ class _TooLargeTile extends StatelessWidget {
             ? "Too large for this device"
             : "Too large for this device: needs $needs, "
                   "this device allows ${formatSize(limit)}",
-        trailing: const IconButton(
-          tooltip: "Too large for this device",
-          icon: Icon(Icons.download),
-          onPressed: null,
-        ),
+        trailing: const Icon(Icons.block),
       ),
     );
   }

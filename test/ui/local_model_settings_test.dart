@@ -94,7 +94,6 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.byTooltip("Too large for this device"), findsOneWidget);
     app.dispose();
 
     // Downloaded on a device it fits, or before there was a measure: kept,

@@ -260,10 +260,21 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
     final memory = handshake["memory"] as Map<Object?, Object?>? ?? const {};
     final workingSet = memory["workingSet"] as int?;
     final available = memory["available"] as int?;
+    final mlx = handshake["mlx"] as bool? ?? false;
+    final budget = _budgetOf(workingSet, available);
+    // The page says what the smallest model needs; this says what the budget
+    // was made of, which is what tuning the share wants.
+    if (mlx && !mlxCatalog.any(budget.fits)) {
+      logFailure(
+        "apple-fm",
+        "no MLX model fits",
+        "workingSet=$workingSet available=$available budget=${budget.bytes}",
+      );
+    }
     return AppleFmProbe(
       handshake["reason"] as String? ?? "other",
-      mlx: handshake["mlx"] as bool? ?? false,
-      budget: _budgetOf(workingSet, available),
+      mlx: mlx,
+      budget: budget,
     );
   } catch (e) {
     logFailure("apple-fm", "handshake failed", e);
@@ -273,30 +284,22 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
 
 Future<AppleFmProbe?>? _appleHandshake;
 
-/// A phone's binding limit is the one it may not have said, and a budget
-/// without it would be the Mac's guess: nothing measured then. Zero is not a
-/// measure either, `os_proc_available_memory` answering it where it has
-/// nothing to say, and a budget of 0 offers nothing.
-ModelBudget _budgetOf(int? workingSet, int? available) {
-  final budget = switch ((workingSet, available)) {
-    (final w?, _) when Platform.isMacOS && w > 0 => ModelBudget.mac(w),
-    (final w?, final a?) when w > 0 && a > 0 => ModelBudget.phone(
-      workingSet: w,
-      available: a,
-    ),
-    _ => const ModelBudget.unknown(),
-  };
-  // The page says what the smallest model needs; this says what the budget
-  // was made of, which is what tuning the share wants.
-  if (!mlxCatalog.any(budget.fits)) {
-    logFailure(
-      "apple-fm",
-      "no MLX model fits",
-      "workingSet=$workingSet available=$available budget=${budget.bytes}",
-    );
-  }
-  return budget;
-}
+/// Zero is not a measure: `os_proc_available_memory` answers it where it has
+/// nothing to say, and as one it offered nothing. A phone without that
+/// reading is held to Metal's alone, still a phone's share of it, so an 8 GB
+/// one is not offered what iOS would end the app for.
+ModelBudget _budgetOf(int? workingSet, int? available) => switch ((
+  workingSet,
+  available,
+)) {
+  (final w?, _) when Platform.isMacOS && w > 0 => ModelBudget.mac(w),
+  (final w?, final a?) when w > 0 && a > 0 => ModelBudget.phone(
+    workingSet: w,
+    available: a,
+  ),
+  (final w?, _) when w > 0 => ModelBudget.phone(workingSet: w, available: w),
+  _ => const ModelBudget.unknown(),
+};
 
 /// The bundle's `lib/` beside the running executable, the one its `$ORIGIN`
 /// rpath resolves. Takes [executablePath] so a test can pin each shape.

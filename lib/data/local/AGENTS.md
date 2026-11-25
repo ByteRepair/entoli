@@ -354,7 +354,9 @@ is what ends an app there, and a phone gets three fifths of the smaller — on a
 UI slows the whole phone with it. A model already downloaded keeps its row
 whatever it measures, and a device that answers nothing is offered everything.
 A reading of zero is no answer: `os_proc_available_memory` returns it where it
-has nothing to say, and as a measure it offered nothing at all.
+has nothing to say, and as a measure it offered nothing at all. A phone without
+that reading gets its share of Metal's working set alone, which still offers an
+8 GB iPhone nothing.
 
 ### What the NPU actually is
 
