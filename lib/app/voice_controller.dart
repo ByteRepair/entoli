@@ -457,7 +457,7 @@ class VoiceController extends Notifier<VoiceViewState> {
       // interrupted turn, which is what the resume bar here is for — and only
       // what arrives from now on is new. `add`'s return is what would have
       // been said, and is dropped on purpose.
-      _sentences.add(_heard(last));
+      _heard(last);
       _read = last.parts;
     }
     // An approval, a question, a sub-agent starting: state changes that carry
@@ -479,12 +479,10 @@ class VoiceController extends Notifier<VoiceViewState> {
     }
   }
 
-  /// Closed once a part that is not text follows the reply's text, which is
-  /// what lets "Let me look." be said while the tool runs.
-  String _heard(Message reply) => _speakable.forSplitter(
-    reply.plainText,
-    closed: reply.parts.lastOrNull is! TextPart,
-  );
+  /// [reply]'s new whole sentences. `textEnded` is what lets "Let me look." be
+  /// said while the tool after it runs.
+  List<String> _heard(Message reply) =>
+      _sentences.add(_speakable.of(reply.plainText), ended: reply.textEnded);
 
   /// Whatever has become a whole sentence since the last look.
   void _readOn() {
@@ -494,7 +492,7 @@ class VoiceController extends Notifier<VoiceViewState> {
     final messages = ref.read(chatControllerProvider(_chatId!)).chat?.messages;
     final last = messages == null || messages.isEmpty ? null : messages.last;
     if (last == null || last.id != _reading) return;
-    for (final sentence in _sentences.add(_heard(last))) {
+    for (final sentence in _heard(last)) {
       _speak(sentence);
     }
   }

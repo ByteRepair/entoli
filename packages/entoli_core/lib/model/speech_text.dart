@@ -19,7 +19,8 @@ final _blanks = RegExp(r"\n{3,}");
 ///
 /// [needs] is every character the rule cannot match without, and is what lets
 /// [SpeakableText] leave a line holding none of them alone. Null for a rule
-/// anchored to the start of a line, which [_marked] answers for instead.
+/// anchored to the start of a line, which [_marked] answers for instead, and
+/// for an id rule, which needs a run of hex digits: see [SpeakableText._plain].
 /// [growingOnly] applies only to the line a reply is still writing.
 class _Rewrite {
   _Rewrite(String pattern, this.replace, {this.needs, this.growingOnly = false})
@@ -49,7 +50,7 @@ final _rewrites = [
   _Rewrite(r"^\s*([-*+]|\d+[.)])\s+", _nothing),
   _Rewrite(r"!\[[^\]]*\]\([^)]*\)", _nothing, needs: "["),
   _Rewrite(r"\[([^\]]*)\]\([^)]*\)", (m) => m[1] ?? "", needs: "["),
-  _Rewrite(r"<?\bhttps?://([^\s<>/?#]+)[^\s<>]*>?", _sayableUrl, needs: ":"),
+  _Rewrite(r"<?\bhttps?://([^\s<>/?#]+)[^\s<>]*>?", _sayableUrl, needs: "/"),
   // With whatever opens it, a bracket, a quote or emphasis, and only the
   // sentence's stop of what closes it.
   _Rewrite(
@@ -57,17 +58,17 @@ final _rewrites = [
     (m) => (_closers.firstMatch(m[0]!)?[0] ?? "").replaceAll(_notStop, ""),
     needs: "/",
   ),
+  // Both hold a digit, which is what the fast path looks for in a hex run.
   _Rewrite(
-    r" ?(?<![\w-])[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}(?![\w-])",
+    r" ?(?<![\w-])(?=[0-9a-fA-F-]{0,35}\d)"
+    r"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}(?![\w-])",
     _nothing,
-    needs: "0123456789",
   ),
   // A word of hex digits with a digit and a letter in it; a hyphen joins it
   // to the word beside it, which makes it prose.
   _Rewrite(
     r" ?(?<![\w-])(?=[0-9a-fA-F]*\d)(?=[0-9a-fA-F]*[a-fA-F])[0-9a-fA-F]{7,}(?![\w-])",
     _nothing,
-    needs: "0123456789",
   ),
   _Rewrite(
     r"(\*{1,3}|_{1,3}|~~)(?=\S)(.*?)(?<=\S)\1",
@@ -144,17 +145,14 @@ String _sayableCode(Match m) {
 
 String _sayableUrl(Match m) {
   final whole = m[0]!;
-  final after = whole.endsWith(">")
-      ? ""
-      : _trailing.firstMatch(whole)?[0] ?? "";
-  final host = m[1]!
-      .split("@")
-      .last
-      .split(":")
-      .first
-      .replaceAll(_trailing, "")
-      .replaceFirst(_www, "");
-  return "a link to $host$after";
+  final quoted = whole.endsWith(">");
+  final after = quoted ? "" : _trailing.firstMatch(whole)?[0] ?? "";
+  final url = whole
+      .substring(0, whole.length - (quoted ? 1 : after.length))
+      .replaceFirst("<", "");
+  final parsed = Uri.tryParse(url)?.host ?? "";
+  final host = parsed.isEmpty ? m[1]! : parsed;
+  return "a link to ${host.replaceFirst(_www, "")}$after";
 }
 
 String _joined(List<String> lines) =>
@@ -197,18 +195,10 @@ class SpeakableText {
   var _scanned = 0;
   var _dirty = false;
 
-  /// [of], for [SentenceSplitter]: with a break after it where the text is
-  /// [closed] (a part that is not text follows it), and a space where it ends
-  /// in one. The end of the text does not end a sentence, since its last word
-  /// may still grow; these are what say it will not.
-  String forSplitter(String markdown, {bool closed = false}) {
-    final said = of(markdown);
-    if (closed) return "$said\n";
-    final ended =
-        markdown.isNotEmpty &&
-        SentenceSplitter._isSpace(markdown.codeUnitAt(markdown.length - 1));
-    return ended ? "$said " : said;
-  }
+  /// The run of hex digits (and hyphens, for a UUID) the scan is in, and
+  /// whether it holds a digit: what an id rule needs, short of markup.
+  var _hexRun = 0;
+  var _hexDigit = false;
 
   String of(String markdown) {
     // The same reply again, which is most looks: a turn changes more than its
@@ -220,8 +210,7 @@ class SpeakableText {
       _prefix = "";
       _done = 0;
       _inFence = false;
-      _scanned = 0;
-      _dirty = false;
+      _rescan(0);
     } else if (markdown.length == _text.length) {
       return _was;
     }
@@ -238,8 +227,7 @@ class SpeakableText {
         if (said != null) _settle(said);
       }
       _done = settled;
-      _scanned = settled;
-      _dirty = false;
+      _rescan(settled);
     }
 
     // The line still being written: stripped afresh every time, and its fence
@@ -260,17 +248,42 @@ class SpeakableText {
   /// Whether [_spoken] would do no more to the line being written than trim it,
   /// which is what a paragraph of prose is. The anchored rules read only how
   /// the line starts and the rest read only the characters in [_markup], so a
-  /// line with neither is one every rewrite is about to leave alone.
+  /// line with neither is one every rewrite is about to leave alone. An id
+  /// rule needs seven hex digits in a row with a digit among them, so a number
+  /// in prose leaves a line plain.
   bool _plain(String tail) {
     for (; _scanned < _text.length; _scanned++) {
-      if (_markup.contains(_text.codeUnitAt(_scanned))) {
+      final c = _text.codeUnitAt(_scanned);
+      if (_markup.contains(c)) {
         _dirty = true;
+      } else if (_isDigit(c)) {
+        _hexRun++;
+        _hexDigit = true;
+      } else if (_isHexLetter(c) || c == 0x2D) {
+        _hexRun++;
+      } else {
+        _hexRun = 0;
+        _hexDigit = false;
+      }
+      if (_hexRun >= 7 && _hexDigit) _dirty = true;
+      if (_dirty) {
         _scanned = _text.length;
         break;
       }
     }
     return !_dirty && !_inFence && !_marked.hasMatch(tail);
   }
+
+  void _rescan(int from) {
+    _scanned = from;
+    _dirty = false;
+    _hexRun = 0;
+    _hexDigit = false;
+  }
+
+  static bool _isDigit(int c) => c >= 0x30 && c <= 0x39;
+  static bool _isHexLetter(int c) =>
+      (c >= 0x41 && c <= 0x46) || (c >= 0x61 && c <= 0x66);
 
   void _settle(String line) {
     // Two blank lines in a row is the `\n{3,}` collapse, done as they arrive.
@@ -302,12 +315,16 @@ class SentenceSplitter {
 
   /// `_text` up to [_spoken]: what has been said.
   var _said = "";
+  var _ended = false;
 
   /// Anything that has become a whole sentence since the last call. [text] is
   /// the reply so far; one that no longer starts with what was said is a
   /// different reply, and starts this over. The unsaid tail may change: a
   /// stripped reply's does, when a URL or a code span in it completes.
-  List<String> add(String text) {
+  ///
+  /// [ended] says the text's last word is whole (`Message.textEnded`), so a
+  /// stop at the very end of it ends a sentence.
+  List<String> add(String text, {bool ended = false}) {
     // Length first: `startsWith` walks the whole reply, and this is asked on
     // every look at a reply that only ever grows.
     if (text.length < _spoken || !text.startsWith(_said)) {
@@ -315,6 +332,7 @@ class SentenceSplitter {
       _said = "";
     }
     _text = text;
+    _ended = ended;
     final from = _spoken;
     final out = <String>[];
     for (var end = _endOfSentence(); end != null; end = _endOfSentence()) {
@@ -344,9 +362,8 @@ class SentenceSplitter {
   /// Where the next sentence ends, or null while none has. A terminator counts
   /// only before whitespace, so `3.14` and `file.dart` are not two sentences,
   /// and a line break ends one however it was punctuated — a heading and a
-  /// bullet are sentences with no full stop. The end of the text is not
-  /// whitespace: `3.` may be about to be `3.14`, and the last sentence is
-  /// [flush]'s.
+  /// bullet are sentences with no full stop. The end of the text is
+  /// whitespace only where it has [_ended]: `3.` may be about to be `3.14`.
   /// Code units rather than characters: `_text[i]` allocates a one-character
   /// string per character scanned, and this runs over the tail of a growing
   /// reply every time one is looked at.
@@ -359,9 +376,12 @@ class SentenceSplitter {
         if (said) return i + 1;
         continue;
       }
-      if (_terminators.contains(c) && i + 1 < _text.length) {
-        final next = _text.codeUnitAt(i + 1);
-        if (_isSpace(next) && !_abbreviates(i)) return i + 1;
+      if (_terminators.contains(c)) {
+        final last = i + 1 == _text.length;
+        final next = last ? _space : _text.codeUnitAt(i + 1);
+        if ((!last || _ended) && _isSpace(next) && !_abbreviates(i)) {
+          return i + 1;
+        }
       }
       final space = _isSpace(c);
       if (!space) said = true;

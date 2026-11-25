@@ -32,4 +32,11 @@ void main() {
     final reply = _reply([const MessagePart.text(text: "Let me look."), _call]);
     expect(reply.finalText, "Let me look.");
   });
+
+  test("text has ended at a space, or where a part follows it", () {
+    MessagePart says(String text) => MessagePart.text(text: text);
+    expect(_reply([says("It is 3.")]).textEnded, isFalse);
+    expect(_reply([says("It is 3. ")]).textEnded, isTrue);
+    expect(_reply([says("Let me look."), _call]).textEnded, isTrue);
+  });
 }

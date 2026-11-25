@@ -869,8 +869,7 @@ extension MessageUsage on Message {
 /// Text and files are scattered across parts; almost every caller wants one
 /// kind at a time.
 extension MessageParts on Message {
-  String get plainText =>
-      parts.whereType<TextPart>().map((p) => p.text).join("\n");
+  String get plainText => _textOf(parts);
 
   /// The text after the last tool call: the answer, without the narration
   /// between calls. All of it where nothing follows the last call.
@@ -878,13 +877,22 @@ extension MessageParts on Message {
     final last = parts.lastIndexWhere(
       (p) => p is ToolCallPart || p is ToolResultPart,
     );
-    final after = parts
-        .skip(last + 1)
-        .whereType<TextPart>()
-        .map((p) => p.text)
-        .join("\n");
+    final after = _textOf(parts.skip(last + 1));
     return after.trim().isEmpty ? plainText : after;
   }
+
+  /// Whether [plainText]'s last word is whole: it ends in whitespace, or a
+  /// part that is not text follows it. What lets speech say a sentence that
+  /// ends the text so far, which may otherwise be `3.` on its way to `3.14`.
+  bool get textEnded {
+    final last = parts.lastOrNull;
+    if (last is! TextPart) return true;
+    return last.text.isNotEmpty &&
+        last.text.trimRight().length < last.text.length;
+  }
+
+  static String _textOf(Iterable<MessagePart> parts) =>
+      parts.whereType<TextPart>().map((p) => p.text).join("\n");
 
   bool get hasText =>
       parts.whereType<TextPart>().any((p) => p.text.trim().isNotEmpty);

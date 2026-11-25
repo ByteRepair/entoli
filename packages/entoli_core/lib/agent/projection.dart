@@ -290,16 +290,6 @@ String _userText(
   return text.isEmpty ? note : "$text\n\n$note";
 }
 
-/// What a say from voice mode carries. The speech filter (`speakable`) drops
-/// code spans and paths, so the reply has to put them there and name them in
-/// words for what is read out to make sense.
-const spokenNote =
-    "(Said aloud in voice mode; your reply will be read aloud. Write it as "
-    "speech: short, plain sentences, no tables or headings. Put anything not "
-    "meant to be spoken, such as code, commands, file paths, URLs and ids, in "
-    "backticks or a code block, and say in words what it is, since it is shown "
-    "on screen but not read out.)";
-
 /// What the model reads for a `/goal` that hands it the work — the kickoff,
 /// or the word that it was resumed — or null for any other message. Worded
 /// here, off the text the log holds, so a reload and a resend read the same;

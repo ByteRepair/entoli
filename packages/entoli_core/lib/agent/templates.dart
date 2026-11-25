@@ -271,6 +271,16 @@ String summarizedTurnText(String summary, {String? carried}) {
 String participantInstructions(String participant, String instructions) =>
     "You are ${CompletionKind.agent.trigger}$participant.\n\n$instructions";
 
+/// What a say from voice mode carries. The speech filter (`speakable`) drops
+/// code spans and paths, so the reply has to put them there and name them in
+/// words for what is read out to make sense.
+const spokenNote =
+    "(Said aloud in voice mode; your reply will be read aloud. Write it as "
+    "speech: short, plain sentences, no tables or headings. Put anything not "
+    "meant to be spoken, such as code, commands, file paths, URLs and ids, in "
+    "backticks or a code block, and say in words what it is, since it is shown "
+    "on screen but not read out.)";
+
 /// A reaction, as its text: the handle of who wrote what it reacts to first,
 /// the way a mention typed to them would be, then what was reacted to. The
 /// same words for every reader; how another participant is told whose mail

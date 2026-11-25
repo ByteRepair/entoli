@@ -1,4 +1,5 @@
 import "package:entoli_core/model/speech_text.dart";
+import "package:entoli_core/model/models.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {
@@ -171,17 +172,31 @@ void main() {
   // What voice mode does: every length a reply streams through, stripped and
   // split. Each sentence is said once, in order, whatever the tail did.
   group("a streamed reply", () {
-    void saidOnce(String reply) {
+    Message reply(List<MessagePart> parts) => Message(
+      id: "r",
+      role: MessageRole.assistant,
+      createdAt: DateTime(2026),
+      parts: parts,
+    );
+
+    List<String> heard(
+      SpeakableText growing,
+      SentenceSplitter splitter,
+      Message m,
+    ) => splitter.add(growing.of(m.plainText), ended: m.textEnded);
+
+    void saidOnce(String text) {
       final growing = SpeakableText();
       final splitter = SentenceSplitter();
       final said = <String>[];
-      for (var i = 0; i <= reply.length; i++) {
-        said.addAll(splitter.add(growing.forSplitter(reply.substring(0, i))));
+      for (var i = 0; i <= text.length; i++) {
+        final so = reply([MessagePart.text(text: text.substring(0, i))]);
+        said.addAll(heard(growing, splitter, so));
       }
       said.add(splitter.flush());
       expect(
         said.where((s) => s.isNotEmpty).join(" "),
-        speakable(reply).replaceAll("\n", " "),
+        speakable(text).replaceAll("\n", " "),
       );
     }
 
@@ -196,18 +211,26 @@ void main() {
     test("a sentence is said once the space after it arrives", () {
       final growing = SpeakableText();
       final splitter = SentenceSplitter();
-      expect(splitter.add(growing.forSplitter("A long answer.")), isEmpty);
-      expect(splitter.add(growing.forSplitter("A long answer. ")), [
+      MessagePart says(String text) => MessagePart.text(text: text);
+      expect(
+        heard(growing, splitter, reply([says("A long answer.")])),
+        isEmpty,
+      );
+      expect(heard(growing, splitter, reply([says("A long answer. ")])), [
         "A long answer.",
       ]);
     });
 
-    test("a closed part's last sentence is said", () {
+    test("a part a tool call follows has its last sentence said", () {
       final growing = SpeakableText();
       final splitter = SentenceSplitter();
-      expect(splitter.add(growing.forSplitter("Let me look.", closed: true)), [
-        "Let me look.",
+      final looked = reply(const [
+        MessagePart.text(text: "Let me look."),
+        MessagePart.toolCall(
+          toolCall: ToolCall(id: "c", name: "bash"),
+        ),
       ]);
+      expect(heard(growing, splitter, looked), ["Let me look."]);
     });
 
     test("code, a decimal and bold mid-sentence", () {
@@ -278,6 +301,15 @@ void main() {
       agreesGrowing(
         "Run `rm -rf build` then `flutter test`. See https://example.com/a. "
         "It wrote /tmp/x/out.txt for commit 6cca6ea1, done.\nNext line.",
+      );
+    });
+
+    // The id rules are reached by a run of hex digits rather than by markup,
+    // so a number in prose stays on the fast path and an id does not.
+    test("agrees over numbers, hex words and ids", () {
+      agreesGrowing(
+        "In 2026 there were 3 files and a deadbeef facade, then commit "
+        "6cca6ea1 and job 3f2a1b4c-9d8e-4f00-a1b2-c3d4e5f60718 ran.",
       );
     });
 
