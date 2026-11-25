@@ -474,6 +474,10 @@ abstract class Message with _$Message {
     /// turn opener, and on every message written before sections existed.
     bool? omadaOn,
 
+    /// True on a say the user spoke in voice mode, whose reply is read aloud:
+    /// the projection tells the model so. Null on everything else.
+    bool? spoken,
+
     /// A reply's context as its last request held it, written on the turn's
     /// close (`TurnEndRecord.context`). Null on a turn that never closed, and
     /// on every reply written before the field existed.

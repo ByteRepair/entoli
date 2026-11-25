@@ -336,10 +336,13 @@ class ChatRoom {
   /// is the session the turn is rewriting underneath it. Where it is checked
   /// after that, the turn it runs goes through the room's machinery like any
   /// other, so the spinner, Stop and the composer's rules hold.
+  ///
+  /// [spoken] is a say from voice mode, whose reply is read aloud.
   Future<void> send(
     String text, {
     List<Attachment> attachments = const [],
     bool queue = false,
+    bool spoken = false,
   }) async {
     await _ready;
     if (state.chat == null) return;
@@ -361,11 +364,11 @@ class ChatRoom {
     }
     final files = await _repo.saveAttachments(chatId, attachments);
     if (state.isRunning) {
-      final say = _composeSay(text, files);
+      final say = _composeSay(text, files, spoken: spoken);
       if (queue || !_steer(say)) await _sayLater(say);
       return;
     }
-    await _prompt(text, files: files);
+    await _prompt(text, files: files, spoken: spoken);
   }
 
   /// React to [messageId] with [reaction], or take it back where it is
@@ -424,11 +427,16 @@ class ChatRoom {
   /// A say made while the room runs. The routing record rides it the moment
   /// it lands — the same stamp a fresh send writes where the prompt is not on
   /// the log yet.
-  Message _composeSay(String text, List<MessagePart> files) => _stamped(
+  Message _composeSay(
+    String text,
+    List<MessagePart> files, {
+    bool spoken = false,
+  }) => _stamped(
     _repo.composeUserPrompt(
       text,
       project: state.chat?.state.project,
       files: files,
+      spoken: spoken,
     ),
   );
 
@@ -574,6 +582,7 @@ class ChatRoom {
     String text, {
     List<MessagePart> files = const [],
     Message? replacing,
+    bool spoken = false,
   }) async {
     final chat = state.chat;
     if (chat == null || state.isRunning) return;
@@ -586,6 +595,7 @@ class ChatRoom {
       text,
       project: chat.state.project,
       files: files,
+      spoken: spoken,
     );
     if (replacing != null) {
       await _openTurn(chat: chat, prompt: userMsg, replacing: replacing);

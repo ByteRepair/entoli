@@ -416,7 +416,7 @@ class VoiceController extends Notifier<VoiceViewState> {
     // Sent whether or not the session is still on — these words were heard
     // while it was. The status is not: a stopped session is not thinking.
     if (state.isOn) _show(VoiceStatus.thinking);
-    await _chat.send(text);
+    await _chat.send(text, spoken: true);
   }
 
   /// The first word of a session started with nothing to speak into, and one
