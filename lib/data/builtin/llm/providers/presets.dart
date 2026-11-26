@@ -3,6 +3,7 @@ import "package:entoli_core/agent/llm/providers/anthropic.dart";
 import "package:entoli_core/agent/llm/providers/google.dart";
 import "package:entoli_core/agent/llm/providers/hosted.dart";
 import "package:entoli_core/agent/llm/providers/local_servers.dart";
+import "package:entoli_core/agent/llm/providers/mistral.dart";
 import "package:entoli_core/agent/llm/providers/openai.dart";
 import "package:entoli_core/agent/llm/providers/openrouter.dart";
 import "package:entoli_core/agent/llm/providers/provider.dart";
@@ -10,16 +11,22 @@ export "package:entoli_core/agent/llm/providers/anthropic.dart";
 export "package:entoli_core/agent/llm/providers/google.dart";
 export "package:entoli_core/agent/llm/providers/hosted.dart";
 export "package:entoli_core/agent/llm/providers/local_servers.dart";
+export "package:entoli_core/agent/llm/providers/mistral.dart";
 export "package:entoli_core/agent/llm/providers/openai.dart";
 export "package:entoli_core/agent/llm/providers/openrouter.dart";
 export "package:entoli_core/agent/llm/providers/provider.dart";
 
+import "antigravity_cli.dart";
 import "claude_cli.dart";
 import "cli.dart";
 import "codex_cli.dart";
+import "copilot_cli.dart";
+export "acp.dart";
+export "antigravity_cli.dart";
 export "claude_cli.dart";
 export "cli.dart";
 export "codex_cli.dart";
+export "copilot_cli.dart";
 
 /// Each preset's class, read with a config. The one list a new provider is
 /// added to: the presets and [providerOf] are both built from it.
@@ -29,6 +36,7 @@ const _kinds = <LlmProvider Function([LlmProviderConfig])>[
   OpenRouterProvider.new,
   GroqProvider.new,
   GoogleProvider.new,
+  MistralProvider.new,
   ZaiProvider.new,
   OllamaCloudProvider.new,
   OllamaProvider.new,
@@ -44,6 +52,8 @@ final llmProviderPresets = [for (final kind in _kinds) kind()];
 final _cliKinds = <LlmApi, CliProvider Function([LlmProviderConfig])>{
   LlmApi.claudeCli: ClaudeCliProvider.new,
   LlmApi.codexCli: CodexCliProvider.new,
+  LlmApi.copilotCli: CopilotCliProvider.new,
+  LlmApi.antigravityCli: AntigravityCliProvider.new,
 };
 
 /// The programs that can answer in a model's place, offered on a desktop.
@@ -56,6 +66,9 @@ const welcomeProviders = <OfferedByName>[
   OllamaCloudProvider(),
   CodexCliProvider(),
   ClaudeCliProvider(),
+  AntigravityCliProvider(),
+  CopilotCliProvider(),
+  MistralProvider(),
 ];
 
 /// The preset of the program [api] runs.

@@ -115,7 +115,7 @@ class CodexCliProvider extends CliProvider with OfferedByName {
       return CliFile(
         name: fileOf(program),
         url: Uri.parse(asset["browser_download_url"] as String),
-        sha256: digest.substring("sha256:".length),
+        checksum: CliChecksum.sha256(digest.substring("sha256:".length)),
         packing: windows ? const ZipProgram() : const TarGzProgram(),
         bytes: asset["size"] as int?,
       );

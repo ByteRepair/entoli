@@ -78,6 +78,16 @@ class OpenAiClient implements LlmClient {
   @protected
   void responded(Map<String, String> headers) {}
 
+  /// [id], a tool call's, as this host is sent it. A host that holds ids to
+  /// a shape of its own rewrites one made elsewhere, the same way each time.
+  @protected
+  String callIdOf(String id) => id;
+
+  /// The request [body] as this host takes it: the shape's own, unless a
+  /// host refuses a field in it.
+  @protected
+  Map<String, dynamic> shaped(Map<String, dynamic> body) => body;
+
   /// The field a reply's length is capped by. The shape's own is
   /// `max_tokens`; a host that renamed it overrides this.
   @protected
@@ -115,7 +125,7 @@ class OpenAiClient implements LlmClient {
       _http,
       under(baseUrl, "chat/completions"),
       headers: _headers,
-      body: {
+      body: shaped({
         "model": model,
         "messages": _encodeAll(
           mergeLeadingSystem(messages),
@@ -140,7 +150,7 @@ class OpenAiClient implements LlmClient {
         // Only the user's cap: unasked, the model writes to its own limit,
         // which this shape lets it — there is no number to guess.
         maxTokensField: ?outputLimit.cap,
-      },
+      }),
     ).onError<LlmException>((e, _) => throw refused(e));
     responded(response.headers);
 
@@ -431,7 +441,7 @@ class OpenAiClient implements LlmClient {
       case LlmRole.tool:
         return {
           "role": "tool",
-          "tool_call_id": message.toolCallId ?? "",
+          "tool_call_id": callIdOf(message.toolCallId ?? ""),
           "content": message.text,
         };
       case LlmRole.assistant:
@@ -450,7 +460,7 @@ class OpenAiClient implements LlmClient {
             "tool_calls": [
               for (final (i, call) in message.toolCalls.indexed)
                 {
-                  "id": call.id,
+                  "id": callIdOf(call.id),
                   "type": "function",
                   "function": {
                     "name": call.name,

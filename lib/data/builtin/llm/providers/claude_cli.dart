@@ -124,7 +124,7 @@ class ClaudeCliProvider extends CliProvider with OfferedByName {
         CliFile(
           name: program,
           url: Uri.parse("$releases/$version/$platform/$program"),
-          sha256: checksum,
+          checksum: CliChecksum.sha256(checksum),
           packing: const BareProgram(),
           bytes: entry["size"] as int?,
         ),

@@ -6,6 +6,7 @@ import "package:http/http.dart" as http;
 import "package:http/testing.dart";
 import "package:entoli_core/agent/llm/gemini_client.dart";
 import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:entoli_core/agent/llm/mistral_client.dart";
 import "package:entoli_core/agent/llm/openai_client.dart";
 import "package:entoli_core/agent/llm/openai_platform_client.dart";
 
@@ -498,6 +499,61 @@ void main() {
         expect((calls[1] as Map).containsKey("extra_content"), isFalse);
       },
     );
+  });
+
+  group("Mistral", () {
+    MistralClient mistral() {
+      requests = [];
+      return MistralClient(
+        baseUrl: Uri.parse("https://api.mistral.ai/v1"),
+        httpClient: MockClient.streaming((request, _) async {
+          requests.add(request);
+          return sseResponse(["[DONE]"]);
+        }),
+      );
+    }
+
+    test("is sent no field it refuses, and only an effort it takes", () async {
+      await mistral()
+          .stream(
+            const [LlmMessage(role: LlmRole.user, text: "hi")],
+            model: "mistral-large-latest",
+            reasoningEffort: "xhigh",
+          )
+          .toList();
+      final body = sentBody();
+      expect(body.containsKey("stream_options"), isFalse);
+      expect(body["reasoning_effort"], "high");
+
+      await mistral()
+          .stream(
+            const [LlmMessage(role: LlmRole.user, text: "hi")],
+            model: "mistral-large-latest",
+            reasoningEffort: "none",
+          )
+          .toList();
+      expect(sentBody().containsKey("reasoning_effort"), isFalse);
+    });
+
+    test("a call another provider made is sent under an id of nine letters "
+        "and digits, its result paired to it", () async {
+      await mistral().stream(const [
+        LlmMessage(
+          role: LlmRole.assistant,
+          toolCalls: [
+            LlmToolCall(id: "toolu_01abc", name: "bash", argumentsJson: "{}"),
+            LlmToolCall(id: "Ab3dE6gH9", name: "bash", argumentsJson: "{}"),
+          ],
+        ),
+        LlmMessage(role: LlmRole.tool, toolCallId: "toolu_01abc", text: "a"),
+        LlmMessage(role: LlmRole.tool, toolCallId: "Ab3dE6gH9", text: "b"),
+      ], model: "mistral-large-latest").toList();
+      final messages = sentBody()["messages"] as List;
+      final ids = [for (final c in messages[0]["tool_calls"] as List) c["id"]];
+      expect(ids[0], matches(RegExp(r"^[A-Za-z0-9]{9}$")));
+      expect(ids[1], "Ab3dE6gH9");
+      expect([messages[1]["tool_call_id"], messages[2]["tool_call_id"]], ids);
+    });
   });
 
   group("earlier reasoning", () {

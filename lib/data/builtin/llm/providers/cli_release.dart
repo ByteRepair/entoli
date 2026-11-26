@@ -2,6 +2,8 @@ import "dart:io";
 import "dart:isolate";
 
 import "package:archive/archive_io.dart";
+import "package:crypto/crypto.dart";
+import "package:path/path.dart" as p;
 
 /// One release of a CLI for this machine: the program, and any program it
 /// runs beside itself, each a file of its own.
@@ -25,7 +27,7 @@ class CliFile {
   const CliFile({
     required this.name,
     required this.url,
-    required this.sha256,
+    required this.checksum,
     required this.packing,
     this.bytes,
   });
@@ -35,15 +37,33 @@ class CliFile {
 
   final Uri url;
 
-  /// Lowercase hex, as the publisher states it. A file that hashes to
-  /// anything else is not installed.
-  final String sha256;
+  /// What the file must hash to. A file that hashes to anything else is not
+  /// installed.
+  final CliChecksum checksum;
 
   final CliPacking packing;
 
   /// What the publisher says the file weighs; null leaves it to the
   /// response's own length.
   final int? bytes;
+}
+
+/// A hash a publisher states beside a file, in the algorithm it chose.
+class CliChecksum {
+  const CliChecksum.sha256(String hex) : this._(sha256, hex);
+  const CliChecksum.sha512(String hex) : this._(sha512, hex);
+  const CliChecksum._(this.algorithm, this.hex);
+
+  final Hash algorithm;
+
+  /// As the publisher states it, either case.
+  final String hex;
+
+  bool matches(String digest) => digest == hex.toLowerCase();
+
+  /// [file]'s digest, hashed in a stream rather than read whole.
+  Future<String> of(File file) async =>
+      "${await algorithm.bind(file.openRead()).first}";
 }
 
 /// How a release carries its program, and so how it is taken out.
@@ -64,10 +84,13 @@ class BareProgram extends CliPacking {
   }
 }
 
-/// An archive holding the program as its one file, read in Dart so no
-/// platform needs a `tar` or `unzip` of its own. What differs is the format.
+/// An archive holding the program, read in Dart so no platform needs a
+/// `tar` or `unzip` of its own: its one file, or the one named [member]
+/// where it holds others beside it. What differs is the format.
 abstract class ArchivedProgram extends CliPacking {
-  const ArchivedProgram();
+  const ArchivedProgram({this.member});
+
+  final String? member;
 
   Archive decode(File archive);
 
@@ -76,8 +99,12 @@ abstract class ArchivedProgram extends CliPacking {
   @override
   Future<void> place(File downloaded, String executable) async {
     final path = downloaded.path;
+    final member = this.member;
     await Isolate.run(() {
-      final files = decode(File(path)).files.where((f) => f.isFile).toList();
+      final files = decode(File(path)).files
+          .where((f) => f.isFile)
+          .where((f) => member == null || p.basename(f.name) == member)
+          .toList();
       if (files.length != 1) {
         throw FormatException(
           "expected one program in $path, found ${files.length}",
@@ -91,7 +118,7 @@ abstract class ArchivedProgram extends CliPacking {
 
 /// A gzipped tarball.
 class TarGzProgram extends ArchivedProgram {
-  const TarGzProgram();
+  const TarGzProgram({super.member});
 
   @override
   Archive decode(File archive) => TarDecoder().decodeBytes(
@@ -101,7 +128,7 @@ class TarGzProgram extends ArchivedProgram {
 
 /// A zip.
 class ZipProgram extends ArchivedProgram {
-  const ZipProgram();
+  const ZipProgram({super.member});
 
   @override
   Archive decode(File archive) =>
