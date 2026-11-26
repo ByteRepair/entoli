@@ -33,6 +33,11 @@ const backupVersion = 1;
 /// shadowed by the manifest and left out of its own backup.
 const manifestName = "backup-meta.json";
 
+/// The provider keys, where the export was asked to carry them: meta beside
+/// the manifest, since they are the secret store's and not a file of the
+/// data directory. A restore hands them to the store.
+const keysName = "backup-keys.json";
+
 /// A backup that cannot be read. The message is shown to the user, so it says
 /// what is wrong with the file rather than where the read gave up.
 class BackupFormatException implements Exception {
@@ -55,6 +60,7 @@ class Backup {
     this.chats,
     this.size, {
     this.createdAt,
+    this.providerKeys = const {},
   });
 
   final String path;
@@ -78,6 +84,9 @@ class Backup {
 
   /// Null where the manifest did not say, which a hand-made one may not.
   final DateTime? createdAt;
+
+  /// Each provider's key by its id, where the export carried them.
+  final Map<String, String> providerKeys;
 }
 
 const _disk = LocalFileSystem();
@@ -91,7 +100,15 @@ final _chatState = RegExp(r"^projects/[^/]+/chats/[^/]+/state\.json$");
 /// [to] a member at a time — a backup costs disk, not memory — on an isolate of
 /// its own, so a large file compressing does not hold up a frame.
 /// [log] hears each top-level folder, and each one under it, as it goes in.
-Future<void> writeBackup(AppConfig config, String to, {StringSink? log}) async {
+///
+/// [providerKeys] go in beside the files where given, which is only where the
+/// user asked for them.
+Future<void> writeBackup(
+  AppConfig config,
+  String to, {
+  StringSink? log,
+  Map<String, String> providerKeys = const {},
+}) async {
   final dataDir = config.dataDir;
   final machineLocal = config.machineLocalFiles;
   // The lines arrive on a port of their own, so they may trail the result:
@@ -99,7 +116,9 @@ Future<void> writeBackup(AppConfig config, String to, {StringSink? log}) async {
   // capture only what it names: a completer or the log would not cross.
   final progress = ReceivePort();
   final send = progress.sendPort;
-  final zipped = Isolate.run(() => _zipData(dataDir, machineLocal, to, send));
+  final zipped = Isolate.run(
+    () => _zipData(dataDir, machineLocal, to, send, providerKeys),
+  );
   await for (final line in progress) {
     if (line == null) break;
     log?.writeln(line);
@@ -113,6 +132,7 @@ Future<void> _zipData(
   List<String> machineLocal,
   String to,
   SendPort progress,
+  Map<String, String> providerKeys,
 ) async {
   // A walk visits a folder's members together, so each is said once.
   String? last;
@@ -157,6 +177,8 @@ Future<void> _zipData(
             "createdAt": DateTime.now().toUtc().toIso8601String(),
           }),
         ),
+        if (providerKeys.isNotEmpty)
+          ArchiveFile.string(keysName, jsonEncode(providerKeys)),
       ],
       onMember: (name) {
         final parts = p.split(name);
@@ -179,7 +201,7 @@ Future<Backup> openBackup(String path) => Isolate.run(() async {
     final archive = _decoded(input);
     final members = [
       for (final file in archive.files)
-        if (file.name != manifestName) file,
+        if (!_meta.contains(file.name)) file,
     ];
     return Backup._(
       path,
@@ -187,6 +209,7 @@ Future<Backup> openBackup(String path) => Isolate.run(() async {
       members.where((file) => _chatState.hasMatch(file.name)).length,
       members.fold(0, (total, file) => total + file.size),
       createdAt: _createdAt(archive),
+      providerKeys: _keysOf(archive),
     );
   } finally {
     await input.close();
@@ -221,6 +244,24 @@ Archive _decoded(InputFileStream input) {
     );
   }
   return archive;
+}
+
+/// The members about the backup rather than of the data directory.
+const _meta = {manifestName, keysName};
+
+Map<String, String> _keysOf(Archive archive) {
+  final file = archive.findFile(keysName);
+  if (file == null) return const {};
+  try {
+    final keys = jsonDecode(utf8.decode(file.readBytes() ?? const []));
+    return {
+      if (keys is Map)
+        for (final MapEntry(:key, :value) in keys.entries)
+          if (value is String && value.isNotEmpty) "$key": value,
+    };
+  } on FormatException {
+    throw const BackupFormatException("its provider keys cannot be read");
+  }
 }
 
 DateTime? _createdAt(Archive archive) {
@@ -277,7 +318,7 @@ Future<void> _restore(
     try {
       final members = [
         for (final file in _decoded(input).files)
-          if (file.name != manifestName) file,
+          if (!_meta.contains(file.name)) file,
       ];
       // A member's name was written by whoever made the zip, and
       // `writeIncoming` is where a path from outside is made safe to join

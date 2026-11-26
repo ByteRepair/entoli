@@ -304,6 +304,19 @@ sealed class SyncMessage with _$SyncMessage {
     required String name,
   }) = SyncProjectDelete;
 
+  /// The profile and the providers as this device has them, for the peer
+  /// to merge with its own ([mergeSettings]): sent on connecting and on
+  /// every change, and answered by a [reply] carrying what the merge made,
+  /// which both then hold as agreed. [items] are by item key, a provider's
+  /// stored key among its fields. [precedence] is this device's choice of
+  /// who wins a conflict, null where none has been made; the later of the
+  /// two devices' is both's.
+  const factory SyncMessage.settingsOffer({
+    required Map<String, Map<String, dynamic>?> items,
+    Map<String, dynamic>? precedence,
+    @Default(false) bool reply,
+  }) = SyncSettingsOffer;
+
   factory SyncMessage.fromJson(Map<String, dynamic> json) =>
       _$SyncMessageFromJson(json);
 }

@@ -782,6 +782,10 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setAutoCompactPercent(int value) =>
       _update((s) => s.autoCompactPercent = value);
 
+  /// Whether an export carries the provider keys.
+  Future<void> setBackupProviderKeys(bool value) =>
+      _update((s) => s.backupProviderKeys = value);
+
   /// Whether the auto-memory subsystem runs at all.
   Future<void> setAutoMemory(bool value) =>
       _update((s) => s.autoMemory = value);

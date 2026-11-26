@@ -6,6 +6,7 @@ import "package:entoli_core/view/widgets/dialogs.dart";
 
 import "../../app/backup_actions.dart";
 import "../../data/backup.dart" show Backup, BackupFormatException;
+import "../../providers.dart";
 import "../widgets/add_button_row.dart";
 import "../widgets/live_log.dart";
 import "../widgets/section_header.dart";
@@ -90,6 +91,25 @@ class DataSettings extends ConsumerWidget {
           child: busy ? const LinearProgressIndicator(minHeight: 2) : null,
         ),
         LogPanel(ref.read(backupBusyProvider.notifier).log),
+        SwitchListTile(
+          title: const Text("Include provider keys"),
+          subtitle: const Text(
+            "Exports carry the providers' API keys, so a restore on another "
+            "device needs none typed again. Anyone holding the file can use "
+            "them.",
+          ),
+          value: ref.watch(
+            appSettingsProvider.select((s) => s.backupProviderKeys),
+          ),
+          onChanged: busy
+              ? null
+              : (value) => guarded(
+                  context,
+                  () => ref
+                      .read(appSettingsProvider.notifier)
+                      .setBackupProviderKeys(value),
+                ),
+        ),
       ],
     );
   }

@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "settings/settings_sync_choice.dart" show SettingsSyncPrompt;
 import "settings/welcome_page.dart" show openFirstRun;
 import "chat/chat_page.dart";
 import "app_command.dart";
@@ -55,12 +56,14 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) => AppMenuSync(
-    child: SidePanelFrame(
-      panel: const Sidebar(),
-      panelWidth: sidebarWidth,
-      shown: ref.watch(sidebarShownProvider),
-      onShow: () => ref.read(sidebarShownProvider.notifier).set(true),
-      child: const ChatPage(),
+    child: SettingsSyncPrompt(
+      child: SidePanelFrame(
+        panel: const Sidebar(),
+        panelWidth: sidebarWidth,
+        shown: ref.watch(sidebarShownProvider),
+        onShow: () => ref.read(sidebarShownProvider.notifier).set(true),
+        child: const ChatPage(),
+      ),
     ),
   );
 }

@@ -155,6 +155,27 @@ class LlmProviderConfig {
     if (env.isNotEmpty) "env": env,
   };
 
+  /// What of it another machine can use: all but the id, which names it, and
+  /// a CLI's program and environment, which are paths and values on this
+  /// machine. [fromPortable] reads it back.
+  Map<String, dynamic> toPortableJson() =>
+      toJson()..removeWhere((key, _) => _machineFields.contains(key));
+
+  static const _machineFields = {"id", "command", "env"};
+
+  /// [json], a [toPortableJson], as the provider [id], keeping [here]'s
+  /// program and environment where this machine has it.
+  static LlmProviderConfig? fromPortable(
+    String id,
+    Map<String, dynamic> json, {
+    LlmProviderConfig? here,
+  }) => fromJson({
+    ...json,
+    "id": id,
+    "command": ?here?.command,
+    if (here != null && here.env.isNotEmpty) "env": here.env,
+  });
+
   /// Null for anything that does not name an id and, unless it is a CLI, a
   /// base URL: a half-written entry is worse than a missing one, because it
   /// fails at the first prompt. An API this build does not know is a later

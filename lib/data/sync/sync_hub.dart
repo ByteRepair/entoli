@@ -30,11 +30,13 @@ import "artifact_bytes.dart" show ArtifactBytes;
 import "package:entoli_core/model/sync/channel.dart";
 import "pairing.dart";
 import "peers.dart";
+import "settings_sync.dart";
 import "sync_byte_cache.dart";
 
 // The two extracted pieces' types are part of what a `SyncHub` hands out.
 export "peers.dart" show PeerState, PeerStatus, SyncPeers;
 export "pairing.dart" show PairingActivity, PairingStage;
+export "settings_sync.dart";
 export "signaling/pairing_payload.dart"
     show PairingOffer, generatePairingCode, generatePsk;
 
@@ -214,7 +216,14 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     String? hostname,
     http.Client? client,
     RelayDial? relayDial,
+    required SettingsLedger settingsLedger,
   }) {
+    settingsSync = SettingsSync(
+      selfId: identity.id,
+      ledger: settingsLedger,
+      send: (id, message) async => _peers[id]?.send(message),
+      pairedAt: (id) async => (await registry.byId(id))?.addedAt,
+    );
     _signaling = SyncPairing(
       identity: identity,
       registry: registry,
@@ -234,6 +243,9 @@ class SyncHub implements ArtifactBytes, RemoteChats {
 
   final SyncIdentity identity;
   final DeviceRegistry registry;
+
+  /// The profile and providers kept in step with each peer that syncs them.
+  late final SettingsSync settingsSync;
 
   late final SyncPeers _peers = SyncPeers(registry);
 
@@ -650,6 +662,8 @@ class SyncHub implements ArtifactBytes, RemoteChats {
         break; // its frame was counted on arrival, in [SecureChannel.lastFrame]
       case SyncReply():
         break; // the asker's echo, matched below
+      case SyncSettingsOffer():
+        await settingsSync.received(peer.deviceId, message);
       case SyncWelcome(:final chats, :final omadaProjects, :final projects) ||
           SyncChatsChanged(:final chats, :final omadaProjects, :final projects):
         _omadaProjects[peer.deviceId] = omadaProjects.toSet();
@@ -1375,6 +1389,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   /// A peer finished the handshake: what this device serves goes out first.
   /// The mirror side answers it with chatOpens for whatever it follows.
   Future<void> _greet(LivePeer peer) async {
+    unawaited(settingsSync.greet(peer.deviceId));
     final repo = _repo;
     if (repo == null) return;
     final chats = await repo.listChats();
@@ -1666,6 +1681,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   /// stale snapshots — the page shows its banner and disables the composer,
   /// and a reconnect replaces the whole lot with fresh data.
   void _peerGone(String deviceId) {
+    settingsSync.gone(deviceId);
     final live = _peers.remove(deviceId);
     for (final echo in _echoes) {
       if (echo.peerId == deviceId && !echo.done.isCompleted) {
@@ -1759,6 +1775,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   Future<void> revoke(String deviceId) async {
     await _peers.remove(deviceId)?.close();
     await _signaling.forgetDevice(deviceId);
+    await settingsSync.forget(deviceId);
     // By hand, both of them: a registry read only fills gaps, so the row and
     // the mirrors would stay listed, and online, until a restart.
     for (final chatId in _mirrorsOf(deviceId)) {

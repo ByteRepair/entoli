@@ -1,6 +1,8 @@
 import "dart:convert";
 import "dart:typed_data";
 
+import "package:collection/collection.dart";
+
 import "secret_store.dart";
 
 /// The secrets that are not sync's: every provider's API key and the TURN
@@ -54,6 +56,22 @@ class AppSecrets {
       if (_providers[providerId] == key) return;
       _providers = {..._providers, providerId: key};
     }
+    await _writeProviders();
+  }
+
+  /// Each of [providerIds]' stored keys, by id; one with none is left out.
+  Map<String, String> providerKeys(Iterable<String> providerIds) => {
+    for (final id in providerIds) id: ?_providers[id],
+  };
+
+  /// [keys] stored or, where null, cleared, in one write of the store.
+  Future<void> setProviderKeys(Map<String, String?> keys) async {
+    final next = {..._providers};
+    for (final MapEntry(:key, :value) in keys.entries) {
+      value == null || value.isEmpty ? next.remove(key) : next[key] = value;
+    }
+    if (const MapEquality<String, String>().equals(next, _providers)) return;
+    _providers = next;
     await _writeProviders();
   }
 

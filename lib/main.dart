@@ -50,9 +50,11 @@ import "data/model_catalog.dart";
 import "data/prompts/bundled_skills.dart";
 import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
+import "package:path/path.dart" as p;
 import "providers.dart";
 import "ui/bot_avatar/licence.dart";
 import "app/remote_turns.dart";
+import "app/settings_sync.dart";
 import "core/app_transcript_bindings.dart";
 import "ui/app_licence.dart" show registerAppLicence, registerBlinkLicence;
 import "app/chat_edits.dart" show chatEditsProvider;
@@ -318,6 +320,10 @@ class AppSession {
       lanSignaling: platform.createLanSignaling,
       createLink: RtcLink.create,
       hostname: await hostname,
+      settingsLedger: FileSettingsLedger(
+        config.fs,
+        p.join(config.syncDir, "settings"),
+      ),
     );
     const launcher = PluginLinkLauncher();
     final container = ProviderContainer(
@@ -391,6 +397,7 @@ class AppSession {
           () => InstalledLocalModels(scans.last),
         ),
         syncHubProvider.overrideWithValue(syncHub),
+        settingsSyncProvider.overrideWithValue(syncHub.settingsSync),
       ],
     );
     settingsHome = container;
@@ -402,6 +409,8 @@ class AppSession {
     // it would otherwise run the whole handshake against a hub with no
     // repository and be sent no welcome.
     syncHub.attach(container.read(chatRepositoryProvider));
+    // Before it too: a peer greeted with no settings to read is offered none.
+    container.read(settingsSyncDriverProvider);
     await syncHub.ensureReady();
     container.read(availableModelsProvider);
     container.read(turnKeepAliveProvider);

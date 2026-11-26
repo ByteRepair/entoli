@@ -860,6 +860,59 @@ Android manifest carries `CAMERA` and a non-required camera feature for it,
 and iOS's `Info.plist` the `NSCameraUsageDescription` the permission prompt
 shows.
 
+## Keeping the profile and providers in step
+
+A pair keeps the user's profile and their providers the same on both devices,
+each provider's key with it. It is opt in per pair, and the choice is who wins
+a conflict: this device, the peer, or neither, which is the two not syncing
+these at all. The first time two devices meet with nothing chosen, both ask
+(`SettingsSyncPrompt` over the shell, the same three segments as the paired
+device's page, `SettingsSyncChoice`); a choice made on either is sent with the
+time it was made, and the later of the two devices' choices is both's
+(`SyncPrecedence.later`, ties broken by winner so both settle the same way).
+Nothing but the question travels until one has been made.
+
+The pieces are three, each a class. `mergeSettings`
+(`packages/entoli_core/lib/model/sync/settings_merge.dart`) is the pure
+merge: items are `profile` and `provider:<id>`, each a map of fields, and it
+is three-way against what the two last agreed. A field only one side changed
+since keeps that edit, so the latest edit wins wherever there is no conflict;
+one both changed differently is the winner's; an item one side removed and the
+other left alone goes, and one removed against an edit is the winner's to keep
+or drop. With nothing agreed, a first sync, an item one side has is kept and
+one both have and that differs is taken whole from the winner: the profile
+the user chose to keep, not a mix. The merge is symmetric, which the tests
+hold: either side reaches the same items. `SettingsSync`
+(`lib/data/sync/settings_sync.dart`, owned by the hub) is the exchange: on
+connecting and on every change each side sends a `settingsOffer` of what it
+has, the other merges it with its own and answers with a `reply` holding the
+result, and both store that as agreed. A reply is merged against what this
+device last sent rather than the agreed base, so an edit made while the offer
+was out is still this device's and goes out again. Every offer is answered,
+if only with the precedence, so one is never left waiting; one is out per pair
+at a time, since a second would move what the first's reply is merged
+against, and edits made meanwhile go with the offer the reply prompts. A new
+choice of precedence is which settings to keep, as at a first sync, so what
+the pair agreed under the old one is dropped. `SettingsSyncDriver`
+(`lib/app/settings_sync.dart`) is the app's side of the `SyncedSettings`
+port: it reads the settings and the secret store into items and writes merged
+items back through `setReplyStyle`, `setProviderKey` and `setProviders`, and
+tells the exchange of every change to either. A CLI provider's `command` and
+`env` are this machine's, so they are not synced and a merged provider keeps
+the local ones: `LlmProviderConfig.toPortableJson` and `fromPortable` say
+which fields those are. The exchange reaches peers by id, through the hub's
+send, and the hub tells it which are connected.
+
+What a pair agreed is kept per peer in `sync/settings/<peer-id>.json`
+(`FileSettingsLedger`), with the precedence; `SettingsSync` is its only
+writer, so it reads each once and keeps it, and the offer awaiting a reply
+lives in memory, meaning nothing past the connection. It holds a
+hash of each field, not the field, so the keys are not on disk outside the
+secret store; a hash is enough to tell which side changed a field. Unpairing
+deletes it, and the next pair asks again: a choice the peer still holds from
+before the pairing (`PairedDevice.addedAt`) is not adopted, the peer having
+forgotten nothing if only this side unpaired.
+
 ## Secrets at rest
 
 `SecretStore` is the interface; the port picks the implementation:
@@ -894,6 +947,7 @@ stays in `settings.json` beside the TURN URL.
 ```
 <dataDir>/sync/devices.json    # public: paired peers, addresses, last seen
 <dataDir>/sync/secrets.json    # private: only where no keyring answered
+<dataDir>/sync/settings/<id>.json  # per peer: precedence, agreed hashes
 ```
 
 Backups skip `sync/` entirely (`writeBackup` passes `skipDir` to `archiveOf`):
@@ -901,8 +955,9 @@ a backup must not carry private keys, and a restore wipes the data directory
 first — so `sync/` in a backup would silently unpair this device on every
 restore. The identity key itself lives in the keyring where there is one, not
 in `identity.json`, which holds only public facts. The provider keys and the
-TURN password are skipped with the same directory, which is what keeps them
-out of every export.
+TURN password are skipped with the same directory, which keeps them out of an
+export unless the user turns on Settings > Data > Include provider keys; see
+"Backing it all up" in `lib/ui/settings/AGENTS.md`.
 
 **`AppConfig.ensureDirs` is what creates the directory**, beside `projects/`
 and the prompt directories, and neither writer here makes it. That is not a

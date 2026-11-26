@@ -11,6 +11,7 @@ import "package:entoli_core/view/widgets/page_bar.dart";
 import "../../data/sync/sync_hub.dart";
 import "../../providers.dart";
 import "../widgets/section_header.dart";
+import "settings_sync_choice.dart";
 
 /// The verbatim values' face: this page's fingerprints and last address
 /// render in the bundled mono, not the platform alias the rest of the sync
@@ -221,6 +222,15 @@ class _PairedDevicePageState extends ConsumerState<PairedDevicePage> {
       ListTile(
         title: const Text("Paired"),
         subtitle: Text(describeFire(device.addedAt, DateTime.now())),
+      ),
+      const Divider(),
+      const SectionHeader(
+        "Profile and providers",
+        description: settingsSyncExplained,
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: SettingsSyncChoice(deviceId: widget.deviceId, peerName: name),
       ),
       const Divider(),
       // The peer's key, as this device stores it.

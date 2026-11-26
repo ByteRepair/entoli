@@ -213,6 +213,15 @@ abstract final class SettingKeys {
     fallback: <String>[],
   );
 
+  /// Whether an export carries the provider keys from the secret store, off
+  /// by default: a backup is a file the user moves about, and a key in it is
+  /// a key anyone holding it can spend.
+  static const backupProviderKeys = DefaultedSetting<bool>(
+    "backupProviderKeys",
+    BoolCodec(),
+    fallback: false,
+  );
+
   /// Whether the auto-memory subsystem runs: a per-project store of markdown
   /// memories the agent reads, recalls and writes with a background model.
   /// Off by default, and inert beside it until [memoryModelId] is set.

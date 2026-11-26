@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:io";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/background_work.dart";
 import "package:entoli_core/model/formatting.dart";
 
@@ -46,6 +47,13 @@ class BackupBusy extends Notifier<bool> {
   /// they cancelled.
   Future<int?> export() async {
     final config = ref.read(appConfigProvider);
+    // The file rather than the notifier, which is the whole app's to build.
+    final settings = AppSettings.load(config);
+    final providerKeys = settings.backupProviderKeys
+        ? ref
+              .read(appSecretsProvider)
+              .providerKeys(settings.llmProviders.map((p) => p.id))
+        : const <String, String>{};
     var size = 0;
     final saved = await ref
         .read(backupHandoffProvider)
@@ -54,7 +62,17 @@ class BackupBusy extends Notifier<bool> {
           // Held from the write, not the save dialog before it.
           (path) => _held(BackupWork.writing, () async {
             log.writeln("Writing the backup");
-            await writeBackup(config, path, log: log);
+            await writeBackup(
+              config,
+              path,
+              log: log,
+              providerKeys: providerKeys,
+            );
+            if (providerKeys.isNotEmpty) {
+              log.writeln(
+                "With ${plural(providerKeys.length, "provider key")}",
+              );
+            }
             size = await File(path).length();
             log.writeln("Wrote ${formatSize(size)}");
           }),
@@ -86,13 +104,18 @@ class BackupBusy extends Notifier<bool> {
       "Restoring ${backup.path}; Entoli starts again when it is done",
     );
     final restart = ref.read(appRestartProvider);
+    // Read now: the restart disposes this provider before it ends.
+    final secrets = ref.read(appSecretsProvider);
     return _held(
       BackupWork.restoring,
       () => restart.restart(
         // The platform's, which gets past proot's mode-0000 stubs an
         // earlier restore left behind, and the read-only skills.
-        whileStopped: () =>
-            restoreBackup(config, backup, deleteTree: platform.deleteTree),
+        whileStopped: () async {
+          await restoreBackup(config, backup, deleteTree: platform.deleteTree);
+          // Into the store, once the files they belong to are back.
+          await secrets.setProviderKeys(backup.providerKeys);
+        },
       ),
     );
   }

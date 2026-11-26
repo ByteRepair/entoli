@@ -160,6 +160,23 @@ void main() {
     expect(File("${config.dataDir}/$manifestName").existsSync(), isFalse);
   });
 
+  test("carries no provider key unless asked", () async {
+    expect((await archive()).findFile(keysName), isNull);
+    expect((await roundTrip()).providerKeys, isEmpty);
+  });
+
+  test("carries the provider keys it is given, beside the files", () async {
+    final path = "${out.path}/keys.zip";
+    await writeBackup(config, path, providerKeys: {"openai": "sk-1"});
+    final backup = await opened(path);
+    expect(backup.providerKeys, {"openai": "sk-1"});
+    expect(backup.members, isNot(contains(keysName)));
+
+    await restoreBackup(config, backup, deleteTree: deleteTree);
+    // The store's, not a file of the data directory.
+    expect(File("${config.dataDir}/$keysName").existsSync(), isFalse);
+  });
+
   test("a restore replaces rather than merges", () async {
     write("projects/default/chats/kept/state.json", "{}");
     final backup = await roundTrip();

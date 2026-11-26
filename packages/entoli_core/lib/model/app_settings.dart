@@ -38,6 +38,7 @@ class AppSettings {
     bool? nestedInstructions,
     List<String>? instructionExcludes,
     bool? autoMemory,
+    bool? backupProviderKeys,
     String? memoryModelId,
     String? memoryProviderId,
     bool? memoryRecall,
@@ -111,6 +112,7 @@ class AppSettings {
       ..set(SettingKeys.nestedInstructions, nestedInstructions)
       ..set(SettingKeys.instructionExcludes, instructionExcludes)
       ..set(SettingKeys.autoMemory, autoMemory)
+      ..set(SettingKeys.backupProviderKeys, backupProviderKeys)
       ..set(SettingKeys.memoryModelId, memoryModelId)
       ..set(SettingKeys.memoryProviderId, memoryProviderId)
       ..set(SettingKeys.memoryRecall, memoryRecall)
@@ -228,6 +230,10 @@ class AppSettings {
       doc.of(SettingKeys.instructionExcludes);
   set instructionExcludes(List<String> value) =>
       doc.set(SettingKeys.instructionExcludes, value);
+
+  bool get backupProviderKeys => doc.of(SettingKeys.backupProviderKeys);
+  set backupProviderKeys(bool value) =>
+      doc.set(SettingKeys.backupProviderKeys, value);
 
   bool get autoMemory => doc.of(SettingKeys.autoMemory);
   set autoMemory(bool value) => doc.set(SettingKeys.autoMemory, value);
