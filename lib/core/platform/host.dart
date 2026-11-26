@@ -174,7 +174,7 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
             ),
             _modelProcess,
             prompts: PromptCache(_kvCacheDir(cacheDir)),
-            budget: probe.budget,
+            launch: probe.memory,
             memory: _appleMemory,
           )
         : const NoLocalEngine();
@@ -204,7 +204,7 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
     ),
     store,
     prompts: prompts,
-    budget: (await memory)?.budget ?? const ModelBudget.unknown(),
+    launch: await memory,
     memory: _ramMemory,
   );
 }
@@ -216,15 +216,12 @@ String _kvCacheDir(String cacheDir) => p.join(cacheDir, "kv-cache");
 /// What llama.cpp may have of this device: its RAM, asked of Android and read
 /// off `/proc/meminfo` on Linux. Null where neither answers, which offers
 /// every model.
-Future<DeviceMemory?> _ramMemory() async {
-  if (!Platform.isAndroid) return linuxMemoryOf(_readMeminfo());
-  try {
-    return androidMemoryOf(await BundledTools.totalMemory());
-  } catch (e) {
-    logFailure("local", "RAM reading failed", e);
-    return null;
-  }
-}
+Future<DeviceMemory?> _ramMemory() async => Platform.isAndroid
+    ? androidMemoryOf(await (_androidTotal ??= BundledTools.totalMemory()))
+    : linuxMemoryOf(_readMeminfo());
+
+// Asked once: Android's RAM cannot change, and the page polls this.
+Future<int?>? _androidTotal;
 
 /// Android's RAM, of which llama.cpp gets [ModelBudget.android]'s half.
 DeviceMemory? androidMemoryOf(int? total) => total == null
@@ -285,9 +282,7 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
     return AppleFmProbe(
       handshake["reason"] as String? ?? "other",
       mlx: handshake["mlx"] as bool? ?? false,
-      budget:
-          appleMemoryOf(handshake["memory"], mac: Platform.isMacOS)?.budget ??
-          const ModelBudget.unknown(),
+      memory: appleMemoryOf(handshake["memory"], mac: Platform.isMacOS),
     );
   } catch (e) {
     logFailure("apple-fm", "handshake failed", e);
@@ -299,8 +294,8 @@ Future<AppleFmProbe?>? _appleHandshake;
 
 /// The channel's `memory` [answer]: Metal's working set, and on a phone what
 /// the OS still lets the app grow by. A phone's binding limit is the one it
-/// may not have said, and a budget without it would be the Mac's guess:
-/// nothing measured then.
+/// may not have said, and a budget without it would be the Mac's guess: the
+/// reading is still shown, its budget unknown.
 DeviceMemory? appleMemoryOf(Object? answer, {required bool mac}) {
   final memory = answer as Map<Object?, Object?>? ?? const {};
   final graphics = memory["workingSet"] as int?;
@@ -314,7 +309,13 @@ DeviceMemory? appleMemoryOf(Object? answer, {required bool mac}) {
       readings: [shown],
     );
   }
-  if (headroom == null) return null;
+  if (headroom == null) {
+    return DeviceMemory(
+      total: graphics,
+      budget: const ModelBudget.unknown(),
+      readings: [shown],
+    );
+  }
   return DeviceMemory(
     total: min(graphics, headroom),
     budget: ModelBudget.phone(workingSet: graphics, available: headroom),

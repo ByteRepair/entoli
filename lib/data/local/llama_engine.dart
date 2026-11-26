@@ -9,7 +9,7 @@ class LlamaEngine extends RuntimeEngine {
     super.runtime,
     super.store, {
     super.prompts,
-    super.budget,
+    super.launch,
     super.memory,
   });
 

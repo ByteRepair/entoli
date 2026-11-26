@@ -20,8 +20,8 @@ import "local_model.dart";
 ///   tenths of the smaller of the two — less than a Mac's share, since the UI
 ///   it draws beside the model is what the user feels. Measured on an iPhone
 ///   18 Pro (12 GB, the memory entitlement on): 8 GB of working set, 6 GB of
-///   headroom at launch, so 4.2 GB, enough for the 4B's 3.8; three fifths was
-///   3.6 and offered nothing. An 8 GB phone is still short of the 4B.
+///   headroom at launch, so 4.2 GB, enough for the 4B's 3.8 with 0.4 to
+///   spare. An 8 GB phone is short of the 4B.
 /// - **llama.cpp on Android and Linux is bounded by memory.** It reads the
 ///   weights into RAM whichever device runs them. A Linux machine gets three
 ///   fifths of it. An Android phone gets half: it shares that RAM with every

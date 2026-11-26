@@ -9,8 +9,8 @@ import "package:agent_chat/core/platform/host.dart";
 void main() {
   const gb = 1024 * 1024 * 1024;
 
-  test("a phone's models get seven tenths of the smaller reading: the "
-      "iPhone 18 Pro's, which three fifths left short of the 4B", () {
+  test("a phone's models get seven tenths of the smaller reading, the "
+      "iPhone 18 Pro's fitting the 4B", () {
     final memory = appleMemoryOf({
       "workingSet": 8 * gb,
       "available": 6 * gb,
@@ -21,8 +21,11 @@ void main() {
       "Graphics memory",
       "App headroom",
     ]);
-    // Without its binding limit a phone is not measured.
-    expect(appleMemoryOf({"workingSet": 8 * gb}, mac: false), isNull);
+    // Without its binding limit a phone's budget is not measured, though the
+    // reading it did give is still shown.
+    final partial = appleMemoryOf({"workingSet": 8 * gb}, mac: false)!;
+    expect(partial.budget.bytes, isNull);
+    expect(partial.readings.single.label, "Graphics memory");
     expect(appleMemoryOf({"workingSet": 8 * gb}, mac: true)!.total, 8 * gb);
   });
 

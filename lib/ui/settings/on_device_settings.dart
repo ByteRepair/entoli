@@ -138,13 +138,15 @@ class _MemoryBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final device = usage.device;
-    final limit = device?.budget.bytes;
-    if (device == null || limit == null || device.total <= 0) {
+    final engine = ref.watch(localEngineProvider);
+    // The launch's whole and limit, the catalog's own; the live readings go
+    // under it.
+    final device = usage.device ?? engine.launch;
+    final whole = engine.launch?.total ?? device?.total;
+    if (device == null || whole == null || whole <= 0) {
       return const SizedBox.shrink();
     }
-    final whole = device.total;
-    final engine = ref.watch(localEngineProvider);
+    final limit = engine.budget.bytes;
     final c = Theme.of(context).colorScheme;
     final colours = [c.primary, c.tertiary, c.secondary];
     final each = usage.each.entries.toList();
@@ -154,7 +156,9 @@ class _MemoryBar extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       child: SegmentedMeter(
-        mark: MeterMark(limit / whole, "Model limit ${formatSize(limit)}"),
+        mark: limit == null
+            ? null
+            : MeterMark(limit / whole, "Model limit ${formatSize(limit)}"),
         segments: [
           for (final (i, e) in each.indexed)
             MeterSegment(

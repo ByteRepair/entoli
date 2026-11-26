@@ -30,14 +30,19 @@ abstract class LocalEngine {
   /// Every model this engine's catalog has.
   List<LocalModel> get catalog;
 
+  /// What the device measured at launch: [budget]'s source, and the whole the
+  /// memory bar is drawn over. Fixed, since on a phone the live headroom
+  /// shrinks by whatever a model takes, which would shrink the bar under it.
+  DeviceMemory? get launch => null;
+
   /// What this device can give a model, which narrows what it [offers].
-  ModelBudget get budget => const ModelBudget.unknown();
+  ModelBudget get budget => launch?.budget ?? const ModelBudget.unknown();
 
   /// Whether [model] is offered to this device: whether it runs here.
   bool offers(LocalModel model) => budget.fits(model);
 
-  /// What the device reports it can give a model right now, which
-  /// [budget] was made from at launch; null where it reports nothing.
+  /// What the device reports right now, the readings shown under the bar;
+  /// null where it reports nothing.
   Future<DeviceMemory?> deviceMemory() async => null;
 
   LocalModelStore get store;
@@ -145,14 +150,14 @@ abstract class RuntimeEngine extends LocalEngine {
     this.runtime,
     this.store, {
     this.prompts,
-    this.budget = const ModelBudget.unknown(),
+    this.launch,
     this.memory,
   }) : residency = Residency(runtime, store);
 
   final LocalRuntime runtime;
 
   @override
-  final ModelBudget budget;
+  final DeviceMemory? launch;
 
   /// Where [deviceMemory] is read from; null where the platform says nothing.
   final Future<DeviceMemory?> Function()? memory;

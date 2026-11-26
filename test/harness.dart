@@ -226,7 +226,14 @@ class TestApp {
         ? LlamaEngine(
             runtime,
             onDevice,
-            budget: localBudget,
+            // A bare budget stands for a launch that measured it alone.
+            launch:
+                deviceMemory ??
+                DeviceMemory(
+                  total: localBudget.bytes ?? 0,
+                  budget: localBudget,
+                  readings: const [],
+                ),
             memory: () async => deviceMemory,
           )
         : NoLocalEngine(missingFromBuild: localEngineMissing);

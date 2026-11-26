@@ -59,6 +59,8 @@ class SegmentedMeter extends StatelessWidget {
     // Over the whole, the bar is full rather than overflowing.
     final scale = used > 1 ? used : 1.0;
     final mark = this.mark;
+    // Shrunk with the segments, so it stays where it falls among them.
+    final at = (mark?.fraction ?? 0) / scale;
     // Flex wants integers; a thousandth is finer than a pixel here.
     int flex(double f) => (f * 1000).round();
     final drawn = [
@@ -72,7 +74,7 @@ class SegmentedMeter extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Align(
-              alignment: Alignment(mark.fraction * 2 - 1, 0),
+              alignment: Alignment(at * 2 - 1, 0),
               child: Text(
                 mark.label,
                 style: theme.textTheme.labelSmall?.copyWith(color: muted),
@@ -130,7 +132,7 @@ class SegmentedMeter extends StatelessWidget {
                   // Haloed in the surface colour, so it shows over any
                   // segment's colour as well as over the track.
                   Positioned(
-                    left: constraints.maxWidth * mark.fraction - 2,
+                    left: constraints.maxWidth * at - 2,
                     top: 0,
                     bottom: 0,
                     child: Container(

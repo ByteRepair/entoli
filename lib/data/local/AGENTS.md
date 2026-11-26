@@ -347,8 +347,8 @@ the 4B and not the 9B. Apple's comes from the handshake: Metal's
 gets three quarters; on iOS also what the OS still lets the app grow by, which
 is what ends an app there, and a phone gets seven tenths of the smaller. That
 share is measured, not guessed: an iPhone 18 Pro with the memory entitlement
-reads 8 GB of working set and 6 GB of headroom at launch, three fifths of which
-fell 0.2 GB short of the 4B. An 8 GB iPhone is still offered nothing, since a
+reads 8 GB of working set and 6 GB of headroom at launch, so 4.2 GB against the
+4B's 3.8. An 8 GB iPhone is offered nothing, since a
 model that slows the UI slows the whole phone with it. A model already
 downloaded keeps its row whatever it measures, and a device that answers
 nothing is offered everything.
