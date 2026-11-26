@@ -2,8 +2,11 @@ import "dart:convert";
 import "dart:ffi" show Abi;
 import "dart:io";
 
+import "package:file/local.dart";
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
+import "package:entoli_core/model/documents.dart" show writeThroughRename;
+import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/llm_provider.dart";
 import "package:entoli_core/model/model_info.dart";
 import "package:entoli_core/agent/llm/providers/provider.dart";
@@ -73,18 +76,35 @@ class AntigravityCliProvider extends AcpProvider with OfferedByName {
   /// Its permissions are by file: Entoli's server let through, since the
   /// loop has its own approvals, and everything of its own asked about,
   /// which the session refuses.
+  ///
+  /// Every session start prepares, several at once where sub-agents start
+  /// beside a turn, so the writes are one at a time per file and each
+  /// through a rename: a program starting beside one never reads it torn.
   @override
-  Future<void> prepare() async {
-    final file = File(
-      p.join(dataDirectory, ".gemini", "antigravity-cli", "settings.json"),
+  Future<void> prepare() {
+    final path = p.join(
+      dataDirectory,
+      ".gemini",
+      "antigravity-cli",
+      "settings.json",
     );
+    final next = (_preparing[path] ?? Future<void>.value()).then(
+      (_) => _prepare(File(path)),
+    );
+    _preparing[path] = next.then<void>((_) {}, onError: (Object _) {});
+    return next;
+  }
+
+  static final _preparing = <String, Future<void>>{};
+
+  Future<void> _prepare(File file) async {
     var settings = <String, dynamic>{};
     if (file.existsSync()) {
       try {
         final read = jsonDecode(await file.readAsString());
         if (read is Map<String, dynamic>) settings = read;
-      } on FormatException {
-        // Its own file, rewritten whole.
+      } on FormatException catch (e) {
+        logFailure("cli", "Antigravity's settings would not parse", e);
       }
     }
     final permissions = switch (settings["permissions"]) {
@@ -101,7 +121,11 @@ class AntigravityCliProvider extends AcpProvider with OfferedByName {
       "permissions": {...permissions, "allow": allow.toList()},
     };
     await file.parent.create(recursive: true);
-    await file.writeAsString(jsonEncode(settings));
+    await writeThroughRename(
+      const LocalFileSystem(),
+      file.path,
+      utf8.encode(jsonEncode(settings)),
+    );
   }
 
   /// Google's own updater's manifests: per platform, the newest version, its

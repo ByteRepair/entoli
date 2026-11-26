@@ -541,7 +541,12 @@ void main() {
         LlmMessage(
           role: LlmRole.assistant,
           toolCalls: [
-            LlmToolCall(id: "toolu_01abc", name: "bash", argumentsJson: "{}"),
+            LlmToolCall(
+              id: "toolu_01abc",
+              name: "bash",
+              argumentsJson: "{}",
+              signature: "gemini's",
+            ),
             LlmToolCall(id: "Ab3dE6gH9", name: "bash", argumentsJson: "{}"),
           ],
         ),
@@ -553,6 +558,10 @@ void main() {
       expect(ids[0], matches(RegExp(r"^[A-Za-z0-9]{9}$")));
       expect(ids[1], "Ab3dE6gH9");
       expect([messages[1]["tool_call_id"], messages[2]["tool_call_id"]], ids);
+      // A Gemini call's signature is a field Mistral refuses.
+      for (final call in messages[0]["tool_calls"] as List) {
+        expect((call as Map).containsKey("extra_content"), isFalse);
+      }
     });
   });
 

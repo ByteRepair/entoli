@@ -1,5 +1,6 @@
 import "dart:async";
 import "dart:convert";
+import "dart:math";
 
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/agent/llm/llm_client.dart";
@@ -63,11 +64,25 @@ abstract class AcpProvider extends CliProvider {
   /// By the protocol's `logout` where the program offers it, else by its
   /// [signOutArguments] where it has any; a program with neither keeps its
   /// sign-in in [dataDirectory], which Sign in again then starts over.
+  ///
+  /// A sign-in that outlives all three is somewhere Entoli does not keep it,
+  /// the system's credential store, and is said rather than left for Sign
+  /// in again to find signed in.
   @override
   Future<void> signOut() async {
-    if (await AcpSession.logOut(this)) return;
+    try {
+      if (await AcpSession.logOut(this)) return;
+    } catch (e) {
+      logFailure("cli", "signing ${config.displayName} out by the protocol", e);
+    }
     if (signOutArguments.isNotEmpty) return super.signOut();
     await forget();
+    if (await signedIn()) {
+      throw LlmException(
+        "${config.displayName} is still signed in from the system's "
+        "credential store. Sign it out there, or with /logout in $command.",
+      );
+    }
   }
 
   @override
@@ -81,10 +96,25 @@ abstract class AcpProvider extends CliProvider {
 class AcpRefused extends LlmException {
   const AcpRefused(super.message, this.code);
 
+  /// [error], a JSON-RPC error object from [name]; `auth_required` said as
+  /// what to do about it.
+  factory AcpRefused.of(Object? error, String name) {
+    final code = error is Map ? (error["code"] as num?)?.toInt() : null;
+    final message = error is Map ? "${error["message"]}" : "$error";
+    return AcpRefused(
+      code == _authRequired
+          ? "$name is not signed in. Sign it in again."
+          : message,
+      code,
+    );
+  }
+
+  static const _authRequired = -32000;
+
   final int? code;
 
   /// ACP's `auth_required`.
-  bool get unauthorized => code == -32000;
+  bool get unauthorized => code == _authRequired;
 }
 
 /// One ACP agent and the one session it holds.
@@ -120,8 +150,29 @@ class AcpSession extends CliProcessSession {
   /// Calls handed to the loop, by id, waiting on its results.
   final _reported = <String, HeldToolCall>{};
 
+  /// What makes this session's call ids its own: the loop keys sub-agents
+  /// and jobs by a call's id, and a chat outlives its sessions.
+  final _tag = _randomTag();
   var _nextCall = 0;
   var _nextId = 0;
+
+  /// Text the agent streamed after its calls were handed out: the bridge and
+  /// stdout are two channels, so a chunk written before a call can be read
+  /// after it. Said at the head of the next reply.
+  final _late = <LlmChunk>[];
+
+  static String _randomTag() {
+    const digits = "0123456789abcdefghijklmnopqrstuvwxyz";
+    final random = Random.secure();
+    return String.fromCharCodes([
+      for (var i = 0; i < 8; i++)
+        digits.codeUnitAt(random.nextInt(digits.length)),
+    ]);
+  }
+
+  /// How long a request other than a prompt is waited on: a program that
+  /// will not answer `initialize` would otherwise hold a sign-in check open.
+  static const _answerWithin = Duration(seconds: 60);
   final _waiting = <int, Completer<Object?>>{};
 
   static Future<AcpSession> start(AcpProvider provider, CliSessionSpec spec) {
@@ -303,6 +354,11 @@ class AcpSession extends CliProcessSession {
 
   @override
   void answer(List<LlmMessage> results) {
+    final out = current!;
+    for (final chunk in _late) {
+      out.add(chunk);
+    }
+    _late.clear();
     for (final result in results) {
       _reported.remove(result.toolCallId)!.answer(result);
     }
@@ -319,11 +375,7 @@ class AcpSession extends CliProcessSession {
       _turnEnded,
       onError: (Object e) {
         _turnEnded(null);
-        end(
-          error: e is AcpRefused && e.unauthorized
-              ? LlmException("$name is not signed in. Sign it in again.")
-              : e,
-        );
+        end(error: e);
       },
     );
   }
@@ -372,14 +424,7 @@ class AcpSession extends CliProcessSession {
     if (waiting == null) return;
     final error = message["error"];
     if (error != null) {
-      waiting.completeError(
-        error is Map
-            ? AcpRefused(
-                "${error["message"]}",
-                (error["code"] as num?)?.toInt(),
-              )
-            : AcpRefused("$error", null),
-      );
+      waiting.completeError(AcpRefused.of(error, name));
     } else {
       waiting.complete(message["result"]);
     }
@@ -444,14 +489,16 @@ class AcpSession extends CliProcessSession {
         _ => null,
       };
 
-  /// Adds [delta] to [said] and streams it, where an exchange is open. One
-  /// that is not is the agent going on without Entoli's loop, and what it
-  /// holds is no longer the conversation the loop has.
+  /// Adds [delta] to [said] and streams it, where an exchange is open; held
+  /// for the next where the turn is still open on calls handed out. Output
+  /// with no turn open is the agent going on without Entoli's loop, and what
+  /// it holds is no longer the conversation the loop has.
   void _say(StringBuffer said, String delta, LlmChunk Function(String) chunk) {
     final out = current;
-    if (out == null) return strayed();
     said.write(delta);
-    out.add(chunk(delta));
+    if (out != null) return out.add(chunk(delta));
+    if (_turnOpen && _reported.isNotEmpty) return _late.add(chunk(delta));
+    strayed();
   }
 
   /// A call from the agent over the bridge: queued for the reply it ends.
@@ -460,7 +507,7 @@ class AcpSession extends CliProcessSession {
       call.fail(HeldToolCall.stopped);
       return;
     }
-    _queued.add(_Call("acp_${++_nextCall}", call));
+    _queued.add(_Call("acp_${_tag}_${++_nextCall}", call));
     _handOutSoon();
   }
 
@@ -473,6 +520,7 @@ class AcpSession extends CliProcessSession {
     }
     _queued.clear();
     _reported.clear();
+    _late.clear();
     if (result is! Map) return;
     final stop = switch (result["stopReason"]) {
       "max_tokens" => LlmStop.truncated,
@@ -526,7 +574,15 @@ class AcpSession extends CliProcessSession {
     final done = Completer<Object?>();
     _waiting[id] = done;
     write({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
-    return done.future;
+    // A prompt turn runs as long as the work does.
+    if (method == "session/prompt") return done.future;
+    return done.future.timeout(
+      _answerWithin,
+      onTimeout: () {
+        _waiting.remove(id);
+        throw LlmException("$name did not answer $method");
+      },
+    );
   }
 
   /// Clears what the exchange has said, with it.

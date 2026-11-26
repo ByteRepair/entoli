@@ -1144,6 +1144,14 @@ void main() {
           [("echo", '{"text":"a"}'), ("echo", '{"text":"b"}')],
         );
         final [first, second] = calls.message.toolCalls;
+        // Its own: a chat outlives its sessions, and the loop keys
+        // sub-agents and jobs by a call's id.
+        expect(first.id, matches(RegExp(r"^acp_[a-z0-9]{8}_1$")));
+        expect(second.id, "${first.id.substring(0, 13)}2");
+
+        // Text read after its calls went out, as stdout and the bridge
+        // race, opens the next reply rather than straying the session.
+        chunk(process, "late. ");
 
         // A permission for one of its own tools is refused.
         process.say({
@@ -1191,7 +1199,7 @@ void main() {
         answer(process, prompt, {"stopReason": "end_turn"});
         final done = await secondStep;
         expect(done.stop, LlmStop.answered);
-        expect(done.message.text, "echo said one and two");
+        expect(done.message.text, "late. echo said one and two");
         expect(done.usage?.inputTokens, 900);
 
         // The next user turn is the same session's next prompt.

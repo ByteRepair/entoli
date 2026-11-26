@@ -28,7 +28,8 @@ class MistralClient extends OpenAiClient {
   }
 
   /// Usage comes on the last frame unasked, and `stream_options` is a field
-  /// it does not know. Its effort is low, medium or high.
+  /// it does not know; nor is a Gemini call's `extra_content`, replayed from
+  /// earlier in the chat. Its effort is low, medium or high.
   @override
   Map<String, dynamic> shaped(Map<String, dynamic> body) {
     final effort = switch (body["reasoning_effort"]) {
@@ -39,8 +40,27 @@ class MistralClient extends OpenAiClient {
     };
     return {
       for (final MapEntry(:key, :value) in body.entries)
-        if (key != "stream_options" && key != "reasoning_effort") key: value,
+        if (key == "messages")
+          key: [for (final message in value as List) _unsigned(message)]
+        else if (key != "stream_options" && key != "reasoning_effort")
+          key: value,
       "reasoning_effort": ?effort,
+    };
+  }
+
+  static Object? _unsigned(Object? message) {
+    if (message is! Map<String, dynamic>) return message;
+    final calls = message["tool_calls"];
+    if (calls is! List) return message;
+    return {
+      ...message,
+      "tool_calls": [
+        for (final call in calls)
+          if (call is Map<String, dynamic>)
+            {...call}..remove("extra_content")
+          else
+            call,
+      ],
     };
   }
 }

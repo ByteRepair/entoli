@@ -53,6 +53,15 @@ class CopilotCliProvider extends AcpProvider with OfferedByName {
   @override
   List<String> get signInArguments => const ["login", "--web-flow"];
 
+  /// The machine's own Copilot settings and GitHub tokens are not the
+  /// provider's: a token in the environment would sign it in as whoever
+  /// that is, and a `COPILOT_MODEL` would pick the model over the chat's.
+  @override
+  bool inherits(String name, Map<String, String> inherited) =>
+      !name.startsWith("COPILOT_") &&
+      name != "GH_TOKEN" &&
+      name != "GITHUB_TOKEN";
+
   /// Its config, its sign-in where there is no system credential store, its
   /// logs and sessions.
   @override

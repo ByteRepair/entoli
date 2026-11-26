@@ -285,23 +285,36 @@ user turn is a `session/prompt`; text and thought chunks stream as they come,
 calls Entoli's tools through the bridge: calls read together are one reply
 (`Timer.run`, as Codex's), the bridge holds each, and the next step's results
 answer them; the prompt's response ends the last reply, by its `stopReason`.
-A permission the agent asks for is for a tool of its own and is refused
-(`reject_once`); any other request is answered with an error.
+A call's id is `acp_<tag>_<n>`, the tag random per session, since the loop
+keys sub-agents and jobs by it and a chat outlives its sessions. The bridge
+and stdout are two channels, so text the agent wrote before a call can be read
+after the reply carrying it went out: it is held and opens the next reply,
+and only output with no prompt turn open strays the session. Every request but
+`session/prompt` is waited on for a minute, so an agent that never answers
+`initialize` cannot hold a sign-in check open. A permission the agent asks for
+is for a tool of its own and is refused (`reject_once`); any other request is
+answered with an error.
 
 Neither has a status command, so `signedIn` opens a session and an
-`auth_required` (-32000) is signed out; `signOut` is ACP's `logout` where the
-agent advertises it, and otherwise the provider's folders forgotten.
+`auth_required` (-32000) is signed out, and said as "sign it in again"
+wherever it comes back; `signOut` is ACP's `logout` where the agent advertises
+it, and otherwise the provider's folders forgotten, then checked: a sign-in
+kept in the system's credential store survives that, and is said rather than
+left for Sign in again to find still signed in.
 Copilot's own tools are held off by its flags — `--deny-tool` for shell,
 write, url and memory, `--disable-builtin-mcps`, `--no-custom-instructions` —
 and Entoli's server let through by `--allow-tool=entoli`; its home is
-`COPILOT_HOME`, the model also `COPILOT_MODEL`, the effort `--effort`, and it
+`COPILOT_HOME`, the model also `COPILOT_MODEL`, the effort `--effort`. The
+machine's `COPILOT_*`, `GH_TOKEN` and `GITHUB_TOKEN` are not inherited, since
+a token there signs it in as whoever that is. It
 signs in by `copilot login --web-flow`, whose page calls back to a loopback
 port. Its release is GitHub's: one tarball (a zip on Windows) holding the one
 program, its SHA-256 the asset's `digest`. Antigravity names no variable for
 its home, so `HOME` (and `USERPROFILE`) is moved to the provider's data folder,
 and its permissions are by file: `prepare` writes `toolPermission` and an
 allow of `mcp(entoli/*)` into `.gemini/antigravity-cli/settings.json` there,
-keeping what else the file says. It signs in by `agy acp --login`. Its release
+keeping what else the file says, through a rename and one write at a time,
+since sub-agents start sessions beside a turn's. It signs in by `agy acp --login`. Its release
 is the manifest its own installer reads, per platform, naming the archive and
 its SHA-512 (`CliChecksum.sha512`); the tarball holds `antigravity` beside
 other files, taken out by name (`TarGzProgram(member:)`). The models each
