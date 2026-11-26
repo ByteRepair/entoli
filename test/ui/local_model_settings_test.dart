@@ -157,10 +157,14 @@ void main() {
     expect(find.text(formatSize(models)), findsOneWidget);
     expect(find.text("For the app"), findsOneWidget);
     expect(find.text(formatSize(6 * gb - models)), findsOneWidget);
-    expect(find.text("Graphics memory"), findsOneWidget);
-    expect(find.text(formatSize(8 * gb)), findsOneWidget);
-    expect(find.text("App headroom"), findsOneWidget);
-    expect(find.text(formatSize(6 * gb)), findsOneWidget);
+    expect(
+      find.text("Graphics memory ${formatSize(8 * gb)}", findRichText: true),
+      findsOneWidget,
+    );
+    expect(
+      find.text("App headroom ${formatSize(6 * gb)}", findRichText: true),
+      findsOneWidget,
+    );
     expect(find.textContaining("Smallest model"), findsOneWidget);
     expect(
       find.text("No models fit this device's hardware requirements"),

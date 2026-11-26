@@ -168,7 +168,7 @@ class _DeviceMemory extends ConsumerWidget {
             "For the app",
             formatSize(total - models),
             (total - models) / total,
-            colours.outlineVariant,
+            colours.tertiary,
           ),
         ],
         readings: [
