@@ -216,7 +216,8 @@ actor MlxModels {
     // MLX's errors caught inside the task, so a failed load throws from it
     // and is not kept, and every caller waiting on it hears the same.
     let loading = models[id] ?? Task {
-      try await catchingMlx { _ in
+      try MlxMemory.checkFits(directory)
+      return try await catchingMlx { _ in
         let container = try await loadModelContainer(
           from: URL(fileURLWithPath: directory), using: #huggingFaceTokenizerLoader())
         // Counted now, while nothing else holds the model.

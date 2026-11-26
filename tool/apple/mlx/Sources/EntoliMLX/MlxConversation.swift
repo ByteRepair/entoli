@@ -48,20 +48,31 @@ actor MlxConversation {
   private var stopGeneration: (@Sendable () -> Void)?
   private var unloaded = false
 
-  /// How many operations are running, and the unload waiting for none to be.
+  /// How many operations are running or queued, and the unload waiting for
+  /// none to be.
   private var operations = 0
   private var whenIdle: [CheckedContinuation<Void, Never>] = []
 
+  /// Whether an operation holds the model, and those queued behind it, first
+  /// come first served.
+  private var running = false
+  private var queued: [CheckedContinuation<Void, Never>] = []
+
   /// Runs `body` as one of the operations an unload waits for, handing it the
   /// model and the box MLX's errors land in (`catchingMlx`); throws
-  /// `MlxUnloaded` once the model is being let go of. Whatever
+  /// `MlxUnloaded` once the model is being let go of.
+  ///
+  /// **One at a time.** An actor lets the next call in at every `await`, so
+  /// without the queue a title asked of the chat's own model, a sub-agent or
+  /// a restore would start mid-reply and replace the session the reply is
+  /// carrying on. llama.cpp's one slot queues the same way. Whatever
   /// `body` holds is let go of before the count falls, since nothing awaits
   /// between its return and the unload that count wakes running on this
   /// actor.
   private func operation<T>(
     _ body: (ModelContainer, ErrorBox) async throws -> T
   ) async throws -> T {
-    guard !unloaded, let container else { throw MlxUnloaded() }
+    guard !unloaded, container != nil else { throw MlxUnloaded() }
     operations += 1
     defer {
       operations -= 1
@@ -70,6 +81,22 @@ actor MlxConversation {
         whenIdle = []
       }
     }
+    if running {
+      await withCheckedContinuation { queued.append($0) }
+    } else {
+      running = true
+    }
+    defer {
+      if queued.isEmpty {
+        running = false
+      } else {
+        queued.removeFirst().resume()
+      }
+    }
+    // Asked again: the model may have been let go of, or the caller have
+    // stopped, while this one waited its turn.
+    guard !unloaded, let container else { throw MlxUnloaded() }
+    try Task.checkCancellation()
     return try await catchingMlx { try await body(container, $0) }
   }
 

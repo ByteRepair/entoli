@@ -1,5 +1,6 @@
 #if os(iOS)
 import Flutter
+import UIKit
 #else
 import FlutterMacOS
 #endif
@@ -23,7 +24,31 @@ final class MlxChannel: GenerationChannel {
 
   static func register(with messenger: FlutterBinaryMessenger) {
     instance = MlxChannel(name: "agent_chat/mlx", messenger: messenger)
+    #if os(iOS)
+    instance?.stopOffScreen()
+    #endif
   }
+
+  /// Off screen, iOS refuses an app's GPU work, so a reply there could only
+  /// fail at its next command buffer. It is stopped as the app leaves, and
+  /// one asked for meanwhile is refused, both ending in `background`.
+  private let offScreen = Flag()
+
+  #if os(iOS)
+  private func stopOffScreen() {
+    let center = NotificationCenter.default
+    center.addObserver(
+      forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+    ) { [weak self] _ in
+      guard let self else { return }
+      offScreen.value = true
+      Task { @MainActor in await self.stopGenerations() }
+    }
+    center.addObserver(
+      forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main
+    ) { [weak self] _ in self?.offScreen.value = false }
+  }
+  #endif
 
   /// Every generation cancelled, returning once each has ended: what a model
   /// host does before it leaves, so no generation is still encoding GPU work
@@ -73,6 +98,7 @@ final class MlxChannel: GenerationChannel {
     // Dart always sends one; the fallback is its default, for a caller that
     // somehow did not.
     let maxTokens = args["maxTokens"] as? Int ?? 8192
+    guard !offScreen.value else { return sendOffScreen(id) }
     do {
       try await Mlx.generate(
         args["model"] as? String ?? "",
@@ -95,6 +121,10 @@ final class MlxChannel: GenerationChannel {
         @unknown default: break
         }
       }
+    } catch where offScreen.value {
+      // Whatever it ended in — the stop, or the GPU refusing first — it
+      // ended because the app left the screen.
+      sendOffScreen(id)
     } catch is CancellationError {
       // A stop: cancelled, not failed, so nothing is said.
     } catch is MlxUnloaded {
@@ -106,5 +136,20 @@ final class MlxChannel: GenerationChannel {
     } catch {
       sendError(id, "other", "\(error)")
     }
+  }
+
+  private func sendOffScreen(_ id: String) {
+    sendError(id, "background", "The app left the screen.")
+  }
+}
+
+/// A flag set on the main thread and read by a generation's task.
+private final class Flag: @unchecked Sendable {
+  private let lock = NSLock()
+  private var raised = false
+
+  var value: Bool {
+    get { lock.withLock { raised } }
+    set { lock.withLock { raised = newValue } }
   }
 }

@@ -37,6 +37,28 @@ enum MlxMemory {
     #endif
   }
 
+  /// Refuses a load whose weights would not fit in what the OS still allows,
+  /// with the reserve kept. The weights are read on a dispatch queue, out of
+  /// reach of the checks a reply makes, so a load that ran out partway would
+  /// end the app rather than fail.
+  static func checkFits(_ directory: String) throws {
+    #if os(iOS)
+    let files = (try? FileManager.default.contentsOfDirectory(atPath: directory)) ?? []
+    let weights = files.filter { $0.hasSuffix(".safetensors") }.reduce(0) { sum, name in
+      let path = (directory as NSString).appendingPathComponent(name)
+      let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? Int) ?? 0
+      return sum + size
+    }
+    let headroom = Int(os_proc_available_memory())
+    if weights + reserve > headroom {
+      let gb = { (bytes: Int) in String(format: "%.1f GB", Double(bytes) / 1e9) }
+      throw MlxFailure(
+        code: "resources",
+        description: "This model needs \(gb(weights + reserve)), and the app has \(gb(headroom)) left.")
+    }
+    #endif
+  }
+
   /// Close enough to the OS's limit that the next step could be the one it
   /// ends the app for. MLX's soft limit only slows it down, so this is what
   /// stops it.
