@@ -11,6 +11,8 @@ import "package:entoli_core/model/model_budget.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
+import "package:agent_chat/core/platform/host.dart" show appleMemoryOf;
+import "package:agent_chat/ui/widgets/segmented_meter.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -135,21 +137,31 @@ void main() {
     );
   });
 
-  testWidgets("the device's memory readings show with nothing loaded", (
-    tester,
-  ) async {
+  testWidgets("the device's memory shows as a bar with nothing loaded: the "
+      "models' share, the app's, and the readings under it", (tester) async {
     const gb = 1024 * 1024 * 1024;
+    final memory = appleMemoryOf({
+      "workingSet": 8 * gb,
+      "available": 6 * gb,
+    }, mac: false)!;
     app = TestApp.create(
       localRuntime: FakeLocalRuntime(),
-      deviceMemory: (graphics: 8 * gb, headroom: 5 * gb),
+      deviceMemory: memory,
     );
     await pumpOnDevice(tester);
 
+    final models = memory.budget.bytes!;
     expect(find.text("Nothing loaded"), findsOneWidget);
+    expect(find.byType(SegmentedMeter), findsOneWidget);
+    expect(find.text("For models"), findsOneWidget);
+    expect(find.text(formatSize(models)), findsOneWidget);
+    expect(find.text("For the app"), findsOneWidget);
+    expect(find.text(formatSize(6 * gb - models)), findsOneWidget);
     expect(find.text("Graphics memory"), findsOneWidget);
-    expect(find.textContaining(formatSize(8 * gb)), findsOneWidget);
+    expect(find.text(formatSize(8 * gb)), findsOneWidget);
     expect(find.text("App headroom"), findsOneWidget);
-    expect(find.textContaining(formatSize(5 * gb)), findsOneWidget);
+    expect(find.text(formatSize(6 * gb)), findsOneWidget);
+    expect(find.textContaining("Smallest model"), findsOneWidget);
     expect(
       find.text("No models fit this device's hardware requirements"),
       findsNothing,

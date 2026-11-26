@@ -100,9 +100,31 @@ abstract class LocalEngine {
   LocalModel Function(ModelLink link)? get fromLink => null;
 }
 
-/// Apple's two readings: what Metal keeps resident before it pages, and on
-/// iOS what the OS still lets this process grow by.
-typedef DeviceMemory = ({int? graphics, int? headroom});
+/// What the device has for models, measured: [total] is what the [budget] is
+/// a share of, and [readings] are the measures [total] was made from, each
+/// named, since the smaller of two is not the same story as one.
+class DeviceMemory {
+  const DeviceMemory({
+    required this.total,
+    required this.budget,
+    required this.readings,
+  });
+
+  final int total;
+  final ModelBudget budget;
+  final List<({String label, int bytes})> readings;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DeviceMemory &&
+      other.total == total &&
+      other.budget.bytes == budget.bytes &&
+      listEquals(other.readings, readings);
+
+  @override
+  int get hashCode =>
+      Object.hash(total, budget.bytes, Object.hashAll(readings));
+}
 
 /// What the Add model page asks for.
 typedef ModelLink = ({

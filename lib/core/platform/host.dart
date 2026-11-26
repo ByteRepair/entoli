@@ -1,6 +1,7 @@
 import "dart:async";
 import "dart:ffi";
 import "dart:io";
+import "dart:math" show min;
 
 import "package:ffi/ffi.dart";
 import "package:flutter/services.dart" show MethodChannel;
@@ -181,7 +182,7 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
   if (!Platform.isAndroid && !Platform.isLinux) return const NoLocalEngine();
   // Asked alongside the library directory rather than after it: on Android
   // both are a channel round trip, and this is on the way to the first frame.
-  final budget = _memoryBudget();
+  final memory = _ramMemory();
   final (String? libDir, String serverName) = Platform.isAndroid
       ? (await BundledTools.nativeLibraryDir(), "libllama-server.so")
       : (bundledLinuxLibDir(), "llama-server");
@@ -203,7 +204,8 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
     ),
     store,
     prompts: prompts,
-    budget: await budget,
+    budget: (await memory)?.budget ?? const ModelBudget.unknown(),
+    memory: _ramMemory,
   );
 }
 
@@ -212,17 +214,40 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
 String _kvCacheDir(String cacheDir) => p.join(cacheDir, "kv-cache");
 
 /// What llama.cpp may have of this device: its RAM, asked of Android and read
-/// off `/proc/meminfo` on Linux. Unknown where neither answers, which offers
+/// off `/proc/meminfo` on Linux. Null where neither answers, which offers
 /// every model.
-Future<ModelBudget> _memoryBudget() async {
-  if (Platform.isAndroid) {
-    final total = await BundledTools.totalMemory();
-    return total == null
-        ? const ModelBudget.unknown()
-        : ModelBudget.android(total);
+Future<DeviceMemory?> _ramMemory() async {
+  if (!Platform.isAndroid) return linuxMemoryOf(_readMeminfo());
+  try {
+    return androidMemoryOf(await BundledTools.totalMemory());
+  } catch (e) {
+    logFailure("local", "RAM reading failed", e);
+    return null;
   }
-  final total = linuxTotalMemory(_readMeminfo());
-  return total == null ? const ModelBudget.unknown() : ModelBudget.linux(total);
+}
+
+/// Android's RAM, of which llama.cpp gets [ModelBudget.android]'s half.
+DeviceMemory? androidMemoryOf(int? total) => total == null
+    ? null
+    : DeviceMemory(
+        total: total,
+        budget: ModelBudget.android(total),
+        readings: [(label: "RAM", bytes: total)],
+      );
+
+/// Linux's RAM out of [meminfo], with what is still free beside it.
+DeviceMemory? linuxMemoryOf(String? meminfo) {
+  final total = linuxTotalMemory(meminfo);
+  if (total == null) return null;
+  final available = procBytes(meminfo, "MemAvailable");
+  return DeviceMemory(
+    total: total,
+    budget: ModelBudget.linux(total),
+    readings: [
+      (label: "RAM", bytes: total),
+      if (available != null) (label: "Available", bytes: available),
+    ],
+  );
 }
 
 String? _readMeminfo() {
@@ -260,15 +285,9 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
     return AppleFmProbe(
       handshake["reason"] as String? ?? "other",
       mlx: handshake["mlx"] as bool? ?? false,
-      // A phone's binding limit is the one it may not have said, and a
-      // budget without it would be the Mac's guess: nothing measured then.
-      budget: switch (_memoryOf(handshake["memory"])) {
-        (graphics: final graphics?, headroom: _) when Platform.isMacOS =>
-          ModelBudget.mac(graphics),
-        (graphics: final graphics?, headroom: final headroom?) =>
-          ModelBudget.phone(workingSet: graphics, available: headroom),
-        _ => const ModelBudget.unknown(),
-      },
+      budget:
+          appleMemoryOf(handshake["memory"], mac: Platform.isMacOS)?.budget ??
+          const ModelBudget.unknown(),
     );
   } catch (e) {
     logFailure("apple-fm", "handshake failed", e);
@@ -278,11 +297,28 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
 
 Future<AppleFmProbe?>? _appleHandshake;
 
-DeviceMemory _memoryOf(Object? answer) {
+/// The channel's `memory` [answer]: Metal's working set, and on a phone what
+/// the OS still lets the app grow by. A phone's binding limit is the one it
+/// may not have said, and a budget without it would be the Mac's guess:
+/// nothing measured then.
+DeviceMemory? appleMemoryOf(Object? answer, {required bool mac}) {
   final memory = answer as Map<Object?, Object?>? ?? const {};
-  return (
-    graphics: memory["workingSet"] as int?,
-    headroom: memory["available"] as int?,
+  final graphics = memory["workingSet"] as int?;
+  final headroom = memory["available"] as int?;
+  if (graphics == null) return null;
+  final shown = (label: "Graphics memory", bytes: graphics);
+  if (mac) {
+    return DeviceMemory(
+      total: graphics,
+      budget: ModelBudget.mac(graphics),
+      readings: [shown],
+    );
+  }
+  if (headroom == null) return null;
+  return DeviceMemory(
+    total: min(graphics, headroom),
+    budget: ModelBudget.phone(workingSet: graphics, available: headroom),
+    readings: [shown, (label: "App headroom", bytes: headroom)],
   );
 }
 
@@ -294,7 +330,7 @@ Future<DeviceMemory?> _appleMemory() async {
         .invokeMethod<Object?>("memory")
         .timeout(const Duration(seconds: 3));
     _memoryFailing = false;
-    return _memoryOf(answer);
+    return appleMemoryOf(answer, mac: Platform.isMacOS);
   } catch (e) {
     // Polled every few seconds: a run of failures is one line.
     if (!_memoryFailing) logFailure("apple-fm", "memory reading failed", e);

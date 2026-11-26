@@ -24,6 +24,7 @@ import "../widgets/add_button_row.dart";
 import "../widgets/catalog.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
+import "../widgets/segmented_meter.dart";
 
 /// The On-device category: what is loaded first, since it is what is most
 /// often come here for, then the row to how text models run, then every
@@ -127,37 +128,54 @@ class _RunningModels extends ConsumerWidget {
   }
 }
 
-/// What the device has to give a model, loaded or not: the readings the
-/// catalog's budget is made from, so a catalog that offers nothing shows why.
+/// What the device has to give a model, loaded or not: the share models get
+/// of it as one bar, the readings it was made from under it, and a mark at
+/// what the smallest model needs, so a catalog that offers nothing shows why.
 class _DeviceMemory extends ConsumerWidget {
   const _DeviceMemory();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final device = ref.watch(runningUsageProvider.select((u) => u?.device));
-    final graphics = device?.graphics;
-    final headroom = device?.headroom;
-    if (graphics == null && headroom == null) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (graphics != null)
-          ListTile(
-            title: const Text("Graphics memory"),
-            subtitle: Text(
-              "${formatSize(graphics)} · what the GPU keeps resident before "
-              "it pages",
-            ),
+    final models = device?.budget.bytes;
+    if (device == null || models == null || device.total <= 0) {
+      return const SizedBox.shrink();
+    }
+    final total = device.total;
+    final smallest = ref
+        .watch(localEngineProvider)
+        .catalog
+        .map(ModelBudget.footprintOf)
+        .minOrNull;
+    final colours = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      child: SegmentedMeter(
+        mark: smallest == null || smallest > total
+            ? null
+            : MeterMark(
+                smallest / total,
+                "Smallest model ${formatSize(smallest)}",
+              ),
+        segments: [
+          MeterSegment(
+            "For models",
+            formatSize(models),
+            models / total,
+            colours.primary,
           ),
-        if (headroom != null)
-          ListTile(
-            title: const Text("App headroom"),
-            subtitle: Text(
-              "${formatSize(headroom)} · what the system still lets this app "
-              "grow by",
-            ),
+          MeterSegment(
+            "For the app",
+            formatSize(total - models),
+            (total - models) / total,
+            colours.outlineVariant,
           ),
-      ],
+        ],
+        readings: [
+          for (final r in device.readings)
+            MeterReading(r.label, formatSize(r.bytes)),
+        ],
+      ),
     );
   }
 }

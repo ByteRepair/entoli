@@ -20,6 +20,15 @@ class MeterMark {
   final String label;
 }
 
+/// A figure the legend gives beside the segments that is not one of them:
+/// what the whole was measured from.
+class MeterReading {
+  const MeterReading(this.label, this.amount);
+
+  final String label;
+  final String amount;
+}
+
 /// A meter of segments laid end to end, its mark a line across it named
 /// over it, and a legend of what each segment is under it.
 class SegmentedMeter extends StatelessWidget {
@@ -28,10 +37,14 @@ class SegmentedMeter extends StatelessWidget {
     required this.segments,
     this.mark,
     this.unit,
+    this.readings = const [],
   });
 
   final List<MeterSegment> segments;
   final MeterMark? mark;
+
+  /// Listed after the segments in the legend, with no colour of their own.
+  final List<MeterReading> readings;
 
   /// What a segment's amount counts, said in its tooltip: "tokens".
   final String? unit;
@@ -135,6 +148,18 @@ class SegmentedMeter extends StatelessWidget {
                   const SizedBox(width: 4),
                   Text(
                     s.amount,
+                    style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                  ),
+                ],
+              ),
+            for (final r in readings)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(r.label, style: theme.textTheme.bodySmall),
+                  const SizedBox(width: 4),
+                  Text(
+                    r.amount,
                     style: theme.textTheme.bodySmall?.copyWith(color: muted),
                   ),
                 ],

@@ -345,14 +345,21 @@ low-memory killer starts on them well short of three fifths — on a 12 GB phone
 the 4B and not the 9B. Apple's comes from the handshake: Metal's
 `recommendedMaxWorkingSetSize`, the GPU the window draws on too, of which a Mac
 gets three quarters; on iOS also what the OS still lets the app grow by, which
-is what ends an app there, and a phone gets three fifths of the smaller — on an
-8 GB iPhone nothing at all, being short of the 4B, since a model that slows the
-UI slows the whole phone with it. A model already downloaded keeps its row
-whatever it measures, and a device that answers nothing is offered everything.
-The page shows Apple's readings live under Running models, loaded or not
-(`LocalEngine.deviceMemory`, the channel's `memory`): graphics memory, and app
-headroom on iPhone and iPad alone. An empty list says no model fits, with what
-the smallest needs against the allowance, which is the launch's reading.
+is what ends an app there, and a phone gets seven tenths of the smaller. That
+share is measured, not guessed: an iPhone 18 Pro with the memory entitlement
+reads 8 GB of working set and 6 GB of headroom at launch, three fifths of which
+fell 0.2 GB short of the 4B. An 8 GB iPhone is still offered nothing, since a
+model that slows the UI slows the whole phone with it. A model already
+downloaded keeps its row whatever it measures, and a device that answers
+nothing is offered everything.
+
+The page draws the measure live under Running models, loaded or not, as one
+`SegmentedMeter` (`LocalEngine.deviceMemory`, a `DeviceMemory` per platform in
+`core/platform/host.dart`): the whole the share is taken of, split into the
+models' part and the app's, a mark at what the smallest catalog entry needs,
+and the readings the whole was made from under it — graphics memory and app
+headroom on Apple's, RAM and what is free on Linux, RAM on Android. An empty
+list says no model fits, against the allowance the launch measured.
 
 ### What the NPU actually is
 

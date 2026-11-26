@@ -16,11 +16,12 @@ import "local_model.dart";
 ///   same GPU. A Mac gets three quarters of that.
 /// - **An iPhone's binding limit is the app's own.** iOS ends an app that
 ///   grows past what it was allowed, whatever the phone has, so what the OS
-///   still lets this process grow by is measured too. A phone gets three fifths
-///   of the smaller of the two — less than a Mac's share, since the UI it
-///   draws beside the model is what the user feels, and slowing it would make
-///   the whole phone feel sluggish. On an 8 GB phone that is short of the
-///   4B, so MLX offers it nothing; a 12 GB one gets the 4B.
+///   still lets this process grow by is measured too. A phone gets seven
+///   tenths of the smaller of the two — less than a Mac's share, since the UI
+///   it draws beside the model is what the user feels. Measured on an iPhone
+///   18 Pro (12 GB, the memory entitlement on): 8 GB of working set, 6 GB of
+///   headroom at launch, so 4.2 GB, enough for the 4B's 3.8; three fifths was
+///   3.6 and offered nothing. An 8 GB phone is still short of the 4B.
 /// - **llama.cpp on Android and Linux is bounded by memory.** It reads the
 ///   weights into RAM whichever device runs them. A Linux machine gets three
 ///   fifths of it. An Android phone gets half: it shares that RAM with every
@@ -38,13 +39,13 @@ class ModelBudget {
   /// can keep resident.
   factory ModelBudget.mac(int workingSet) => ModelBudget(workingSet * 3 ~/ 4);
 
-  /// An iPhone or iPad: three fifths of the smaller of Metal's [workingSet]
+  /// An iPhone or iPad: seven tenths of the smaller of Metal's [workingSet]
   /// and [available], what the OS still lets this process grow by — the
   /// limit that binds there.
   factory ModelBudget.phone({
     required int workingSet,
     required int available,
-  }) => ModelBudget(min(workingSet, available) * 3 ~/ 5);
+  }) => ModelBudget(min(workingSet, available) * 7 ~/ 10);
 
   /// An Android phone: half of its [total] bytes of RAM.
   factory ModelBudget.android(int total) => ModelBudget(total ~/ 2);
