@@ -366,8 +366,9 @@ clicks through to its own page (Paired device page,
 fingerprints under "Device fingerprint" and "This device" with the explanation
 of the comparison they exist for. The Sync list itself draws no fingerprint. The
 relay and TURN settings are screens of their own behind two rows on the page,
-and Keep connected off screen is Android's row only — the one platform whose
-process freezes with the screen. See `lib/data/sync/AGENTS.md` for the threat
+and Keep connected off screen is the phones' row only — the platforms whose
+process freezes with the screen (a notification on Android, a Live Activity on
+iOS). See `lib/data/sync/AGENTS.md` for the threat
 model and handshake. **Providers** is the endpoints — and the keys, which are
 not in `settings.json` at all: a key typed into the provider dialog (or the
 recommended-provider card) goes to the secret store, under the provider's id,

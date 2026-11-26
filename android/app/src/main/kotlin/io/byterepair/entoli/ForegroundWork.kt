@@ -53,7 +53,8 @@ abstract class ForegroundWork : Service() {
     /// What the notification's one action button says. "Stop" for the three
     /// that stop work mid-flight; the sync one says "Disconnect", since what
     /// it stops is connections, and the devices go offline rather than stop.
-    protected open val actionLabel: String
+    /// Null for no button: a backup cut off part-way is a broken one.
+    protected open val actionLabel: String?
         get() = "Stop"
 
     /// Whether a notification swiped off the shade is put back. Android 14+
@@ -188,7 +189,9 @@ abstract class ForegroundWork : Service() {
             .setSmallIcon(R.drawable.ic_cookie_monochrome)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .addAction(Notification.Action.Builder(null as Icon?, actionLabel, pendingStop()).build())
+        actionLabel?.let {
+            builder.addAction(Notification.Action.Builder(null as Icon?, it, pendingStop()).build())
+        }
 
         builder.setContentIntent(
             PendingIntent.getActivity(
@@ -226,6 +229,7 @@ abstract class ForegroundWork : Service() {
         private var prefilling = false
         private var syncing = false
         private var signingIn = false
+        private var backingUp = false
 
         // A hold the alarm receiver took before Dart was listening. It starts
         // AgentService itself, inside the one window a backgrounded app may —
@@ -244,7 +248,7 @@ abstract class ForegroundWork : Service() {
         // mode counts, since the session it holds is in that isolate too.
         val busy: Boolean
             get() = turns > 0 || listening || downloading || prefilling ||
-                syncing || signingIn || alarmHold
+                syncing || signingIn || backingUp || alarmHold
 
         fun holdForAlarm() {
             alarmHold = true
@@ -307,6 +311,13 @@ abstract class ForegroundWork : Service() {
                             signingIn = plan != null
                             hold(appContext, SignInService::class.java, signingIn) {
                                 it.putExtra(SignInService.EXTRA_PLAN, plan)
+                            }
+                        }
+                        "backingUp" -> {
+                            val work = call.arguments as? String
+                            backingUp = work != null
+                            hold(appContext, BackupService::class.java, backingUp) {
+                                it.putExtra(BackupService.EXTRA_WORK, work)
                             }
                         }
                         else -> return@setMethodCallHandler result.notImplemented()

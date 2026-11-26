@@ -270,6 +270,7 @@ class FakeBackgroundWork implements BackgroundWork {
   final List<SyncNotice?> synced = [];
   final List<String?> signIns = [];
   final List<bool> setups = [];
+  final List<BackupWork?> backups = [];
   final _stops = StreamController<BackgroundJob>.broadcast();
 
   @override
@@ -293,6 +294,9 @@ class FakeBackgroundWork implements BackgroundWork {
 
   @override
   Future<void> settingUp(bool active) async => setups.add(active);
+
+  @override
+  Future<void> backingUp(BackupWork? work) async => backups.add(work);
 
   @override
   Stream<BackgroundJob> get stopRequests => _stops.stream;
@@ -458,9 +462,13 @@ class FakeClipboardFiles implements ClipboardFiles {
 class FakeAppRestart implements AppRestart {
   var restarts = 0;
 
+  /// Heard as a restart begins, before its work runs.
+  void Function()? onRestart;
+
   @override
   Future<void> restart({Future<void> Function()? whileStopped}) async {
     restarts++;
+    onRestart?.call();
     await whileStopped?.call();
   }
 }
