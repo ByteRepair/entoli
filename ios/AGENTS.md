@@ -435,6 +435,19 @@ chunk, since MLX goes on with arrays it never computed. The message is coded
 `other`. The weights are read on a dispatch queue, out of the handler's reach,
 so a load that runs out of memory there still crashes.
 
+**MLX is held to the app's limit, not Metal's.** `ModelBudget` decides which
+models are offered; nothing in MLX keeps a loaded one inside it. MLX sizes
+itself from Metal's working set and keeps the buffers it frees until it holds
+about 7.6 GB on a 12 GB iPhone, while iOS ends the app at 6.0 GiB there — a
+JetsamEvent report's `per-process-limit`, with the app frontmost, 1–3 seconds
+into a 4B's prefill. So on iOS (`MlxMemory`) the buffer cache is 64 MB while a
+model is loaded, MLX's soft limit is set before each reply from
+`os_proc_available_memory` less a 768 MB reserve, and a reply whose headroom
+falls under half the reserve stops itself — after each prefill chunk, through
+the prefill's progress, and after each output chunk — ending in `resources`.
+The soft limit only makes an evaluation wait for work in flight; MLX's
+allocator never fails at it, which is why the stop is the app's.
+
 ### The build
 
 MLX reaches the Runners prebuilt: `tool/apple/mlx/` is a package,

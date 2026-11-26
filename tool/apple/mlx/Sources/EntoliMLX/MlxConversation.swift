@@ -99,8 +99,15 @@ actor MlxConversation {
   ) async throws {
     try await operation { container, mlxError in
       guard let last = messages.last else { return }
+      MlxMemory.fit()
+      // The prefill is where a reply's memory peaks, and it says nothing
+      // until it is done but this, after each chunk.
+      let memoryStop = MemoryStop()
       var parameters = GenerateParameters(maxTokens: maxTokens)
       if let temperature { parameters.temperature = Float(temperature) }
+      parameters.prefill.progress = { _, _ in
+        if MlxMemory.isShort { memoryStop.trip() }
+      }
 
       let fresh: [MlxMessage]
       if let session, let held, held.carriesOn(messages, tools) {
@@ -136,6 +143,7 @@ actor MlxConversation {
         var counts = (prompt: 0, generated: 0)
         for try await generation in stream {
           try Task.checkCancellation()
+          if MlxMemory.isShort { throw MlxFailure.shortOfMemory }
           // MLX goes on after an error with arrays it never computed, so the
           // reply ends at the first one rather than at the block's end.
           try mlxError.check()
@@ -159,6 +167,7 @@ actor MlxConversation {
         return (reply, calls, counts)
       }
       stopGeneration = { work.cancel() }
+      memoryStop.arm { work.cancel() }
       defer { stopGeneration = nil }
       let outcome: (reply: String, calls: [MlxToolCall], counts: (Int, Int))
       do {
@@ -169,6 +178,7 @@ actor MlxConversation {
         }
       } catch {
         if unloaded { throw MlxUnloaded() }
+        if memoryStop.tripped { throw MlxFailure.shortOfMemory }
         throw error
       }
       // The reply task may still be writing the cache back: an error there
@@ -239,6 +249,33 @@ actor MlxConversation {
   private static func json(_ arguments: [String: JSONValue]) -> String {
     guard let data = try? JSONEncoder().encode(arguments) else { return "{}" }
     return String(decoding: data, as: UTF8.self)
+  }
+}
+
+/// A reply stopped short of the OS's memory limit by the prefill's progress,
+/// which runs inside mlx-swift-lm and can only ask for the cancel.
+private final class MemoryStop: @unchecked Sendable {
+  private let lock = NSLock()
+  private var cancel: (() -> Void)?
+  private var stopped = false
+
+  var tripped: Bool { lock.withLock { stopped } }
+
+  /// What a trip cancels, run at once where it has tripped already.
+  func arm(_ cancel: @escaping () -> Void) {
+    let already = lock.withLock {
+      self.cancel = cancel
+      return stopped
+    }
+    if already { cancel() }
+  }
+
+  func trip() {
+    let cancel = lock.withLock {
+      stopped = true
+      return self.cancel
+    }
+    cancel?()
   }
 }
 
