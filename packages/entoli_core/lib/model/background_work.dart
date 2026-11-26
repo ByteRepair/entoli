@@ -127,6 +127,11 @@ abstract interface class BackgroundWork {
   /// for it as for a turn: off screen it would suspend the guest's download.
   Future<void> settingUp(bool active);
 
+  /// Whether a backup is being written or restored. It has no stop: cut off
+  /// part-way, a backup is a broken file and a restore a broken data
+  /// directory, so the hold only keeps it from being cut off.
+  Future<void> backingUp(bool active);
+
   /// The user said stop from outside the app — each notification has a button,
   /// and this says which was pressed. Whoever owns that kind of work stops it,
   /// which is what then takes the notification away: the button asks, it does

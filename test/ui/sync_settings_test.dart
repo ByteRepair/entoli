@@ -559,30 +559,32 @@ void main() {
   });
 
   group("keeping connected off screen", () {
-    // Android's row only — the one platform whose process freezes with the
+    // The phones' row only — the platforms whose process freezes with the
     // screen. The override is undone in the body: flutter_test refuses
     // letting it leak past the test.
-    testWidgets("the switch is Android's, and writes the setting", (
-      tester,
-    ) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.android;
-      try {
-        await open(tester);
+    for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+      testWidgets("the switch is on ${platform.name}, and writes the setting", (
+        tester,
+      ) async {
+        debugDefaultTargetPlatformOverride = platform;
+        try {
+          await open(tester);
 
-        await scrollTo(tester, find.text("Keep connected off screen"));
-        await tester.tap(find.text("Keep connected off screen"));
-        await settleIo(tester);
+          await scrollTo(tester, find.text("Keep connected off screen"));
+          await tester.tap(find.text("Keep connected off screen"));
+          await settleIo(tester);
 
-        expect(AppSettings.load(app.config).syncKeepAlive, isTrue);
+          expect(AppSettings.load(app.config).syncKeepAlive, isTrue);
 
-        await tester.tap(find.text("Keep connected off screen"));
-        await settleIo(tester);
+          await tester.tap(find.text("Keep connected off screen"));
+          await settleIo(tester);
 
-        expect(AppSettings.load(app.config).syncKeepAlive, isFalse);
-      } finally {
-        debugDefaultTargetPlatformOverride = null;
-      }
-    });
+          expect(AppSettings.load(app.config).syncKeepAlive, isFalse);
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      });
+    }
 
     testWidgets("nothing of it is drawn anywhere else", (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;

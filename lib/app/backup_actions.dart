@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:io";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -30,12 +31,16 @@ class BackupBusy extends Notifier<bool> {
     if (state) return null;
     state = true;
     log.clear();
+    // Read now: a restore's restart disposes this provider before it ends.
+    final background = ref.read(backgroundWorkProvider);
+    unawaited(background.backingUp(true));
     try {
       return await work();
     } catch (e) {
       log.writeln("Failed: $e");
       rethrow;
     } finally {
+      unawaited(background.backingUp(false));
       if (ref.mounted) state = false;
     }
   }

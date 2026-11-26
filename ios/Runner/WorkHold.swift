@@ -3,31 +3,49 @@ import Flutter
 import UIKit
 
 /// Answers `agent_chat/background`, the channel Android's foreground services
-/// answer: while a turn or a setup runs, a continued-processing task keeps the
-/// app running off screen, and the system shows it with its own stop. See
-/// "Running off screen" in ios/AGENTS.md.
+/// answer: while a turn, a setup, a download, a backup, a sign-in or a sync
+/// connection is held, one continued-processing task keeps the app running
+/// off screen, and the system shows it as a Live Activity with its own stop.
+/// See "Running off screen" in ios/AGENTS.md.
 enum WorkHold {
   private static let taskPrefix = "io.byterepair.entoli.work"
   private static let title = "Entoli"
 
   private static var turns = 0
   private static var settingUp = false
+  private static var download: (label: String, received: Int64, total: Int64)?
+  private static var syncNames: [String]?
+  private static var signInPlan: String?
+  private static var backingUp = false
+
   private static var task: BGContinuedProcessingTask?
   /// Submitted, its launch handler not yet run.
   private static var pending = false
   private static var heartbeat: Timer?
   private static var channel: FlutterMethodChannel?
 
-  private static var busy: Bool { turns > 0 || settingUp }
+  private static var busy: Bool {
+    turns > 0 || settingUp || download != nil || syncNames != nil || signInPlan != nil
+      || backingUp
+  }
 
-  /// Android's notification text (`AgentService.kt`), worded here rather than
-  /// in Dart since the port carries a count.
+  /// Each held job in the words Android's notification uses for it, worded
+  /// here rather than in Dart since the port carries counts and labels.
   private static var summary: String {
-    switch turns {
-    case 0: "Setting up tools"
-    case 1: "Running a turn"
-    default: "Running \(turns) turns"
+    var parts: [String] = []
+    if turns == 1 { parts.append("Running a turn") }
+    if turns > 1 { parts.append("Running \(turns) turns") }
+    if settingUp { parts.append("Setting up tools") }
+    if let download {
+      let percent = download.total > 0 ? " (\(download.received * 100 / download.total)%)" : ""
+      parts.append("Downloading \(download.label)\(percent)")
     }
+    if backingUp { parts.append("Backing up") }
+    if let plan = signInPlan { parts.append("Waiting for you to sign in to \(plan)") }
+    if let names = syncNames {
+      parts.append(names.count == 1 ? "Connected to \(names[0])" : "\(names.count) devices connected")
+    }
+    return parts.joined(separator: " · ")
   }
 
   static func register(with messenger: FlutterBinaryMessenger) {
@@ -44,6 +62,20 @@ enum WorkHold {
     switch call.method {
     case "running": turns = (call.arguments as? NSNumber)?.intValue ?? 0
     case "settingUp": settingUp = (call.arguments as? Bool) ?? false
+    case "downloading":
+      download = (call.arguments as? [String: Any]).map {
+        (
+          label: $0["label"] as? String ?? "a model",
+          received: ($0["received"] as? NSNumber)?.int64Value ?? 0,
+          total: ($0["total"] as? NSNumber)?.int64Value ?? 0
+        )
+      }
+    case "syncing":
+      syncNames = (call.arguments as? [String: Any]).map { $0["names"] as? [String] ?? [] }
+    case "signingIn": signInPlan = call.arguments as? String
+    case "backingUp": backingUp = (call.arguments as? Bool) ?? false
+    // Not held: the prefill is MLX's, and iOS gives the GPU only to the app
+    // in front, so off screen it would fail rather than finish.
     default: return result(FlutterMethodNotImplemented)
     }
     update()
@@ -85,26 +117,42 @@ enum WorkHold {
     started.updateTitle(title, subtitle: summary)
     // The user's stop and the system's expiry both land here, and iOS does
     // not say which. Off screen the app is suspended next, which would cut
-    // the turns off anyway, so they are stopped cleanly; in front, the work
-    // goes on, killable again, as on Android when its service times out.
+    // the work off anyway, so each held job with a stop is asked to stop, as
+    // its Android notification's button would; in front, the work goes on,
+    // killable again, as on Android when its service times out. A backup has
+    // no stop: it is left to finish or be cut off.
     started.expirationHandler = {
       DispatchQueue.main.async {
         if task === started {
           drop()
-          if turns > 0 && UIApplication.shared.applicationState != .active {
-            channel?.invokeMethod("stopRequested", arguments: "turns")
+          if UIApplication.shared.applicationState != .active {
+            var jobs: [String] = []
+            if turns > 0 { jobs.append("turns") }
+            if download != nil { jobs.append("download") }
+            if signInPlan != nil { jobs.append("signIn") }
+            if syncNames != nil { jobs.append("sync") }
+            jobs.forEach { channel?.invokeMethod("stopRequested", arguments: $0) }
           }
         }
         started.setTaskCompleted(success: false)
       }
     }
-    // The system expires a task whose progress stalls, and nothing that holds
-    // it knows its length: a turn, its sub-agents, a long command, a setup.
-    // Held is alive, so the progress moves while it is held, a minute ahead.
     started.progress.totalUnitCount = 60
-    heartbeat = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-      started.progress.completedUnitCount += 1
-      started.progress.totalUnitCount = started.progress.completedUnitCount + 60
+    heartbeat = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick(started.progress) }
+  }
+
+  /// The system expires a task whose progress stalls. A download alone has a
+  /// real fraction, kilobytes as Android's bar counts them, and stalls only
+  /// when it does. Nothing else that holds the task knows its length — a
+  /// turn, a setup, a backup, a connection — so held is alive, and the
+  /// progress moves a tick a second against a total kept a minute ahead.
+  private static func tick(_ progress: Progress) {
+    if let download, download.total > 0, turns == 0, !settingUp, !backingUp {
+      progress.totalUnitCount = download.total / 1024
+      progress.completedUnitCount = download.received / 1024
+    } else {
+      progress.completedUnitCount += 1
+      progress.totalUnitCount = progress.completedUnitCount + 60
     }
   }
 

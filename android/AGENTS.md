@@ -41,6 +41,10 @@ Kotlin, the names ride in from Dart the way a download's label does, and the
 action says Disconnect rather than Stop — what it ends is connections, not
 work mid-flight.
 
+`BackupService` holds a backup being written or restored, and is the one
+with no button: cut off part-way, a backup is a broken file and a restore a
+broken data directory, so there is nothing a Stop could safely do.
+
 `SignInService` holds a CLI's sign-in while its page is open in a Custom
 Tab: Android freezes a backgrounded process within seconds, and a frozen
 proot leaves the program's `localhost` callback unanswered, the page

@@ -55,16 +55,22 @@ class SyncSettings extends ConsumerWidget {
         PairingControls(flow: ref.watch(pairingFlowProvider)),
         const Divider(),
         _PairedDevices(hub: hub),
-        // Android alone freezes the process with the screen, so only it has
-        // a keep-alive to switch.
-        if (isAndroid) ...[
+        // The phones freeze the process with the screen, so only they have a
+        // keep-alive to switch.
+        if (isPhone) ...[
           const Divider(),
           SwitchListTile(
             title: const Text("Keep connected off screen"),
-            subtitle: const Text(
-              "While a device is connected, hold the app open off screen "
-              "with a notification naming it and a Disconnect action. Costs "
-              "battery — a wake lock for as long as the connection lasts.",
+            subtitle: Text(
+              isAndroid
+                  ? "While a device is connected, hold the app open off "
+                        "screen with a notification naming it and a "
+                        "Disconnect action. Costs battery — a wake lock for "
+                        "as long as the connection lasts."
+                  : "While a device is connected, keep the app running off "
+                        "screen with a Live Activity naming it. Stopping the "
+                        "activity disconnects. Costs battery for as long as "
+                        "the connection lasts.",
             ),
             value: settings.syncKeepAlive,
             onChanged: (value) => ref

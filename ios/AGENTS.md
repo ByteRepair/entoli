@@ -761,9 +761,14 @@ A setup is held off screen as a turn is (see "Running off screen").
 
 iOS suspends an app seconds after it leaves the screen, and a turn is
 minutes. `WorkHold` (`Runner/WorkHold.swift`) answers `agent_chat/background`
-as Android's foreground services do: while a turn runs (`running`) or a setup
-installs (`settingUp`), it holds a `BGContinuedProcessingTask`, the one thing
-iOS lets user-started work keep running on. Nothing about the work moves; the
+as Android's foreground services do: while a turn runs (`running`), a setup
+installs (`settingUp`), a model downloads (`downloading`), a backup is written
+or restored (`backingUp`), a CLI sign-in waits (`signingIn`) or a paired
+device is connected with Keep connected off screen on (`syncing`), it holds a
+`BGContinuedProcessingTask`, the one thing iOS lets user-started work keep
+running on. One task for all of them, its subtitle naming each, since a
+second task would be a second Live Activity. The prefill is not held: it is
+MLX's, and off screen the GPU is refused. Nothing about the work moves; the
 hold only buys the isolate the time.
 
 **The task is submitted from the foreground or not at all.** A turn starts
@@ -776,20 +781,24 @@ system expired. Both are held again when the app next becomes active. It is
 it holds knows its length: a turn, its sub-agents, a long command, a setup.
 Dart already says exactly when work is held, so the progress is a native
 heartbeat, a tick a second against a total kept a minute ahead, for as long as
-the hold lasts. Counting the agent's steps was tried and left out what runs
+the hold lasts. A download held alone is the exception: its bar is the real
+fraction, so it expires only if the download itself stalls. Counting the agent's steps was tried and left out what runs
 longest between them (a command, a sub-agent, a setup).
 
 **The system draws the task, and its stop is the only one.** iOS shows every
 continued task as its own Live Activity with a stop button. The app does not
 draw one of its own: a second activity next to it showed every turn twice. The
-task's title and subtitle read as Android's turn notification does ("Running 2
-turns"), worded in Swift since the port carries a count.
+task's title and subtitle read as Android's notifications do ("Running 2
+turns · Downloading Qwen3.5 4B (40%)"), worded in Swift since the port carries
+counts and labels.
 
 **The system's stop and its expiry are the same call.** Both run the task's
 `expirationHandler`, and iOS does not say which one it was. Off screen, the
-handler sends `stopRequested("turns")`, the path Android's Stop takes, since
-the app is suspended next and the turns would be cut off anyway. In front, it
-drops the hold and leaves the turns running, killable again, as Android's
+handler sends `stopRequested` for each held job that has a stop (turns,
+download, sign-in, sync), the paths Android's buttons take, since the app is
+suspended next and the work would be cut off anyway: a sync connection lasts
+exactly as long as the activity. A backup has no stop and is left to finish.
+In front, it drops the hold and leaves the work running, killable again, as Android's
 `onTimeout` does.
 
 The task asks for no GPU: background GPU wants the
