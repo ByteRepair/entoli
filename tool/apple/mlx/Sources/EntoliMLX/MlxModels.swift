@@ -17,7 +17,7 @@ public enum Mlx {
 
   /// Loads the model in `directory` and keeps it as `id`.
   public static func load(_ id: String, _ directory: String) async throws {
-    _ = try await MlxModels.shared.load(id, directory)
+    _ = try await catchingMlx { _ in try await MlxModels.shared.load(id, directory) }
   }
 
   public static func evict(_ id: String) async {
@@ -40,21 +40,23 @@ public enum Mlx {
     emit: @escaping @Sendable (MlxEvent) -> Void
   ) async throws {
     guard let conversation = await MlxModels.shared.loaded(id) else { throw MlxNotLoaded() }
-    try await conversation.generate(
-      messages: messages, tools: tools, temperature: temperature, maxTokens: maxTokens,
-      emit: emit)
+    try await catchingMlx { mlxError in
+      try await conversation.generate(
+        messages: messages, tools: tools, temperature: temperature, maxTokens: maxTokens,
+        mlxError: mlxError, emit: emit)
+    }
   }
 
   /// Writes what `id` holds to `path`. False where it holds nothing.
   public static func save(_ id: String, to path: String) async -> Bool {
     guard let conversation = await MlxModels.shared.loaded(id) else { return false }
-    return await conversation.save(to: path)
+    return (try? await catchingMlx { _ in await conversation.save(to: path) }) ?? false
   }
 
   /// Reads `path` back as what `id` holds. False where it could not.
   public static func restore(_ id: String, from path: String) async -> Bool {
     guard let conversation = await MlxModels.shared.loaded(id) else { return false }
-    return await conversation.restore(from: path)
+    return (try? await catchingMlx { _ in await conversation.restore(from: path) }) ?? false
   }
 
   /// What `id` takes up: its weights' bytes, and how many tokens its cache
@@ -145,6 +147,36 @@ public enum MlxEvent: Sendable {
   case toolCall(MlxToolCall)
   /// The end, with how much of the prompt was read and how much was reused.
   case done(promptTokens: Int, generatedTokens: Int)
+}
+
+/// A failure MLX raised itself, coded as the channel's `error` frame is: the
+/// GPU refused off screen (`background`), memory ran out (`resources`), or
+/// anything else (`other`).
+public struct MlxFailure: Error, CustomStringConvertible {
+  public let code: String
+  public let description: String
+
+  init(_ message: String) {
+    description = message
+    code =
+      message.contains("BackgroundExecutionNotPermitted")
+      ? "background"
+      : ["OutOfMemory", "Insufficient Memory", "malloc]"].contains { message.contains($0) }
+        ? "resources" : "other"
+  }
+}
+
+/// Runs `body` with MLX's errors thrown as `MlxFailure`. With no scoped
+/// handler MLX calls `fatalError`, so a refused command buffer or a failed
+/// allocation killed the app with nothing said. The handler is task-local:
+/// it reaches mlx-swift-lm's generation tasks, not the weight loading it
+/// runs on a dispatch queue.
+func catchingMlx<T>(_ body: (ErrorBox) async throws -> T) async throws -> T {
+  do {
+    return try await withError(body)
+  } catch MLXError.caught(let message) {
+    throw MlxFailure(message)
+  }
 }
 
 /// A generation asked of a model `load` does not hold.

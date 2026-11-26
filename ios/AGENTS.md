@@ -418,6 +418,17 @@ else of it.
   `callId`) and `done` frames, or `error`.
 - `save` / `restore {model, path}` → whether the prompt state was
   written or read.
+
+**MLX's own errors are caught, or they kill the app.** mlx-swift's handler,
+unscoped, is `fatalError`: a command buffer the GPU refused or an allocation
+that failed took the app down mid-turn, and all the user saw was the Live
+Activity's "Task failed". Every `Mlx` call runs under `withError`
+(`catchingMlx`), whose handler is task-local and so reaches mlx-swift-lm's
+generation tasks; a generation checks it per chunk, since MLX goes on with
+arrays it never computed. The message is coded `background` (the GPU refused
+off screen), `resources` (memory ran out) or `other`. The weights are read on
+a dispatch queue, out of the handler's reach, so a load that runs out of
+memory still crashes.
 - `usage {model}` → `{weightBytes, tokens}`: the weights' bytes, counted
   once, and the tokens its cache holds, which Dart prices at the model's KV
   bytes per token for the Running models row. Nil where it is not loaded.
@@ -794,7 +805,7 @@ drops the hold and leaves the turns running, killable again, as Android's
 
 The task asks for no GPU: background GPU wants the
 `continued-processing.gpu` entitlement, so an MLX turn still stops off
-screen. A remote provider's turn is network and CPU, which the default
+screen, its reply ending with an error that says so. A remote provider's turn is network and CPU, which the default
 covers. None of this answers on the simulator as it does on a device; the
 recipe is a device: start a turn, lock the phone, and watch it finish.
 

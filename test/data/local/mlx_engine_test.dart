@@ -270,6 +270,29 @@ void main() {
     await ended;
   });
 
+  test("a reply the GPU refused off screen ends saying why", () async {
+    final mlx = engine();
+    final reply = mlx.client(() => AppSettings()).stream(const [
+      LlmMessage(role: LlmRole.user, text: "hi"),
+    ], model: small.id).toList();
+    await channel.until("generate");
+    final ended = expectLater(
+      reply,
+      throwsA(
+        isA<LlmException>()
+            .having((e) => e.message, "message", contains("left the screen"))
+            .having((e) => e.retryable, "retryable", isFalse),
+      ),
+    );
+
+    await channel.incoming("error", {
+      "id": channel.outgoing("generate")["id"],
+      "code": "background",
+      "message": "[METAL] Command buffer execution failed.",
+    });
+    await ended;
+  });
+
   test("every tool call of a reply arrives before it ends", () async {
     final mlx = engine();
     final reply = mlx.client(() => AppSettings()).stream(const [

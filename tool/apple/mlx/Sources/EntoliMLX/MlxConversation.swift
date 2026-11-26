@@ -92,7 +92,7 @@ actor MlxConversation {
 
   func generate(
     messages: [MlxMessage], tools: [MlxTool], temperature: Double?, maxTokens: Int,
-    emit: @escaping @Sendable (MlxEvent) -> Void
+    mlxError: ErrorBox, emit: @escaping @Sendable (MlxEvent) -> Void
   ) async throws {
     try await operation { container in
       guard let last = messages.last else { return }
@@ -133,6 +133,9 @@ actor MlxConversation {
         var counts = (prompt: 0, generated: 0)
         for try await generation in stream {
           try Task.checkCancellation()
+          // MLX goes on after an error with arrays it never computed, so the
+          // reply ends at the first one rather than at the block's end.
+          try mlxError.check()
           switch generation {
           case .chunk(let chunk):
             say(thinking.feed(chunk))
@@ -149,6 +152,7 @@ actor MlxConversation {
           }
         }
         try Task.checkCancellation()
+        try mlxError.check()
         say(thinking.finish())
         return (reply, calls, counts)
       }
