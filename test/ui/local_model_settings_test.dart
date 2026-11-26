@@ -1,8 +1,10 @@
 import "dart:async";
 
+import "package:collection/collection.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/local/local_instance.dart" show LocalUsage;
+import "package:entoli_core/model/formatting.dart";
 import "package:entoli_core/model/local_llm.dart";
 import "package:entoli_core/model/local_model.dart";
 import "package:entoli_core/model/model_budget.dart";
@@ -97,6 +99,61 @@ void main() {
     await pumpOnDevice(tester);
 
     expect(find.text(heavy.name), findsOneWidget);
+  });
+
+  testWidgets("a device that fits nothing says so, with what the smallest "
+      "needs", (tester) async {
+    final smallest = ggufCatalog.map(ModelBudget.footprintOf).min;
+    final budget = ModelBudget(smallest - 1);
+    app = TestApp.create(localRuntime: FakeLocalRuntime(), localBudget: budget);
+    await pumpOnDevice(tester);
+
+    expect(
+      find.text("No models fit this device's hardware requirements"),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        "The smallest needs ${formatSize(smallest)}; this device allowed "
+        "${formatSize(budget.bytes!)} when the app started.",
+      ),
+      findsOneWidget,
+    );
+    app.dispose();
+
+    // One already downloaded is listed, and runs: the page does not say none.
+    app = TestApp.create(
+      localRuntime: FakeLocalRuntime(),
+      localBudget: budget,
+      localModels: {model.id},
+    );
+    await pumpOnDevice(tester);
+
+    expect(
+      find.text("No models fit this device's hardware requirements"),
+      findsNothing,
+    );
+  });
+
+  testWidgets("the device's memory readings show with nothing loaded", (
+    tester,
+  ) async {
+    const gb = 1024 * 1024 * 1024;
+    app = TestApp.create(
+      localRuntime: FakeLocalRuntime(),
+      deviceMemory: (graphics: 8 * gb, headroom: 5 * gb),
+    );
+    await pumpOnDevice(tester);
+
+    expect(find.text("Nothing loaded"), findsOneWidget);
+    expect(find.text("Graphics memory"), findsOneWidget);
+    expect(find.textContaining(formatSize(8 * gb)), findsOneWidget);
+    expect(find.text("App headroom"), findsOneWidget);
+    expect(find.textContaining(formatSize(5 * gb)), findsOneWidget);
+    expect(
+      find.text("No models fit this device's hardware requirements"),
+      findsNothing,
+    );
   });
 
   testWidgets("there is no model picker — every downloaded one is offered "

@@ -50,13 +50,16 @@ final class AppleFmChannel: GenerationChannel {
   /// the OS lets this process grow by — the limit that ends an app there.
   private func memory() -> [String: Any] {
     var memory: [String: Any] = [:]
-    if let device = MTLCreateSystemDefaultDevice() {
-      memory["workingSet"] = Int(device.recommendedMaxWorkingSetSize)
-    }
+    if let workingSet = Self.workingSet { memory["workingSet"] = workingSet }
     #if os(iOS)
     memory["available"] = Int(os_proc_available_memory())
     #endif
     return memory
+  }
+
+  /// Fixed per device, and the page polls `memory`: one Metal device, once.
+  private static let workingSet: Int? = MTLCreateSystemDefaultDevice().map {
+    Int($0.recommendedMaxWorkingSetSize)
   }
 
   private func availabilityReason() -> String {
@@ -74,6 +77,8 @@ final class AppleFmChannel: GenerationChannel {
     switch call.method {
     case "handshake":
       result(["reason": availabilityReason(), "mlx": Mlx.isAvailable, "memory": memory()])
+    case "memory":
+      result(memory())
     case "generate":
       startGeneration(call, result, generate)
     default:

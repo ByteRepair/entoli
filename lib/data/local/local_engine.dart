@@ -30,8 +30,15 @@ abstract class LocalEngine {
   /// Every model this engine's catalog has.
   List<LocalModel> get catalog;
 
+  /// What this device can give a model, which narrows what it [offers].
+  ModelBudget get budget => const ModelBudget.unknown();
+
   /// Whether [model] is offered to this device: whether it runs here.
-  bool offers(LocalModel model) => true;
+  bool offers(LocalModel model) => budget.fits(model);
+
+  /// What the device reports it can give a model right now, which
+  /// [budget] was made from at launch; null where it reports nothing.
+  Future<DeviceMemory?> deviceMemory() async => null;
 
   LocalModelStore get store;
 
@@ -93,6 +100,10 @@ abstract class LocalEngine {
   LocalModel Function(ModelLink link)? get fromLink => null;
 }
 
+/// Apple's two readings: what Metal keeps resident before it pages, and on
+/// iOS what the OS still lets this process grow by.
+typedef DeviceMemory = ({int? graphics, int? headroom});
+
 /// What the Add model page asks for.
 typedef ModelLink = ({
   String url,
@@ -113,15 +124,19 @@ abstract class RuntimeEngine extends LocalEngine {
     this.store, {
     this.prompts,
     this.budget = const ModelBudget.unknown(),
+    this.memory,
   }) : residency = Residency(runtime, store);
 
   final LocalRuntime runtime;
 
-  /// What this device can give a model, which narrows what it [offers].
+  @override
   final ModelBudget budget;
 
+  /// Where [deviceMemory] is read from; null where the platform says nothing.
+  final Future<DeviceMemory?> Function()? memory;
+
   @override
-  bool offers(LocalModel model) => budget.fits(model);
+  Future<DeviceMemory?> deviceMemory() async => memory?.call();
 
   @override
   final LocalModelStore store;

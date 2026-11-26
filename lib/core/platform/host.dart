@@ -174,6 +174,7 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
             _modelProcess,
             prompts: PromptCache(_kvCacheDir(cacheDir)),
             budget: probe.budget,
+            memory: _appleMemory,
           )
         : const NoLocalEngine();
   }
@@ -256,22 +257,16 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
         .invokeMethod<Object?>("handshake")
         .timeout(const Duration(seconds: 3));
     final handshake = answer as Map<Object?, Object?>? ?? const {};
-    final memory = handshake["memory"] as Map<Object?, Object?>? ?? const {};
-    final workingSet = memory["workingSet"] as int?;
-    final available = memory["available"] as int?;
     return AppleFmProbe(
       handshake["reason"] as String? ?? "other",
       mlx: handshake["mlx"] as bool? ?? false,
       // A phone's binding limit is the one it may not have said, and a
       // budget without it would be the Mac's guess: nothing measured then.
-      budget: switch ((workingSet, available)) {
-        (final workingSet?, _) when Platform.isMacOS => ModelBudget.mac(
-          workingSet,
-        ),
-        (final workingSet?, final available?) => ModelBudget.phone(
-          workingSet: workingSet,
-          available: available,
-        ),
+      budget: switch (_memoryOf(handshake["memory"])) {
+        (graphics: final graphics?, headroom: _) when Platform.isMacOS =>
+          ModelBudget.mac(graphics),
+        (graphics: final graphics?, headroom: final headroom?) =>
+          ModelBudget.phone(workingSet: graphics, available: headroom),
         _ => const ModelBudget.unknown(),
       },
     );
@@ -282,6 +277,33 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
 }();
 
 Future<AppleFmProbe?>? _appleHandshake;
+
+DeviceMemory _memoryOf(Object? answer) {
+  final memory = answer as Map<Object?, Object?>? ?? const {};
+  return (
+    graphics: memory["workingSet"] as int?,
+    headroom: memory["available"] as int?,
+  );
+}
+
+/// The handshake's readings asked again: the headroom moves as the app grows.
+/// Null on a failure, so a missing reading leaves the models' own standing.
+Future<DeviceMemory?> _appleMemory() async {
+  try {
+    final answer = await appleChannel
+        .invokeMethod<Object?>("memory")
+        .timeout(const Duration(seconds: 3));
+    _memoryFailing = false;
+    return _memoryOf(answer);
+  } catch (e) {
+    // Polled every few seconds: a run of failures is one line.
+    if (!_memoryFailing) logFailure("apple-fm", "memory reading failed", e);
+    _memoryFailing = true;
+    return null;
+  }
+}
+
+bool _memoryFailing = false;
 
 /// The bundle's `lib/` beside the running executable, the one its `$ORIGIN`
 /// rpath resolves. Takes [executablePath] so a test can pin each shape.

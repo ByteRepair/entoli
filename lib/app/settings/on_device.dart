@@ -10,7 +10,7 @@ import "package:entoli_core/model/local_llm.dart";
 import "package:entoli_core/model/local_model.dart";
 import "package:entoli_core/model/local_model_store.dart";
 
-import "../../data/local/local_engine.dart" show LocalEngine;
+import "../../data/local/local_engine.dart" show DeviceMemory, LocalEngine;
 import "../../data/local/local_instance.dart" show LocalUsage;
 import "../../providers.dart";
 import "../downloads/model_downloads.dart";
@@ -23,8 +23,13 @@ final localDevicesProvider = FutureProvider<List<LocalDevice>?>(
 );
 
 /// What the loaded models take up: [total] is the model host's whole
-/// footprint where it knows it, the models added up where not.
-typedef RunningUsage = ({int? total, Map<String, LocalUsage> each});
+/// footprint where it knows it, the models added up where not. [device] is
+/// what the device has to give, measured whether anything is loaded or not.
+typedef RunningUsage = ({
+  int? total,
+  Map<String, LocalUsage> each,
+  DeviceMemory? device,
+});
 
 /// [RunningUsage], asked again every few seconds while something shows it: a
 /// model's cache grows as a chat goes on, and the running list is a place to
@@ -70,10 +75,12 @@ class RunningUsageWatch extends Notifier<RunningUsage?> {
     final ids = [for (final state in engine.running.value) state.modelId];
     final List<LocalUsage?> usages;
     final int? footprint;
+    final DeviceMemory? device;
     try {
-      (usages, footprint) = await (
+      (usages, footprint, device) = await (
         Future.wait(ids.map(engine.usage)),
         engine.footprint(),
+        engine.deviceMemory(),
       ).wait;
     } catch (e) {
       if (!_failing) logFailure("local", "could not measure the models", e);
@@ -89,10 +96,13 @@ class RunningUsageWatch extends Notifier<RunningUsage?> {
     final was = state;
     // A tick that measured the same leaves the pages showing it alone.
     if (!ref.mounted ||
-        was != null && was.total == total && mapEquals(was.each, each)) {
+        was != null &&
+            was.total == total &&
+            was.device == device &&
+            mapEquals(was.each, each)) {
       return;
     }
-    state = (total: total, each: each);
+    state = (total: total, each: each, device: device);
   }
 }
 
