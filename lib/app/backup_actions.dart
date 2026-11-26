@@ -5,7 +5,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/background_work.dart";
 import "package:entoli_core/model/formatting.dart";
-import "package:entoli_core/model/llm_provider.dart";
 
 import "../core/platform/platform.dart" as platform;
 import "../data/backup.dart";
@@ -51,7 +50,9 @@ class BackupBusy extends Notifier<bool> {
     // The file rather than the notifier, which is the whole app's to build.
     final settings = AppSettings.load(config);
     final providerKeys = settings.backupProviderKeys
-        ? _keysOf(settings.llmProviders)
+        ? ref
+              .read(appSecretsProvider)
+              .providerKeys(settings.llmProviders.map((p) => p.id))
         : const <String, String>{};
     var size = 0;
     final saved = await ref
@@ -104,9 +105,7 @@ class BackupBusy extends Notifier<bool> {
     );
     final restart = ref.read(appRestartProvider);
     // Read now: the restart disposes this provider before it ends.
-    final secrets = backup.providerKeys.isEmpty
-        ? null
-        : ref.read(appSecretsProvider);
+    final secrets = ref.read(appSecretsProvider);
     return _held(
       BackupWork.restoring,
       () => restart.restart(
@@ -115,21 +114,10 @@ class BackupBusy extends Notifier<bool> {
         whileStopped: () async {
           await restoreBackup(config, backup, deleteTree: platform.deleteTree);
           // Into the store, once the files they belong to are back.
-          for (final MapEntry(:key, :value) in backup.providerKeys.entries) {
-            await secrets!.setProviderKey(key, value);
-          }
+          await secrets.setProviderKeys(backup.providerKeys);
         },
       ),
     );
-  }
-
-  /// Each of [providers]' stored keys, by its id.
-  Map<String, String> _keysOf(List<LlmProviderConfig> providers) {
-    final secrets = ref.read(appSecretsProvider);
-    return {
-      for (final provider in providers)
-        provider.id: ?secrets.providerKey(provider.id),
-    };
   }
 
   /// [body], with the app held open off screen while it runs. The port is

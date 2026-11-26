@@ -216,12 +216,14 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     String? hostname,
     http.Client? client,
     RelayDial? relayDial,
-    SettingsLedger? settingsLedger,
-  }) : settingsSync = SettingsSync(
-         selfId: identity.id,
-         ledger: settingsLedger ?? _NoLedger(),
-         pairedAt: (id) async => (await registry.byId(id))?.addedAt,
-       ) {
+    required SettingsLedger settingsLedger,
+  }) {
+    settingsSync = SettingsSync(
+      selfId: identity.id,
+      ledger: settingsLedger,
+      send: (id, message) async => _peers[id]?.send(message),
+      pairedAt: (id) async => (await registry.byId(id))?.addedAt,
+    );
     _signaling = SyncPairing(
       identity: identity,
       registry: registry,
@@ -243,7 +245,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   final DeviceRegistry registry;
 
   /// The profile and providers kept in step with each peer that syncs them.
-  final SettingsSync settingsSync;
+  late final SettingsSync settingsSync;
 
   late final SyncPeers _peers = SyncPeers(registry);
 
@@ -661,7 +663,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
       case SyncReply():
         break; // the asker's echo, matched below
       case SyncSettingsOffer():
-        await settingsSync.received(peer, message);
+        await settingsSync.received(peer.deviceId, message);
       case SyncWelcome(:final chats, :final omadaProjects, :final projects) ||
           SyncChatsChanged(:final chats, :final omadaProjects, :final projects):
         _omadaProjects[peer.deviceId] = omadaProjects.toSet();
@@ -1387,7 +1389,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   /// A peer finished the handshake: what this device serves goes out first.
   /// The mirror side answers it with chatOpens for whatever it follows.
   Future<void> _greet(LivePeer peer) async {
-    unawaited(settingsSync.greet(peer));
+    unawaited(settingsSync.greet(peer.deviceId));
     final repo = _repo;
     if (repo == null) return;
     final chats = await repo.listChats();
@@ -1784,23 +1786,6 @@ class SyncHub implements ArtifactBytes, RemoteChats {
     _rebuildRemotes();
     unawaited(_peers.refresh());
   }
-}
-
-/// A hub given nowhere to keep what its pairs settled: a test's, which
-/// holds it for the hub's life.
-class _NoLedger implements SettingsLedger {
-  final _states = <String, SettingsPairState>{};
-
-  @override
-  Future<SettingsPairState> read(String peerId) async =>
-      _states[peerId] ?? SettingsPairState();
-
-  @override
-  Future<void> write(String peerId, SettingsPairState state) async =>
-      _states[peerId] = state;
-
-  @override
-  Future<void> forget(String peerId) async => _states.remove(peerId);
 }
 
 /// One resource transfer in flight: chunks accumulate until `done`.

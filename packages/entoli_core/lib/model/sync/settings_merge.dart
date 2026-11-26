@@ -1,11 +1,12 @@
 import "dart:convert";
 
+import "package:collection/collection.dart";
 import "package:crypto/crypto.dart";
 
 /// What two paired devices keep in step of their settings, item by item:
 /// the profile, and each provider by its id. An item is its fields as JSON
-/// values, or null where the device does not have it.
-typedef SyncedItems = Map<String, Map<String, Object?>?>;
+/// values; one the device does not have is not in the map.
+typedef SyncedItems = Map<String, Map<String, Object?>>;
 
 /// The key the profile is synced under.
 const profileItem = "profile";
@@ -16,6 +17,8 @@ String providerItem(String id) => "provider:$id";
 /// The provider id [item] names, or null for an item that is not one.
 String? providerIdOf(String item) =>
     item.startsWith("provider:") ? item.substring("provider:".length) : null;
+
+const _deep = DeepCollectionEquality();
 
 /// Who wins where both devices changed the same thing since they last
 /// agreed: one of the two, or neither, which is the two not syncing these at
@@ -67,21 +70,22 @@ class SyncPrecedence {
 
 /// What two devices last agreed each item was, field by field, as hashes:
 /// enough to tell which side changed a field since, and nothing a provider's
-/// key could be read back out of. Null where they have never agreed, which
-/// is their first sync.
+/// key could be read back out of. A field that is null is not in it.
 class MergeBase {
   const MergeBase(this.items);
 
-  /// Per item, per field, the hash of the value agreed; an item agreed
-  /// absent is null.
-  final Map<String, Map<String, String>?> items;
+  /// Per item, per field, the hash of the value agreed.
+  final Map<String, Map<String, String>> items;
 
   static MergeBase of(SyncedItems items) => MergeBase({
-    for (final MapEntry(:key, :value) in items.entries)
-      key: value == null
-          ? null
-          : {for (final field in value.entries) field.key: hashOf(field.value)},
+    for (final MapEntry(:key, :value) in items.entries) key: fieldsOf(value),
   });
+
+  /// [item]'s fields that hold anything, each as its hash.
+  static Map<String, String> fieldsOf(Map<String, Object?> item) => {
+    for (final MapEntry(:key, :value) in item.entries)
+      if (value != null) key: hashOf(value),
+  };
 
   /// One value's hash, over its JSON with keys in order, so two maps that
   /// differ only in how they were built hash the same.
@@ -97,18 +101,19 @@ class MergeBase {
     _ => value,
   };
 
+  /// Whether [items] is what was agreed.
+  bool agrees(SyncedItems items) => _deep.equals(this.items, of(items).items);
+
   Map<String, Object?> toJson() => items;
 
   static MergeBase? fromJson(Object? json) {
     if (json is! Map) return null;
     return MergeBase({
       for (final MapEntry(:key, :value) in json.entries)
-        "$key": value is Map
-            ? {
-                for (final field in value.entries)
-                  "${field.key}": "${field.value}",
-              }
-            : null,
+        if (value is Map)
+          "$key": {
+            for (final field in value.entries) "${field.key}": "${field.value}",
+          },
     });
   }
 }
@@ -119,9 +124,9 @@ class MergeBase {
 /// the other left alone goes; one removed against an edit is the winner's
 /// to keep or drop.
 ///
-/// On a first sync there is nothing agreed, so an item only one side has is
-/// kept and one both have and that differs is taken whole from the winner:
-/// the profile the user chose to keep, not a mix of the two.
+/// An item the two never agreed on — every item at a first sync — is kept
+/// where only one side has it, and taken whole from the winner where both
+/// do: the profile the user chose to keep, not a mix of the two.
 ///
 /// Symmetric: the other device, passing its own side as [local] and the
 /// opposite [localWins], reaches the same items.
@@ -130,25 +135,10 @@ SyncedItems mergeSettings({
   required SyncedItems remote,
   required MergeBase? base,
   required bool localWins,
-}) {
-  final merged = <String, Map<String, Object?>?>{};
-  for (final key in {...local.keys, ...remote.keys}) {
-    final mine = local[key];
-    final theirs = remote[key];
-    final Map<String, Object?>? item;
-    if (base == null || !base.items.containsKey(key)) {
-      item = mine == null || theirs == null
-          ? mine ?? theirs
-          : _same(mine, theirs)
-          ? mine
-          : (localWins ? mine : theirs);
-    } else {
-      item = _mergeItem(mine, theirs, base.items[key], localWins);
-    }
-    merged[key] = item;
-  }
-  return merged;
-}
+}) => {
+  for (final key in {...local.keys, ...remote.keys})
+    key: ?_mergeItem(local[key], remote[key], base?.items[key], localWins),
+};
 
 Map<String, Object?>? _mergeItem(
   Map<String, Object?>? mine,
@@ -156,54 +146,45 @@ Map<String, Object?>? _mergeItem(
   Map<String, String>? agreed,
   bool localWins,
 ) {
-  bool unchanged(Map<String, Object?>? item) =>
-      item == null ? agreed == null : agreed != null && _matches(item, agreed);
   if (mine == null || theirs == null) {
-    if (mine == null && theirs == null) return null;
-    // One side has it gone: kept only where the other changed it since,
-    // and then only if that side wins.
-    final present = mine ?? theirs!;
-    if (unchanged(present)) return null;
-    if (agreed == null) return present;
-    final presentWins = (mine != null) == localWins;
-    return presentWins ? present : null;
+    final present = mine ?? theirs;
+    // Gone from one side: kept only where the other changed it since, and
+    // then only if that side wins.
+    if (present == null || agreed == null) return present;
+    if (const MapEquality<String, String>().equals(
+      MergeBase.fieldsOf(present),
+      agreed,
+    )) {
+      return null;
+    }
+    return (mine != null) == localWins ? present : null;
   }
+  if (agreed == null) return localWins ? mine : theirs;
   final fields = <String, Object?>{};
   for (final field in {...mine.keys, ...theirs.keys}) {
     final a = mine[field], b = theirs[field];
-    final was = agreed?[field];
-    final aHash = MergeBase.hashOf(a), bHash = MergeBase.hashOf(b);
-    final Object? value;
-    if (aHash == bHash) {
-      value = a;
-    } else if (aHash == (was ?? MergeBase.hashOf(null))) {
-      value = b;
-    } else if (bHash == (was ?? MergeBase.hashOf(null))) {
-      value = a;
-    } else {
-      value = localWins ? a : b;
-    }
+    final was = agreed[field];
+    final aHash = a == null ? null : MergeBase.hashOf(a);
+    final bHash = b == null ? null : MergeBase.hashOf(b);
+    final value = aHash == bHash || bHash == was
+        ? a
+        : aHash == was
+        ? b
+        : (localWins ? a : b);
     if (value != null) fields[field] = value;
   }
   return fields;
 }
 
-bool _same(Map<String, Object?> a, Map<String, Object?> b) =>
-    MergeBase.hashOf(a) == MergeBase.hashOf(b);
-
-bool _matches(Map<String, Object?> item, Map<String, String> agreed) {
-  final fields = {
-    for (final MapEntry(:key, :value) in item.entries)
-      if (value != null) key: MergeBase.hashOf(value),
-  };
-  final nonNull = {
-    for (final MapEntry(:key, :value) in agreed.entries)
-      if (value != MergeBase.hashOf(null)) key: value,
-  };
-  return fields.length == nonNull.length &&
-      fields.entries.every((e) => nonNull[e.key] == e.value);
-}
-
-/// Whether [a] and [b] hold the same items, field for field.
+/// Whether [a] and [b] hold the same items, field for field, a null field
+/// being no field.
 bool sameItems(SyncedItems a, SyncedItems b) =>
-    MergeBase.hashOf(a) == MergeBase.hashOf(b);
+    _deep.equals(_filled(a), _filled(b));
+
+SyncedItems _filled(SyncedItems items) => {
+  for (final MapEntry(:key, :value) in items.entries)
+    key: {
+      for (final field in value.entries)
+        if (field.value != null) field.key: field.value,
+    },
+};

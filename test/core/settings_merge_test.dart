@@ -133,7 +133,7 @@ void main() {
 
     test("drops an item one side removed and the other left alone", () {
       final merged = merge(
-        {profileItem: agreed[profileItem]},
+        {profileItem: agreed[profileItem]!},
         agreed,
         agreed: agreed,
         localWins: false,
@@ -146,7 +146,7 @@ void main() {
         ...agreed,
         "provider:a": {"name": "A", "key": "k2"},
       };
-      final removed = {profileItem: agreed[profileItem]};
+      final removed = {profileItem: agreed[profileItem]!};
       expect(
         merge(edited, removed, agreed: agreed)["provider:a"],
         edited["provider:a"],

@@ -888,7 +888,8 @@ connecting and on every change each side sends a `settingsOffer` of what it
 has, the other merges it with its own and answers with a `reply` holding the
 result, and both store that as agreed. A reply is merged against what this
 device last sent rather than the agreed base, so an edit made while the offer
-was out is still this device's and goes out again; one offer is out per pair
+was out is still this device's and goes out again. Every offer is answered,
+if only with the precedence, so one is never left waiting; one is out per pair
 at a time, since a second would move what the first's reply is merged
 against, and edits made meanwhile go with the offer the reply prompts. A new
 choice of precedence is which settings to keep, as at a first sync, so what
@@ -898,10 +899,14 @@ port: it reads the settings and the secret store into items and writes merged
 items back through `setReplyStyle`, `setProviderKey` and `setProviders`, and
 tells the exchange of every change to either. A CLI provider's `command` and
 `env` are this machine's, so they are not synced and a merged provider keeps
-the local ones.
+the local ones: `LlmProviderConfig.toPortableJson` and `fromPortable` say
+which fields those are. The exchange reaches peers by id, through the hub's
+send, and the hub tells it which are connected.
 
 What a pair agreed is kept per peer in `sync/settings/<peer-id>.json`
-(`FileSettingsLedger`), with the precedence and the last offer. It holds a
+(`FileSettingsLedger`), with the precedence; `SettingsSync` is its only
+writer, so it reads each once and keeps it, and the offer awaiting a reply
+lives in memory, meaning nothing past the connection. It holds a
 hash of each field, not the field, so the keys are not on disk outside the
 secret store; a hash is enough to tell which side changed a field. Unpairing
 deletes it, and the next pair asks again: a choice the peer still holds from

@@ -19,9 +19,7 @@ class _Settings implements SyncedSettings {
   @override
   Future<void> write(SyncedItems items) async {
     writes++;
-    this.items = {
-      for (final MapEntry(:key, :value) in items.entries) key: ?value,
-    };
+    this.items = items;
   }
 }
 
@@ -40,35 +38,40 @@ class _Ledger implements SettingsLedger {
   Future<void> forget(String peerId) async => states.remove(peerId);
 }
 
-/// [to]'s end of the pair: what is sent goes to [to] as it would over the
-/// wire, through JSON.
-class _Link implements SettingsPeer {
-  _Link(this.deviceId);
+/// Two devices wired to each other: what one sends goes to the other as it
+/// would over the wire, through JSON.
+class _Pair {
+  late SettingsSync a, b;
+  final sent = <String, List<SyncSettingsOffer>>{"A": [], "B": []};
 
-  @override
-  final String deviceId;
-  late SettingsSync to;
-  late _Link back;
-  final sent = <SyncSettingsOffer>[];
-
-  @override
-  Future<void> send(SyncMessage message) async {
-    final offer =
-        SyncMessage.fromJson(jsonDecode(jsonEncode(message.toJson())))
-            as SyncSettingsOffer;
-    sent.add(offer);
-    scheduleMicrotask(() => to.received(back, offer));
-  }
+  /// [from]'s send, to the other.
+  Future<void> Function(String, SyncMessage) sendOf(String from) =>
+      (to, message) async {
+        final offer =
+            SyncMessage.fromJson(jsonDecode(jsonEncode(message.toJson())))
+                as SyncSettingsOffer;
+        sent[from]!.add(offer);
+        scheduleMicrotask(() => (to == "B" ? b : a).received(from, offer));
+      };
 }
 
 void main() {
-  late SettingsSync a, b;
+  late _Pair pair;
   late _Settings onA, onB;
-  late _Link toB, toA;
+  late SettingsSync a, b;
 
   setUp(() {
-    a = SettingsSync(selfId: "A", ledger: _Ledger());
-    b = SettingsSync(selfId: "B", ledger: _Ledger());
+    pair = _Pair();
+    a = pair.a = SettingsSync(
+      selfId: "A",
+      ledger: _Ledger(),
+      send: pair.sendOf("A"),
+    );
+    b = pair.b = SettingsSync(
+      selfId: "B",
+      ledger: _Ledger(),
+      send: pair.sendOf("B"),
+    );
     onA = _Settings({
       profileItem: {"name": "Ann"},
       "provider:x": {"name": "X", "key": "kx"},
@@ -79,11 +82,6 @@ void main() {
     });
     a.settings = onA;
     b.settings = onB;
-    // The link A sends to B over is B, as A knows it.
-    toB = _Link("B")..to = b;
-    toA = _Link("A")..to = a;
-    toB.back = toA;
-    toA.back = toB;
   });
 
   Future<void> settle() async {
@@ -93,8 +91,8 @@ void main() {
   }
 
   Future<void> connect() async {
-    await a.greet(toB);
-    await b.greet(toA);
+    await a.greet("B");
+    await b.greet("A");
     await settle();
   }
 
@@ -103,7 +101,10 @@ void main() {
     expect(a.undecided.value, {"B"});
     expect(b.undecided.value, {"A"});
     expect(onA.writes + onB.writes, 0);
-    expect([...toB.sent, ...toA.sent].every((o) => o.items.isEmpty), isTrue);
+    expect(
+      [...pair.sent["A"]!, ...pair.sent["B"]!].every((o) => o.items.isEmpty),
+      isTrue,
+    );
   });
 
   test(
@@ -172,8 +173,11 @@ void main() {
 
   test("the ledger keeps hashes, not keys", () async {
     final ledger = _Ledger();
-    a = SettingsSync(selfId: "A", ledger: ledger)..settings = onA;
-    toA.to = a;
+    a = pair.a = SettingsSync(
+      selfId: "A",
+      ledger: ledger,
+      send: pair.sendOf("A"),
+    )..settings = onA;
     await connect();
     await a.choose("B", "A");
     await settle();
@@ -203,24 +207,27 @@ void main() {
 
   test("a choice the peer kept from before the pairing is not taken", () async {
     final paired = DateTime.now().toUtc();
-    a = SettingsSync(
+    a = pair.a = SettingsSync(
       selfId: "A",
       ledger: _Ledger(),
+      send: pair.sendOf("A"),
       pairedAt: (_) async => paired,
     )..settings = onA;
-    toA.to = a;
     // B's choice, from the pairing A has since forgotten.
     final stale = SyncPrecedence(
       winner: "B",
       decidedAt: paired.subtract(const Duration(days: 1)),
     );
-    await toA.send(
+    await a.greet("B");
+    await pair.sendOf("B")(
+      "A",
       SyncMessage.settingsOffer(items: onB.items, precedence: stale.toJson()),
     );
     await settle();
-    await a.greet(toB);
-    await settle();
     expect(a.undecided.value, {"B"});
     expect(onA.items[profileItem], {"name": "Ann"});
+    // Answered, if only with its own precedence: B's offer is not left
+    // waiting, which would hold B's edits back for the connection.
+    expect(pair.sent["A"]!.last.reply, isTrue);
   });
 }

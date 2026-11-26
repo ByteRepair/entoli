@@ -1,6 +1,8 @@
 import "dart:async";
 import "dart:io";
 
+import "package:file/memory.dart";
+
 import "package:file/local.dart";
 import "package:agent_chat/app/app_menus.dart";
 import "package:clock/clock.dart";
@@ -20,7 +22,7 @@ import "package:agent_chat/data/local/local_engine.dart";
 import "package:agent_chat/data/local/byte_repair_store.dart";
 import "package:agent_chat/data/sync/peers.dart" show PeerState, PeerStatus;
 import "package:agent_chat/data/sync/sync_hub.dart"
-    show RemoteChatEntry, RemoteProject, SyncHub;
+    show FileSettingsLedger, RemoteChatEntry, RemoteProject, SyncHub;
 import "package:entoli_core/model/model_budget.dart";
 import "package:entoli_core/model/confinement.dart";
 import "package:entoli_core/model/sync/devices.dart";
@@ -589,6 +591,7 @@ Future<SyncHub> testSyncHub({
   // Nothing to dial by default, so a test that forgets one fails rather
   // than reaching the network from whatever URL it configured.
   relayDial: relayDial ?? FakeRelaySignaling().dial,
+  settingsLedger: FileSettingsLedger(MemoryFileSystem(), "/sync/settings"),
 );
 
 /// Put a whole chat on disk the way the app would have: its state, then its

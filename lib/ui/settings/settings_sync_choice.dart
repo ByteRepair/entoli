@@ -47,7 +47,7 @@ class _SettingsSyncChoiceState extends ConsumerState<SettingsSyncChoice> {
       builder: (context, precedences, _) {
         final side = switch (precedences[deviceId]) {
           null => null,
-          SyncPrecedence(:final winner) when winner == null => _Side.none,
+          SyncPrecedence(winner: null) => _Side.none,
           SyncPrecedence(:final winner) when winner == deviceId => _Side.there,
           _ => _Side.here,
         };
@@ -60,16 +60,13 @@ class _SettingsSyncChoiceState extends ConsumerState<SettingsSyncChoice> {
           ],
           selected: {?side},
           emptySelectionAllowed: side == null,
-          onSelectionChanged: (picked) => unawaited(
-            sync
-                .choose(deviceId, switch (picked.first) {
-                  _Side.here => sync.selfId,
-                  _Side.none => null,
-                  _Side.there => deviceId,
-                })
-                .catchError((Object e) {
-                  if (context.mounted) say(context, e);
-                }),
+          onSelectionChanged: (picked) => catchAndSay(
+            context,
+            () => sync.choose(deviceId, switch (picked.first) {
+              _Side.here => sync.selfId,
+              _Side.none => null,
+              _Side.there => deviceId,
+            }),
           ),
         );
       },
