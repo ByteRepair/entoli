@@ -2,20 +2,6 @@ import "file_picker.dart";
 import "mime.dart";
 import "models.dart";
 
-/// What the composer's Image offers.
-const imageFileTypes = FileTypes(
-  label: "Images",
-  extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "avif"],
-  mimeTypes: [
-    "image/png",
-    "image/jpeg",
-    "image/gif",
-    "image/webp",
-    "image/bmp",
-  ],
-  uniformTypeIdentifiers: ["public.image"],
-);
-
 /// The files the user chose through [picker] as attachments, or none if they
 /// cancelled.
 Future<List<Attachment>> pickAttachments(
@@ -23,7 +9,7 @@ Future<List<Attachment>> pickAttachments(
   AttachmentKind kind,
 ) async {
   final files = switch (kind) {
-    AttachmentKind.image => await picker.files(types: imageFileTypes),
+    AttachmentKind.image => await picker.images(),
     AttachmentKind.photo => [?await picker.photo()],
     AttachmentKind.file => await picker.files(),
   };

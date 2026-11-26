@@ -14,9 +14,14 @@ a folder, one file or several, each filtered by a `FileTypes` the page names.
 A page holds a `PickedFile`, never the plugin's `XFile`, so no page imports
 the plugin and a test answers with a file on its own disk. Android's chooser
 hands back a content URI, which the plugin copies under the cache by its
-display name, so `path` is a real file there too. The composer's Image and
-File are the core's `pickAttachments` over it, which reads the files into
-`Attachment`s.
+display name, so `path` is a real file there too. The composer's File is the
+core's `pickAttachments` over it, which reads the files into `Attachment`s.
+
+The composer's Image is `FilePicker.images`: on the phones the photo library
+through `image_picker`'s `pickMultiImage`, scaled like the camera's photo but
+not re-encoded; on the desktops files filtered to images. Android's Photo
+Picker is the plugin's own choice only from Android 16, so
+`platformFilePicker` turns it on where the picker is bound.
 
 A filter names extensions, MIME types and uniform type identifiers together,
 since each platform reads only its own field: the desktops the extension,

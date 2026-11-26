@@ -388,6 +388,15 @@ class FakeFilePicker implements FilePicker {
     ];
   }
 
+  /// How many times the photo library was opened.
+  var imagesAsked = 0;
+
+  @override
+  Future<List<PickedFile>> images() async {
+    imagesAsked++;
+    return [for (final a in scriptedAttachments) _HeldFile(a)];
+  }
+
   @override
   bool canTakePhoto = false;
 

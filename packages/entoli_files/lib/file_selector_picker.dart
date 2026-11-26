@@ -8,29 +8,65 @@ import "package:entoli_core/model/file_picker.dart";
 import "package:entoli_core/model/log.dart";
 
 /// The platform's own folder and file choosers, through `file_selector` — one
-/// plugin covering every platform the app runs on — and the phones' camera
-/// through `image_picker`.
+/// plugin covering every platform the app runs on — and the phones' camera and
+/// photo library through `image_picker`.
 class FileSelectorFilePicker implements FilePicker {
   const FileSelectorFilePicker();
 
   // The desktops' image_picker would only open a file chooser.
+  static bool get _phone => Platform.isAndroid || Platform.isIOS;
+
+  // A phone's photo is 12 MP and more; a model reads no more than this.
+  static const _side = 2048.0;
+
+  // Image where there is no photo library: the desktops.
+  static const _imageTypes = FileTypes(
+    label: "Images",
+    extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "avif"],
+    mimeTypes: [
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/webp",
+      "image/bmp",
+    ],
+    uniformTypeIdentifiers: ["public.image"],
+  );
+
   @override
-  bool get canTakePhoto => Platform.isAndroid || Platform.isIOS;
+  bool get canTakePhoto => _phone;
 
   @override
   Future<PickedFile?> photo() async {
     try {
-      // A phone's photo is 12 MP and more; a model reads no more than this.
       final file = await ImagePicker().pickImage(
         source: ImageSource.camera,
-        maxWidth: 2048,
-        maxHeight: 2048,
+        maxWidth: _side,
+        maxHeight: _side,
         imageQuality: 85,
       );
       return file == null ? null : _Picked(file);
     } on PlatformException catch (e) {
       logFailure("files", "camera: ${e.code}", e.message);
       return null;
+    }
+  }
+
+  @override
+  Future<List<PickedFile>> images() async {
+    if (!_phone) return files(types: _imageTypes);
+    try {
+      // No full metadata: PHPicker then needs no Photos permission. No
+      // imageQuality: it would re-encode every pick, a GIF to one frame.
+      final picked = await ImagePicker().pickMultiImage(
+        maxWidth: _side,
+        maxHeight: _side,
+        requestFullMetadata: false,
+      );
+      return [for (final file in picked) _Picked(file)];
+    } on PlatformException catch (e) {
+      logFailure("files", "photos: ${e.code}", e.message);
+      return const [];
     }
   }
 

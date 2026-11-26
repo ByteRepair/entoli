@@ -49,6 +49,8 @@
 	<string>Entoli connects to devices on your local network when you sync with your other devices, or when you use a model or service you run on this network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Entoli listens only during a voice conversation. Your speech is turned into text on this device, and that text is sent to the model you've chosen, like a typed message.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Entoli attaches the photos you pick to a message. It sees only the photos you choose, not the rest of your library.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Entoli turns your speech into text on this device during a voice conversation. The audio never leaves the device; the text goes to the model you've chosen, like a typed message.</string>
 	<key>UIApplicationSceneManifest</key>

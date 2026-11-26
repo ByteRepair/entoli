@@ -134,6 +134,9 @@ The app requests the following permissions, each used only for its feature:
 - **Speech recognition** (iOS) — hearing voice mode, on the device only.
 - **Camera** — taking a photo to attach to a message, and scanning a sync
   pairing QR code.
+- **Photos** — none. Attaching an image opens the system's photo picker, which
+  gives the app only the photos you pick, with no access to the rest of your
+  library.
 - **Local network** (iOS) — syncing with your other devices on the same
   network, and reaching a model or service you run on it.
 - **Notifications** — announcing reminders and finished turns.
