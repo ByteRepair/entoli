@@ -215,11 +215,9 @@ actor MlxModels {
     Memory.cacheLimit = MlxMemory.cacheLimit
     // MLX's errors caught inside the task, so a failed load throws from it
     // and is not kept, and every caller waiting on it hears the same.
-    // With nothing else loaded, whatever MLX still holds is an evicted
-    // model's, on its way out.
-    let reclaimable = models.isEmpty ? Memory.activeMemory + Memory.cacheMemory : 0
+    let nothingLoaded = models.isEmpty
     let loading = models[id] ?? Task {
-      try MlxMemory.checkFits(directory, reclaimable: reclaimable)
+      try MlxMemory.checkFits(directory, nothingLoaded: nothingLoaded)
       return try await catchingMlx { _ in
         let container = try await loadModelContainer(
           from: URL(fileURLWithPath: directory), using: #huggingFaceTokenizerLoader())

@@ -452,7 +452,7 @@ itself from Metal's working set and keeps the buffers it frees until it holds
 about 7.6 GB on a 12 GB iPhone, while iOS ends the app at 6.0 GiB there — a
 JetsamEvent report's `per-process-limit`, with the app frontmost, 1–3 seconds
 into a 4B's prefill. So on iOS (`MlxMemory`) the buffer cache is 64 MB while a
-model is loaded, MLX's soft limit is set before each reply from
+model is loaded, MLX's soft limit is set before each call on a model from
 `os_proc_available_memory` less a 768 MB reserve, and a reply whose headroom
 falls under half the reserve stops itself — after each prefill chunk, through
 the prefill's progress, and after each output chunk — ending in `resources`.

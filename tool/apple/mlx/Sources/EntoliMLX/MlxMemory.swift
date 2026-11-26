@@ -29,7 +29,7 @@ enum MlxMemory {
   /// MLX's own soft limit, read before `fit` first changes it.
   private static let ownLimit = Memory.memoryLimit
 
-  /// Before a reply or a restore: MLX's soft limit, past which an evaluation
+  /// Before each call on a model: MLX's soft limit, past which an evaluation
   /// waits for the work in flight to free its buffers, set to what MLX holds
   /// now and what the OS still allows, less the reserve. Asked each time,
   /// since what is left moves with every model loaded beside this one.
@@ -51,10 +51,10 @@ enum MlxMemory {
   /// reach of the checks a reply makes, so a load that ran out partway would
   /// end the app rather than fail.
   ///
-  /// `reclaimable` is what MLX holds that is on its way out: an evicted
-  /// model's weights are let go of a moment after its unload returns (see
-  /// `MlxModels.evict`), and the OS still counts them.
-  static func checkFits(_ directory: String, reclaimable: Int) throws {
+  /// With `nothingLoaded`, whatever MLX still holds is on its way out: an
+  /// evicted model's weights are let go of a moment after its unload returns
+  /// (see `MlxModels.evict`), and the OS still counts them.
+  static func checkFits(_ directory: String, nothingLoaded: Bool) throws {
     #if os(iOS)
     let files = (try? FileManager.default.contentsOfDirectory(atPath: directory)) ?? []
     let weights = files.filter { $0.hasSuffix(".safetensors") }.reduce(0) { sum, name in
@@ -62,6 +62,7 @@ enum MlxMemory {
       let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? Int) ?? 0
       return sum + size
     }
+    let reclaimable = nothingLoaded ? Memory.activeMemory + Memory.cacheMemory : 0
     let headroom = Int(os_proc_available_memory()) + reclaimable
     if weights + reserve > headroom {
       let gb = { (bytes: Int) in String(format: "%.1f GB", Double(bytes) / 1e9) }

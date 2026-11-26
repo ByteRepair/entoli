@@ -23,10 +23,11 @@ final class MlxChannel: GenerationChannel {
   private static var instance: MlxChannel?
 
   static func register(with messenger: FlutterBinaryMessenger) {
-    instance = MlxChannel(name: "agent_chat/mlx", messenger: messenger)
+    let channel = MlxChannel(name: "agent_chat/mlx", messenger: messenger)
     #if os(iOS)
-    instance?.stopOffScreen()
+    channel.stopOffScreen()
     #endif
+    instance = channel
   }
 
   /// Off screen, iOS refuses an app's GPU work, so a reply there could only

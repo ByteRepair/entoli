@@ -108,6 +108,7 @@ actor MlxConversation {
     // stopped, while this one waited its turn.
     guard !unloaded, let container else { throw MlxUnloaded() }
     try Task.checkCancellation()
+    MlxMemory.fit()
     return try await catchingMlx { try await body(container, $0) }
   }
 
@@ -142,7 +143,6 @@ actor MlxConversation {
   ) async throws {
     try await operation { container, mlxError in
       guard let last = messages.last else { return }
-      MlxMemory.fit()
       // The prefill is where a reply's memory peaks, and it says nothing
       // until it is done but this, after each chunk.
       let memoryStop = MemoryStop()
@@ -269,7 +269,6 @@ actor MlxConversation {
 
   func restore(from path: String) async -> Bool {
     (try? await operation { container, mlxError in
-      MlxMemory.fit()
       let record = try JSONDecoder().decode(
         HeldRecord.self, from: Data(contentsOf: Self.companion(path)))
       let snapshot = try loadPromptCacheSnapshot(url: URL(fileURLWithPath: path))
