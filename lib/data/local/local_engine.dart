@@ -63,6 +63,10 @@ abstract class LocalEngine {
   /// Unload [modelId], where it is loaded.
   Future<void> stop(String modelId);
 
+  /// How much conversation [modelId] has room for here under [settings]: the
+  /// device's limit on the chat's window. Null where it is not on disk.
+  int? contextOf(String modelId, AppSettings settings) => null;
+
   /// What [modelId] takes up while it is loaded; null where it is not, or
   /// where its runtime cannot say.
   Future<LocalUsage?> usage(String modelId) async => null;
@@ -177,6 +181,9 @@ abstract class RuntimeEngine extends LocalEngine {
   Set<LocalControl> get controls => runtime.controls;
 
   @override
+  bool offers(LocalModel model) => runtime.offers(model, budget);
+
+  @override
   ValueListenable<List<LocalLlmState>> get running => residency.running;
 
   @override
@@ -185,6 +192,15 @@ abstract class RuntimeEngine extends LocalEngine {
 
   @override
   Future<void> stop(String modelId) => residency.stop(modelId);
+
+  @override
+  int? contextOf(String modelId, AppSettings settings) {
+    final model = store.downloadedOfSync(modelId);
+    if (model == null) return null;
+    final plan = runtime.plan(model, LocalOptions.fromSettings(settings));
+    // A window of nothing is no answer.
+    return plan.refusal == null ? plan.contextLength : null;
+  }
 
   @override
   Future<LocalUsage?> usage(String modelId) async =>

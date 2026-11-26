@@ -29,7 +29,7 @@ void main() {
     cache = PromptCache(tempDir().path);
     model = runtime.create(
       FakeLocalModelStore(installed: {"m"}).downloadedOfSync("m")!,
-      const LocalLoad(contextLength: 8192, keepsPrompts: true),
+      const LocalLoad(memory: FixedContextPlan(8192), keepsPrompts: true),
       onChange: () {},
     );
   });

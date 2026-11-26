@@ -53,7 +53,7 @@ void main() {
     binaries: binaries,
     model: model,
     load: LocalLoad(
-      contextLength: contextLength ?? model.defaultContext,
+      memory: FixedContextPlan(contextLength ?? model.defaultContext),
       device: device,
       threads: threads,
     ),
@@ -432,6 +432,25 @@ something else entirely
       // No address of its own: each model is its own process on its own port,
       // and the endpoint's client is what routes between them.
       expect(onDevice(const _AlwaysInstalled()).config.baseUrl, isEmpty);
+    });
+
+    test("a model's window is the context this device runs it with", () {
+      final first = ggufCatalog.first;
+      final provider = onDevice(const _AlwaysInstalled());
+
+      expect(
+        provider.modelInfo(first.id)?.context,
+        downloadedAs(first).defaultContext,
+      );
+      expect(
+        provider
+            .offered(ModelCatalog.empty, ModelHost.resolving())
+            .first
+            .info
+            .context,
+        downloadedAs(first).defaultContext,
+      );
+      expect(provider.modelInfo("not-downloaded"), isNull);
     });
 
     test(

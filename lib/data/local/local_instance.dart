@@ -4,7 +4,11 @@ import "package:flutter/foundation.dart" show protected;
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/local_llm.dart";
 import "package:entoli_core/model/local_model.dart";
+import "package:entoli_core/model/memory_plan.dart";
+import "package:entoli_core/model/model_budget.dart";
 import "package:entoli_core/agent/llm/llm_client.dart";
+
+export "package:entoli_core/model/memory_plan.dart";
 
 /// How a model is to be loaded, as a turn asks for it. Read from the settings
 /// fresh for every call, the way `LocalShell` re-reads its environment, so a
@@ -41,6 +45,9 @@ class LocalOptions {
   final int? contextLength;
   final int maxRunning;
   final int? threads;
+
+  /// How many models may be resident at once, as many as the app allows.
+  int get resident => maxRunning.clamp(1, maxLocalModelsAllowed);
   final int keptPrompts;
 
   /// Whether prompts are kept on disk between turns: the one place
@@ -55,13 +62,16 @@ class LocalOptions {
 /// changes how a runtime loads a model.
 class LocalLoad {
   const LocalLoad({
-    required this.contextLength,
+    required this.memory,
     this.device,
     this.threads,
     this.keepsPrompts = false,
   });
 
-  final int contextLength;
+  /// How the model's memory is laid out, which decides its context.
+  final MemoryPlan memory;
+
+  int get contextLength => memory.contextLength;
 
   /// The device in the runtime's own word, or null where the runtime has no
   /// choice of device.
@@ -76,8 +86,8 @@ class LocalLoad {
   final bool keepsPrompts;
 
   /// Every field, so one added is one compared.
-  ({int c, String? d, int? t, bool k}) get _fields =>
-      (c: contextLength, d: device, t: threads, k: keepsPrompts);
+  ({MemoryPlan m, String? d, int? t, bool k}) get _fields =>
+      (m: memory, d: device, t: threads, k: keepsPrompts);
 
   @override
   bool operator ==(Object other) =>
@@ -244,8 +254,17 @@ abstract class LocalRuntime {
   /// draws.
   Set<LocalControl> get controls;
 
-  /// What [options] mean for [model] here: "auto" made a device, a default
-  /// context made a number. Asynchronous because a runtime may have to ask the
+  /// How [model]'s memory is laid out under [options], and so how much
+  /// conversation it has room for. Synchronous, since the chat's window is
+  /// read from it before anything is loaded.
+  MemoryPlan plan(DownloadedModel model, LocalOptions options);
+
+  /// Whether [model] is offered for download under [budget], before it is on
+  /// disk to plan from.
+  bool offers(LocalModel model, ModelBudget budget) => budget.fits(model);
+
+  /// What [options] mean for [model] here: "auto" made a device, the [plan]
+  /// made a context. Asynchronous because a runtime may have to ask the
   /// hardware what it has.
   Future<LocalLoad> resolve(DownloadedModel model, LocalOptions options);
 

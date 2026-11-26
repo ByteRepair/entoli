@@ -432,11 +432,9 @@ load is not kept, a reply ends in `error` with nothing held, a restore leaves
 the session as it was, and a save leaves no file. A generation checks it per
 chunk, since MLX goes on with arrays it never computed. The message is coded
 `background` (the GPU refused off screen), `resources` (memory ran out) or
-`other`. The weights are read on a dispatch queue, out of the handler's
-reach, so a load is refused before it starts where its `.safetensors` and the
-reserve below come to more than the app has left (`MlxMemory.checkFits`),
-counting as left what MLX still holds when no model is loaded: an evicted
-model's weights go a moment after its unload returns.
+`other`, and `context` where a prompt is longer than the model has room
+for. The weights are read on a dispatch queue, out of the handler's reach, so
+whether they fit is the plan's to say before the load is asked for (below).
 
 **One call at a time per model.** `MlxConversation.operation` queues its
 generate, save and restore calls, first come first served: an actor lets the
@@ -446,19 +444,31 @@ the session the reply was carrying on. llama.cpp's one slot queues the same
 way. A call stopped while it waits leaves the queue at once, and one handed
 the model re-checks for an unload first.
 
-**MLX is held to the app's limit, not Metal's.** `ModelBudget` decides which
-models are offered; nothing in MLX keeps a loaded one inside it. MLX sizes
-itself from Metal's working set and keeps the buffers it frees until it holds
-about 7.6 GB on a 12 GB iPhone, while iOS ends the app at 6.0 GiB there — a
-JetsamEvent report's `per-process-limit`, with the app frontmost, 1–3 seconds
-into a 4B's prefill. So on iOS (`MlxMemory`) the buffer cache is 64 MB while a
-model is loaded, MLX's soft limit is set before each call on a model from
-`os_proc_available_memory` less a 768 MB reserve, and a reply whose headroom
-falls under half the reserve stops itself — after each prefill chunk, through
-the prefill's progress, and after each output chunk — ending in `resources`.
-The soft limit only makes an evaluation wait for work in flight; MLX's
-allocator never fails at it, which is why the stop is the app's. With no
-model left, the limit is MLX's own again.
+**MLX runs inside a budget the app sets, and the app keeps the rest.** MLX
+sizes itself from Metal's working set and keeps the buffers it frees until it
+holds about 7.6 GB on a 12 GB iPhone, while iOS ends the app at 6.0 GiB there
+— a JetsamEvent report's `per-process-limit`, the app frontmost, 1–3 seconds
+into a 4B's prefill. Qwen3.5 4B's prefill was most of it: its 256-wide heads
+take MLX's unfused attention, which writes out a chunk's whole score matrix
+against the conversation, about 650 MB a layer at 20k tokens with 512-token
+chunks. Dart's `BudgetPlan` (see "How much context, and why it is per model"
+in `lib/data/local/AGENTS.md`) lays the measured budget out — weights, state,
+prefill scratch, buffer cache, and the KV cache from what is left, which is
+the context the chat compacts against — and the load carries it
+(`MlxLimits`). `MlxBudget` sets MLX's soft limit and cache to the sum over the
+loaded models; each reply's prefill runs at the plan's step, short enough that
+its scratch fits at the full context; and a reply is stopped where its prompt
+or its reply passes the context (`context`), or where MLX's own counters,
+active and cache, pass the budget (`resources`) — checked after each prefill
+chunk, through the prefill's progress, and after each output chunk. An
+evicted model's budget stays counted until MLX has freed it, so another
+model's reply is not stopped for memory on its way out. The soft limit only makes an
+evaluation wait for work in flight, MLX's allocator never failing at it,
+which is why the stop is the app's. Neither measures the app's free memory:
+the line does not move with whatever Flutter is doing. Each `done` reports
+MLX's peak beside its budget, both the process's, and a reply that came within
+a tenth of it is logged, a plan short of what MLX takes. With no model loaded, MLX's limits are its own
+and its cache keeps nothing.
 
 ### The build
 

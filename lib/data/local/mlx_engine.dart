@@ -2,6 +2,8 @@ import "dart:async";
 
 import "package:flutter/services.dart";
 import "package:entoli_core/model/local_model.dart";
+import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/model_budget.dart";
 import "package:entoli_core/model/local_model_store.dart";
 import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:entoli_core/model/model_process.dart";
@@ -9,6 +11,7 @@ import "package:entoli_core/model/model_process.dart";
 import "channel_generation.dart";
 import "local_engine.dart";
 import "local_instance.dart";
+import "model_format.dart";
 
 /// The MLX models' channel, whose Swift half (`MlxChannel.swift`) is
 /// registered only where they run: the model host on macOS, the app on iOS.
@@ -25,8 +28,16 @@ class MlxEngine extends RuntimeEngine {
     super.prompts,
     super.launch,
     super.memory,
+    bool budgetRequired = false,
   }) : _process = process,
-       super(MlxRuntime(process), store);
+       super(
+         MlxRuntime(
+           process,
+           budget: launch?.budget.bytes,
+           budgetRequired: budgetRequired,
+         ),
+         store,
+       );
 
   final ModelProcess _process;
 
@@ -42,14 +53,58 @@ class MlxEngine extends RuntimeEngine {
 
 /// How an MLX model is loaded: by name and directory, over the channel to its
 /// Swift half. The GPU is the only device, so there is no device or thread
-/// count to choose, and MLX's cache grows as it is used rather than being
-/// sized at load, so there is no context to choose either. Keeping prompts
-/// changes nothing about a load, so it is not in one.
+/// count to choose, and the context is the [BudgetPlan]'s, so there is none
+/// to choose there either. Keeping prompts changes nothing about a load, so
+/// it is not in one.
 class MlxRuntime extends LocalRuntime {
-  MlxRuntime(this._process) : _channel = _process.channel(mlxChannel.name);
+  MlxRuntime(this._process, {this.budget, this.budgetRequired = false})
+    : _channel = _process.channel(mlxChannel.name);
 
   final ModelProcess _process;
   final ModelChannel _channel;
+
+  /// What every MLX model together may take, measured at launch; null where
+  /// the device said nothing, which leaves MLX its own defaults.
+  final int? budget;
+
+  /// Whether a model may not run without [budget]: an iPhone, whose app iOS
+  /// ends past a limit nothing else would hold MLX inside.
+  final bool budgetRequired;
+
+  /// Each model's shape, read off its config once — the chat's window asks
+  /// for the plan on every read — and read again for files that changed.
+  final _shapes = <String, ModelShape>{};
+
+  /// Offered where its weights and what MLX needs beside them fit the
+  /// budget; a catalog entry has no config yet to plan the rest from.
+  @override
+  bool offers(LocalModel model, ModelBudget budget) {
+    final bytes = budget.bytes, weights = model.bytes;
+    return bytes == null ||
+        weights == null ||
+        BudgetPlan.floorOf(weights) <= bytes;
+  }
+
+  @override
+  MemoryPlan plan(DownloadedModel model, LocalOptions options) {
+    final budget = this.budget;
+    if (budget == null) {
+      return FixedContextPlan(
+        model.contextLength,
+        refusal: budgetRequired
+            ? "the device did not say how much memory the app may use"
+            : null,
+      );
+    }
+    final ModelShape shape;
+    try {
+      shape = _shapes["${model.id}\u0000${model.file}\u0000${model.bytes}"] ??=
+          MlxFormat.shapeOf(model);
+    } on FormatException catch (e) {
+      return FixedContextPlan(model.contextLength, refusal: e.message);
+    }
+    return BudgetPlan(shape, deviceBytes: budget, sharedBy: options.resident);
+  }
 
   @override
   Set<LocalControl> get controls => const {
@@ -61,7 +116,7 @@ class MlxRuntime extends LocalRuntime {
   Future<LocalLoad> resolve(
     DownloadedModel model,
     LocalOptions options,
-  ) async => LocalLoad(contextLength: model.contextLength);
+  ) async => LocalLoad(memory: plan(model, options));
 
   @override
   LocalInstance create(
@@ -106,10 +161,18 @@ class MlxInstance extends LocalInstance {
   void start() => unawaited(_load());
 
   Future<void> _load() async {
+    final memory = load.memory;
+    if (memory.refusal case final why?) return markFailed(why);
     try {
       await _channel.invokeMethod("load", {
         "model": model.id,
         "directory": model.file,
+        if (memory is BudgetPlan) ...{
+          "budget": memory.budgetBytes,
+          "cache": BudgetPlan.cacheBytes,
+          "context": memory.contextLength,
+          "prefillStep": memory.prefillStep,
+        },
       });
       markReady();
     } on PlatformException catch (e) {
@@ -130,15 +193,31 @@ class MlxInstance extends LocalInstance {
     double? temperature,
     String? reasoningEffort,
     LlmOutputLimit outputLimit = const LlmOutputLimit(),
-  }) => ChannelGeneration(_channel, label: "on-device model").run("generate", {
-    "model": model.id,
-    "messages": [for (final message in messages) _wire(message)],
-    "tools": [for (final tool in tools) channelTool(tool)],
-    "temperature": ?temperature,
-    // Always a number: the Swift half has to stop somewhere, and says the
-    // reply was cut off where it stopped here.
-    "maxTokens": outputLimit.tokens,
-  });
+  }) =>
+      ChannelGeneration(
+        _channel,
+        label: "on-device model",
+        onDone: _checkPeak,
+      ).run("generate", {
+        "model": model.id,
+        "messages": [for (final message in messages) _wire(message)],
+        "tools": [for (final tool in tools) channelTool(tool)],
+        "temperature": ?temperature,
+        // Always a number: the Swift half has to stop somewhere, and says the
+        // reply was cut off where it stopped here.
+        "maxTokens": outputLimit.tokens,
+      });
+
+  /// A reply whose peak came within a tenth of MLX's budget says the plans'
+  /// working memory is short of what MLX takes. Both are the process's —
+  /// every loaded model's — as MLX counts them.
+  void _checkPeak(Map<Object?, Object?> done) {
+    final peak = done["peakBytes"], budget = done["budgetBytes"];
+    if (peak is! int || budget is! int) return;
+    if (peak * 10 > budget * 9) {
+      logFailure("mlx", "${model.id} peaked at $peak of a $budget budget");
+    }
+  }
 
   /// A message as the Swift half reads it.
   static Map<String, Object?> _wire(LlmMessage message) => {

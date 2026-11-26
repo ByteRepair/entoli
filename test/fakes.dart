@@ -1479,16 +1479,19 @@ DownloadedModel downloadedAs(LocalModel model, {String? file}) =>
 /// beside it — downloading is tested against the real store and a real socket.
 /// An id the catalog does not have is described by the id alone.
 class FakeLocalModelStore extends LocalModelStore {
-  FakeLocalModelStore({Set<String> installed = const {}})
-    : _installed = {
-        for (final id in installed)
-          id: downloadedAs(
-            <LocalModel>[...ggufCatalog, ...mlxCatalog].firstWhere(
-              (m) => m.id == id,
-              orElse: () => GgufModel(id: id, name: id, url: ""),
-            ),
-          ),
-      };
+  FakeLocalModelStore({
+    Set<String> installed = const {},
+    List<DownloadedModel> models = const [],
+  }) : _installed = {
+         for (final id in installed)
+           id: downloadedAs(
+             <LocalModel>[...ggufCatalog, ...mlxCatalog].firstWhere(
+               (m) => m.id == id,
+               orElse: () => GgufModel(id: id, name: id, url: ""),
+             ),
+           ),
+         for (final model in models) model.id: model,
+       };
 
   final Map<String, DownloadedModel> _installed;
 
@@ -1595,10 +1598,14 @@ class FakeLocalRuntime extends LocalRuntime {
   Future<List<LocalDevice>> devices() async => devicesFound;
 
   @override
+  MemoryPlan plan(DownloadedModel model, LocalOptions options) =>
+      FixedContextPlan(options.contextLength ?? 4096);
+
+  @override
   Future<LocalLoad> resolve(DownloadedModel model, LocalOptions options) async {
     served.add((modelId: model.id, options: options));
     return LocalLoad(
-      contextLength: options.contextLength ?? 4096,
+      memory: plan(model, options),
       device: options.device,
       threads: options.threads,
       keepsPrompts: options.keepsPrompts,

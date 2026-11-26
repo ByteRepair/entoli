@@ -251,6 +251,13 @@ class LlamaRuntime extends LocalRuntime {
   @override
   Set<LocalControl> get controls => _controls;
 
+  /// llama.cpp's KV cache is sized when the server starts, and the weights
+  /// are mapped and paged, so the context is the setting or the model's own
+  /// default: a gigabyte of cache at what one token costs it.
+  @override
+  MemoryPlan plan(DownloadedModel model, LocalOptions options) =>
+      FixedContextPlan(options.contextLength ?? model.defaultContext);
+
   @override
   int? get maxThreads => _bigCores ?? Platform.numberOfProcessors;
 
@@ -282,7 +289,7 @@ class LlamaRuntime extends LocalRuntime {
       options.device == null ? await devices() : const [],
     );
     return LocalLoad(
-      contextLength: options.contextLength ?? model.defaultContext,
+      memory: plan(model, options),
       device: device,
       threads: options.threads ?? _bigCores,
       // Only where there is somewhere to write them: a build with no cache

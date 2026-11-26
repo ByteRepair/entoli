@@ -11,7 +11,7 @@ import "package:entoli_core/agent/llm/llm_client.dart";
 /// the MLX models both answer this way, and both end with `done` or `error`:
 /// the tool calls a reply made arrive before its `done`.
 class ChannelGeneration {
-  ChannelGeneration(this.channel, {required this.label});
+  ChannelGeneration(this.channel, {required this.label, this.onDone});
 
   /// One counter for the whole process: a generation id must not mean two
   /// things to one channel.
@@ -21,6 +21,10 @@ class ChannelGeneration {
 
   /// What the model is called in an error, after "the".
   final String label;
+
+  /// Handed the `done` frame's arguments, for what a native half reports
+  /// beyond the reply.
+  final void Function(Map<Object?, Object?> done)? onDone;
 
   Stream<LlmChunk> run(String method, Map<String, Object?> arguments) async* {
     final generation = "fm${++_generations}";
@@ -86,6 +90,7 @@ class ChannelGeneration {
             );
           case "done":
             finished = true;
+            onDone?.call(args ?? const {});
             final input = (args?["inputTokens"] as num?)?.toInt();
             final output = (args?["outputTokens"] as num?)?.toInt();
             yield completion(

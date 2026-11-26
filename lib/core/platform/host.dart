@@ -176,6 +176,7 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
             prompts: PromptCache(_kvCacheDir(cacheDir)),
             launch: probe.memory,
             memory: _appleMemory,
+            budgetRequired: Platform.isIOS,
           )
         : const NoLocalEngine();
   }
