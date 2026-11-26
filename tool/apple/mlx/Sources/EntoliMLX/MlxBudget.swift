@@ -40,7 +40,13 @@ final class MlxBudget: @unchecked Sendable {
   private let lock = NSLock()
   private var planned: [String: MlxLimits] = [:]
   private var unplanned: Set<String> = []
-  private var total: Int?
+
+  /// The loaded models' budgets summed; nil while none is planned or one is
+  /// not, a model with no plan having no budget to hold anything to.
+  private var total: Int? {
+    guard unplanned.isEmpty, !planned.isEmpty else { return nil }
+    return planned.values.reduce(0) { $0 + $1.budget }
+  }
 
   /// Evicted models' budgets, still counted: their buffers are freed a moment
   /// after their unload returns, and a reply on another model must not be
@@ -75,30 +81,25 @@ final class MlxBudget: @unchecked Sendable {
     let used = Memory.activeMemory + Memory.cacheMemory
     return lock.withLock {
       guard let total else { return false }
-      if draining > 0 && used <= total { draining = 0 }
+      if draining > 0 && used <= total {
+        draining = 0
+        apply()
+      }
       return used > total + draining
     }
   }
 
-  /// A model loaded with no plan has no budget to hold anything to, so MLX
-  /// keeps its defaults while one is. With nothing loaded the cache keeps
-  /// nothing: an evicted model's buffers are freed a moment after its unload
-  /// returns, and are handed back as they are.
+  /// With no budget MLX keeps its own limits, and with nothing loaded its
+  /// cache keeps nothing: an evicted model's buffers are freed a moment after
+  /// its unload returns, and are handed back as they are.
   private func apply() {
-    if planned.isEmpty && unplanned.isEmpty {
-      total = nil
-      Memory.memoryLimit = ownMemoryLimit
-      Memory.cacheLimit = 0
-    } else if !unplanned.isEmpty {
-      total = nil
-      Memory.memoryLimit = ownMemoryLimit
-      Memory.cacheLimit = ownCacheLimit
-    } else {
-      let sum = planned.values.reduce(0) { $0 + $1.budget }
-      total = sum
-      Memory.memoryLimit = sum + draining
+    if let total {
+      Memory.memoryLimit = total + draining
       Memory.cacheLimit = planned.values.reduce(0) { $0 + $1.cache }
+    } else {
+      draining = 0
+      Memory.memoryLimit = ownMemoryLimit
+      Memory.cacheLimit = unplanned.isEmpty ? 0 : ownCacheLimit
     }
-    if total == nil { draining = 0 }
   }
 }

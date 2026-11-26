@@ -1,9 +1,9 @@
 import "dart:async";
-import "dart:io" show FileSystemException;
 
 import "package:flutter/services.dart";
 import "package:entoli_core/model/local_model.dart";
 import "package:entoli_core/model/log.dart";
+import "package:entoli_core/model/model_budget.dart";
 import "package:entoli_core/model/local_model_store.dart";
 import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:entoli_core/model/model_process.dart";
@@ -75,13 +75,21 @@ class MlxRuntime extends LocalRuntime {
   /// for the plan on every read — and read again for files that changed.
   final _shapes = <String, ModelShape>{};
 
-  /// Each model gets an equal share of [budget], so the models
-  /// `maxRunning` lets be resident together fit beside each other.
+  /// Offered where its weights and what MLX needs beside them fit the
+  /// budget; a catalog entry has no config yet to plan the rest from.
+  @override
+  bool offers(LocalModel model, ModelBudget budget) {
+    final bytes = budget.bytes, weights = model.bytes;
+    return bytes == null ||
+        weights == null ||
+        BudgetPlan.floorOf(weights) <= bytes;
+  }
+
   @override
   MemoryPlan plan(DownloadedModel model, LocalOptions options) {
     final budget = this.budget;
     if (budget == null) {
-      return UnplannedMemory(
+      return FixedContextPlan(
         model.contextLength,
         refusal: budgetRequired
             ? "the device did not say how much memory the app may use"
@@ -93,15 +101,9 @@ class MlxRuntime extends LocalRuntime {
       shape = _shapes["${model.id}\u0000${model.file}\u0000${model.bytes}"] ??=
           MlxFormat.shapeOf(model);
     } on FormatException catch (e) {
-      return UnplannedMemory(model.contextLength, refusal: e.message);
-    } on FileSystemException catch (e) {
-      return UnplannedMemory(model.contextLength, refusal: e.message);
+      return FixedContextPlan(model.contextLength, refusal: e.message);
     }
-    return BudgetPlan(
-      shape,
-      budgetBytes: budget ~/ options.maxRunning,
-      sharedBy: options.maxRunning,
-    );
+    return BudgetPlan(shape, deviceBytes: budget, sharedBy: options.resident);
   }
 
   @override

@@ -10,7 +10,6 @@ void main() {
     kvBytesPerToken: 8 * 4 * 256 * 2 * 2,
     trainedContext: 262144,
     stateBytes: 51511296,
-    attentionLayers: 8,
     attentionHeads: 16,
     headDim: 256,
     hiddenSize: 2560,
@@ -18,7 +17,7 @@ void main() {
   );
 
   test("the KV cache gets what the rest leaves, and decides the context", () {
-    final plan = BudgetPlan(qwen, budgetBytes: 4200000000);
+    final plan = BudgetPlan(qwen, deviceBytes: 4200000000);
 
     expect(
       plan.kvBytes,
@@ -34,7 +33,7 @@ void main() {
   });
 
   test("the prefill's step holds its scratch at the full context", () {
-    final plan = BudgetPlan(qwen, budgetBytes: 4200000000);
+    final plan = BudgetPlan(qwen, deviceBytes: 4200000000);
 
     expect(plan.prefillStep, 168);
     expect(
@@ -55,34 +54,36 @@ void main() {
     );
 
     expect(narrow.scoresWrittenOut, isFalse);
-    expect(BudgetPlan(narrow, budgetBytes: 4 << 30).prefillStep, 512);
+    expect(BudgetPlan(narrow, deviceBytes: 4 << 30).prefillStep, 512);
   });
 
   test("a roomy budget is held to what the model was trained on", () {
     expect(
-      BudgetPlan(qwen, budgetBytes: 64 << 30).contextLength,
+      BudgetPlan(qwen, deviceBytes: 64 << 30).contextLength,
       qwen.trainedContext,
     );
   });
 
   test("a budget with no room to talk refuses the model, saying so", () {
-    final plan = BudgetPlan(qwen, budgetBytes: 3400000000);
+    final plan = BudgetPlan(qwen, deviceBytes: 3400000000);
 
     expect(plan.contextLength, lessThan(BudgetPlan.minimumContext));
-    expect(plan.refusal, contains("3.4 GB"));
+    expect(plan.refusal, contains("3.2 GB"));
   });
 
   test("a budget smaller than the weights is no context at all", () {
-    expect(BudgetPlan(qwen, budgetBytes: 1 << 30).contextLength, 0);
+    expect(BudgetPlan(qwen, deviceBytes: 1 << 30).contextLength, 0);
   });
 
-  test("a refused plan has no window to compact against", () {
-    expect(BudgetPlan(qwen, budgetBytes: 3400000000).window, isNull);
-    expect(BudgetPlan(qwen, budgetBytes: 4200000000).window, 23762);
+  test("a plan too small says what it needs", () {
+    expect(
+      BudgetPlan(qwen, deviceBytes: 3400000000).refusal,
+      contains("with room to talk"),
+    );
   });
 
   test("a share too small names the setting that split it", () {
-    final plan = BudgetPlan(qwen, budgetBytes: 2100000000, sharedBy: 2);
+    final plan = BudgetPlan(qwen, deviceBytes: 4200000000, sharedBy: 2);
 
     expect(plan.refusal, contains("each of the 2 models"));
   });
@@ -93,7 +94,7 @@ void main() {
       kvBytesPerToken: 0,
       trainedContext: 8192,
     );
-    final plan = BudgetPlan(recurrent, budgetBytes: 4 << 30);
+    final plan = BudgetPlan(recurrent, deviceBytes: 4 << 30);
 
     expect(plan.contextLength, 8192);
     expect(plan.prefillStep, 512);
@@ -101,12 +102,12 @@ void main() {
 
   test("a plan with another budget or step is another load", () {
     expect(
-      BudgetPlan(qwen, budgetBytes: 4200000000).identity,
-      BudgetPlan(qwen, budgetBytes: 4200000000).identity,
+      BudgetPlan(qwen, deviceBytes: 4200000000),
+      BudgetPlan(qwen, deviceBytes: 4200000000),
     );
     expect(
-      BudgetPlan(qwen, budgetBytes: 64 << 30).identity,
-      isNot(BudgetPlan(qwen, budgetBytes: 128 << 30).identity),
+      BudgetPlan(qwen, deviceBytes: 64 << 30),
+      isNot(BudgetPlan(qwen, deviceBytes: 128 << 30)),
     );
   });
 }

@@ -181,6 +181,9 @@ abstract class RuntimeEngine extends LocalEngine {
   Set<LocalControl> get controls => runtime.controls;
 
   @override
+  bool offers(LocalModel model) => runtime.offers(model, budget);
+
+  @override
   ValueListenable<List<LocalLlmState>> get running => residency.running;
 
   @override
@@ -194,7 +197,9 @@ abstract class RuntimeEngine extends LocalEngine {
   int? contextOf(String modelId, AppSettings settings) {
     final model = store.downloadedOfSync(modelId);
     if (model == null) return null;
-    return runtime.plan(model, LocalOptions.fromSettings(settings)).window;
+    final plan = runtime.plan(model, LocalOptions.fromSettings(settings));
+    // A window of nothing is no answer.
+    return plan.refusal == null ? plan.contextLength : null;
   }
 
   @override

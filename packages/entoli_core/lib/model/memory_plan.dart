@@ -1,5 +1,7 @@
 import "dart:math";
 
+import "formatting.dart";
+
 /// How much conversation a loaded model has room for, and what that room is
 /// made of. Each runtime answers it for its own models (`LocalRuntime.plan`),
 /// and its [contextLength] is the model's window wherever one is read: the
@@ -12,37 +14,38 @@ abstract class MemoryPlan {
   int get contextLength;
 
   /// Why the model cannot be run under this plan, or null where it can.
-  String? get refusal => null;
+  String? get refusal;
 
-  /// The context where the model runs under this plan, or null where it
-  /// does not: a window of nothing is no answer.
-  int? get window => refusal == null ? contextLength : null;
-
-  /// What decides whether a loaded model is still the one asked for: a model
-  /// loaded under another plan is loaded again.
-  Object get identity => contextLength;
-}
-
-/// A context fixed at load: llama.cpp sizes its KV cache when the server
-/// starts, from the setting or the model's own default.
-class FixedContextPlan extends MemoryPlan {
-  const FixedContextPlan(this.contextLength);
+  /// Equal plans load a model the same way, so one loaded under another plan
+  /// is loaded again.
+  @override
+  bool operator ==(Object other);
 
   @override
-  final int contextLength;
+  int get hashCode;
 }
 
-/// No budget to plan against: the model gets what it was trained on and its
-/// runtime's own defaults, or, where a budget is what keeps the app alive and
-/// none could be had, is refused with [refusal].
-class UnplannedMemory extends MemoryPlan {
-  const UnplannedMemory(this.contextLength, {this.refusal});
+/// A context decided without a budget: llama.cpp sizes its KV cache when the
+/// server starts, from the setting or the model's own default, and MLX on a
+/// device that measured nothing runs a model at what it was trained on — or,
+/// where a budget is what keeps the app alive, refuses it with [refusal].
+class FixedContextPlan extends MemoryPlan {
+  const FixedContextPlan(this.contextLength, {this.refusal});
 
   @override
   final int contextLength;
 
   @override
   final String? refusal;
+
+  @override
+  bool operator ==(Object other) =>
+      other is FixedContextPlan &&
+      other.contextLength == contextLength &&
+      other.refusal == refusal;
+
+  @override
+  int get hashCode => Object.hash(contextLength, refusal);
 }
 
 /// What a model's architecture costs in memory, read off its own config.
@@ -52,7 +55,6 @@ class ModelShape {
     required this.kvBytesPerToken,
     required this.trainedContext,
     this.stateBytes = 0,
-    this.attentionLayers = 0,
     this.attentionHeads = 0,
     this.headDim = 0,
     this.hiddenSize = 0,
@@ -70,7 +72,6 @@ class ModelShape {
   /// linear-attention layers keep one recurrent state each.
   final int stateBytes;
 
-  final int attentionLayers;
   final int attentionHeads;
   final int headDim;
   final int hiddenSize;
@@ -101,15 +102,16 @@ class ModelShape {
 /// than allowed for: [prefillStep] is the longest chunk whose scratch fits at
 /// the full [contextLength].
 class BudgetPlan extends MemoryPlan {
-  BudgetPlan(this.shape, {required this.budgetBytes, this.sharedBy = 1});
+  /// [deviceBytes] shared equally between the [sharedBy] models that may be
+  /// resident together, so they fit beside each other.
+  BudgetPlan(this.shape, {required int deviceBytes, this.sharedBy = 1})
+    : budgetBytes = deviceBytes ~/ sharedBy;
 
   final ModelShape shape;
 
   /// What this model may take, all of it.
   final int budgetBytes;
 
-  /// How many models the device's budget was split between, for a refusal
-  /// that says why the share is what it is.
   final int sharedBy;
 
   /// The prefill's working memory, whatever the conversation's length.
@@ -123,6 +125,11 @@ class BudgetPlan extends MemoryPlan {
   /// instructions and tools take a few thousand tokens before anything is
   /// said.
   static const minimumContext = 4096;
+
+  /// The least a model of [weightBytes] takes before it has said anything:
+  /// what a catalog entry, with no config to read yet, is offered by.
+  static int floorOf(int weightBytes) =>
+      weightBytes + scratchBytes + cacheBytes;
 
   /// What is left for the KV cache once everything else is counted.
   int get kvBytes =>
@@ -145,7 +152,13 @@ class BudgetPlan extends MemoryPlan {
   }
 
   @override
-  Object get identity => (budgetBytes, contextLength, prefillStep);
+  bool operator ==(Object other) =>
+      other is BudgetPlan &&
+      other.budgetBytes == budgetBytes &&
+      other.contextLength == contextLength;
+
+  @override
+  int get hashCode => Object.hash(budgetBytes, contextLength);
 
   @override
   String? get refusal {
@@ -154,10 +167,9 @@ class BudgetPlan extends MemoryPlan {
         budgetBytes - kvBytes + minimumContext * shape.kvBytesPerToken;
     final share = sharedBy > 1
         ? "each of the $sharedBy models that may stay loaded has "
-              "${_gb(budgetBytes)} here; keep fewer loaded under On-device"
-        : "on-device models have ${_gb(budgetBytes)} here";
-    return "it needs ${_gb(needed)} with room to talk, and $share";
+              "${formatSize(budgetBytes)} here; keep fewer loaded under "
+              "On-device"
+        : "on-device models have ${formatSize(budgetBytes)} here";
+    return "it needs ${formatSize(needed)} with room to talk, and $share";
   }
-
-  static String _gb(int bytes) => "${(bytes / 1e9).toStringAsFixed(1)} GB";
 }

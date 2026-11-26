@@ -490,7 +490,7 @@ void main() {
 
     test("the load carries the plan the Swift half holds MLX to", () async {
       final mlx = planned(4000000000);
-      final plan = BudgetPlan(MlxFormat.shapeOf(qwen), budgetBytes: 4000000000);
+      final plan = BudgetPlan(MlxFormat.shapeOf(qwen), deviceBytes: 4000000000);
 
       final loaded = await mlx.serve(small.id, testLocalOptions());
 
@@ -521,7 +521,7 @@ void main() {
         mlx.contextOf(small.id, AppSettings()),
         BudgetPlan(
           MlxFormat.shapeOf(qwen),
-          budgetBytes: 4000000000,
+          deviceBytes: 4000000000,
         ).contextLength,
       );
       expect(mlx.contextOf("gone", AppSettings()), isNull);

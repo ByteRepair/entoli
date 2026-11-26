@@ -58,7 +58,7 @@ class Residency {
       _loaded.remove(already);
       stopping.add(already);
     }
-    final cap = options.maxRunning.clamp(1, maxLocalModelsAllowed);
+    final cap = options.resident;
     while (_loaded.length >= cap) {
       stopping.add(_loaded.removeAt(0));
     }

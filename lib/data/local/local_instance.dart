@@ -5,6 +5,7 @@ import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/local_llm.dart";
 import "package:entoli_core/model/local_model.dart";
 import "package:entoli_core/model/memory_plan.dart";
+import "package:entoli_core/model/model_budget.dart";
 import "package:entoli_core/agent/llm/llm_client.dart";
 
 export "package:entoli_core/model/memory_plan.dart";
@@ -44,6 +45,9 @@ class LocalOptions {
   final int? contextLength;
   final int maxRunning;
   final int? threads;
+
+  /// How many models may be resident at once, as many as the app allows.
+  int get resident => maxRunning.clamp(1, maxLocalModelsAllowed);
   final int keptPrompts;
 
   /// Whether prompts are kept on disk between turns: the one place
@@ -82,8 +86,8 @@ class LocalLoad {
   final bool keepsPrompts;
 
   /// Every field, so one added is one compared.
-  ({Object m, String? d, int? t, bool k}) get _fields =>
-      (m: memory.identity, d: device, t: threads, k: keepsPrompts);
+  ({MemoryPlan m, String? d, int? t, bool k}) get _fields =>
+      (m: memory, d: device, t: threads, k: keepsPrompts);
 
   @override
   bool operator ==(Object other) =>
@@ -254,6 +258,10 @@ abstract class LocalRuntime {
   /// conversation it has room for. Synchronous, since the chat's window is
   /// read from it before anything is loaded.
   MemoryPlan plan(DownloadedModel model, LocalOptions options);
+
+  /// Whether [model] is offered for download under [budget], before it is on
+  /// disk to plan from.
+  bool offers(LocalModel model, ModelBudget budget) => budget.fits(model);
 
   /// What [options] mean for [model] here: "auto" made a device, the [plan]
   /// made a context. Asynchronous because a runtime may have to ask the

@@ -296,11 +296,15 @@ from the rest of the app, which keeps what the budget leaves. The shape is
 read off the model's `config.json` (`MlxConfig`). A plan with less than
 `minimumContext` left is a model that will not load, said on its row before
 the channel is asked — naming the setting where the share is small because
-two may stay loaded — and has no window rather than a window of nothing. A
-plan whose identity changes (a new share, a new step) loads the model again.
-`UnplannedMemory` is a device that measured nothing: a Mac's models get what
-they were trained on and MLX its defaults, and an iPhone's are refused, since
-there a budget is the only thing keeping the app alive.
+two may stay loaded — and has no window rather than a window of nothing.
+Plans compare by value, and a model asked for under a different one (a new
+share) is loaded again. A device that measured nothing gets a
+`FixedContextPlan`: a Mac's models what they were trained on and MLX its
+defaults, an iPhone's a refusal, since there a budget is the only thing
+keeping the app alive. The catalog is offered by the runtime too
+(`LocalRuntime.offers`): MLX offers what `BudgetPlan.floorOf` fits, the
+weights and what MLX needs beside them, since an entry has no config yet to
+plan the rest from.
 
 **`-c` is always passed.** llama.cpp's `--fit` would otherwise size it, and on a
 phone that is wrong in a way it is not on a desktop: the CPU backend reports
