@@ -800,8 +800,9 @@ download, sign-in, sync), the paths Android's buttons take, since the app is
 suspended next and the work would be cut off anyway: a sync connection lasts
 exactly as long as the activity. A backup has no stop and is left to finish.
 In front, it drops the hold and leaves the work running, killable again, as
-Android's `onTimeout` does; it is not held again until it ends, or every
-progress report would bring the activity back.
+Android's `onTimeout` does; the jobs held then are not held again, or every
+progress report would bring the activity back, but a job that starts later
+is.
 
 The task asks for no GPU: background GPU wants the
 `continued-processing.gpu` entitlement, so an MLX turn still stops off

@@ -11,45 +11,36 @@ enum WorkHold {
   private static let taskPrefix = "io.byterepair.entoli.work"
   private static let title = "Entoli"
 
-  private static var turns = 0
-  private static var settingUp = false
-  private static var download: (label: String, received: Int64, total: Int64)?
-  private static var syncNames: [String]?
-  private static var signInPlan: String?
-  /// "Writing a backup" or "Restoring a backup", or nil.
-  private static var backup: String?
+  /// One held job: what the subtitle says of it, and the `BackgroundJob` its
+  /// stop asks Dart to end, where it has one.
+  private struct Job {
+    let subtitle: String
+    let stop: String?
+  }
+
+  /// The held jobs by the channel method that reported them, in the order
+  /// the subtitle names them.
+  private static var held: [String: Job] = [:]
+  private static let order = [
+    "running", "settingUp", "downloading", "backingUp", "signingIn", "syncing",
+  ]
 
   private static var task: BGContinuedProcessingTask?
   /// Submitted, its launch handler not yet run.
   private static var pending = false
-  /// Stopped by the user in front: the work goes on, and is not held again
-  /// until it ends — every progress report would otherwise bring it back.
-  private static var declined = false
+  /// The jobs held when the user stopped the activity in front. They go on,
+  /// unheld, and only a job not among them holds again: otherwise a
+  /// download's next percent would bring the activity straight back.
+  private static var declined: Set<String> = []
   private static var heartbeat: Timer?
   private static var channel: FlutterMethodChannel?
 
-  private static var busy: Bool {
-    turns > 0 || settingUp || download != nil || syncNames != nil || signInPlan != nil
-      || backup != nil
-  }
+  private static var busy: Bool { !held.isEmpty }
 
   /// Each held job in the words Android's notification uses for it, worded
   /// here rather than in Dart since the port carries counts and labels.
   private static var summary: String {
-    var parts: [String] = []
-    if turns == 1 { parts.append("Running a turn") }
-    if turns > 1 { parts.append("Running \(turns) turns") }
-    if settingUp { parts.append("Setting up tools") }
-    if let download {
-      let percent = download.total > 0 ? " (\(download.received * 100 / download.total)%)" : ""
-      parts.append("Downloading \(download.label)\(percent)")
-    }
-    if let backup { parts.append(backup) }
-    if let plan = signInPlan { parts.append("Waiting for you to sign in to \(plan)") }
-    if let names = syncNames {
-      parts.append(names.count == 1 ? "Connected to \(names[0])" : "\(names.count) devices connected")
-    }
-    return parts.joined(separator: " · ")
+    order.compactMap { held[$0]?.subtitle }.joined(separator: " · ")
   }
 
   static func register(with messenger: FlutterBinaryMessenger) {
@@ -63,38 +54,51 @@ enum WorkHold {
   }
 
   private static func handle(_ call: FlutterMethodCall, _ result: FlutterResult) {
+    let job: Job?
     switch call.method {
-    case "running": turns = (call.arguments as? NSNumber)?.intValue ?? 0
-    case "settingUp": settingUp = (call.arguments as? Bool) ?? false
+    case "running":
+      let turns = (call.arguments as? NSNumber)?.intValue ?? 0
+      job = turns == 0
+        ? nil : Job(subtitle: turns == 1 ? "Running a turn" : "Running \(turns) turns", stop: "turns")
+    case "settingUp":
+      job = (call.arguments as? Bool) == true ? Job(subtitle: "Setting up tools", stop: nil) : nil
     case "downloading":
-      download = (call.arguments as? [String: Any]).map {
-        (
-          label: $0["label"] as? String ?? "a model",
-          received: ($0["received"] as? NSNumber)?.int64Value ?? 0,
-          total: ($0["total"] as? NSNumber)?.int64Value ?? 0
-        )
+      job = (call.arguments as? [String: Any]).map { notice in
+        let label = notice["label"] as? String ?? "a model"
+        let received = (notice["received"] as? NSNumber)?.int64Value ?? 0
+        let total = (notice["total"] as? NSNumber)?.int64Value ?? 0
+        let percent = total > 0 ? " (\(received * 100 / total)%)" : ""
+        return Job(subtitle: "Downloading \(label)\(percent)", stop: "download")
+      }
+    // No stop: cut off part-way, a backup is a broken file.
+    case "backingUp":
+      job = (call.arguments as? String).map {
+        Job(subtitle: $0 == "restoring" ? "Restoring a backup" : "Writing a backup", stop: nil)
+      }
+    case "signingIn":
+      job = (call.arguments as? String).map {
+        Job(subtitle: "Waiting for you to sign in to \($0)", stop: "signIn")
       }
     case "syncing":
-      syncNames = (call.arguments as? [String: Any]).map { $0["names"] as? [String] ?? [] }
-    case "signingIn": signInPlan = call.arguments as? String
-    case "backingUp":
-      backup = (call.arguments as? String).map {
-        $0 == "restoring" ? "Restoring a backup" : "Writing a backup"
+      job = (call.arguments as? [String: Any]).map { notice in
+        let names = notice["names"] as? [String] ?? []
+        return Job(
+          subtitle: names.count == 1 ? "Connected to \(names[0])" : "\(names.count) devices connected",
+          stop: "sync")
       }
     // Not held: the prefill is MLX's, and iOS gives the GPU only to the app
     // in front, so off screen it would fail rather than finish.
     default: return result(FlutterMethodNotImplemented)
     }
+    held[call.method] = job
     update()
     result(nil)
   }
 
   private static func update() {
-    guard busy else {
-      declined = false
-      return finish()
-    }
-    if task == nil && !pending && !declined { submit() }
+    declined.formIntersection(held.keys)
+    guard busy else { return finish() }
+    if task == nil && !pending && !Set(held.keys).isSubset(of: declined) { submit() }
     task?.updateTitle(title, subtitle: summary)
   }
 
@@ -136,14 +140,11 @@ enum WorkHold {
         if task === started {
           drop()
           if UIApplication.shared.applicationState != .active {
-            var jobs: [String] = []
-            if turns > 0 { jobs.append("turns") }
-            if download != nil { jobs.append("download") }
-            if signInPlan != nil { jobs.append("signIn") }
-            if syncNames != nil { jobs.append("sync") }
-            jobs.forEach { channel?.invokeMethod("stopRequested", arguments: $0) }
+            for stop in held.values.compactMap(\.stop) {
+              channel?.invokeMethod("stopRequested", arguments: stop)
+            }
           } else {
-            declined = true
+            declined = Set(held.keys)
           }
         }
         started.setTaskCompleted(success: false)

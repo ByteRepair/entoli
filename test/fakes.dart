@@ -462,9 +462,13 @@ class FakeClipboardFiles implements ClipboardFiles {
 class FakeAppRestart implements AppRestart {
   var restarts = 0;
 
+  /// Heard as a restart begins, before its work runs.
+  void Function()? onRestart;
+
   @override
   Future<void> restart({Future<void> Function()? whileStopped}) async {
     restarts++;
+    onRestart?.call();
     await whileStopped?.call();
   }
 }

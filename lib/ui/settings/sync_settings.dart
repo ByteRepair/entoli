@@ -62,15 +62,9 @@ class SyncSettings extends ConsumerWidget {
           SwitchListTile(
             title: const Text("Keep connected off screen"),
             subtitle: Text(
-              isAndroid
-                  ? "While a device is connected, hold the app open off "
-                        "screen with a notification naming it and a "
-                        "Disconnect action. Costs battery — a wake lock for "
-                        "as long as the connection lasts."
-                  : "While a device is connected, keep the app running off "
-                        "screen with a Live Activity naming it. Stopping it off "
-                        "screen disconnects. Costs battery for as long as "
-                        "the connection lasts.",
+              "While a device is connected, hold the app open off screen "
+              "${isAndroid ? "with a notification naming it and a Disconnect action" : "with a Live Activity naming it, whose stop disconnects off screen"}. "
+              "Costs battery for as long as the connection lasts.",
             ),
             value: settings.syncKeepAlive,
             onChanged: (value) => ref
