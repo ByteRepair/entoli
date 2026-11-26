@@ -293,8 +293,23 @@ DeviceMemory _memoryOf(Object? answer) {
 }
 
 /// The handshake's readings asked again: the headroom moves as the app grows.
-Future<DeviceMemory?> _appleMemory() async =>
-    _memoryOf(await appleChannel.invokeMethod<Object?>("memory"));
+/// Null on a failure, so a missing reading leaves the models' own standing.
+Future<DeviceMemory?> _appleMemory() async {
+  try {
+    final answer = await appleChannel
+        .invokeMethod<Object?>("memory")
+        .timeout(const Duration(seconds: 3));
+    _memoryFailing = false;
+    return _memoryOf(answer);
+  } catch (e) {
+    // Polled every few seconds: a run of failures is one line.
+    if (!_memoryFailing) logFailure("apple-fm", "memory reading failed", e);
+    _memoryFailing = true;
+    return null;
+  }
+}
+
+bool _memoryFailing = false;
 
 /// The bundle's `lib/` beside the running executable, the one its `$ORIGIN`
 /// rpath resolves. Takes [executablePath] so a test can pin each shape.

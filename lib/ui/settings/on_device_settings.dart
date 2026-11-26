@@ -297,16 +297,19 @@ class _TextModels extends ConsumerWidget {
               "They are stored outside the app's data and are not included in "
               "backups.",
         ),
+        // The allowance is the launch's reading, while the readings above are
+        // live; the subtitle says so rather than leaving the two to disagree.
         if (allowed != null &&
             smallest != null &&
-            !engine.catalog.any(engine.offers))
+            offered.isEmpty &&
+            others.isEmpty)
           ListTile(
             title: const Text(
               "No models fit this device's hardware requirements",
             ),
             subtitle: Text(
-              "The smallest needs ${formatSize(smallest)}; this device allows "
-              "${formatSize(allowed)}.",
+              "The smallest needs ${formatSize(smallest)}; this device "
+              "allowed ${formatSize(allowed)} when the app started.",
             ),
           ),
         for (final model in offered)

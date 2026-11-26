@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:collection/collection.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/local/local_instance.dart" show LocalUsage;
@@ -102,7 +103,8 @@ void main() {
 
   testWidgets("a device that fits nothing says so, with what the smallest "
       "needs", (tester) async {
-    final budget = ModelBudget(ModelBudget.footprintOf(model) - 1);
+    final smallest = ggufCatalog.map(ModelBudget.footprintOf).min;
+    final budget = ModelBudget(smallest - 1);
     app = TestApp.create(localRuntime: FakeLocalRuntime(), localBudget: budget);
     await pumpOnDevice(tester);
 
@@ -112,10 +114,24 @@ void main() {
     );
     expect(
       find.text(
-        "The smallest needs ${formatSize(ModelBudget.footprintOf(model))}; "
-        "this device allows ${formatSize(budget.bytes!)}.",
+        "The smallest needs ${formatSize(smallest)}; this device allowed "
+        "${formatSize(budget.bytes!)} when the app started.",
       ),
       findsOneWidget,
+    );
+    app.dispose();
+
+    // One already downloaded is listed, and runs: the page does not say none.
+    app = TestApp.create(
+      localRuntime: FakeLocalRuntime(),
+      localBudget: budget,
+      localModels: {model.id},
+    );
+    await pumpOnDevice(tester);
+
+    expect(
+      find.text("No models fit this device's hardware requirements"),
+      findsNothing,
     );
   });
 
