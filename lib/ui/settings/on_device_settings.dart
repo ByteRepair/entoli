@@ -142,7 +142,7 @@ class _MemoryBar extends ConsumerWidget {
     // The launch's whole and limit, the catalog's own; the live readings go
     // under it.
     final device = usage.device ?? engine.launch;
-    final whole = engine.launch?.total ?? device?.total;
+    final whole = (engine.launch ?? usage.device)?.total;
     if (device == null || whole == null || whole <= 0) {
       return const SizedBox.shrink();
     }

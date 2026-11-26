@@ -205,7 +205,8 @@ Future<LocalEngine> createLocalEngine(String cacheDir) async {
     store,
     prompts: prompts,
     launch: await memory,
-    memory: _ramMemory,
+    // Android's RAM cannot change, so its launch reading stands.
+    memory: Platform.isAndroid ? null : _ramMemory,
   );
 }
 
@@ -217,11 +218,8 @@ String _kvCacheDir(String cacheDir) => p.join(cacheDir, "kv-cache");
 /// off `/proc/meminfo` on Linux. Null where neither answers, which offers
 /// every model.
 Future<DeviceMemory?> _ramMemory() async => Platform.isAndroid
-    ? androidMemoryOf(await (_androidTotal ??= BundledTools.totalMemory()))
+    ? androidMemoryOf(await BundledTools.totalMemory())
     : linuxMemoryOf(_readMeminfo());
-
-// Asked once: Android's RAM cannot change, and the page polls this.
-Future<int?>? _androidTotal;
 
 /// Android's RAM, of which llama.cpp gets [ModelBudget.android]'s half.
 DeviceMemory? androidMemoryOf(int? total) => total == null
@@ -302,17 +300,10 @@ DeviceMemory? appleMemoryOf(Object? answer, {required bool mac}) {
   final headroom = memory["available"] as int?;
   if (graphics == null) return null;
   final shown = (label: "Graphics memory", bytes: graphics);
-  if (mac) {
+  if (mac || headroom == null) {
     return DeviceMemory(
       total: graphics,
-      budget: ModelBudget.mac(graphics),
-      readings: [shown],
-    );
-  }
-  if (headroom == null) {
-    return DeviceMemory(
-      total: graphics,
-      budget: const ModelBudget.unknown(),
+      budget: mac ? ModelBudget.mac(graphics) : const ModelBudget.unknown(),
       readings: [shown],
     );
   }
