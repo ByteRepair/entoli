@@ -220,6 +220,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   }) : settingsSync = SettingsSync(
          selfId: identity.id,
          ledger: settingsLedger ?? _NoLedger(),
+         pairedAt: (id) async => (await registry.byId(id))?.addedAt,
        ) {
     _signaling = SyncPairing(
       identity: identity,

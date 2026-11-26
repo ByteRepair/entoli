@@ -1,3 +1,5 @@
+import "dart:convert";
+
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/llm_provider.dart";
@@ -76,16 +78,27 @@ class SettingsSyncDriver implements SyncedSettings {
     for (final MapEntry(key: id, value: (_, key)) in incoming.entries) {
       await secrets.setProviderKey(id, key);
     }
-    await notifier.setProviders([
+    final providers = [
       // In the order this device had them, then the new ones.
       for (final id in local.keys)
         if (incoming[id] case (final config, _)) config,
       for (final MapEntry(key: id, value: (config, _)) in incoming.entries)
         if (!local.containsKey(id)) config,
-    ]);
+    ];
+    // A list set again rebuilds every model list, so only where it moved.
+    if (!_same(providers, settings.llmProviders)) {
+      await notifier.setProviders(providers);
+    }
   }
 
-  void dispose() => _watch.close();
+  static bool _same(List<LlmProviderConfig> a, List<LlmProviderConfig> b) =>
+      jsonEncode([for (final p in a) p.toJson()]) ==
+      jsonEncode([for (final p in b) p.toJson()]);
+
+  void dispose() {
+    _watch.close();
+    if (identical(_sync.settings, this)) _sync.settings = null;
+  }
 }
 
 /// The hub's [SettingsSync], where the app has a hub: `main` binds it, and

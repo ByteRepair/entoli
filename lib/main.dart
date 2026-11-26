@@ -320,7 +320,10 @@ class AppSession {
       lanSignaling: platform.createLanSignaling,
       createLink: RtcLink.create,
       hostname: await hostname,
-      settingsLedger: FileSettingsLedger(p.join(config.syncDir, "settings")),
+      settingsLedger: FileSettingsLedger(
+        config.fs,
+        p.join(config.syncDir, "settings"),
+      ),
     );
     const launcher = PluginLinkLauncher();
     final container = ProviderContainer(

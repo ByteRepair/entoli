@@ -180,4 +180,47 @@ void main() {
     expect(ledger.states["B"], isNot(contains("kx")));
     expect(ledger.states["B"], isNot(contains("ky")));
   });
+
+  test("a second edit made before the first's reply is kept", () async {
+    await connect();
+    await a.choose("B", "A");
+    await settle();
+    onA.items = {
+      ...onA.items,
+      profileItem: {"name": "first"},
+    };
+    a.changed();
+    // Before the reply to the first offer has come back.
+    onA.items = {
+      ...onA.items,
+      profileItem: {"name": "second"},
+    };
+    a.changed();
+    await settle();
+    expect(onA.items[profileItem], {"name": "second"});
+    expect(onB.items[profileItem], {"name": "second"});
+  });
+
+  test("a choice the peer kept from before the pairing is not taken", () async {
+    final paired = DateTime.now().toUtc();
+    a = SettingsSync(
+      selfId: "A",
+      ledger: _Ledger(),
+      pairedAt: (_) async => paired,
+    )..settings = onA;
+    toA.to = a;
+    // B's choice, from the pairing A has since forgotten.
+    final stale = SyncPrecedence(
+      winner: "B",
+      decidedAt: paired.subtract(const Duration(days: 1)),
+    );
+    await toA.send(
+      SyncMessage.settingsOffer(items: onB.items, precedence: stale.toJson()),
+    );
+    await settle();
+    await a.greet(toB);
+    await settle();
+    expect(a.undecided.value, {"B"});
+    expect(onA.items[profileItem], {"name": "Ann"});
+  });
 }

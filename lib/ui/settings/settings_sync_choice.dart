@@ -15,7 +15,7 @@ enum _Side { here, none, there }
 /// Who wins where both of a pair changed the same profile field or provider:
 /// this device, neither (the two do not sync them), or the peer. Three
 /// segments, this device's name first, the way the theme's are.
-class SettingsSyncChoice extends ConsumerWidget {
+class SettingsSyncChoice extends ConsumerStatefulWidget {
   const SettingsSyncChoice({
     super.key,
     required this.deviceId,
@@ -26,7 +26,20 @@ class SettingsSyncChoice extends ConsumerWidget {
   final String peerName;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsSyncChoice> createState() => _SettingsSyncChoiceState();
+}
+
+class _SettingsSyncChoiceState extends ConsumerState<SettingsSyncChoice> {
+  @override
+  void initState() {
+    super.initState();
+    // A pair not connected since launch has its choice only on disk.
+    unawaited(ref.read(syncHubProvider).settingsSync.recall(widget.deviceId));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final deviceId = widget.deviceId;
     final hub = ref.watch(syncHubProvider);
     final sync = hub.settingsSync;
     return ValueListenableBuilder<Map<String, SyncPrecedence?>>(
@@ -43,7 +56,7 @@ class SettingsSyncChoice extends ConsumerWidget {
           segments: [
             ButtonSegment(value: _Side.here, label: Text(hub.deviceName)),
             const ButtonSegment(value: _Side.none, label: Text("No Sync")),
-            ButtonSegment(value: _Side.there, label: Text(peerName)),
+            ButtonSegment(value: _Side.there, label: Text(widget.peerName)),
           ],
           selected: {?side},
           emptySelectionAllowed: side == null,
@@ -134,7 +147,11 @@ class _ChoiceDialog extends ConsumerWidget {
       builder: (context, undecided, _) {
         if (!undecided.contains(peerId)) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (context.mounted) Navigator.of(context).maybePop();
+            // Once: a rebuild while it animates out would pop the page
+            // under it.
+            if (context.mounted && ModalRoute.of(context)?.isCurrent == true) {
+              Navigator.of(context).pop();
+            }
           });
         }
         return AlertDialog(

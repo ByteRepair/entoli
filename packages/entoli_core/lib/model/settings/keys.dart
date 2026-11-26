@@ -213,9 +213,6 @@ abstract final class SettingKeys {
     fallback: <String>[],
   );
 
-  /// Whether the auto-memory subsystem runs: a per-project store of markdown
-  /// memories the agent reads, recalls and writes with a background model.
-  /// Off by default, and inert beside it until [memoryModelId] is set.
   /// Whether an export carries the provider keys from the secret store, off
   /// by default: a backup is a file the user moves about, and a key in it is
   /// a key anyone holding it can spend.
@@ -225,6 +222,9 @@ abstract final class SettingKeys {
     fallback: false,
   );
 
+  /// Whether the auto-memory subsystem runs: a per-project store of markdown
+  /// memories the agent reads, recalls and writes with a background model.
+  /// Off by default, and inert beside it until [memoryModelId] is set.
   static const autoMemory = DefaultedSetting<bool>(
     "autoMemory",
     BoolCodec(),

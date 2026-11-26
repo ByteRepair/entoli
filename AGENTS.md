@@ -299,7 +299,8 @@ title model, the classifier model, `approveMode`, `environment`,
  `cornerRadius` and `systemPalette` — and `llmProviders`, whose entries carry
 no key: the provider API keys and the TURN password live in the secret store
 beside the sync identity (`AppSecrets`), which is what keeps them out of
-`settings.json` and out of every backup zip; and the user's
+`settings.json` and out of a backup zip unless Settings > Data > Include
+provider keys is on; and the user's
  global `AGENTS.md`, the instructions that reach every turn in every user
  project, beside it.
 `<dataDir>/reminders.json` is the user's triggers — reminders generalized to

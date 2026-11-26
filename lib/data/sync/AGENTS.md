@@ -888,7 +888,11 @@ connecting and on every change each side sends a `settingsOffer` of what it
 has, the other merges it with its own and answers with a `reply` holding the
 result, and both store that as agreed. A reply is merged against what this
 device last sent rather than the agreed base, so an edit made while the offer
-was out is still this device's and goes out again. `SettingsSyncDriver`
+was out is still this device's and goes out again; one offer is out per pair
+at a time, since a second would move what the first's reply is merged
+against, and edits made meanwhile go with the offer the reply prompts. A new
+choice of precedence is which settings to keep, as at a first sync, so what
+the pair agreed under the old one is dropped. `SettingsSyncDriver`
 (`lib/app/settings_sync.dart`) is the app's side of the `SyncedSettings`
 port: it reads the settings and the secret store into items and writes merged
 items back through `setReplyStyle`, `setProviderKey` and `setProviders`, and
@@ -900,7 +904,9 @@ What a pair agreed is kept per peer in `sync/settings/<peer-id>.json`
 (`FileSettingsLedger`), with the precedence and the last offer. It holds a
 hash of each field, not the field, so the keys are not on disk outside the
 secret store; a hash is enough to tell which side changed a field. Unpairing
-deletes it, and the next pair asks again.
+deletes it, and the next pair asks again: a choice the peer still holds from
+before the pairing (`PairedDevice.addedAt`) is not adopted, the peer having
+forgotten nothing if only this side unpaired.
 
 ## Secrets at rest
 
