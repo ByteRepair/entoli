@@ -48,20 +48,33 @@ actor MlxConversation {
   private var stopGeneration: (@Sendable () -> Void)?
   private var unloaded = false
 
-  /// How many operations are running, and the unload waiting for none to be.
+  /// How many operations are running or queued, and the unload waiting for
+  /// none to be.
   private var operations = 0
   private var whenIdle: [CheckedContinuation<Void, Never>] = []
 
+  /// Whether an operation holds the model, and those queued behind it, first
+  /// come first served: each resumed true when handed the model, false when
+  /// its caller stopped while it waited.
+  private var running = false
+  private var queued: [(ticket: Int, resume: CheckedContinuation<Bool, Never>)] = []
+  private var tickets = 0
+
   /// Runs `body` as one of the operations an unload waits for, handing it the
   /// model and the box MLX's errors land in (`catchingMlx`); throws
-  /// `MlxUnloaded` once the model is being let go of. Whatever
+  /// `MlxUnloaded` once the model is being let go of.
+  ///
+  /// **One at a time.** An actor lets the next call in at every `await`, so
+  /// without the queue a title asked of the chat's own model, a sub-agent or
+  /// a restore would start mid-reply and replace the session the reply is
+  /// carrying on. llama.cpp's one slot queues the same way. Whatever
   /// `body` holds is let go of before the count falls, since nothing awaits
   /// between its return and the unload that count wakes running on this
   /// actor.
   private func operation<T>(
     _ body: (ModelContainer, ErrorBox) async throws -> T
   ) async throws -> T {
-    guard !unloaded, let container else { throw MlxUnloaded() }
+    guard !unloaded, container != nil else { throw MlxUnloaded() }
     operations += 1
     defer {
       operations -= 1
@@ -70,7 +83,38 @@ actor MlxConversation {
         whenIdle = []
       }
     }
+    if running {
+      let ticket = tickets
+      tickets += 1
+      // The cancel reaches the actor only once this has queued, since the
+      // actor is not given up before the continuation suspends.
+      let handed = await withTaskCancellationHandler {
+        await withCheckedContinuation { queued.append((ticket, $0)) }
+      } onCancel: {
+        Task { await self.leaveQueue(ticket) }
+      }
+      guard handed else { throw CancellationError() }
+    } else {
+      running = true
+    }
+    defer {
+      if queued.isEmpty {
+        running = false
+      } else {
+        queued.removeFirst().resume.resume(returning: true)
+      }
+    }
+    // Asked again: the model may have been let go of, or the caller have
+    // stopped, while this one waited its turn.
+    guard !unloaded, let container else { throw MlxUnloaded() }
+    try Task.checkCancellation()
+    MlxMemory.fit()
     return try await catchingMlx { try await body(container, $0) }
+  }
+
+  private func leaveQueue(_ ticket: Int) {
+    guard let index = queued.firstIndex(where: { $0.ticket == ticket }) else { return }
+    queued.remove(at: index).resume.resume(returning: false)
   }
 
   /// Refuses what comes next, stops a generation, waits for every operation
@@ -99,8 +143,14 @@ actor MlxConversation {
   ) async throws {
     try await operation { container, mlxError in
       guard let last = messages.last else { return }
+      // The prefill is where a reply's memory peaks, and it says nothing
+      // until it is done but this, after each chunk.
+      let memoryStop = MemoryStop()
       var parameters = GenerateParameters(maxTokens: maxTokens)
       if let temperature { parameters.temperature = Float(temperature) }
+      parameters.prefill.progress = { _, _ in
+        if MlxMemory.isShort { memoryStop.trip() }
+      }
 
       let fresh: [MlxMessage]
       if let session, let held, held.carriesOn(messages, tools) {
@@ -136,6 +186,7 @@ actor MlxConversation {
         var counts = (prompt: 0, generated: 0)
         for try await generation in stream {
           try Task.checkCancellation()
+          if MlxMemory.isShort { throw MlxFailure.shortOfMemory }
           // MLX goes on after an error with arrays it never computed, so the
           // reply ends at the first one rather than at the block's end.
           try mlxError.check()
@@ -159,6 +210,7 @@ actor MlxConversation {
         return (reply, calls, counts)
       }
       stopGeneration = { work.cancel() }
+      memoryStop.arm { work.cancel() }
       defer { stopGeneration = nil }
       let outcome: (reply: String, calls: [MlxToolCall], counts: (Int, Int))
       do {
@@ -169,6 +221,7 @@ actor MlxConversation {
         }
       } catch {
         if unloaded { throw MlxUnloaded() }
+        if memoryStop.tripped { throw MlxFailure.shortOfMemory }
         throw error
       }
       // The reply task may still be writing the cache back: an error there
@@ -239,6 +292,33 @@ actor MlxConversation {
   private static func json(_ arguments: [String: JSONValue]) -> String {
     guard let data = try? JSONEncoder().encode(arguments) else { return "{}" }
     return String(decoding: data, as: UTF8.self)
+  }
+}
+
+/// A reply stopped short of the OS's memory limit by the prefill's progress,
+/// which runs inside mlx-swift-lm and can only ask for the cancel.
+private final class MemoryStop: @unchecked Sendable {
+  private let lock = NSLock()
+  private var cancel: (() -> Void)?
+  private var stopped = false
+
+  var tripped: Bool { lock.withLock { stopped } }
+
+  /// What a trip cancels, run at once where it has tripped already.
+  func arm(_ cancel: @escaping () -> Void) {
+    let already = lock.withLock {
+      self.cancel = cancel
+      return stopped
+    }
+    if already { cancel() }
+  }
+
+  func trip() {
+    let cancel = lock.withLock {
+      stopped = true
+      return self.cancel
+    }
+    cancel?()
   }
 }
 

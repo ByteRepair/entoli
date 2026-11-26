@@ -432,8 +432,33 @@ load is not kept, a reply ends in `error` with nothing held, a restore leaves
 the session as it was, and a save leaves no file. A generation checks it per
 chunk, since MLX goes on with arrays it never computed. The message is coded
 `background` (the GPU refused off screen), `resources` (memory ran out) or
-`other`. The weights are read on a dispatch queue, out of the handler's reach,
-so a load that runs out of memory there still crashes.
+`other`. The weights are read on a dispatch queue, out of the handler's
+reach, so a load is refused before it starts where its `.safetensors` and the
+reserve below come to more than the app has left (`MlxMemory.checkFits`),
+counting as left what MLX still holds when no model is loaded: an evicted
+model's weights go a moment after its unload returns.
+
+**One call at a time per model.** `MlxConversation.operation` queues its
+generate, save and restore calls, first come first served: an actor lets the
+next call in at every `await`, and without the queue a title asked of the
+chat's own model, a sub-agent or a restore would start mid-reply and replace
+the session the reply was carrying on. llama.cpp's one slot queues the same
+way. A call stopped while it waits leaves the queue at once, and one handed
+the model re-checks for an unload first.
+
+**MLX is held to the app's limit, not Metal's.** `ModelBudget` decides which
+models are offered; nothing in MLX keeps a loaded one inside it. MLX sizes
+itself from Metal's working set and keeps the buffers it frees until it holds
+about 7.6 GB on a 12 GB iPhone, while iOS ends the app at 6.0 GiB there — a
+JetsamEvent report's `per-process-limit`, with the app frontmost, 1–3 seconds
+into a 4B's prefill. So on iOS (`MlxMemory`) the buffer cache is 64 MB while a
+model is loaded, MLX's soft limit is set before each call on a model from
+`os_proc_available_memory` less a 768 MB reserve, and a reply whose headroom
+falls under half the reserve stops itself — after each prefill chunk, through
+the prefill's progress, and after each output chunk — ending in `resources`.
+The soft limit only makes an evaluation wait for work in flight; MLX's
+allocator never fails at it, which is why the stop is the app's. With no
+model left, the limit is MLX's own again.
 
 ### The build
 
@@ -818,8 +843,12 @@ progress report would bring the activity back, but a job that starts later
 is.
 
 The task asks for no GPU: background GPU wants the
-`continued-processing.gpu` entitlement, so an MLX turn still stops off
-screen, its reply ending with an error that says so. A remote provider's turn
+`continued-processing.gpu` entitlement, so an MLX turn stops off screen:
+`MlxChannel` cancels its generations as the app leaves, each ending in
+`background` even if the app is back before it has unwound, and refuses a
+reply, a load or a restore until it is back — a launch in the background
+starts refused — rather than wait for the GPU to refuse the next command
+buffer, which in a load ends the app. A remote provider's turn
 is network and CPU, which the default covers. None of this answers on the
 simulator as it does on a device; the recipe is a device: start a turn, lock
 the phone, and watch it finish.

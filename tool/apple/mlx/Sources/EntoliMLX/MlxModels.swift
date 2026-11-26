@@ -155,6 +155,15 @@ public struct MlxFailure: Error, CustomStringConvertible {
   public let code: String
   public let description: String
 
+  /// A reply stopped before iOS would end the app for its memory.
+  static let shortOfMemory = MlxFailure(
+    code: "resources", description: "The device is nearly out of memory for this app.")
+
+  init(code: String, description: String) {
+    self.code = code
+    self.description = description
+  }
+
   init(_ message: String) {
     description = message
     if message.contains("BackgroundExecutionNotPermitted") {
@@ -203,11 +212,13 @@ actor MlxModels {
   /// The model in `directory`, loaded and kept as `id`. A load that throws
   /// leaves nothing behind for the next ask to find.
   func load(_ id: String, _ directory: String) async throws -> MlxConversation {
-    Memory.cacheLimit = defaultCacheLimit
+    Memory.cacheLimit = MlxMemory.cacheLimit
     // MLX's errors caught inside the task, so a failed load throws from it
     // and is not kept, and every caller waiting on it hears the same.
+    let nothingLoaded = models.isEmpty
     let loading = models[id] ?? Task {
-      try await catchingMlx { _ in
+      try MlxMemory.checkFits(directory, nothingLoaded: nothingLoaded)
+      return try await catchingMlx { _ in
         let container = try await loadModelContainer(
           from: URL(fileURLWithPath: directory), using: #huggingFaceTokenizerLoader())
         // Counted now, while nothing else holds the model.
@@ -230,10 +241,6 @@ actor MlxModels {
     try? await models[id]?.value
   }
 
-  /// What MLX keeps of the buffers it frees, for the next allocation, while
-  /// a model is loaded: its own default, which is its to manage.
-  private let defaultCacheLimit = Memory.cacheLimit
-
   /// MLX keeps what a model lets go of in its buffer cache and never gives it
   /// back on its own, so an unloaded model's gigabytes would stay with the
   /// process. The model is let go of before its unload returns — see
@@ -249,7 +256,10 @@ actor MlxModels {
     if let conversation = try? await models.removeValue(forKey: id)?.value {
       await conversation.unload()
     }
-    if models.isEmpty { Memory.cacheLimit = 0 }
+    if models.isEmpty {
+      Memory.cacheLimit = 0
+      MlxMemory.reset()
+    }
     Memory.clearCache()
   }
 
