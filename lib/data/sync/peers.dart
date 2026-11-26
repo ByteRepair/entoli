@@ -6,6 +6,7 @@ import "package:entoli_core/model/sync/devices.dart";
 import "package:entoli_core/model/sync/protocol.dart";
 
 import "framing.dart";
+import "settings_sync.dart" show SettingsPeer;
 
 enum PeerStatus { connecting, online, offline, error }
 
@@ -38,7 +39,7 @@ class PeerState {
 
 /// One live connection, and the queue that keeps a peer's messages in the
 /// order they arrived.
-class LivePeer {
+class LivePeer implements SettingsPeer {
   LivePeer(
     this.channel, {
     required this.deviceId,
@@ -47,6 +48,7 @@ class LivePeer {
   });
 
   final SecureChannel channel;
+  @override
   final String deviceId;
 
   /// The peer's name as the handshake gave it — the address book's where the
@@ -96,6 +98,7 @@ class LivePeer {
   /// the only thing to do with that, and letting the error out instead turns
   /// one vanishing mid-broadcast into an unhandled exception in whichever
   /// loop happened to be writing to it.
+  @override
   Future<void> send(SyncMessage message) async {
     if (_closed) return;
     try {

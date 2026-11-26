@@ -10,6 +10,7 @@ import "package:entoli_core/model/sync/devices.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/paired_device_page.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
+import "package:agent_chat/ui/settings/settings_sync_choice.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -433,6 +434,16 @@ void main() {
     // it.
   });
 
+  /// How often [text] is on the page, less the settings-sync choice, whose
+  /// segments name the two devices too.
+  int onPage(String text) => find
+      .text(text)
+      .evaluate()
+      .where(
+        (e) => e.findAncestorWidgetOfExactType<SettingsSyncChoice>() == null,
+      )
+      .length;
+
   group("clicking a paired device's row", () {
     testWidgets("opens the device's own page", (tester) async {
       final device = testPairedDevice("d1", name: "Laptop");
@@ -445,9 +456,20 @@ void main() {
       // The record, the rename, and both fingerprints — nothing of the sync
       // page's rows behind it. The header is a category, not the name again.
       expect(find.text("Paired device"), findsOneWidget);
-      expect(find.text("Laptop"), findsOneWidget);
+      expect(onPage("Laptop"), 1);
+      // Who wins a settings conflict: this device, neither, or the peer.
+      expect(
+        find.descendant(
+          of: find.byType(SettingsSyncChoice),
+          matching: find.text("Laptop"),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text("No Sync"), findsOneWidget);
       expect(find.text("Last connected"), findsOneWidget);
       expect(find.text("Rename"), findsOneWidget);
+      // Below the settings-sync choice, so further down.
+      await scrollTo(tester, find.text("This device"));
       expect(find.text("This device"), findsOneWidget);
       expect(find.text(hub.identity.fingerprint), findsOneWidget);
       // The stored key's, from the record itself.
@@ -480,7 +502,7 @@ void main() {
       expect((await registry.byId("d1"))!.name, "Desk");
       // The page's name followed (once — the header stays a category), and
       // the row behind kept it.
-      expect(find.text("Desk"), findsOneWidget);
+      expect(onPage("Desk"), 1);
       await tester.pageBack();
       await settleIo(tester);
       expect(find.text("Desk"), findsOneWidget);
@@ -505,7 +527,7 @@ void main() {
       await settleIo(tester);
 
       expect((await registry.byId("d1"))!.name, "Laptop");
-      expect(find.text("Laptop"), findsOneWidget);
+      expect(onPage("Laptop"), 1);
     });
   });
 

@@ -594,7 +594,12 @@ skips, so a secret behind it is out of every export, where a key in a JSON
 file the format carries by default would ride in all of them. What a backup
 costs the user is stated plainly — restoring onto another device does not
 bring the keys, and they are typed again where the store is local to it (the
-keyring is a machine's own).
+keyring is a machine's own). Unless the user asks: **Include provider keys**,
+a switch under the two buttons and off by default (`backupProviderKeys`), puts
+each provider's key in the zip as `backup-keys.json`, a member beside the
+manifest rather than a file of the data directory, and a restore hands them to
+the secret store once the files are back. The switch says what it costs:
+anyone holding the file can spend the keys.
 
 A per-project `rootfs/` is the one re-fetchable tree that may still live under
 the data directory, left by a build whose built-ins kept their own living
