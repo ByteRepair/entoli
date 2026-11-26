@@ -54,9 +54,11 @@ actor MlxConversation {
   private var whenIdle: [CheckedContinuation<Void, Never>] = []
 
   /// Whether an operation holds the model, and those queued behind it, first
-  /// come first served.
+  /// come first served: each resumed true when handed the model, false when
+  /// its caller stopped while it waited.
   private var running = false
-  private var queued: [CheckedContinuation<Void, Never>] = []
+  private var queued: [(ticket: Int, resume: CheckedContinuation<Bool, Never>)] = []
+  private var tickets = 0
 
   /// Runs `body` as one of the operations an unload waits for, handing it the
   /// model and the box MLX's errors land in (`catchingMlx`); throws
@@ -82,7 +84,16 @@ actor MlxConversation {
       }
     }
     if running {
-      await withCheckedContinuation { queued.append($0) }
+      let ticket = tickets
+      tickets += 1
+      // The cancel reaches the actor only once this has queued, since the
+      // actor is not given up before the continuation suspends.
+      let handed = await withTaskCancellationHandler {
+        await withCheckedContinuation { queued.append((ticket, $0)) }
+      } onCancel: {
+        Task { await self.leaveQueue(ticket) }
+      }
+      guard handed else { throw CancellationError() }
     } else {
       running = true
     }
@@ -90,7 +101,7 @@ actor MlxConversation {
       if queued.isEmpty {
         running = false
       } else {
-        queued.removeFirst().resume()
+        queued.removeFirst().resume.resume(returning: true)
       }
     }
     // Asked again: the model may have been let go of, or the caller have
@@ -98,6 +109,11 @@ actor MlxConversation {
     guard !unloaded, let container else { throw MlxUnloaded() }
     try Task.checkCancellation()
     return try await catchingMlx { try await body(container, $0) }
+  }
+
+  private func leaveQueue(_ ticket: Int) {
+    guard let index = queued.firstIndex(where: { $0.ticket == ticket }) else { return }
+    queued.remove(at: index).resume.resume(returning: false)
   }
 
   /// Refuses what comes next, stops a generation, waits for every operation
@@ -253,6 +269,7 @@ actor MlxConversation {
 
   func restore(from path: String) async -> Bool {
     (try? await operation { container, mlxError in
+      MlxMemory.fit()
       let record = try JSONDecoder().decode(
         HeldRecord.self, from: Data(contentsOf: Self.companion(path)))
       let snapshot = try loadPromptCacheSnapshot(url: URL(fileURLWithPath: path))

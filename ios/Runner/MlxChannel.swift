@@ -30,23 +30,25 @@ final class MlxChannel: GenerationChannel {
   }
 
   /// Off screen, iOS refuses an app's GPU work, so a reply there could only
-  /// fail at its next command buffer. It is stopped as the app leaves, and
-  /// one asked for meanwhile is refused, both ending in `background`.
-  private let offScreen = Flag()
+  /// fail at its next command buffer and a load would end the app. Replies
+  /// are stopped as the app leaves, each ending in `background`, and a
+  /// reply, load or restore asked for meanwhile is refused.
+  private let screen = Screen()
 
   #if os(iOS)
   private func stopOffScreen() {
+    screen.offScreen = UIApplication.shared.applicationState == .background
     let center = NotificationCenter.default
     center.addObserver(
       forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
     ) { [weak self] _ in
       guard let self else { return }
-      offScreen.value = true
+      screen.leave()
       Task { @MainActor in await self.stopGenerations() }
     }
     center.addObserver(
       forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main
-    ) { [weak self] _ in self?.offScreen.value = false }
+    ) { [weak self] _ in self?.screen.offScreen = false }
   }
   #endif
 
@@ -67,7 +69,8 @@ final class MlxChannel: GenerationChannel {
     switch call.method {
     case "load":
       let directory = args["directory"] as? String ?? ""
-      answer(result, code: "load") {
+      answer(result, code: "load") { [screen] in
+        if screen.offScreen { throw OffScreen() }
         try await Mlx.load(model, directory)
         return nil
       }
@@ -81,7 +84,11 @@ final class MlxChannel: GenerationChannel {
     case "save":
       answer(result) { await Mlx.save(model, to: path) }
     case "restore":
-      answer(result) { await Mlx.restore(model, from: path) }
+      answer(result) { [screen] in
+        // Not restored is a reply that starts over, which is all it can do.
+        if screen.offScreen { return false }
+        return await Mlx.restore(model, from: path)
+      }
     case "usage":
       answer(result) {
         await Mlx.usage(model).map { ["weightBytes": $0.weightBytes, "tokens": $0.tokens] }
@@ -98,7 +105,10 @@ final class MlxChannel: GenerationChannel {
     // Dart always sends one; the fallback is its default, for a caller that
     // somehow did not.
     let maxTokens = args["maxTokens"] as? Int ?? 8192
-    guard !offScreen.value else { return sendOffScreen(id) }
+    guard !screen.offScreen else { return sendOffScreen(id) }
+    // A reply the app left the screen during ended for that, whatever it
+    // ended in and whether or not the app is back by then.
+    let departures = screen.departures
     do {
       try await Mlx.generate(
         args["model"] as? String ?? "",
@@ -121,9 +131,7 @@ final class MlxChannel: GenerationChannel {
         @unknown default: break
         }
       }
-    } catch where offScreen.value {
-      // Whatever it ended in — the stop, or the GPU refusing first — it
-      // ended because the app left the screen.
+    } catch where screen.departures != departures {
       sendOffScreen(id)
     } catch is CancellationError {
       // A stop: cancelled, not failed, so nothing is said.
@@ -143,13 +151,28 @@ final class MlxChannel: GenerationChannel {
   }
 }
 
-/// A flag set on the main thread and read by a generation's task.
-private final class Flag: @unchecked Sendable {
+/// Whether the app is off screen, and how many times it has left: set on
+/// the main thread, read by the channel's tasks.
+private final class Screen: @unchecked Sendable {
   private let lock = NSLock()
-  private var raised = false
+  private var away = false
+  private var left = 0
 
-  var value: Bool {
-    get { lock.withLock { raised } }
-    set { lock.withLock { raised = newValue } }
+  var offScreen: Bool {
+    get { lock.withLock { away } }
+    set { lock.withLock { away = newValue } }
   }
+
+  var departures: Int { lock.withLock { left } }
+
+  func leave() {
+    lock.withLock {
+      away = true
+      left += 1
+    }
+  }
+}
+
+private struct OffScreen: Error, CustomStringConvertible {
+  var description: String { "The model can load only while Entoli is on screen." }
 }
