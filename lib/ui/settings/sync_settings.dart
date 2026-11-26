@@ -68,8 +68,8 @@ class SyncSettings extends ConsumerWidget {
                         "Disconnect action. Costs battery — a wake lock for "
                         "as long as the connection lasts."
                   : "While a device is connected, keep the app running off "
-                        "screen with a Live Activity naming it. Stopping the "
-                        "activity disconnects. Costs battery for as long as "
+                        "screen with a Live Activity naming it. Stopping it off "
+                        "screen disconnects. Costs battery for as long as "
                         "the connection lasts.",
             ),
             value: settings.syncKeepAlive,

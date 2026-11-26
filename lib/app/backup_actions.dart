@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:io";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:entoli_core/model/background_work.dart";
 import "package:entoli_core/model/formatting.dart";
 
 import "../core/platform/platform.dart" as platform;
@@ -31,16 +32,12 @@ class BackupBusy extends Notifier<bool> {
     if (state) return null;
     state = true;
     log.clear();
-    // Read now: a restore's restart disposes this provider before it ends.
-    final background = ref.read(backgroundWorkProvider);
-    unawaited(background.backingUp(true));
     try {
       return await work();
     } catch (e) {
       log.writeln("Failed: $e");
       rethrow;
     } finally {
-      unawaited(background.backingUp(false));
       if (ref.mounted) state = false;
     }
   }
@@ -50,15 +47,18 @@ class BackupBusy extends Notifier<bool> {
   Future<int?> export() async {
     final config = ref.read(appConfigProvider);
     var size = 0;
-    final saved = await ref.read(backupHandoffProvider).save(
-      backupFilename(DateTime.now()),
-      (path) async {
-        log.writeln("Writing the backup");
-        await writeBackup(config, path, log: log);
-        size = await File(path).length();
-        log.writeln("Wrote ${formatSize(size)}");
-      },
-    );
+    final saved = await ref
+        .read(backupHandoffProvider)
+        .save(
+          backupFilename(DateTime.now()),
+          // Held from the write, not the save dialog before it.
+          (path) => _held(BackupWork.writing, () async {
+            log.writeln("Writing the backup");
+            await writeBackup(config, path, log: log);
+            size = await File(path).length();
+            log.writeln("Wrote ${formatSize(size)}");
+          }),
+        );
     if (!saved) log.writeln("Cancelled");
     return saved ? size : null;
   }
@@ -85,14 +85,28 @@ class BackupBusy extends Notifier<bool> {
     log.writeln(
       "Restoring ${backup.path}; Entoli starts again when it is done",
     );
-    return ref
-        .read(appRestartProvider)
-        .restart(
-          // The platform's, which gets past proot's mode-0000 stubs an
-          // earlier restore left behind, and the read-only skills.
-          whileStopped: () =>
-              restoreBackup(config, backup, deleteTree: platform.deleteTree),
-        );
+    final restart = ref.read(appRestartProvider);
+    return _held(
+      BackupWork.restoring,
+      () => restart.restart(
+        // The platform's, which gets past proot's mode-0000 stubs an
+        // earlier restore left behind, and the read-only skills.
+        whileStopped: () =>
+            restoreBackup(config, backup, deleteTree: platform.deleteTree),
+      ),
+    );
+  }
+
+  /// [body], with the app held open off screen while it runs. The port is
+  /// read first: a restore's restart disposes this provider before it ends.
+  Future<T> _held<T>(BackupWork work, Future<T> Function() body) async {
+    final background = ref.read(backgroundWorkProvider);
+    unawaited(background.backingUp(work));
+    try {
+      return await body();
+    } finally {
+      unawaited(background.backingUp(null));
+    }
   }
 }
 

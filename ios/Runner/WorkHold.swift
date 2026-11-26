@@ -16,17 +16,21 @@ enum WorkHold {
   private static var download: (label: String, received: Int64, total: Int64)?
   private static var syncNames: [String]?
   private static var signInPlan: String?
-  private static var backingUp = false
+  /// "Writing a backup" or "Restoring a backup", or nil.
+  private static var backup: String?
 
   private static var task: BGContinuedProcessingTask?
   /// Submitted, its launch handler not yet run.
   private static var pending = false
+  /// Stopped by the user in front: the work goes on, and is not held again
+  /// until it ends — every progress report would otherwise bring it back.
+  private static var declined = false
   private static var heartbeat: Timer?
   private static var channel: FlutterMethodChannel?
 
   private static var busy: Bool {
     turns > 0 || settingUp || download != nil || syncNames != nil || signInPlan != nil
-      || backingUp
+      || backup != nil
   }
 
   /// Each held job in the words Android's notification uses for it, worded
@@ -40,7 +44,7 @@ enum WorkHold {
       let percent = download.total > 0 ? " (\(download.received * 100 / download.total)%)" : ""
       parts.append("Downloading \(download.label)\(percent)")
     }
-    if backingUp { parts.append("Backing up") }
+    if let backup { parts.append(backup) }
     if let plan = signInPlan { parts.append("Waiting for you to sign in to \(plan)") }
     if let names = syncNames {
       parts.append(names.count == 1 ? "Connected to \(names[0])" : "\(names.count) devices connected")
@@ -73,7 +77,10 @@ enum WorkHold {
     case "syncing":
       syncNames = (call.arguments as? [String: Any]).map { $0["names"] as? [String] ?? [] }
     case "signingIn": signInPlan = call.arguments as? String
-    case "backingUp": backingUp = (call.arguments as? Bool) ?? false
+    case "backingUp":
+      backup = (call.arguments as? String).map {
+        $0 == "restoring" ? "Restoring a backup" : "Writing a backup"
+      }
     // Not held: the prefill is MLX's, and iOS gives the GPU only to the app
     // in front, so off screen it would fail rather than finish.
     default: return result(FlutterMethodNotImplemented)
@@ -83,8 +90,11 @@ enum WorkHold {
   }
 
   private static func update() {
-    guard busy else { return finish() }
-    if task == nil && !pending { submit() }
+    guard busy else {
+      declined = false
+      return finish()
+    }
+    if task == nil && !pending && !declined { submit() }
     task?.updateTitle(title, subtitle: summary)
   }
 
@@ -132,27 +142,22 @@ enum WorkHold {
             if signInPlan != nil { jobs.append("signIn") }
             if syncNames != nil { jobs.append("sync") }
             jobs.forEach { channel?.invokeMethod("stopRequested", arguments: $0) }
+          } else {
+            declined = true
           }
         }
         started.setTaskCompleted(success: false)
       }
     }
+    // The system expires a task whose progress stalls, and nothing that holds
+    // it knows its length: a turn, a setup, a backup, a connection. Even a
+    // download's percent is reported only as it moves, which on a slow link
+    // is minutes, so its share is the subtitle's. Held is alive, so the
+    // progress moves while it is held, a minute ahead.
     started.progress.totalUnitCount = 60
-    heartbeat = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick(started.progress) }
-  }
-
-  /// The system expires a task whose progress stalls. A download alone has a
-  /// real fraction, kilobytes as Android's bar counts them, and stalls only
-  /// when it does. Nothing else that holds the task knows its length — a
-  /// turn, a setup, a backup, a connection — so held is alive, and the
-  /// progress moves a tick a second against a total kept a minute ahead.
-  private static func tick(_ progress: Progress) {
-    if let download, download.total > 0, turns == 0, !settingUp, !backingUp {
-      progress.totalUnitCount = download.total / 1024
-      progress.completedUnitCount = download.received / 1024
-    } else {
-      progress.completedUnitCount += 1
-      progress.totalUnitCount = progress.completedUnitCount + 60
+    heartbeat = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+      started.progress.completedUnitCount += 1
+      started.progress.totalUnitCount = started.progress.completedUnitCount + 60
     }
   }
 

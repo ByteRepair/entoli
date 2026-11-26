@@ -15,6 +15,12 @@ class BackupService : ForegroundWork() {
     override val actionLabel: String? = null
 
     override fun describe(intent: Intent, builder: Notification.Builder) {
-        builder.setContentText("Backing up")
+        builder.setContentText(
+            if (intent.getStringExtra(EXTRA_WORK) == "restoring") "Restoring a backup" else "Writing a backup"
+        )
+    }
+
+    companion object {
+        const val EXTRA_WORK = "work"
     }
 }

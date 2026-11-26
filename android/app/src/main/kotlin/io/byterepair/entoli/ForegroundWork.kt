@@ -314,8 +314,11 @@ abstract class ForegroundWork : Service() {
                             }
                         }
                         "backingUp" -> {
-                            backingUp = call.arguments as? Boolean ?: false
-                            hold(appContext, BackupService::class.java, backingUp)
+                            val work = call.arguments as? String
+                            backingUp = work != null
+                            hold(appContext, BackupService::class.java, backingUp) {
+                                it.putExtra(BackupService.EXTRA_WORK, work)
+                            }
                         }
                         else -> return@setMethodCallHandler result.notImplemented()
                     }

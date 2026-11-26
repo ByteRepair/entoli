@@ -270,7 +270,7 @@ class FakeBackgroundWork implements BackgroundWork {
   final List<SyncNotice?> synced = [];
   final List<String?> signIns = [];
   final List<bool> setups = [];
-  final List<bool> backups = [];
+  final List<BackupWork?> backups = [];
   final _stops = StreamController<BackgroundJob>.broadcast();
 
   @override
@@ -296,7 +296,7 @@ class FakeBackgroundWork implements BackgroundWork {
   Future<void> settingUp(bool active) async => setups.add(active);
 
   @override
-  Future<void> backingUp(bool active) async => backups.add(active);
+  Future<void> backingUp(BackupWork? work) async => backups.add(work);
 
   @override
   Stream<BackgroundJob> get stopRequests => _stops.stream;

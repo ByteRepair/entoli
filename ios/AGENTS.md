@@ -781,8 +781,9 @@ system expired. Both are held again when the app next becomes active. It is
 it holds knows its length: a turn, its sub-agents, a long command, a setup.
 Dart already says exactly when work is held, so the progress is a native
 heartbeat, a tick a second against a total kept a minute ahead, for as long as
-the hold lasts. A download held alone is the exception: its bar is the real
-fraction, so it expires only if the download itself stalls. Counting the agent's steps was tried and left out what runs
+the hold lasts. Not even a download's bar is real: its percent is reported
+only as it moves, which on a slow link is minutes, so it is the subtitle's.
+Counting the agent's steps was tried and left out what runs
 longest between them (a command, a sub-agent, a setup).
 
 **The system draws the task, and its stop is the only one.** iOS shows every
@@ -798,8 +799,9 @@ handler sends `stopRequested` for each held job that has a stop (turns,
 download, sign-in, sync), the paths Android's buttons take, since the app is
 suspended next and the work would be cut off anyway: a sync connection lasts
 exactly as long as the activity. A backup has no stop and is left to finish.
-In front, it drops the hold and leaves the work running, killable again, as Android's
-`onTimeout` does.
+In front, it drops the hold and leaves the work running, killable again, as
+Android's `onTimeout` does; it is not held again until it ends, or every
+progress report would bring the activity back.
 
 The task asks for no GPU: background GPU wants the
 `continued-processing.gpu` entitlement, so an MLX turn still stops off

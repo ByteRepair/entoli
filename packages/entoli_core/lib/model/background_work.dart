@@ -17,6 +17,9 @@ import "package:flutter/foundation.dart" show listEquals;
 /// a different type from the others that are not.
 enum BackgroundJob { turns, voice, download, prefill, sync, signIn }
 
+/// Which way a backup is going, which the notification words.
+enum BackupWork { writing, restoring }
+
 /// A download worth telling the user about. Unlike the other two, its wording
 /// cannot live in Kotlin: which model is being fetched is the catalog's.
 class DownloadNotice {
@@ -127,10 +130,10 @@ abstract interface class BackgroundWork {
   /// for it as for a turn: off screen it would suspend the guest's download.
   Future<void> settingUp(bool active);
 
-  /// Whether a backup is being written or restored. It has no stop: cut off
-  /// part-way, a backup is a broken file and a restore a broken data
-  /// directory, so the hold only keeps it from being cut off.
-  Future<void> backingUp(bool active);
+  /// The backup being written or restored, or null when none is. It has no
+  /// stop: cut off part-way, a backup is a broken file and a restore a broken
+  /// data directory, so the hold only keeps it from being cut off.
+  Future<void> backingUp(BackupWork? work);
 
   /// The user said stop from outside the app — each notification has a button,
   /// and this says which was pressed. Whoever owns that kind of work stops it,

@@ -55,7 +55,7 @@ class ForegroundService implements BackgroundWork {
   Future<void> settingUp(bool active) => _tell("settingUp", active);
 
   @override
-  Future<void> backingUp(bool active) => _tell("backingUp", active);
+  Future<void> backingUp(BackupWork? work) => _tell("backingUp", work?.name);
 
   Future<void> _tell(String method, Object? argument) async {
     // Logged rather than raised: a platform that will not hold the process
