@@ -17,11 +17,12 @@ public enum Mlx {
 
   /// Loads the model in `directory` and keeps it as `id`.
   public static func load(_ id: String, _ directory: String) async throws {
-    _ = try await catchingMlx { _ in try await MlxModels.shared.load(id, directory) }
+    _ = try await MlxModels.shared.load(id, directory)
   }
 
   public static func evict(_ id: String) async {
-    await MlxModels.shared.evict(id)
+    // Evicted whatever MLX says: what failed was the model being let go of.
+    _ = try? await catchingMlx { _ in await MlxModels.shared.evict(id) }
   }
 
   /// One model call over `messages`, the whole conversation: what the model
@@ -50,13 +51,14 @@ public enum Mlx {
   /// Writes what `id` holds to `path`. False where it holds nothing.
   public static func save(_ id: String, to path: String) async -> Bool {
     guard let conversation = await MlxModels.shared.loaded(id) else { return false }
-    return (try? await catchingMlx { _ in await conversation.save(to: path) }) ?? false
+    return (try? await catchingMlx { await conversation.save(to: path, mlxError: $0) }) ?? false
   }
 
   /// Reads `path` back as what `id` holds. False where it could not.
   public static func restore(_ id: String, from path: String) async -> Bool {
     guard let conversation = await MlxModels.shared.loaded(id) else { return false }
-    return (try? await catchingMlx { _ in await conversation.restore(from: path) }) ?? false
+    return (try? await catchingMlx { await conversation.restore(from: path, mlxError: $0) })
+      ?? false
   }
 
   /// What `id` takes up: its weights' bytes, and how many tokens its cache
@@ -203,14 +205,18 @@ actor MlxModels {
   /// leaves nothing behind for the next ask to find.
   func load(_ id: String, _ directory: String) async throws -> MlxConversation {
     Memory.cacheLimit = defaultCacheLimit
+    // MLX's errors caught inside the task, so a failed load throws from it
+    // and is not kept, and every caller waiting on it hears the same.
     let loading = models[id] ?? Task {
-      let container = try await loadModelContainer(
-        from: URL(fileURLWithPath: directory), using: #huggingFaceTokenizerLoader())
-      // Counted now, while nothing else holds the model.
-      let weightBytes = await container.perform { context in
-        context.model.parameters().flattened().reduce(0) { $0 + $1.1.nbytes }
+      try await catchingMlx { _ in
+        let container = try await loadModelContainer(
+          from: URL(fileURLWithPath: directory), using: #huggingFaceTokenizerLoader())
+        // Counted now, while nothing else holds the model.
+        let weightBytes = await container.perform { context in
+          context.model.parameters().flattened().reduce(0) { $0 + $1.1.nbytes }
+        }
+        return MlxConversation(container, weightBytes: weightBytes)
       }
-      return MlxConversation(container, weightBytes: weightBytes)
     }
     models[id] = loading
     do {

@@ -169,12 +169,16 @@ actor MlxConversation {
         if unloaded { throw MlxUnloaded() }
         throw error
       }
+      // The reply task may still be writing the cache back: an error there
+      // leaves nothing held, and the generation ends in `error`, not `done`.
+      let tokens = (try? await session?.cacheStatus().processedTokenCount ?? nil) ?? 0
+      try mlxError.check()
       held = HeldRecord(
         messages: messages + [
           MlxMessage(role: .assistant, content: outcome.reply, toolCalls: outcome.calls)
         ],
         tools: tools)
-      heldTokens = (try? await session?.cacheStatus().processedTokenCount ?? nil) ?? 0
+      heldTokens = tokens
       emit(.done(promptTokens: outcome.counts.0, generatedTokens: outcome.counts.1))
     }
   }
@@ -191,20 +195,31 @@ actor MlxConversation {
   /// Writes the cache to `path` and what it holds beside it, `path.json`: a
   /// cache file says nothing of which messages it covers, and a session
   /// restored without that would read its own reply a second time.
-  func save(to path: String) async -> Bool {
+  /// A save MLX failed part-way leaves no file behind, since a cache that
+  /// says it covers messages it never computed would be restored as one.
+  func save(to path: String, mlxError: ErrorBox) async -> Bool {
     (try? await operation { _ in
       guard let session, let held else { return false }
-      try await session.saveCache(to: URL(fileURLWithPath: path))
-      try JSONEncoder().encode(held).write(to: Self.companion(path), options: .atomic)
+      do {
+        try await session.saveCache(to: URL(fileURLWithPath: path))
+        try mlxError.check()
+        try JSONEncoder().encode(held).write(to: Self.companion(path), options: .atomic)
+      } catch {
+        try? FileManager.default.removeItem(atPath: path)
+        throw error
+      }
       return true
     }) ?? false
   }
 
-  func restore(from path: String) async -> Bool {
+  func restore(from path: String, mlxError: ErrorBox) async -> Bool {
     (try? await operation { container in
       let record = try JSONDecoder().decode(
         HeldRecord.self, from: Data(contentsOf: Self.companion(path)))
       let snapshot = try loadPromptCacheSnapshot(url: URL(fileURLWithPath: path))
+      // Checked before anything is replaced: a snapshot MLX failed to read
+      // is not one to carry on from.
+      try mlxError.check()
       session = ChatSession(
         container, cache: snapshot.cache, state: snapshot.state,
         tools: record.tools.map(\.spec))
