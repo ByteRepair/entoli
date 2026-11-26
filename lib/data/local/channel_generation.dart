@@ -199,6 +199,11 @@ LlmException _errorOf(
     "The $label does not support this conversation's language.",
   ),
   "resources" => LlmException("The $label ran short of device resources."),
+  // The GPU refused off screen; a retry there is refused the same way.
+  "background" => LlmException(
+    "The $label stopped when Entoli left the screen: the system lets only "
+    "the app in front use the GPU.",
+  ),
   // Let go of from the settings page mid-reply: the reply ends there, and a
   // retry would only load it again.
   "unloaded" => LlmException("The $label was unloaded."),

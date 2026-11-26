@@ -101,6 +101,8 @@ final class MlxChannel: GenerationChannel {
       // Not a stop the turn asked for: it is waiting, and is told why its
       // reply ended.
       sendError(id, "unloaded", "The model was unloaded.")
+    } catch let failure as MlxFailure {
+      sendError(id, failure.code, failure.description)
     } catch {
       sendError(id, "other", "\(error)")
     }

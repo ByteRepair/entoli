@@ -21,7 +21,8 @@ public enum Mlx {
   }
 
   public static func evict(_ id: String) async {
-    await MlxModels.shared.evict(id)
+    // Evicted whatever MLX says: what failed was the model being let go of.
+    _ = try? await catchingMlx { _ in await MlxModels.shared.evict(id) }
   }
 
   /// One model call over `messages`, the whole conversation: what the model
@@ -147,6 +148,38 @@ public enum MlxEvent: Sendable {
   case done(promptTokens: Int, generatedTokens: Int)
 }
 
+/// A failure MLX raised itself, coded as the channel's `error` frame is: the
+/// GPU refused off screen (`background`), memory ran out (`resources`), or
+/// anything else (`other`).
+public struct MlxFailure: Error, CustomStringConvertible {
+  public let code: String
+  public let description: String
+
+  init(_ message: String) {
+    description = message
+    if message.contains("BackgroundExecutionNotPermitted") {
+      code = "background"
+    } else if ["OutOfMemory", "Insufficient Memory", "malloc]"].contains(where: { message.contains($0) }) {
+      code = "resources"
+    } else {
+      code = "other"
+    }
+  }
+}
+
+/// Runs `body` with MLX's errors thrown as `MlxFailure`. With no scoped
+/// handler MLX calls `fatalError`, so a refused command buffer or a failed
+/// allocation killed the app with nothing said. The handler is task-local:
+/// it reaches mlx-swift-lm's generation tasks, not the weight loading it
+/// runs on a dispatch queue.
+func catchingMlx<T>(_ body: (ErrorBox) async throws -> T) async throws -> T {
+  do {
+    return try await withError(body)
+  } catch MLXError.caught(let message) {
+    throw MlxFailure(message)
+  }
+}
+
 /// A generation asked of a model `load` does not hold.
 public struct MlxNotLoaded: Error, CustomStringConvertible {
   public var description: String { "The model is not loaded." }
@@ -171,14 +204,18 @@ actor MlxModels {
   /// leaves nothing behind for the next ask to find.
   func load(_ id: String, _ directory: String) async throws -> MlxConversation {
     Memory.cacheLimit = defaultCacheLimit
+    // MLX's errors caught inside the task, so a failed load throws from it
+    // and is not kept, and every caller waiting on it hears the same.
     let loading = models[id] ?? Task {
-      let container = try await loadModelContainer(
-        from: URL(fileURLWithPath: directory), using: #huggingFaceTokenizerLoader())
-      // Counted now, while nothing else holds the model.
-      let weightBytes = await container.perform { context in
-        context.model.parameters().flattened().reduce(0) { $0 + $1.1.nbytes }
+      try await catchingMlx { _ in
+        let container = try await loadModelContainer(
+          from: URL(fileURLWithPath: directory), using: #huggingFaceTokenizerLoader())
+        // Counted now, while nothing else holds the model.
+        let weightBytes = await container.perform { context in
+          context.model.parameters().flattened().reduce(0) { $0 + $1.1.nbytes }
+        }
+        return MlxConversation(container, weightBytes: weightBytes)
       }
-      return MlxConversation(container, weightBytes: weightBytes)
     }
     models[id] = loading
     do {
