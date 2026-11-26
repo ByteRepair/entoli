@@ -24,10 +24,14 @@ internal import MLXLMCommon
 /// session and the container itself — so when it returns, nothing holds the
 /// model, rather than whenever a straggler finishes.
 actor MlxConversation {
-  init(_ container: ModelContainer, weightBytes: Int) {
+  init(_ container: ModelContainer, weightBytes: Int, limits: MlxLimits?) {
     self.container = container
     self.weightBytes = weightBytes
+    self.limits = limits
   }
+
+  /// What the app planned for this model; nil leaves MLX its defaults.
+  private let limits: MlxLimits?
 
   /// The model: what holds its weights. Nil once unloaded.
   private var container: ModelContainer?
@@ -108,7 +112,6 @@ actor MlxConversation {
     // stopped, while this one waited its turn.
     guard !unloaded, let container else { throw MlxUnloaded() }
     try Task.checkCancellation()
-    MlxMemory.fit()
     return try await catchingMlx { try await body(container, $0) }
   }
 
@@ -143,17 +146,29 @@ actor MlxConversation {
   ) async throws {
     try await operation { container, mlxError in
       guard let last = messages.last else { return }
+      let carriesOn = session != nil && held?.carriesOn(messages, tools) == true
       // The prefill is where a reply's memory peaks, and it says nothing
-      // until it is done but this, after each chunk.
-      let memoryStop = MemoryStop()
+      // until it is done but this, after each chunk: where the prompt is too
+      // long for the model's room, or MLX has outgrown its budget, it asks
+      // for the stop.
+      let stop = Stop()
       var parameters = GenerateParameters(maxTokens: maxTokens)
       if let temperature { parameters.temperature = Float(temperature) }
-      parameters.prefill.progress = { _, _ in
-        if MlxMemory.isShort { memoryStop.trip() }
+      if let limits {
+        let base = carriesOn ? heldTokens : 0
+        parameters.prefill.stepSize = limits.prefillStep
+        parameters.prefill.progress = { _, total in
+          if base + total > limits.context {
+            stop.trip(.outgrewContext)
+          } else if MlxBudget.shared.isOver {
+            stop.trip(.overBudget)
+          }
+        }
       }
+      Memory.peakMemory = 0
 
       let fresh: [MlxMessage]
-      if let session, let held, held.carriesOn(messages, tools) {
+      if carriesOn, let session, let held {
         session.generateParameters = parameters
         fresh = Array(messages[held.messages.count...])
       } else {
@@ -186,7 +201,7 @@ actor MlxConversation {
         var counts = (prompt: 0, generated: 0)
         for try await generation in stream {
           try Task.checkCancellation()
-          if MlxMemory.isShort { throw MlxFailure.shortOfMemory }
+          if MlxBudget.shared.isOver { throw MlxFailure.overBudget }
           // MLX goes on after an error with arrays it never computed, so the
           // reply ends at the first one rather than at the block's end.
           try mlxError.check()
@@ -210,7 +225,7 @@ actor MlxConversation {
         return (reply, calls, counts)
       }
       stopGeneration = { work.cancel() }
-      memoryStop.arm { work.cancel() }
+      stop.arm { work.cancel() }
       defer { stopGeneration = nil }
       let outcome: (reply: String, calls: [MlxToolCall], counts: (Int, Int))
       do {
@@ -221,7 +236,7 @@ actor MlxConversation {
         }
       } catch {
         if unloaded { throw MlxUnloaded() }
-        if memoryStop.tripped { throw MlxFailure.shortOfMemory }
+        if let failure = stop.failure { throw failure }
         throw error
       }
       // The reply task may still be writing the cache back: an error there
@@ -234,7 +249,10 @@ actor MlxConversation {
         ],
         tools: tools)
       heldTokens = tokens
-      emit(.done(promptTokens: outcome.counts.0, generatedTokens: outcome.counts.1))
+      emit(
+        .done(
+          promptTokens: outcome.counts.0, generatedTokens: outcome.counts.1,
+          peakBytes: Memory.peakMemory))
     }
   }
 
@@ -295,27 +313,29 @@ actor MlxConversation {
   }
 }
 
-/// A reply stopped short of the OS's memory limit by the prefill's progress,
-/// which runs inside mlx-swift-lm and can only ask for the cancel.
-private final class MemoryStop: @unchecked Sendable {
+/// A reply stopped by the prefill's progress, which runs inside mlx-swift-lm
+/// and can only ask for the cancel, and why.
+private final class Stop: @unchecked Sendable {
   private let lock = NSLock()
   private var cancel: (() -> Void)?
-  private var stopped = false
+  private var stopped: MlxFailure?
 
-  var tripped: Bool { lock.withLock { stopped } }
+  var failure: MlxFailure? { lock.withLock { stopped } }
 
   /// What a trip cancels, run at once where it has tripped already.
   func arm(_ cancel: @escaping () -> Void) {
     let already = lock.withLock {
       self.cancel = cancel
-      return stopped
+      return stopped != nil
     }
     if already { cancel() }
   }
 
-  func trip() {
-    let cancel = lock.withLock {
-      stopped = true
+  /// The first reason given is the one kept.
+  func trip(_ failure: MlxFailure) {
+    let cancel = lock.withLock { () -> (() -> Void)? in
+      guard stopped == nil else { return nil }
+      stopped = failure
       return self.cancel
     }
     cancel?()

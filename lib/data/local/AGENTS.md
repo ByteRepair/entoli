@@ -158,9 +158,10 @@ one.
 `RuntimeEngine` and the classes it is made of, so llama.cpp and MLX differ in
 one place each — their `LocalRuntime`:
 
-- `LocalRuntime` is the engine's half: what the settings mean for a model
-  (`resolve`, into a `LocalLoad` — "auto" made a device, a default context
-  made a number), which settings it reads (`controls`), its devices and
+- `LocalRuntime` is the engine's half: how a model's memory is laid out
+  (`plan`, a `MemoryPlan`, whose context is the model's), what the settings
+  mean for a model (`resolve`, into a `LocalLoad` — "auto" made a device, the
+  plan made a context), which settings it reads (`controls`), its devices and
   thread count, and `create`, a `LocalInstance` of a model.
 - `LocalInstance` is one loaded model: `generate`, `saveState` and
   `restoreState` of its prompt state, and `stop`. It is made by the runtime
@@ -279,6 +280,23 @@ the endpoint carries its own client, and an empty string keeps the registry's
 cache signature still while servers come and go underneath it.
 
 ### How much context, and why it is per model
+
+**The context is the runtime's `MemoryPlan`, and it is the chat's window.**
+`OnDeviceProvider.modelInfo` answers a downloaded model's `context` from
+`LocalEngine.contextOf`, so `contextWindowProvider` takes the smallest of
+models.dev's (none, on the device), Total Context, and this: the device's
+limit wins wherever it is the lowest, which on a phone it is, and auto-compact
+fires at its share of it. The summarizer and the classifier read the same
+number. `FixedContextPlan` is llama.cpp's, below. `BudgetPlan` is MLX's: the
+measured `ModelBudget`, shared equally between the `maxLocalModels` that may
+be resident, holds the weights, the fixed state, the prefill's working memory
+(`scratchBytes`), MLX's buffer cache (`cacheBytes`) and the KV cache, which
+gets what is left and so decides the context. Nothing of it is a margin taken
+from the rest of the app, which keeps what the budget leaves. The shape is
+read off the model's `config.json` (`MlxConfig`). A plan with less than
+`minimumContext` left is a model that will not load, said on its row before
+the channel is asked. `UnplannedMemory` is a device that measured nothing,
+whose models get what they were trained on and MLX its defaults.
 
 **`-c` is always passed.** llama.cpp's `--fit` would otherwise size it, and on a
 phone that is wrong in a way it is not on a desktop: the CPU backend reports

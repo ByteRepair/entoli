@@ -1,4 +1,7 @@
+import "dart:io" show FileSystemException;
+
 import "package:flutter/foundation.dart";
+import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/local_llm.dart";
 import "package:entoli_core/model/local_model.dart";
@@ -62,6 +65,10 @@ abstract class LocalEngine {
 
   /// Unload [modelId], where it is loaded.
   Future<void> stop(String modelId);
+
+  /// How much conversation [modelId] has room for here under [settings]: the
+  /// device's limit on the chat's window. Null where it is not on disk.
+  int? contextOf(String modelId, AppSettings settings) => null;
 
   /// What [modelId] takes up while it is loaded; null where it is not, or
   /// where its runtime cannot say.
@@ -185,6 +192,23 @@ abstract class RuntimeEngine extends LocalEngine {
 
   @override
   Future<void> stop(String modelId) => residency.stop(modelId);
+
+  @override
+  int? contextOf(String modelId, AppSettings settings) {
+    final model = store.downloadedOfSync(modelId);
+    if (model == null) return null;
+    try {
+      return runtime
+          .plan(model, LocalOptions.fromSettings(settings))
+          .contextLength;
+    } on FormatException catch (e) {
+      logFailure("local", "no plan for $modelId", e.message);
+      return null;
+    } on FileSystemException catch (e) {
+      logFailure("local", "no plan for $modelId", e.message);
+      return null;
+    }
+  }
 
   @override
   Future<LocalUsage?> usage(String modelId) async =>

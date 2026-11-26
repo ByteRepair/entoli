@@ -72,7 +72,7 @@ final class MlxChannel: GenerationChannel {
       let directory = args["directory"] as? String ?? ""
       answer(result, code: "load") { [screen] in
         if screen.offScreen { throw OffScreen() }
-        try await Mlx.load(model, directory)
+        try await Mlx.load(model, directory, limits: MlxLimits(channel: args))
         return nil
       }
     case "evict":
@@ -125,9 +125,10 @@ final class MlxChannel: GenerationChannel {
           self?.send("toolCall", [
             "id": id, "callId": call.id, "name": call.name, "arguments": call.arguments,
           ])
-        case .done(let prompt, let generated):
+        case .done(let prompt, let generated, let peak):
           self?.send("done", [
             "id": id, "finish": "stop", "inputTokens": prompt, "outputTokens": generated,
+            "peakBytes": peak,
           ])
         @unknown default: break
         }

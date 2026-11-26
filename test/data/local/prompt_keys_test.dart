@@ -29,7 +29,7 @@ void main() {
             contextLength: context,
             kvBytesPerToken: 0,
           ),
-          LocalLoad(contextLength: context, device: device),
+          LocalLoad(memory: FixedContextPlan(context), device: device),
           onChange: () {},
         );
 

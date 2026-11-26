@@ -4,13 +4,17 @@ import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 import "package:entoli_core/agent/llm/llm_client.dart";
+import "package:agent_chat/data/local/local_engine.dart";
 import "package:agent_chat/data/local/mlx_engine.dart";
+import "package:agent_chat/data/local/model_format.dart";
 import "package:agent_chat/data/local/prompt_cache.dart";
 import "package:agent_chat/data/model_host/model_process.dart";
 import "package:entoli_core/model/model_process.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/local_llm.dart";
 import "package:entoli_core/model/local_model.dart";
+import "package:entoli_core/model/memory_plan.dart";
+import "package:entoli_core/model/model_budget.dart";
 
 import "../../fakes.dart";
 import "../../harness.dart" show tempDir;
@@ -445,6 +449,102 @@ void main() {
     await mlx.serve(small.id, testLocalOptions());
     expect(calls(), ["load ${small.id}"]);
     expect(mlx.running.value.single.phase, LocalLlmPhase.ready);
+  });
+
+  group("with a measured budget", () {
+    late Directory dir;
+    late DownloadedModel qwen;
+
+    // Qwen3.5 4B's config, its weights stood in for by a file of their size
+    // as the disk reports it.
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp("mlx-plan");
+      File(p.join(dir.path, "config.json")).writeAsStringSync("""{
+        "quantization": {"bits": 4, "group_size": 64},
+        "text_config": {
+          "max_position_embeddings": 262144, "num_attention_heads": 16,
+          "num_key_value_heads": 4, "head_dim": 256, "hidden_size": 2560,
+          "intermediate_size": 9216, "num_hidden_layers": 4,
+          "layer_types": ["linear_attention", "linear_attention",
+            "linear_attention", "full_attention"],
+          "linear_num_key_heads": 16, "linear_num_value_heads": 32,
+          "linear_key_head_dim": 128, "linear_value_head_dim": 128,
+          "linear_conv_kernel_dim": 4
+        }
+      }""");
+      final weights = File(p.join(dir.path, "model.safetensors"));
+      await (await weights.open(mode: FileMode.write)).truncate(3000000000);
+      qwen = const MlxFormat().describe(small.id, dir.path, small);
+    });
+    tearDown(() => dir.delete(recursive: true));
+
+    MlxEngine planned(int budget) => MlxEngine(
+      FakeLocalModelStore(models: [qwen]),
+      const InAppModelProcess(),
+      launch: DeviceMemory(
+        total: budget,
+        budget: ModelBudget(budget),
+        readings: const [],
+      ),
+    );
+
+    test("the load carries the plan the Swift half holds MLX to", () async {
+      final mlx = planned(4000000000);
+      final plan = BudgetPlan(MlxFormat.shapeOf(qwen), budgetBytes: 4000000000);
+
+      final loaded = await mlx.serve(small.id, testLocalOptions());
+
+      expect(asked.single.arguments, {
+        "model": small.id,
+        "directory": dir.path,
+        "budget": 4000000000,
+        "cache": BudgetPlan.cacheBytes,
+        "context": plan.contextLength,
+        "prefillStep": plan.prefillStep,
+      });
+      expect(loaded.load.contextLength, plan.contextLength);
+      expect(mlx.running.value.single.contextLength, plan.contextLength);
+    });
+
+    test("two resident models share the budget equally", () async {
+      final mlx = planned(8000000000);
+
+      await mlx.serve(small.id, testLocalOptions(maxRunning: 2));
+
+      expect((asked.single.arguments as Map)["budget"], 4000000000);
+    });
+
+    test("the chat's window is the plan's context", () {
+      final mlx = planned(4000000000);
+
+      expect(
+        mlx.contextOf(small.id, AppSettings()),
+        BudgetPlan(
+          MlxFormat.shapeOf(qwen),
+          budgetBytes: 4000000000,
+        ).contextLength,
+      );
+      expect(mlx.contextOf("gone", AppSettings()), isNull);
+    });
+
+    test(
+      "a model with no room to talk is refused before the channel is asked",
+      () async {
+        final mlx = planned(3100000000);
+
+        await expectLater(
+          mlx.serve(small.id, testLocalOptions()),
+          throwsA(
+            isA<LocalLlmFailure>().having(
+              (e) => e.message,
+              "message",
+              contains("with room to talk"),
+            ),
+          ),
+        );
+        expect(asked, isEmpty);
+      },
+    );
   });
 }
 

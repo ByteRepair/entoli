@@ -4,7 +4,10 @@ import "package:flutter/foundation.dart" show protected;
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/local_llm.dart";
 import "package:entoli_core/model/local_model.dart";
+import "package:entoli_core/model/memory_plan.dart";
 import "package:entoli_core/agent/llm/llm_client.dart";
+
+export "package:entoli_core/model/memory_plan.dart";
 
 /// How a model is to be loaded, as a turn asks for it. Read from the settings
 /// fresh for every call, the way `LocalShell` re-reads its environment, so a
@@ -55,13 +58,16 @@ class LocalOptions {
 /// changes how a runtime loads a model.
 class LocalLoad {
   const LocalLoad({
-    required this.contextLength,
+    required this.memory,
     this.device,
     this.threads,
     this.keepsPrompts = false,
   });
 
-  final int contextLength;
+  /// How the model's memory is laid out, which decides its context.
+  final MemoryPlan memory;
+
+  int get contextLength => memory.contextLength;
 
   /// The device in the runtime's own word, or null where the runtime has no
   /// choice of device.
@@ -244,8 +250,13 @@ abstract class LocalRuntime {
   /// draws.
   Set<LocalControl> get controls;
 
-  /// What [options] mean for [model] here: "auto" made a device, a default
-  /// context made a number. Asynchronous because a runtime may have to ask the
+  /// How [model]'s memory is laid out under [options], and so how much
+  /// conversation it has room for. Synchronous, since the chat's window is
+  /// read from it before anything is loaded.
+  MemoryPlan plan(DownloadedModel model, LocalOptions options);
+
+  /// What [options] mean for [model] here: "auto" made a device, the [plan]
+  /// made a context. Asynchronous because a runtime may have to ask the
   /// hardware what it has.
   Future<LocalLoad> resolve(DownloadedModel model, LocalOptions options);
 

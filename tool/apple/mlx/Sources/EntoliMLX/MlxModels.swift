@@ -15,9 +15,10 @@ public enum Mlx {
     return false
   }
 
-  /// Loads the model in `directory` and keeps it as `id`.
-  public static func load(_ id: String, _ directory: String) async throws {
-    _ = try await MlxModels.shared.load(id, directory)
+  /// Loads the model in `directory` and keeps it as `id`, held to `limits`
+  /// where the app planned any.
+  public static func load(_ id: String, _ directory: String, limits: MlxLimits?) async throws {
+    _ = try await MlxModels.shared.load(id, directory, limits: limits)
   }
 
   public static func evict(_ id: String) async {
@@ -144,8 +145,9 @@ public enum MlxEvent: Sendable {
   case reasoning(String)
   case text(String)
   case toolCall(MlxToolCall)
-  /// The end, with how much of the prompt was read and how much was reused.
-  case done(promptTokens: Int, generatedTokens: Int)
+  /// The end, with how much of the prompt was read and how much was reused,
+  /// and the most memory MLX held while it ran.
+  case done(promptTokens: Int, generatedTokens: Int, peakBytes: Int)
 }
 
 /// A failure MLX raised itself, coded as the channel's `error` frame is: the
@@ -155,9 +157,13 @@ public struct MlxFailure: Error, CustomStringConvertible {
   public let code: String
   public let description: String
 
-  /// A reply stopped before iOS would end the app for its memory.
-  static let shortOfMemory = MlxFailure(
-    code: "resources", description: "The device is nearly out of memory for this app.")
+  /// A reply stopped at the memory the app planned for its model.
+  static let overBudget = MlxFailure(
+    code: "resources", description: "The model outgrew the memory set aside for it.")
+
+  /// A prompt longer than the model has room for.
+  static let outgrewContext = MlxFailure(
+    code: "context", description: "The conversation is longer than the model has room for.")
 
   init(code: String, description: String) {
     self.code = code
@@ -211,28 +217,30 @@ actor MlxModels {
 
   /// The model in `directory`, loaded and kept as `id`. A load that throws
   /// leaves nothing behind for the next ask to find.
-  func load(_ id: String, _ directory: String) async throws -> MlxConversation {
-    Memory.cacheLimit = MlxMemory.cacheLimit
+  ///
+  /// The weights are read on a dispatch queue, out of reach of MLX's error
+  /// handler and of any check a reply makes, so whether they fit is the
+  /// app's plan's to say before asking (`BudgetPlan.refusal`).
+  func load(_ id: String, _ directory: String, limits: MlxLimits?) async throws -> MlxConversation {
+    if models[id] == nil { MlxBudget.shared.admit(id, limits) }
     // MLX's errors caught inside the task, so a failed load throws from it
     // and is not kept, and every caller waiting on it hears the same.
-    let nothingLoaded = models.isEmpty
     let loading = models[id] ?? Task {
-      try MlxMemory.checkFits(directory, nothingLoaded: nothingLoaded)
-      return try await catchingMlx { _ in
+      try await catchingMlx { _ in
         let container = try await loadModelContainer(
           from: URL(fileURLWithPath: directory), using: #huggingFaceTokenizerLoader())
         // Counted now, while nothing else holds the model.
         let weightBytes = await container.perform { context in
           context.model.parameters().flattened().reduce(0) { $0 + $1.1.nbytes }
         }
-        return MlxConversation(container, weightBytes: weightBytes)
+        return MlxConversation(container, weightBytes: weightBytes, limits: limits)
       }
     }
     models[id] = loading
     do {
       return try await loading.value
     } catch {
-      models.removeValue(forKey: id)
+      if models.removeValue(forKey: id) != nil { MlxBudget.shared.release(id) }
       throw error
     }
   }
@@ -249,17 +257,14 @@ actor MlxModels {
   /// Not quite all of it is let go of by then: mlx-swift-lm's reply task
   /// drops its hold on the model as it exits, a moment after the session's
   /// wait for it returns, and nothing says when. So with no model left the
-  /// cache's limit is taken to nothing, and MLX hands back whatever is freed
-  /// from then on as it is freed; the next load gives MLX its default back.
-  /// While a model is loaded, what is freed is kept for it.
+  /// cache's limit is taken to nothing (`MlxBudget`), and MLX hands back
+  /// whatever is freed from then on as it is freed. While a model is loaded,
+  /// what is freed is kept for it, up to its budget's share.
   func evict(_ id: String) async {
     if let conversation = try? await models.removeValue(forKey: id)?.value {
       await conversation.unload()
     }
-    if models.isEmpty {
-      Memory.cacheLimit = 0
-      MlxMemory.reset()
-    }
+    MlxBudget.shared.release(id)
     Memory.clearCache()
   }
 

@@ -42,15 +42,29 @@ class OnDeviceProvider extends LlmProvider with KeyFree {
     http.Client? httpClient,
   }) async => _engine.installed;
 
-  /// What it has is on the disk, not in models.dev, so [info] says nothing and
-  /// an id it has not got is nothing at all.
+  /// What it has is on the disk, not in models.dev: a downloaded model's
+  /// window is what this device has room for, which is what the chat compacts
+  /// against.
+  @override
+  ModelInfo? modelInfo(String? modelId) {
+    if (modelId == null || _engine.store.downloadedOfSync(modelId) == null) {
+      return null;
+    }
+    return ModelInfo(
+      id: modelId,
+      toolCall: true,
+      context: _engine.contextOf(modelId, _settings()),
+    );
+  }
+
+  /// [info] from models.dev says nothing here, and an id it has not got is
+  /// nothing at all.
   @override
   List<Model> serve(String id, ModelInfo? info, ModelHost host) {
     final ref = (providerId: localProviderId, modelId: id);
     final voice = voices().contains(id) ? voiceModelById(id) : null;
     return [
-      if (_engine.store.downloadedOfSync(id) != null)
-        HostedChatModel(ref, ModelInfo(id: id, toolCall: true)),
+      if (modelInfo(id) case final chat?) HostedChatModel(ref, chat),
       if (voice is RecognitionModel) OnDeviceTranscriptionModel(ref, voice),
       if (voice is SpeechModel) OnDeviceSynthesisModel(ref, voice),
     ];
