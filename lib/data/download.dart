@@ -129,18 +129,19 @@ class DownloadRun implements DownloadTask {
   /// How far the bar moves before it is worth saying so.
   static const _reportEvery = 1 << 20;
 
-  /// [fetch] one file and answer its SHA-256 in hex, hashed on the way past
+  /// [fetch] one file and answer its digest in hex, hashed on the way past
   /// rather than by reading back what may be gigabytes.
   @override
-  Future<String> fetchSha256({
+  Future<String> fetchHashed({
     required String url,
     required String to,
     int? total,
     int done = 0,
+    Hash algorithm = sha256,
   }) async {
     report(DownloadProgress(received: done, total: total ?? 0));
-    final hash = _Sha256Sink();
-    final hashing = sha256.startChunkedConversion(hash);
+    final hash = _DigestSink();
+    final hashing = algorithm.startChunkedConversion(hash);
     await fetch(url: url, to: to, total: total, done: done, watch: hashing);
     hashing.close();
     return "${hash.digest}";
@@ -155,7 +156,7 @@ StartDownload startDownload({http.Client? client}) =>
 
 /// Where the hash of the download lands. `package:convert` has one of these and
 /// is not a dependency for four lines.
-class _Sha256Sink implements Sink<Digest> {
+class _DigestSink implements Sink<Digest> {
   Digest? digest;
 
   @override

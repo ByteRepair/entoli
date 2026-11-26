@@ -971,6 +971,399 @@ void main() {
     });
   });
 
+  group("an ACP session", () {
+    late Directory dir;
+    late _FakeLaunch launch;
+    late _FakeBridge bridge;
+    late AcpProvider provider;
+
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync("acp-cli-");
+      CliProvider.cacheRoot = p.join(dir.path, "cache");
+      final exe = File(p.join(dir.path, "copilot"))..createSync();
+      launch = _FakeLaunch();
+      bridge = _FakeBridge();
+      provider = CopilotCliProvider.over(
+        LlmProviderConfig(
+          id: "g",
+          api: LlmApi.copilotCli,
+          baseUrl: "",
+          command: exe.path,
+        ),
+        guest: HostCliGuest(launch: launch.call),
+        bindBridge: bridge.bind,
+      );
+    });
+    tearDown(() {
+      CliProvider.cacheRoot = null;
+      dir.deleteSync(recursive: true);
+    });
+
+    const tool = LlmTool(name: "echo", description: "says it", schema: {});
+    const ask = _useEcho;
+
+    Future<LlmCompletion> step(LlmClient client, List<LlmMessage> messages) =>
+        _step(client, messages, model: "gpt-6-astra", tool: tool);
+
+    Future<Map<String, dynamic>> request(
+      _FakeProcess process,
+      String method,
+    ) async {
+      final sent = await process.sent.next;
+      expect(sent["method"], method);
+      expect(sent["jsonrpc"], "2.0");
+      return sent;
+    }
+
+    void answer(_FakeProcess process, Map<String, dynamic> to, Object result) =>
+        process.say({"jsonrpc": "2.0", "id": to["id"], "result": result});
+
+    /// The agent's capabilities, as a full one states them.
+    const capabilities = {
+      "agentCapabilities": {
+        "promptCapabilities": {"image": true},
+        "mcpCapabilities": {"http": true},
+        "sessionCapabilities": {"systemPrompt": <String, dynamic>{}},
+      },
+    };
+
+    /// The agent as far as an open session, offering [models] by config
+    /// option; hands back `session/new`'s params.
+    Future<(_FakeProcess, Map<String, dynamic>)> opened({
+      Map<String, dynamic> initialized = capabilities,
+      List<String> models = const ["gpt-6-astra", "claude-sonnet-4.5"],
+    }) async {
+      final process = await launch.started.next;
+      answer(process, await request(process, "initialize"), initialized);
+      final created = await request(process, "session/new");
+      answer(process, created, {
+        "sessionId": "s1",
+        "configOptions": [
+          {
+            "id": "model",
+            "category": "model",
+            "type": "select",
+            "currentValue": models.last,
+            "options": [
+              for (final m in models) {"value": m, "name": m},
+            ],
+          },
+        ],
+      });
+      return (process, created["params"] as Map<String, dynamic>);
+    }
+
+    void chunk(_FakeProcess process, String text) => process.say({
+      "jsonrpc": "2.0",
+      "method": "session/update",
+      "params": {
+        "sessionId": "s1",
+        "update": {
+          "sessionUpdate": "agent_message_chunk",
+          "content": {"type": "text", "text": text},
+        },
+      },
+    });
+
+    Future<Map<String, dynamic>?> call(int id, String text) =>
+        bridge.routes.answer({
+          "jsonrpc": "2.0",
+          "id": id,
+          "method": "tools/call",
+          "params": {
+            "name": "echo",
+            "arguments": {"text": text},
+          },
+        });
+
+    LlmMessage result(String id, String text) =>
+        LlmMessage(role: LlmRole.tool, toolCallId: id, text: text);
+
+    test("is started with its own tools denied and Entoli's allowed", () async {
+      final client = provider.client(null);
+      unawaited(
+        step(client, [_system, ask]).then<void>((_) {}, onError: (Object _) {}),
+      );
+      final process = await launch.started.next;
+      expect(
+        process.arguments,
+        containsAll([
+          "--acp",
+          "--stdio",
+          "--allow-tool=entoli",
+          "--deny-tool=shell",
+          "--deny-tool=write",
+          "--disable-builtin-mcps",
+          "--effort=low",
+        ]),
+      );
+      expect(process.environment["COPILOT_MODEL"], "gpt-6-astra");
+      expect(process.environment["COPILOT_HOME"], provider.dataDirectory);
+      client.close();
+    });
+
+    test(
+      "runs Entoli's tools over the bridge and carries on in one session",
+      () async {
+        final client = provider.client(null);
+        final firstStep = step(client, [_system, ask]);
+        final (process, created) = await opened();
+        expect(created["systemPrompt"], {
+          "mode": "append",
+          "content": [
+            {"type": "text", "text": "be brief"},
+          ],
+        });
+        expect((created["mcpServers"] as List).single, {
+          "type": "http",
+          "name": "entoli",
+          "url": null,
+          "headers": <Object>[],
+        });
+        final pick = await request(process, "session/set_config_option");
+        expect(pick["params"], {
+          "sessionId": "s1",
+          "configId": "model",
+          "value": "gpt-6-astra",
+        });
+        answer(process, pick, {"configOptions": <Object>[]});
+        final prompt = await request(process, "session/prompt");
+        expect(prompt["params"]["prompt"], [
+          {"type": "text", "text": "use echo"},
+        ]);
+
+        // Two calls made together are one reply.
+        chunk(process, "calling");
+        final one = call(1, "a");
+        final two = call(2, "b");
+        final calls = await firstStep;
+        expect(calls.stop, LlmStop.toolUse);
+        expect(calls.message.text, "calling");
+        expect(
+          [for (final c in calls.message.toolCalls) (c.name, c.argumentsJson)],
+          [("echo", '{"text":"a"}'), ("echo", '{"text":"b"}')],
+        );
+        final [first, second] = calls.message.toolCalls;
+        // Its own: a chat outlives its sessions, and the loop keys
+        // sub-agents and jobs by a call's id.
+        expect(first.id, matches(RegExp(r"^acp_[A-Za-z0-9_-]{8}_1$")));
+        expect(second.id, "${first.id.substring(0, 13)}2");
+
+        // Text read after its calls went out, as stdout and the bridge
+        // race, opens the next reply rather than straying the session.
+        chunk(process, "late. ");
+
+        // A permission for one of its own tools is refused.
+        process.say({
+          "jsonrpc": "2.0",
+          "id": 40,
+          "method": "session/request_permission",
+          "params": {
+            "sessionId": "s1",
+            "toolCall": {"toolCallId": "t"},
+            "options": [
+              {"optionId": "yes", "name": "Allow", "kind": "allow_once"},
+              {"optionId": "no", "name": "Reject", "kind": "reject_once"},
+            ],
+          },
+        });
+        final refused = await process.sent.next;
+        expect(refused["id"], 40);
+        expect(refused["result"], {
+          "outcome": {"outcome": "selected", "optionId": "no"},
+        });
+
+        // The next step's results answer the calls the agent waits on.
+        final secondStep = step(client, [
+          _system,
+          ask,
+          calls.message,
+          result(second.id, "two"),
+          result(first.id, "one"),
+        ]);
+        expect((await one)!["result"]["content"][0]["text"], "one");
+        expect((await two)!["result"]["content"][0]["text"], "two");
+        chunk(process, "echo said one and two");
+        process.say({
+          "jsonrpc": "2.0",
+          "method": "session/update",
+          "params": {
+            "sessionId": "s1",
+            "update": {
+              "sessionUpdate": "usage_update",
+              "used": 900,
+              "size": 128000,
+            },
+          },
+        });
+        answer(process, prompt, {"stopReason": "end_turn"});
+        final done = await secondStep;
+        expect(done.stop, LlmStop.answered);
+        expect(done.message.text, "late. echo said one and two");
+        expect(done.usage?.inputTokens, 900);
+
+        // The next user turn is the same session's next prompt.
+        const again = LlmMessage(role: LlmRole.user, text: "and now");
+        final third = step(client, [
+          _system,
+          ask,
+          calls.message,
+          result(second.id, "two"),
+          result(first.id, "one"),
+          done.message,
+          again,
+        ]);
+        final next = await request(process, "session/prompt");
+        expect(next["params"]["prompt"], [
+          {"type": "text", "text": "and now"},
+        ]);
+        chunk(process, "ok");
+        answer(process, next, {"stopReason": "end_turn"});
+        expect((await third).message.text, "ok");
+        expect(launch.calls, 1);
+        client.close();
+      },
+    );
+
+    test(
+      "an agent with no system prompt of its own is told it first",
+      () async {
+        final client = provider.client(null);
+        final reply = _call(client, [_system, _ask]);
+        final process = await launch.started.next;
+        answer(process, await request(process, "initialize"), {
+          "agentCapabilities": <String, dynamic>{},
+        });
+        final created = await request(process, "session/new");
+        expect(created["params"].containsKey("systemPrompt"), isFalse);
+        answer(process, created, {
+          "sessionId": "s1",
+          "models": {
+            "currentModelId": "m",
+            "availableModels": [
+              {"modelId": "m", "name": "M"},
+            ],
+          },
+        });
+        final prompt = await request(process, "session/prompt");
+        expect(prompt["params"]["prompt"], [
+          {"type": "text", "text": "<system>\nbe brief\n</system>"},
+          {"type": "text", "text": "hi"},
+        ]);
+        chunk(process, "hello");
+        answer(process, prompt, {"stopReason": "max_tokens"});
+        final done = await reply;
+        expect(done.stop, LlmStop.truncated);
+        expect(done.message.text, "hello");
+        client.close();
+      },
+    );
+
+    test("a model it does not offer fails the session, saying what it "
+        "does", () async {
+      final client = provider.client(null);
+      final reply = step(client, [_system, ask]);
+      await opened(models: const ["claude-sonnet-4.5"]);
+      await expectLater(
+        reply,
+        throwsA(
+          isA<LlmException>().having(
+            (e) => e.message,
+            "message",
+            allOf(contains("gpt-6-astra"), contains("claude-sonnet-4.5")),
+          ),
+        ),
+      );
+      client.close();
+    });
+
+    test("an agent that takes no MCP server over HTTP cannot run the "
+        "tools", () async {
+      final client = provider.client(null);
+      final reply = step(client, [_system, ask]);
+      final process = await launch.started.next;
+      answer(process, await request(process, "initialize"), {
+        "agentCapabilities": <String, dynamic>{},
+      });
+      await expectLater(reply, throwsA(isA<LlmException>()));
+      client.close();
+    });
+
+    test("is signed in where a session opens, and not where it is "
+        "refused for it", () async {
+      final asked = provider.signedIn();
+      var process = await launch.started.next;
+      answer(process, await request(process, "initialize"), capabilities);
+      final created = await request(process, "session/new");
+      expect(created["params"]["mcpServers"], isEmpty);
+      answer(process, created, {"sessionId": "s1"});
+      expect(await asked, isTrue);
+
+      final refused = provider.signedIn();
+      process = await launch.started.next;
+      answer(process, await request(process, "initialize"), capabilities);
+      final again = await request(process, "session/new");
+      process.say({
+        "jsonrpc": "2.0",
+        "id": again["id"],
+        "error": {"code": -32000, "message": "Authentication required"},
+      });
+      expect(await refused, isFalse);
+    });
+
+    test("Antigravity's permissions let Entoli's server through, kept "
+        "beside what its file already says", () async {
+      final agy = AntigravityCliProvider.over(
+        AntigravityCliProvider.preset.copyWith(id: "a"),
+        guest: HostCliGuest(launch: launch.call),
+      );
+      final file = File(
+        p.join(
+          agy.dataDirectory,
+          ".gemini",
+          "antigravity-cli",
+          "settings.json",
+        ),
+      )..createSync(recursive: true);
+      file.writeAsStringSync(
+        jsonEncode({
+          "theme": "dark",
+          "permissions": {
+            "allow": ["mcp(other/*)"],
+          },
+        }),
+      );
+      await agy.prepare();
+      await agy.prepare();
+      expect(jsonDecode(file.readAsStringSync()), {
+        "theme": "dark",
+        "toolPermission": "request-review",
+        "permissions": {
+          "allow": ["mcp(other/*)", "mcp(entoli/*)"],
+        },
+      });
+      expect(agy.environment["HOME"], agy.dataDirectory);
+      expect(
+        agy.acpArguments(
+          CliSessionSpec(model: "", system: "", tools: const []),
+        ),
+        ["acp"],
+      );
+    });
+
+    test("signs out by the protocol where the agent offers it", () async {
+      final out = provider.signOut();
+      final process = await launch.started.next;
+      answer(process, await request(process, "initialize"), {
+        "agentCapabilities": {
+          "auth": {"logout": <String, dynamic>{}},
+        },
+      });
+      answer(process, await request(process, "logout"), <String, dynamic>{});
+      await out;
+    });
+  });
+
   group("the provider", () {
     test("is read from an entry by its API, whatever else it says", () {
       final provider = providerOf(
@@ -1149,7 +1542,7 @@ void main() {
           "${claude.url}",
           "${ClaudeCliProvider.releases}/2.1.320/darwin-arm64/claude",
         );
-        expect(claude.sha256, "ab");
+        expect(claude.checksum.hex, "ab");
         expect(claude.packing, isA<BareProgram>());
 
         final windows = await claudeOn(
@@ -1207,7 +1600,7 @@ void main() {
         linux.files.last.url.pathSegments.last,
         "codex-x86_64-unknown-linux-musl.tar.gz",
       );
-      expect(linux.files.last.sha256, "cd");
+      expect(linux.files.last.checksum.hex, "cd");
       expect(linux.files.last.packing, isA<TarGzProgram>());
 
       final windows = await codexOn(
@@ -1330,6 +1723,92 @@ void main() {
         expect(Directory(p.dirname(codex.ownCopy)).listSync(), isEmpty);
       },
     );
+
+    test("Copilot CLI's release is the tarball GitHub built for this "
+        "machine", () async {
+      CopilotCliProvider copilotOn(Abi abi) => CopilotCliProvider.over(
+        CopilotCliProvider.preset,
+        guest: HostCliGuest(abi: abi),
+      );
+      final releases = MockClient(
+        (request) async => request.url == CopilotCliProvider.latestUrl
+            ? http.Response(
+                jsonEncode({
+                  "assets": [
+                    asset("copilot-linux-x64.tar.gz"),
+                    asset("copilot-linuxmusl-arm64.tar.gz"),
+                    asset("copilot-win32-x64.zip"),
+                    asset("copilot-darwin-arm64.tar.gz", digest: null),
+                  ],
+                }),
+                200,
+              )
+            : http.Response("", 404),
+      );
+      final linux = await copilotOn(Abi.linuxX64).latestRelease(releases);
+      expect(linux!.files.single.name, "copilot");
+      expect(linux.files.single.checksum.hex, "cd");
+      expect(linux.files.single.packing, isA<TarGzProgram>());
+      // Android's Linux is Alpine's, so musl's.
+      final android = await copilotOn(Abi.androidArm64).latestRelease(releases);
+      expect(
+        android!.files.single.url.pathSegments.last,
+        "copilot-linuxmusl-arm64.tar.gz",
+      );
+      final windows = await copilotOn(Abi.windowsX64).latestRelease(releases);
+      expect(windows!.files.single.name, "copilot.exe");
+      expect(windows.files.single.packing, isA<ZipProgram>());
+      await expectLater(
+        copilotOn(Abi.macosArm64).latestRelease(releases),
+        throwsFormatException,
+      );
+    });
+
+    test("Antigravity CLI installs from Google's manifest, checked by its "
+        "SHA-512, the one program out of its tarball", () async {
+      final tarball = GZipEncoder().encodeBytes(
+        TarEncoder().encodeBytes(
+          Archive()
+            ..addFile(ArchiveFile.bytes("README", utf8.encode("read me")))
+            ..addFile(
+              ArchiveFile.bytes("antigravity", utf8.encode("#!/bin/sh")),
+            ),
+        ),
+      );
+      http.Client serving(String hash) => MockClient((request) async {
+        if (request.url.path.endsWith("/manifests/linux_amd64.json")) {
+          return http.Response(
+            jsonEncode({
+              "version": "1.5.18",
+              "url": "https://example.com/cli_linux_x64.tar.gz",
+              "sha512": hash,
+            }),
+            200,
+          );
+        }
+        if (request.url.path.endsWith("/cli_linux_x64.tar.gz")) {
+          return http.Response.bytes(tarball, 200);
+        }
+        return http.Response("", 404);
+      });
+      final agy = AntigravityCliProvider.over(
+        AntigravityCliProvider.preset,
+        guest: const HostCliGuest(abi: Abi.linuxX64),
+      );
+
+      await expectLater(
+        agy.install(client: serving("00")).drain<void>(),
+        throwsFormatException,
+      );
+      expect(agy.installed, isFalse);
+
+      await agy
+          .install(client: serving("${sha512.convert(tarball)}".toUpperCase()))
+          .drain<void>();
+      expect(agy.installed, isTrue);
+      expect(p.basename(agy.ownCopy), "agy");
+      expect(File(agy.ownCopy).readAsStringSync(), "#!/bin/sh");
+    });
   });
 
   group("a sign-in", () {

@@ -93,36 +93,14 @@ class CodexCliProvider extends CliProvider with OfferedByName {
     final triple = tripleOf(abi);
     if (triple == null) return null;
     final windows = triple.endsWith("windows-msvc");
-    final release = await LlmProvider.getJson(
-      latestUrl,
-      headers: const {"Accept": "application/vnd.github+json"},
-      httpClient: client,
-    );
-    final assets = switch (release["assets"]) {
-      final List<dynamic> assets => assets.whereType<Map<String, dynamic>>(),
-      _ => const <Map<String, dynamic>>[],
-    };
-    CliFile? assetOf(String program) {
-      final name = windows
-          ? "$program-$triple.exe.zip"
-          : "$program-$triple.tar.gz";
-      final asset = assets.where((a) => a["name"] == name).firstOrNull;
-      if (asset == null) return null;
-      final digest = asset["digest"];
-      if (digest is! String || !digest.startsWith("sha256:")) {
-        throw FormatException("$name has no SHA-256 stated beside it");
-      }
-      return CliFile(
-        name: fileOf(program),
-        url: Uri.parse(asset["browser_download_url"] as String),
-        sha256: digest.substring("sha256:".length),
-        packing: windows ? const ZipProgram() : const TarGzProgram(),
-        bytes: asset["size"] as int?,
-      );
-    }
-
+    final release = await GitHubRelease.fetch(latestUrl, client);
     final files = [
-      for (final program in [...companions, defaultCommand]) assetOf(program),
+      for (final program in [...companions, defaultCommand])
+        release.file(
+          windows ? "$program-$triple.exe.zip" : "$program-$triple.tar.gz",
+          name: fileOf(program),
+          packing: windows ? const ZipProgram() : const TarGzProgram(),
+        ),
     ];
     if (files.contains(null)) return null;
     return CliRelease(files: files.nonNulls.toList());
