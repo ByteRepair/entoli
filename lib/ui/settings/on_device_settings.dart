@@ -24,6 +24,7 @@ import "../widgets/add_button_row.dart";
 import "../widgets/catalog.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
+import "../widgets/segmented_meter.dart";
 
 /// The On-device category: what is loaded first, since it is what is most
 /// often come here for, then the row to how text models run, then every
@@ -42,7 +43,6 @@ class OnDeviceSection extends ConsumerWidget {
       children: [
         if (engine.available) ...[
           const _RunningModels(),
-          const _DeviceMemory(),
           ListTile(
             title: const Text("LLM settings"),
             subtitle: const Text("Hardware, context and caching"),
@@ -94,6 +94,7 @@ class _RunningModels extends ConsumerWidget {
           "Running models",
           description: total == null ? null : "${formatSize(total)} in memory",
         ),
+        if (usage != null) _MemoryBar(usage),
         const _Prefilling(),
         if (running.isEmpty)
           const ListTile(
@@ -127,37 +128,58 @@ class _RunningModels extends ConsumerWidget {
   }
 }
 
-/// What the device has to give a model, loaded or not: the readings the
-/// catalog's budget is made from, so a catalog that offers nothing shows why.
-class _DeviceMemory extends ConsumerWidget {
-  const _DeviceMemory();
+/// The device's memory as one bar, loaded or not: each running model the
+/// space it takes, a line at the models' limit, and under it the readings
+/// the whole was measured from, so a catalog that offers nothing shows why.
+class _MemoryBar extends ConsumerWidget {
+  const _MemoryBar(this.usage);
+
+  final RunningUsage usage;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final device = ref.watch(runningUsageProvider.select((u) => u?.device));
-    final graphics = device?.graphics;
-    final headroom = device?.headroom;
-    if (graphics == null && headroom == null) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (graphics != null)
-          ListTile(
-            title: const Text("Graphics memory"),
-            subtitle: Text(
-              "${formatSize(graphics)} · what the GPU keeps resident before "
-              "it pages",
+    final engine = ref.watch(localEngineProvider);
+    // The launch's whole and limit, the catalog's own; the live readings go
+    // under it.
+    final device = usage.device ?? engine.launch;
+    final whole = (engine.launch ?? usage.device)?.total;
+    if (device == null || whole == null || whole <= 0) {
+      return const SizedBox.shrink();
+    }
+    final limit = engine.budget.bytes;
+    final c = Theme.of(context).colorScheme;
+    final colours = [c.primary, c.tertiary, c.secondary];
+    final each = usage.each.entries.toList();
+    final sum = each.fold(0, (total, e) => total + e.value.bytes);
+    // Where the models share one process, what no row counts: its runtime.
+    final shared = (usage.total ?? sum) - sum;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: SegmentedMeter(
+        mark: limit == null
+            ? null
+            : MeterMark(limit / whole, "Model limit ${formatSize(limit)}"),
+        segments: [
+          for (final (i, e) in each.indexed)
+            MeterSegment(
+              engine.nameOf(e.key),
+              formatSize(e.value.bytes),
+              e.value.bytes / whole,
+              colours[i % colours.length],
             ),
-          ),
-        if (headroom != null)
-          ListTile(
-            title: const Text("App headroom"),
-            subtitle: Text(
-              "${formatSize(headroom)} · what the system still lets this app "
-              "grow by",
+          if (shared > 0)
+            MeterSegment(
+              "Shared runtime",
+              formatSize(shared),
+              shared / whole,
+              c.outline,
             ),
-          ),
-      ],
+        ],
+        readings: [
+          for (final r in device.readings)
+            MeterReading(r.label, formatSize(r.bytes)),
+        ],
+      ),
     );
   }
 }

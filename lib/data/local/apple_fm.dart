@@ -3,12 +3,12 @@ import "package:http/http.dart" as http;
 
 import "package:entoli_core/model/local_model.dart";
 import "package:entoli_core/model/llm_provider.dart";
-import "package:entoli_core/model/model_budget.dart";
 import "package:entoli_core/model/models.dart" show ModelChoice;
 import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:entoli_core/agent/llm/providers/provider.dart";
 import "package:entoli_core/model/model_process.dart";
 import "channel_generation.dart";
+import "local_engine.dart" show DeviceMemory;
 
 // The ids live in the domain beside `localProviderId`, exported here for the
 // tests and the pages that name the model.
@@ -57,16 +57,13 @@ const appleChannel = MethodChannel("agent_chat/apple_fm");
 /// offers it — the wording below is then the one place that says why
 /// nothing came back.
 class AppleFmProbe {
-  const AppleFmProbe(
-    this.reason, {
-    this.mlx = false,
-    this.budget = const ModelBudget.unknown(),
-  });
+  const AppleFmProbe(this.reason, {this.mlx = false, this.memory});
 
   final String reason;
 
-  /// What the device can give an MLX model, from what Metal and the OS said.
-  final ModelBudget budget;
+  /// What the device can give an MLX model, from what Metal and the OS said
+  /// at launch; null where it said nothing.
+  final DeviceMemory? memory;
 
   /// Whether the build carries the MLX models' package and the OS can run
   /// one, which is what decides the platform's engine is `MlxEngine`. The

@@ -11,6 +11,8 @@ import "package:entoli_core/model/model_budget.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_category.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
+import "package:agent_chat/core/platform/host.dart" show appleMemoryOf;
+import "package:agent_chat/ui/widgets/segmented_meter.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -135,25 +137,63 @@ void main() {
     );
   });
 
-  testWidgets("the device's memory readings show with nothing loaded", (
-    tester,
-  ) async {
+  testWidgets("the device's memory is a bar under Running models: the limit a "
+      "line on it, the readings under it, loaded or not", (tester) async {
     const gb = 1024 * 1024 * 1024;
+    final memory = appleMemoryOf({
+      "workingSet": 8 * gb,
+      "available": 6 * gb,
+    }, mac: false)!;
     app = TestApp.create(
       localRuntime: FakeLocalRuntime(),
-      deviceMemory: (graphics: 8 * gb, headroom: 5 * gb),
+      deviceMemory: memory,
     );
     await pumpOnDevice(tester);
 
     expect(find.text("Nothing loaded"), findsOneWidget);
-    expect(find.text("Graphics memory"), findsOneWidget);
-    expect(find.textContaining(formatSize(8 * gb)), findsOneWidget);
-    expect(find.text("App headroom"), findsOneWidget);
-    expect(find.textContaining(formatSize(5 * gb)), findsOneWidget);
+    expect(find.byType(SegmentedMeter), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byType(SegmentedMeter)).dy,
+      lessThan(tester.getTopLeft(find.text("Nothing loaded")).dy),
+    );
+    expect(
+      find.text("Model limit ${formatSize(memory.budget.bytes!)}"),
+      findsOneWidget,
+    );
+    expect(
+      find.text("Graphics memory ${formatSize(8 * gb)}", findRichText: true),
+      findsOneWidget,
+    );
+    expect(
+      find.text("App headroom ${formatSize(6 * gb)}", findRichText: true),
+      findsOneWidget,
+    );
     expect(
       find.text("No models fit this device's hardware requirements"),
       findsNothing,
     );
+  });
+
+  testWidgets("a running model takes its space on the memory bar", (
+    tester,
+  ) async {
+    const gb = 1024 * 1024 * 1024;
+    app = TestApp.create(
+      localRuntime: FakeLocalRuntime(
+        usage: const LocalUsage(bytes: 3 * gb, tokens: 9000),
+      ),
+      localModels: {model.id},
+      deviceMemory: appleMemoryOf({
+        "workingSet": 8 * gb,
+        "available": 6 * gb,
+      }, mac: false),
+    );
+    await io(tester, () => app.serveLocal(model.id));
+    await pumpOnDevice(tester);
+
+    final segments = tester.widget<SegmentedMeter>(find.byType(SegmentedMeter));
+    expect(segments.segments.single.label, model.name);
+    expect(segments.segments.single.fraction, 0.5);
   });
 
   testWidgets("there is no model picker — every downloaded one is offered "

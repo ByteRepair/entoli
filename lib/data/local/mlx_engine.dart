@@ -23,7 +23,7 @@ class MlxEngine extends RuntimeEngine {
     LocalModelStore store,
     ModelProcess process, {
     super.prompts,
-    super.budget,
+    super.launch,
     super.memory,
   }) : _process = process,
        super(MlxRuntime(process), store);

@@ -20,6 +20,15 @@ class MeterMark {
   final String label;
 }
 
+/// A figure the legend gives beside the segments that is not one of them:
+/// what the whole was measured from.
+class MeterReading {
+  const MeterReading(this.label, this.amount);
+
+  final String label;
+  final String amount;
+}
+
 /// A meter of segments laid end to end, its mark a line across it named
 /// over it, and a legend of what each segment is under it.
 class SegmentedMeter extends StatelessWidget {
@@ -28,10 +37,14 @@ class SegmentedMeter extends StatelessWidget {
     required this.segments,
     this.mark,
     this.unit,
+    this.readings = const [],
   });
 
   final List<MeterSegment> segments;
   final MeterMark? mark;
+
+  /// Listed after the segments in the legend, with no colour of their own.
+  final List<MeterReading> readings;
 
   /// What a segment's amount counts, said in its tooltip: "tokens".
   final String? unit;
@@ -46,8 +59,14 @@ class SegmentedMeter extends StatelessWidget {
     // Over the whole, the bar is full rather than overflowing.
     final scale = used > 1 ? used : 1.0;
     final mark = this.mark;
+    // Shrunk with the segments, so it stays where it falls among them.
+    final at = (mark?.fraction ?? 0) / scale;
     // Flex wants integers; a thousandth is finer than a pixel here.
     int flex(double f) => (f * 1000).round();
+    final drawn = [
+      for (final s in segments)
+        if (flex(s.fraction) > 0) s,
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -55,7 +74,7 @@ class SegmentedMeter extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Align(
-              alignment: Alignment(mark.fraction * 2 - 1, 0),
+              alignment: Alignment(at * 2 - 1, 0),
               child: Text(
                 mark.label,
                 style: theme.textTheme.labelSmall?.copyWith(color: muted),
@@ -76,17 +95,30 @@ class SegmentedMeter extends StatelessWidget {
                     color: theme.colorScheme.surfaceContainerHighest,
                     child: Row(
                       children: [
-                        for (final s in segments)
-                          if (flex(s.fraction) > 0)
-                            Expanded(
-                              flex: flex(s.fraction),
-                              child: Tooltip(
-                                message:
-                                    "${s.label}: ${s.amount}"
-                                    "${unit == null ? "" : " $unit"}",
-                                child: Container(color: s.color),
+                        for (final (i, s) in drawn.indexed)
+                          Expanded(
+                            flex: flex(s.fraction),
+                            child: Tooltip(
+                              message:
+                                  "${s.label}: ${s.amount}"
+                                  "${unit == null ? "" : " $unit"}",
+                              // A seam between neighbours, so two segments
+                              // of close colours still read as two.
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: s.color,
+                                  border: i == drawn.length - 1
+                                      ? null
+                                      : Border(
+                                          right: BorderSide(
+                                            color: theme.colorScheme.surface,
+                                            width: 2,
+                                          ),
+                                        ),
+                                ),
                               ),
                             ),
+                          ),
                         if (flex(scale - used) > 0)
                           Expanded(
                             flex: flex(scale - used),
@@ -97,15 +129,21 @@ class SegmentedMeter extends StatelessWidget {
                   ),
                 ),
                 if (mark != null)
+                  // Haloed in the surface colour, so it shows over any
+                  // segment's colour as well as over the track.
                   Positioned(
-                    left: constraints.maxWidth * mark.fraction - 1,
+                    left: constraints.maxWidth * at - 2,
                     top: 0,
                     bottom: 0,
                     child: Container(
-                      width: 2,
+                      width: 4,
                       decoration: BoxDecoration(
                         color: theme.colorScheme.onSurface,
-                        borderRadius: BorderRadius.circular(1),
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(
+                          color: theme.colorScheme.surface,
+                          width: 1,
+                        ),
                       ),
                     ),
                   ),
@@ -123,11 +161,11 @@ class SegmentedMeter extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 8,
-                    height: 8,
+                    width: 10,
+                    height: 10,
                     decoration: BoxDecoration(
                       color: s.color,
-                      shape: BoxShape.circle,
+                      borderRadius: BorderRadius.circular(3),
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -141,6 +179,30 @@ class SegmentedMeter extends StatelessWidget {
               ),
           ],
         ),
+        // A line of their own: they measure the whole, and beside the
+        // segments they read as more of them.
+        if (readings.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 16,
+            runSpacing: 6,
+            children: [
+              for (final r in readings)
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(text: "${r.label} "),
+                      TextSpan(
+                        text: r.amount,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                ),
+            ],
+          ),
+        ],
       ],
     );
   }
