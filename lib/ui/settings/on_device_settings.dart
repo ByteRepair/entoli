@@ -43,7 +43,6 @@ class OnDeviceSection extends ConsumerWidget {
       children: [
         if (engine.available) ...[
           const _RunningModels(),
-          const _DeviceMemory(),
           ListTile(
             title: const Text("LLM settings"),
             subtitle: const Text("Hardware, context and caching"),
@@ -95,6 +94,7 @@ class _RunningModels extends ConsumerWidget {
           "Running models",
           description: total == null ? null : "${formatSize(total)} in memory",
         ),
+        if (usage != null) _MemoryBar(usage),
         const _Prefilling(),
         if (running.isEmpty)
           const ListTile(
@@ -128,48 +128,48 @@ class _RunningModels extends ConsumerWidget {
   }
 }
 
-/// What the device has to give a model, loaded or not: the share models get
-/// of it as one bar, the readings it was made from under it, and a mark at
-/// what the smallest model needs, so a catalog that offers nothing shows why.
-class _DeviceMemory extends ConsumerWidget {
-  const _DeviceMemory();
+/// The device's memory as one bar, loaded or not: each running model the
+/// space it takes, a line at the models' limit, and under it the readings
+/// the whole was measured from, so a catalog that offers nothing shows why.
+class _MemoryBar extends ConsumerWidget {
+  const _MemoryBar(this.usage);
+
+  final RunningUsage usage;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final device = ref.watch(runningUsageProvider.select((u) => u?.device));
-    final models = device?.budget.bytes;
-    if (device == null || models == null || device.total <= 0) {
+    final device = usage.device;
+    final limit = device?.budget.bytes;
+    if (device == null || limit == null || device.total <= 0) {
       return const SizedBox.shrink();
     }
-    final total = device.total;
-    final smallest = ref
-        .watch(localEngineProvider)
-        .catalog
-        .map(ModelBudget.footprintOf)
-        .minOrNull;
-    final colours = Theme.of(context).colorScheme;
+    final whole = device.total;
+    final engine = ref.watch(localEngineProvider);
+    final c = Theme.of(context).colorScheme;
+    final colours = [c.primary, c.tertiary, c.secondary];
+    final each = usage.each.entries.toList();
+    final sum = each.fold(0, (total, e) => total + e.value.bytes);
+    // Where the models share one process, what no row counts: its runtime.
+    final shared = (usage.total ?? sum) - sum;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       child: SegmentedMeter(
-        mark: smallest == null || smallest > total
-            ? null
-            : MeterMark(
-                smallest / total,
-                "Smallest model ${formatSize(smallest)}",
-              ),
+        mark: MeterMark(limit / whole, "Model limit ${formatSize(limit)}"),
         segments: [
-          MeterSegment(
-            "For models",
-            formatSize(models),
-            models / total,
-            colours.primary,
-          ),
-          MeterSegment(
-            "For the app",
-            formatSize(total - models),
-            (total - models) / total,
-            colours.tertiary,
-          ),
+          for (final (i, e) in each.indexed)
+            MeterSegment(
+              engine.nameOf(e.key),
+              formatSize(e.value.bytes),
+              e.value.bytes / whole,
+              colours[i % colours.length],
+            ),
+          if (shared > 0)
+            MeterSegment(
+              "Shared runtime",
+              formatSize(shared),
+              shared / whole,
+              c.outline,
+            ),
         ],
         readings: [
           for (final r in device.readings)

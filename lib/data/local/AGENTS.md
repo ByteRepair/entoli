@@ -353,12 +353,13 @@ model that slows the UI slows the whole phone with it. A model already
 downloaded keeps its row whatever it measures, and a device that answers
 nothing is offered everything.
 
-The page draws the measure live under Running models, loaded or not, as one
-`SegmentedMeter` (`LocalEngine.deviceMemory`, a `DeviceMemory` per platform in
-`core/platform/host.dart`): the whole the share is taken of, split into the
-models' part and the app's, a mark at what the smallest catalog entry needs,
-and the readings the whole was made from under it — graphics memory and app
-headroom on Apple's, RAM and what is free on Linux, RAM on Android. An empty
+The Running models section opens with the measure as one `SegmentedMeter`,
+live and loaded or not (`LocalEngine.deviceMemory`, a `DeviceMemory` per
+platform in `core/platform/host.dart`): the whole the share is taken of, each
+running model a segment of what it takes, the models' limit a line across it,
+and under it the readings the whole was made from — graphics memory and app
+headroom on Apple's, RAM and what is free on Linux, RAM on Android. The rows
+of what is loaded follow it. An empty
 list says no model fits, against the allowance the launch measured.
 
 ### What the NPU actually is
