@@ -247,51 +247,44 @@ void main() {
     await reply;
   });
 
-  test("a reply whose model is unloaded under it ends saying so", () async {
-    final mlx = engine();
-    final reply = mlx.client(() => AppSettings()).stream(const [
-      LlmMessage(role: LlmRole.user, text: "hi"),
-    ], model: small.id).toList();
-    await channel.until("generate");
-    final ended = expectLater(
-      reply,
-      throwsA(
-        isA<LlmException>()
-            .having((e) => e.message, "message", contains("was unloaded"))
-            .having((e) => e.retryable, "retryable", isFalse),
-      ),
-    );
+  // Each error the native half ends a reply with, and what the turn is told.
+  for (final (:why, :code, :message, :said) in [
+    (
+      why: "whose model is unloaded under it",
+      code: "unloaded",
+      message: "The model was unloaded.",
+      said: "was unloaded",
+    ),
+    (
+      why: "the GPU refused off screen",
+      code: "background",
+      message: "[METAL] Command buffer execution failed.",
+      said: "left the screen",
+    ),
+  ]) {
+    test("a reply $why ends saying so", () async {
+      final mlx = engine();
+      final reply = mlx.client(() => AppSettings()).stream(const [
+        LlmMessage(role: LlmRole.user, text: "hi"),
+      ], model: small.id).toList();
+      await channel.until("generate");
+      final ended = expectLater(
+        reply,
+        throwsA(
+          isA<LlmException>()
+              .having((e) => e.message, "message", contains(said))
+              .having((e) => e.retryable, "retryable", isFalse),
+        ),
+      );
 
-    await channel.incoming("error", {
-      "id": channel.outgoing("generate")["id"],
-      "code": "unloaded",
-      "message": "The model was unloaded.",
+      await channel.incoming("error", {
+        "id": channel.outgoing("generate")["id"],
+        "code": code,
+        "message": message,
+      });
+      await ended;
     });
-    await ended;
-  });
-
-  test("a reply the GPU refused off screen ends saying why", () async {
-    final mlx = engine();
-    final reply = mlx.client(() => AppSettings()).stream(const [
-      LlmMessage(role: LlmRole.user, text: "hi"),
-    ], model: small.id).toList();
-    await channel.until("generate");
-    final ended = expectLater(
-      reply,
-      throwsA(
-        isA<LlmException>()
-            .having((e) => e.message, "message", contains("left the screen"))
-            .having((e) => e.retryable, "retryable", isFalse),
-      ),
-    );
-
-    await channel.incoming("error", {
-      "id": channel.outgoing("generate")["id"],
-      "code": "background",
-      "message": "[METAL] Command buffer execution failed.",
-    });
-    await ended;
-  });
+  }
 
   test("every tool call of a reply arrives before it ends", () async {
     final mlx = engine();

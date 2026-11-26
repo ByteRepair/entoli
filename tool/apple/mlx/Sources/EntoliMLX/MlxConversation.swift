@@ -53,11 +53,14 @@ actor MlxConversation {
   private var whenIdle: [CheckedContinuation<Void, Never>] = []
 
   /// Runs `body` as one of the operations an unload waits for, handing it the
-  /// model; throws `MlxUnloaded` once the model is being let go of. Whatever
+  /// model and the box MLX's errors land in (`catchingMlx`); throws
+  /// `MlxUnloaded` once the model is being let go of. Whatever
   /// `body` holds is let go of before the count falls, since nothing awaits
   /// between its return and the unload that count wakes running on this
   /// actor.
-  private func operation<T>(_ body: (ModelContainer) async throws -> T) async throws -> T {
+  private func operation<T>(
+    _ body: (ModelContainer, ErrorBox) async throws -> T
+  ) async throws -> T {
     guard !unloaded, let container else { throw MlxUnloaded() }
     operations += 1
     defer {
@@ -67,7 +70,7 @@ actor MlxConversation {
         whenIdle = []
       }
     }
-    return try await body(container)
+    return try await catchingMlx { try await body(container, $0) }
   }
 
   /// Refuses what comes next, stops a generation, waits for every operation
@@ -92,9 +95,9 @@ actor MlxConversation {
 
   func generate(
     messages: [MlxMessage], tools: [MlxTool], temperature: Double?, maxTokens: Int,
-    mlxError: ErrorBox, emit: @escaping @Sendable (MlxEvent) -> Void
+    emit: @escaping @Sendable (MlxEvent) -> Void
   ) async throws {
-    try await operation { container in
+    try await operation { container, mlxError in
       guard let last = messages.last else { return }
       var parameters = GenerateParameters(maxTokens: maxTokens)
       if let temperature { parameters.temperature = Float(temperature) }
@@ -152,7 +155,6 @@ actor MlxConversation {
           }
         }
         try Task.checkCancellation()
-        try mlxError.check()
         say(thinking.finish())
         return (reply, calls, counts)
       }
@@ -197,8 +199,8 @@ actor MlxConversation {
   /// restored without that would read its own reply a second time.
   /// A save MLX failed part-way leaves no file behind, since a cache that
   /// says it covers messages it never computed would be restored as one.
-  func save(to path: String, mlxError: ErrorBox) async -> Bool {
-    (try? await operation { _ in
+  func save(to path: String) async -> Bool {
+    (try? await operation { _, mlxError in
       guard let session, let held else { return false }
       do {
         try await session.saveCache(to: URL(fileURLWithPath: path))
@@ -212,8 +214,8 @@ actor MlxConversation {
     }) ?? false
   }
 
-  func restore(from path: String, mlxError: ErrorBox) async -> Bool {
-    (try? await operation { container in
+  func restore(from path: String) async -> Bool {
+    (try? await operation { container, mlxError in
       let record = try JSONDecoder().decode(
         HeldRecord.self, from: Data(contentsOf: Self.companion(path)))
       let snapshot = try loadPromptCacheSnapshot(url: URL(fileURLWithPath: path))

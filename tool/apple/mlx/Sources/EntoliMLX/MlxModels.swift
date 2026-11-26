@@ -41,24 +41,21 @@ public enum Mlx {
     emit: @escaping @Sendable (MlxEvent) -> Void
   ) async throws {
     guard let conversation = await MlxModels.shared.loaded(id) else { throw MlxNotLoaded() }
-    try await catchingMlx { mlxError in
-      try await conversation.generate(
-        messages: messages, tools: tools, temperature: temperature, maxTokens: maxTokens,
-        mlxError: mlxError, emit: emit)
-    }
+    try await conversation.generate(
+      messages: messages, tools: tools, temperature: temperature, maxTokens: maxTokens,
+      emit: emit)
   }
 
   /// Writes what `id` holds to `path`. False where it holds nothing.
   public static func save(_ id: String, to path: String) async -> Bool {
     guard let conversation = await MlxModels.shared.loaded(id) else { return false }
-    return (try? await catchingMlx { await conversation.save(to: path, mlxError: $0) }) ?? false
+    return await conversation.save(to: path)
   }
 
   /// Reads `path` back as what `id` holds. False where it could not.
   public static func restore(_ id: String, from path: String) async -> Bool {
     guard let conversation = await MlxModels.shared.loaded(id) else { return false }
-    return (try? await catchingMlx { await conversation.restore(from: path, mlxError: $0) })
-      ?? false
+    return await conversation.restore(from: path)
   }
 
   /// What `id` takes up: its weights' bytes, and how many tokens its cache
@@ -160,11 +157,13 @@ public struct MlxFailure: Error, CustomStringConvertible {
 
   init(_ message: String) {
     description = message
-    code =
-      message.contains("BackgroundExecutionNotPermitted")
-      ? "background"
-      : ["OutOfMemory", "Insufficient Memory", "malloc]"].contains { message.contains($0) }
-        ? "resources" : "other"
+    if message.contains("BackgroundExecutionNotPermitted") {
+      code = "background"
+    } else if ["OutOfMemory", "Insufficient Memory", "malloc]"].contains(where: { message.contains($0) }) {
+      code = "resources"
+    } else {
+      code = "other"
+    }
   }
 }
 
