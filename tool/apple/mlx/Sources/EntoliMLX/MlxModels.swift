@@ -146,8 +146,9 @@ public enum MlxEvent: Sendable {
   case text(String)
   case toolCall(MlxToolCall)
   /// The end, with how much of the prompt was read and how much was reused,
-  /// and the most memory MLX held while it ran.
-  case done(promptTokens: Int, generatedTokens: Int, peakBytes: Int)
+  /// the most memory MLX held while it ran, and MLX's budget where the app
+  /// planned one.
+  case done(promptTokens: Int, generatedTokens: Int, peakBytes: Int, budgetBytes: Int?)
 }
 
 /// A failure MLX raised itself, coded as the channel's `error` frame is: the

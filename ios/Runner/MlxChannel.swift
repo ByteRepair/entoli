@@ -125,11 +125,13 @@ final class MlxChannel: GenerationChannel {
           self?.send("toolCall", [
             "id": id, "callId": call.id, "name": call.name, "arguments": call.arguments,
           ])
-        case .done(let prompt, let generated, let peak):
-          self?.send("done", [
+        case .done(let prompt, let generated, let peak, let budget):
+          var done: [String: Any] = [
             "id": id, "finish": "stop", "inputTokens": prompt, "outputTokens": generated,
             "peakBytes": peak,
-          ])
+          ]
+          if let budget { done["budgetBytes"] = budget }
+          self?.send("done", done)
         @unknown default: break
         }
       }

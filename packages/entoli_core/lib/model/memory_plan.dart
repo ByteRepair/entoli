@@ -13,6 +13,14 @@ abstract class MemoryPlan {
 
   /// Why the model cannot be run under this plan, or null where it can.
   String? get refusal => null;
+
+  /// The context where the model runs under this plan, or null where it
+  /// does not: a window of nothing is no answer.
+  int? get window => refusal == null ? contextLength : null;
+
+  /// What decides whether a loaded model is still the one asked for: a model
+  /// loaded under another plan is loaded again.
+  Object get identity => contextLength;
 }
 
 /// A context fixed at load: llama.cpp sizes its KV cache when the server
@@ -24,13 +32,17 @@ class FixedContextPlan extends MemoryPlan {
   final int contextLength;
 }
 
-/// No budget measured, so nothing to plan against: the model gets what it was
-/// trained on and its runtime's own defaults.
+/// No budget to plan against: the model gets what it was trained on and its
+/// runtime's own defaults, or, where a budget is what keeps the app alive and
+/// none could be had, is refused with [refusal].
 class UnplannedMemory extends MemoryPlan {
-  const UnplannedMemory(this.contextLength);
+  const UnplannedMemory(this.contextLength, {this.refusal});
 
   @override
   final int contextLength;
+
+  @override
+  final String? refusal;
 }
 
 /// What a model's architecture costs in memory, read off its own config.
@@ -89,12 +101,16 @@ class ModelShape {
 /// than allowed for: [prefillStep] is the longest chunk whose scratch fits at
 /// the full [contextLength].
 class BudgetPlan extends MemoryPlan {
-  BudgetPlan(this.shape, {required this.budgetBytes});
+  BudgetPlan(this.shape, {required this.budgetBytes, this.sharedBy = 1});
 
   final ModelShape shape;
 
   /// What this model may take, all of it.
   final int budgetBytes;
+
+  /// How many models the device's budget was split between, for a refusal
+  /// that says why the share is what it is.
+  final int sharedBy;
 
   /// The prefill's working memory, whatever the conversation's length.
   static const scratchBytes = 256 << 20;
@@ -116,21 +132,31 @@ class BudgetPlan extends MemoryPlan {
       scratchBytes -
       cacheBytes;
 
+  /// A model with no per-token cache is held to what it was trained on.
   @override
-  int get contextLength =>
-      max(0, min(shape.trainedContext, kvBytes ~/ shape.kvBytesPerToken));
+  int get contextLength => shape.kvBytesPerToken <= 0
+      ? (kvBytes >= 0 ? shape.trainedContext : 0)
+      : max(0, min(shape.trainedContext, kvBytes ~/ shape.kvBytesPerToken));
 
   /// Between 16 and mlx-swift-lm's own default of 512.
-  int get prefillStep =>
-      (scratchBytes ~/ shape.scratchPerToken(contextLength)).clamp(16, 512);
+  int get prefillStep {
+    final perToken = shape.scratchPerToken(contextLength);
+    return perToken <= 0 ? 512 : (scratchBytes ~/ perToken).clamp(16, 512);
+  }
+
+  @override
+  Object get identity => (budgetBytes, contextLength, prefillStep);
 
   @override
   String? get refusal {
     if (contextLength >= minimumContext) return null;
     final needed =
         budgetBytes - kvBytes + minimumContext * shape.kvBytesPerToken;
-    return "it needs ${_gb(needed)} with room to talk, and on-device models "
-        "have ${_gb(budgetBytes)} here";
+    final share = sharedBy > 1
+        ? "each of the $sharedBy models that may stay loaded has "
+              "${_gb(budgetBytes)} here; keep fewer loaded under On-device"
+        : "on-device models have ${_gb(budgetBytes)} here";
+    return "it needs ${_gb(needed)} with room to talk, and $share";
   }
 
   static String _gb(int bytes) => "${(bytes / 1e9).toStringAsFixed(1)} GB";

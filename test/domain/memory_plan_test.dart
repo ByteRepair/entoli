@@ -75,4 +75,38 @@ void main() {
   test("a budget smaller than the weights is no context at all", () {
     expect(BudgetPlan(qwen, budgetBytes: 1 << 30).contextLength, 0);
   });
+
+  test("a refused plan has no window to compact against", () {
+    expect(BudgetPlan(qwen, budgetBytes: 3400000000).window, isNull);
+    expect(BudgetPlan(qwen, budgetBytes: 4200000000).window, 23762);
+  });
+
+  test("a share too small names the setting that split it", () {
+    final plan = BudgetPlan(qwen, budgetBytes: 2100000000, sharedBy: 2);
+
+    expect(plan.refusal, contains("each of the 2 models"));
+  });
+
+  test("a model with no per-token cache or scratch divides by nothing", () {
+    const recurrent = ModelShape(
+      weightBytes: 1 << 30,
+      kvBytesPerToken: 0,
+      trainedContext: 8192,
+    );
+    final plan = BudgetPlan(recurrent, budgetBytes: 4 << 30);
+
+    expect(plan.contextLength, 8192);
+    expect(plan.prefillStep, 512);
+  });
+
+  test("a plan with another budget or step is another load", () {
+    expect(
+      BudgetPlan(qwen, budgetBytes: 4200000000).identity,
+      BudgetPlan(qwen, budgetBytes: 4200000000).identity,
+    );
+    expect(
+      BudgetPlan(qwen, budgetBytes: 64 << 30).identity,
+      isNot(BudgetPlan(qwen, budgetBytes: 128 << 30).identity),
+    );
+  });
 }

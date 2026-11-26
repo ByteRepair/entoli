@@ -42,6 +42,12 @@ final class MlxBudget: @unchecked Sendable {
   private var unplanned: Set<String> = []
   private var total: Int?
 
+  /// Evicted models' budgets, still counted: their buffers are freed a moment
+  /// after their unload returns, and a reply on another model must not be
+  /// stopped for memory that is on its way out. Dropped once MLX holds no
+  /// more than the loaded models' budgets.
+  private var draining = 0
+
   /// MLX's own, read before anything changes them.
   private let ownMemoryLimit = Memory.memoryLimit
   private let ownCacheLimit = Memory.cacheLimit
@@ -55,16 +61,23 @@ final class MlxBudget: @unchecked Sendable {
 
   func release(_ id: String) {
     lock.withLock {
-      planned.removeValue(forKey: id)
+      if let limits = planned.removeValue(forKey: id) { draining += limits.budget }
       unplanned.remove(id)
       apply()
     }
   }
 
+  /// MLX's budget as it stands, evicted models' still counted.
+  var bytes: Int? { lock.withLock { total.map { $0 + draining } } }
+
   /// Whether MLX holds more than every loaded model was planned to.
   var isOver: Bool {
-    guard let total = lock.withLock({ total }) else { return false }
-    return Memory.activeMemory + Memory.cacheMemory > total
+    let used = Memory.activeMemory + Memory.cacheMemory
+    return lock.withLock {
+      guard let total else { return false }
+      if draining > 0 && used <= total { draining = 0 }
+      return used > total + draining
+    }
   }
 
   /// A model loaded with no plan has no budget to hold anything to, so MLX
@@ -83,8 +96,9 @@ final class MlxBudget: @unchecked Sendable {
     } else {
       let sum = planned.values.reduce(0) { $0 + $1.budget }
       total = sum
-      Memory.memoryLimit = sum
+      Memory.memoryLimit = sum + draining
       Memory.cacheLimit = planned.values.reduce(0) { $0 + $1.cache }
     }
+    if total == nil { draining = 0 }
   }
 }

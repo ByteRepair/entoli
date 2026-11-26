@@ -132,7 +132,10 @@ class MlxConfig {
   final Map _json;
   final Map _text;
 
-  int? _number(String key) => (_text[key] as num?)?.toInt();
+  int? _number(String key) => switch (_text[key]) {
+    final num n => n.toInt(),
+    _ => null,
+  };
 
   int? get _context => _number("max_position_embeddings");
   int? get _heads => _number("num_attention_heads");

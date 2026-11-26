@@ -1,7 +1,4 @@
-import "dart:io" show FileSystemException;
-
 import "package:flutter/foundation.dart";
-import "package:entoli_core/model/log.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/local_llm.dart";
 import "package:entoli_core/model/local_model.dart";
@@ -197,17 +194,7 @@ abstract class RuntimeEngine extends LocalEngine {
   int? contextOf(String modelId, AppSettings settings) {
     final model = store.downloadedOfSync(modelId);
     if (model == null) return null;
-    try {
-      return runtime
-          .plan(model, LocalOptions.fromSettings(settings))
-          .contextLength;
-    } on FormatException catch (e) {
-      logFailure("local", "no plan for $modelId", e.message);
-      return null;
-    } on FileSystemException catch (e) {
-      logFailure("local", "no plan for $modelId", e.message);
-      return null;
-    }
+    return runtime.plan(model, LocalOptions.fromSettings(settings)).window;
   }
 
   @override

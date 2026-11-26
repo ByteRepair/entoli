@@ -527,6 +527,41 @@ void main() {
       expect(mlx.contextOf("gone", AppSettings()), isNull);
     });
 
+    test("a model it would refuse has no window", () {
+      expect(planned(3100000000).contextOf(small.id, AppSettings()), isNull);
+    });
+
+    test("an iPhone that measured nothing refuses rather than guess", () async {
+      final mlx = MlxEngine(
+        FakeLocalModelStore(models: [qwen]),
+        const InAppModelProcess(),
+        budgetRequired: true,
+      );
+
+      await expectLater(
+        mlx.serve(small.id, testLocalOptions()),
+        throwsA(
+          isA<LocalLlmFailure>().having(
+            (e) => e.message,
+            "message",
+            contains("did not say how much memory"),
+          ),
+        ),
+      );
+      expect(asked, isEmpty);
+    });
+
+    test("a config that cannot be read is a refusal, not a crash", () async {
+      File(p.join(dir.path, "config.json")).writeAsStringSync("{}");
+      final mlx = planned(4000000000);
+
+      expect(mlx.contextOf(small.id, AppSettings()), isNull);
+      await expectLater(
+        mlx.serve(small.id, testLocalOptions()),
+        throwsA(isA<LocalLlmFailure>()),
+      );
+    });
+
     test(
       "a model with no room to talk is refused before the channel is asked",
       () async {

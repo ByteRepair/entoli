@@ -146,6 +146,7 @@ actor MlxConversation {
   ) async throws {
     try await operation { container, mlxError in
       guard let last = messages.last else { return }
+      let limits = self.limits
       let carriesOn = session != nil && held?.carriesOn(messages, tools) == true
       // The prefill is where a reply's memory peaks, and it says nothing
       // until it is done but this, after each chunk: where the prompt is too
@@ -158,6 +159,7 @@ actor MlxConversation {
         let base = carriesOn ? heldTokens : 0
         parameters.prefill.stepSize = limits.prefillStep
         parameters.prefill.progress = { _, total in
+          stop.promptEnd = base + total
           if base + total > limits.context {
             stop.trip(.outgrewContext)
           } else if MlxBudget.shared.isOver {
@@ -199,14 +201,21 @@ actor MlxConversation {
         }
         var calls: [MlxToolCall] = []
         var counts = (prompt: 0, generated: 0)
+        // A chunk is a token or more, so this counts the reply's cache short
+        // rather than past where it is.
+        var chunks = 0
         for try await generation in stream {
           try Task.checkCancellation()
           if MlxBudget.shared.isOver { throw MlxFailure.overBudget }
+          if let limits, stop.promptEnd + chunks > limits.context {
+            throw MlxFailure.outgrewContext
+          }
           // MLX goes on after an error with arrays it never computed, so the
           // reply ends at the first one rather than at the block's end.
           try mlxError.check()
           switch generation {
           case .chunk(let chunk):
+            chunks += 1
             say(thinking.feed(chunk))
           case .toolCall(let call):
             let made = MlxToolCall(
@@ -249,10 +258,13 @@ actor MlxConversation {
         ],
         tools: tools)
       heldTokens = tokens
+      // The peak is the process's, every loaded model's, so it is reported
+      // beside the budget it is measured against; a reply on another model
+      // resets it too, which a diagnostic can live with.
       emit(
         .done(
           promptTokens: outcome.counts.0, generatedTokens: outcome.counts.1,
-          peakBytes: Memory.peakMemory))
+          peakBytes: Memory.peakMemory, budgetBytes: MlxBudget.shared.bytes))
     }
   }
 
@@ -319,8 +331,15 @@ private final class Stop: @unchecked Sendable {
   private let lock = NSLock()
   private var cancel: (() -> Void)?
   private var stopped: MlxFailure?
+  private var end = 0
 
   var failure: MlxFailure? { lock.withLock { stopped } }
+
+  /// Where the prompt ends in the cache, as the prefill last said.
+  var promptEnd: Int {
+    get { lock.withLock { end } }
+    set { lock.withLock { end = newValue } }
+  }
 
   /// What a trip cancels, run at once where it has tripped already.
   func arm(_ cancel: @escaping () -> Void) {

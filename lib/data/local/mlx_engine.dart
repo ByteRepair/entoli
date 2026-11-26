@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:io" show FileSystemException;
 
 import "package:flutter/services.dart";
 import "package:entoli_core/model/local_model.dart";
@@ -27,8 +28,16 @@ class MlxEngine extends RuntimeEngine {
     super.prompts,
     super.launch,
     super.memory,
+    bool budgetRequired = false,
   }) : _process = process,
-       super(MlxRuntime(process, budget: launch?.budget.bytes), store);
+       super(
+         MlxRuntime(
+           process,
+           budget: launch?.budget.bytes,
+           budgetRequired: budgetRequired,
+         ),
+         store,
+       );
 
   final ModelProcess _process;
 
@@ -48,7 +57,7 @@ class MlxEngine extends RuntimeEngine {
 /// to choose there either. Keeping prompts changes nothing about a load, so
 /// it is not in one.
 class MlxRuntime extends LocalRuntime {
-  MlxRuntime(this._process, {this.budget})
+  MlxRuntime(this._process, {this.budget, this.budgetRequired = false})
     : _channel = _process.channel(mlxChannel.name);
 
   final ModelProcess _process;
@@ -58,18 +67,41 @@ class MlxRuntime extends LocalRuntime {
   /// the device said nothing, which leaves MLX its own defaults.
   final int? budget;
 
-  /// Each model's shape, read off its config once: the chat's window asks
-  /// for the plan on every read.
+  /// Whether a model may not run without [budget]: an iPhone, whose app iOS
+  /// ends past a limit nothing else would hold MLX inside.
+  final bool budgetRequired;
+
+  /// Each model's shape, read off its config once — the chat's window asks
+  /// for the plan on every read — and read again for files that changed.
   final _shapes = <String, ModelShape>{};
 
-  /// Each loaded model gets an equal share, so the models [maxRunning] lets
-  /// be resident together fit beside each other.
+  /// Each model gets an equal share of [budget], so the models
+  /// `maxRunning` lets be resident together fit beside each other.
   @override
   MemoryPlan plan(DownloadedModel model, LocalOptions options) {
     final budget = this.budget;
-    if (budget == null) return UnplannedMemory(model.contextLength);
-    final shape = _shapes[model.id] ??= MlxFormat.shapeOf(model);
-    return BudgetPlan(shape, budgetBytes: budget ~/ options.maxRunning);
+    if (budget == null) {
+      return UnplannedMemory(
+        model.contextLength,
+        refusal: budgetRequired
+            ? "the device did not say how much memory the app may use"
+            : null,
+      );
+    }
+    final ModelShape shape;
+    try {
+      shape = _shapes["${model.id}\u0000${model.file}\u0000${model.bytes}"] ??=
+          MlxFormat.shapeOf(model);
+    } on FormatException catch (e) {
+      return UnplannedMemory(model.contextLength, refusal: e.message);
+    } on FileSystemException catch (e) {
+      return UnplannedMemory(model.contextLength, refusal: e.message);
+    }
+    return BudgetPlan(
+      shape,
+      budgetBytes: budget ~/ options.maxRunning,
+      sharedBy: options.maxRunning,
+    );
   }
 
   @override
@@ -174,18 +206,14 @@ class MlxInstance extends LocalInstance {
         "maxTokens": outputLimit.tokens,
       });
 
-  /// A reply whose peak came within a tenth of the model's budget says the
-  /// plan's working memory is short of what MLX takes: the margin the stop
-  /// relies on is not there.
+  /// A reply whose peak came within a tenth of MLX's budget says the plans'
+  /// working memory is short of what MLX takes. Both are the process's —
+  /// every loaded model's — as MLX counts them.
   void _checkPeak(Map<Object?, Object?> done) {
-    final memory = load.memory;
-    final peak = done["peakBytes"];
-    if (memory is! BudgetPlan || peak is! int) return;
-    if (peak * 10 > memory.budgetBytes * 9) {
-      logFailure(
-        "mlx",
-        "${model.id} peaked at $peak of its ${memory.budgetBytes} budget",
-      );
+    final peak = done["peakBytes"], budget = done["budgetBytes"];
+    if (peak is! int || budget is! int) return;
+    if (peak * 10 > budget * 9) {
+      logFailure("mlx", "${model.id} peaked at $peak of a $budget budget");
     }
   }
 

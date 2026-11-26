@@ -458,14 +458,16 @@ the context the chat compacts against — and the load carries it
 (`MlxLimits`). `MlxBudget` sets MLX's soft limit and cache to the sum over the
 loaded models; each reply's prefill runs at the plan's step, short enough that
 its scratch fits at the full context; and a reply is stopped where its prompt
-passes the context (`context`) or where MLX's own counters, active and cache,
-pass the budget (`resources`) — checked after each prefill chunk, through the
-prefill's progress, and after each output chunk. The soft limit only makes an
+or its reply passes the context (`context`), or where MLX's own counters,
+active and cache, pass the budget (`resources`) — checked after each prefill
+chunk, through the prefill's progress, and after each output chunk. An
+evicted model's budget stays counted until MLX has freed it, so another
+model's reply is not stopped for memory on its way out. The soft limit only makes an
 evaluation wait for work in flight, MLX's allocator never failing at it,
 which is why the stop is the app's. Neither measures the app's free memory:
 the line does not move with whatever Flutter is doing. Each `done` reports
-MLX's peak, and a reply that came within a tenth of its budget is logged, a
-plan short of what MLX takes. With no model loaded, MLX's limits are its own
+MLX's peak beside its budget, both the process's, and a reply that came within
+a tenth of it is logged, a plan short of what MLX takes. With no model loaded, MLX's limits are its own
 and its cache keeps nothing.
 
 ### The build

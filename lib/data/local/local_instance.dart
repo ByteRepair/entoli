@@ -82,8 +82,8 @@ class LocalLoad {
   final bool keepsPrompts;
 
   /// Every field, so one added is one compared.
-  ({int c, String? d, int? t, bool k}) get _fields =>
-      (c: contextLength, d: device, t: threads, k: keepsPrompts);
+  ({Object m, String? d, int? t, bool k}) get _fields =>
+      (m: memory.identity, d: device, t: threads, k: keepsPrompts);
 
   @override
   bool operator ==(Object other) =>
