@@ -257,22 +257,16 @@ Future<AppleFmProbe?> _appleProbe() => _appleHandshake ??= () async {
         .invokeMethod<Object?>("handshake")
         .timeout(const Duration(seconds: 3));
     final handshake = answer as Map<Object?, Object?>? ?? const {};
-    final (graphics: workingSet, headroom: available) = _memoryOf(
-      handshake["memory"],
-    );
     return AppleFmProbe(
       handshake["reason"] as String? ?? "other",
       mlx: handshake["mlx"] as bool? ?? false,
       // A phone's binding limit is the one it may not have said, and a
       // budget without it would be the Mac's guess: nothing measured then.
-      budget: switch ((workingSet, available)) {
-        (final workingSet?, _) when Platform.isMacOS => ModelBudget.mac(
-          workingSet,
-        ),
-        (final workingSet?, final available?) => ModelBudget.phone(
-          workingSet: workingSet,
-          available: available,
-        ),
+      budget: switch (_memoryOf(handshake["memory"])) {
+        (graphics: final graphics?, headroom: _) when Platform.isMacOS =>
+          ModelBudget.mac(graphics),
+        (graphics: final graphics?, headroom: final headroom?) =>
+          ModelBudget.phone(workingSet: graphics, available: headroom),
         _ => const ModelBudget.unknown(),
       },
     );

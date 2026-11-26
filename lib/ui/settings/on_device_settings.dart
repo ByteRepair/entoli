@@ -134,7 +134,7 @@ class _DeviceMemory extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final device = ref.watch(runningUsageProvider)?.device;
+    final device = ref.watch(runningUsageProvider.select((u) => u?.device));
     final graphics = device?.graphics;
     final headroom = device?.headroom;
     if (graphics == null && headroom == null) return const SizedBox.shrink();
