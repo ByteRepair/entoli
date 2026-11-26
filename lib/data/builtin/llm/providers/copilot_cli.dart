@@ -91,6 +91,9 @@ class CopilotCliProvider extends AcpProvider with OfferedByName {
     if (effortOf(spec.reasoningEffort) case final effort?) "--effort=$effort",
   ];
 
+  @override
+  bool get modelByEnvironment => true;
+
   /// The model, where the session offers no choice of it over ACP.
   @override
   Map<String, String> acpEnvironment(CliSessionSpec spec) => {
@@ -107,36 +110,12 @@ class CopilotCliProvider extends AcpProvider with OfferedByName {
     final target = targetOf(abi, musl: musl);
     if (target == null) return null;
     final windows = target.startsWith("win32");
-    final name = "copilot-$target.${windows ? "zip" : "tar.gz"}";
-    final release = await LlmProvider.getJson(
-      latestUrl,
-      headers: const {"Accept": "application/vnd.github+json"},
-      httpClient: client,
+    final file = (await GitHubRelease.fetch(latestUrl, client)).file(
+      "copilot-$target.${windows ? "zip" : "tar.gz"}",
+      name: fileOf(defaultCommand),
+      packing: windows ? const ZipProgram() : const TarGzProgram(),
     );
-    final asset = switch (release["assets"]) {
-      final List<dynamic> assets =>
-        assets
-            .whereType<Map<String, dynamic>>()
-            .where((a) => a["name"] == name)
-            .firstOrNull,
-      _ => null,
-    };
-    if (asset == null) return null;
-    final digest = asset["digest"];
-    if (digest is! String || !digest.startsWith("sha256:")) {
-      throw FormatException("$name has no SHA-256 stated beside it");
-    }
-    return CliRelease(
-      files: [
-        CliFile(
-          name: fileOf(defaultCommand),
-          url: Uri.parse(asset["browser_download_url"] as String),
-          checksum: CliChecksum.sha256(digest.substring("sha256:".length)),
-          packing: windows ? const ZipProgram() : const TarGzProgram(),
-          bytes: asset["size"] as int?,
-        ),
-      ],
-    );
+    return file == null ? null : CliRelease(files: [file]);
   }
 
   /// The name [abi]'s build carries, the musl one where the C library is

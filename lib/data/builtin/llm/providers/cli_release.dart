@@ -3,7 +3,9 @@ import "dart:isolate";
 
 import "package:archive/archive_io.dart";
 import "package:crypto/crypto.dart";
+import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
+import "package:entoli_core/agent/llm/providers/provider.dart";
 
 /// One release of a CLI for this machine: the program, and any program it
 /// runs beside itself, each a file of its own.
@@ -48,6 +50,51 @@ class CliFile {
   final int? bytes;
 }
 
+/// A release on GitHub, by its API, which states each asset's SHA-256 as
+/// its `digest`.
+class GitHubRelease {
+  GitHubRelease._(this._assets);
+
+  /// The release [url] names: a repository's `releases/latest`.
+  static Future<GitHubRelease> fetch(Uri url, http.Client client) async {
+    final release = await LlmProvider.getJson(
+      url,
+      headers: const {"Accept": "application/vnd.github+json"},
+      httpClient: client,
+    );
+    return GitHubRelease._(switch (release["assets"]) {
+      final List<dynamic> assets => [
+        ...assets.whereType<Map<String, dynamic>>(),
+      ],
+      _ => const [],
+    });
+  }
+
+  final List<Map<String, dynamic>> _assets;
+
+  /// The asset called [asset], installed as [name] out of [packing]; null
+  /// where the release has none of that name.
+  CliFile? file(
+    String asset, {
+    required String name,
+    required CliPacking packing,
+  }) {
+    final found = _assets.where((a) => a["name"] == asset).firstOrNull;
+    if (found == null) return null;
+    final digest = found["digest"];
+    if (digest is! String || !digest.startsWith("sha256:")) {
+      throw FormatException("$asset has no SHA-256 stated beside it");
+    }
+    return CliFile(
+      name: name,
+      url: Uri.parse(found["browser_download_url"] as String),
+      checksum: CliChecksum.sha256(digest.substring("sha256:".length)),
+      packing: packing,
+      bytes: found["size"] as int?,
+    );
+  }
+}
+
 /// A hash a publisher states beside a file, in the algorithm it chose.
 class CliChecksum {
   const CliChecksum.sha256(String hex) : this._(sha256, hex);
@@ -60,10 +107,6 @@ class CliChecksum {
   final String hex;
 
   bool matches(String digest) => digest == hex.toLowerCase();
-
-  /// [file]'s digest, hashed in a stream rather than read whole.
-  Future<String> of(File file) async =>
-      "${await algorithm.bind(file.openRead()).first}";
 }
 
 /// How a release carries its program, and so how it is taken out.

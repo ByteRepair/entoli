@@ -1,3 +1,5 @@
+import "package:crypto/crypto.dart";
+
 /// How far along a download is. One value for both catalogs — the voice models
 /// and the Linux the agent runs commands in — because it was the same three
 /// fields twice, and a bar reading one of them cannot tell which store filled
@@ -48,12 +50,13 @@ abstract interface class DownloadTask {
     int done = 0,
   });
 
-  /// [fetch], answering the file's SHA-256 in hex.
-  Future<String> fetchSha256({
+  /// [fetch], answering the file's digest by [algorithm] in hex.
+  Future<String> fetchHashed({
     required String url,
     required String to,
     int? total,
     int done = 0,
+    Hash algorithm = sha256,
   });
 }
 

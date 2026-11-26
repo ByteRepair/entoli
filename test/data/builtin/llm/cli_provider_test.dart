@@ -1146,7 +1146,7 @@ void main() {
         final [first, second] = calls.message.toolCalls;
         // Its own: a chat outlives its sessions, and the loop keys
         // sub-agents and jobs by a call's id.
-        expect(first.id, matches(RegExp(r"^acp_[a-z0-9]{8}_1$")));
+        expect(first.id, matches(RegExp(r"^acp_[A-Za-z0-9_-]{8}_1$")));
         expect(second.id, "${first.id.substring(0, 13)}2");
 
         // Text read after its calls went out, as stdout and the bridge

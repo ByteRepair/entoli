@@ -1,11 +1,11 @@
 import "dart:async";
 import "dart:convert";
-import "dart:math";
 
 import "package:entoli_core/model/log.dart";
 import "package:entoli_core/agent/llm/llm_client.dart";
 import "package:entoli_core/agent/llm/openai_client.dart" show inlineText;
 
+import "../../../random_token.dart";
 import "../mcp_tool_bridge.dart";
 import "cli.dart";
 
@@ -38,6 +38,10 @@ abstract class AcpProvider extends CliProvider {
   /// configured by file rather than by flag writes its file here.
   Future<void> prepare() async {}
 
+  /// Whether [acpEnvironment] carries the model, so a session offering no
+  /// choice of it over the protocol is no failure.
+  bool get modelByEnvironment => false;
+
   /// Unread: no such program says whether it is signed in by an exit code,
   /// so [signedIn] asks over the protocol instead.
   @override
@@ -47,11 +51,9 @@ abstract class AcpProvider extends CliProvider {
   /// `session/new` with `auth_required`.
   @override
   Future<bool> signedIn() async {
-    final session =
-        await AcpSession.start(
-          this,
-          CliSessionSpec(model: "", system: "", tools: const []),
-        ).then<AcpSession?>((s) => s).catchError((Object e) {
+    final session = await AcpSession.start(this, AcpSession.bare)
+        .then<AcpSession?>((s) => s)
+        .catchError((Object e) {
           if (e is! AcpRefused || !e.unauthorized) {
             logFailure("cli", "asking ${config.displayName} its sign-in", e);
           }
@@ -61,11 +63,11 @@ abstract class AcpProvider extends CliProvider {
     return session != null;
   }
 
-  /// By the protocol's `logout` where the program offers it, else by its
-  /// [signOutArguments] where it has any; a program with neither keeps its
-  /// sign-in in [dataDirectory], which Sign in again then starts over.
+  /// By the protocol's `logout` where the program offers it; one that does
+  /// not keeps its sign-in in [dataDirectory], which Sign in again then
+  /// starts over.
   ///
-  /// A sign-in that outlives all three is somewhere Entoli does not keep it,
+  /// A sign-in that outlives both is somewhere Entoli does not keep it,
   /// the system's credential store, and is said rather than left for Sign
   /// in again to find signed in.
   @override
@@ -75,7 +77,6 @@ abstract class AcpProvider extends CliProvider {
     } catch (e) {
       logFailure("cli", "signing ${config.displayName} out by the protocol", e);
     }
-    if (signOutArguments.isNotEmpty) return super.signOut();
     await forget();
     if (await signedIn()) {
       throw LlmException(
@@ -85,6 +86,7 @@ abstract class AcpProvider extends CliProvider {
     }
   }
 
+  /// Unread: [signOut] is by the protocol.
   @override
   List<String> get signOutArguments => const [];
 
@@ -145,14 +147,14 @@ class AcpSession extends CliProcessSession {
   LlmUsage? _usage;
 
   /// Calls the agent made that no reply has carried yet.
-  final _queued = <_Call>[];
+  final _queued = <String, HeldToolCall>{};
 
   /// Calls handed to the loop, by id, waiting on its results.
   final _reported = <String, HeldToolCall>{};
 
   /// What makes this session's call ids its own: the loop keys sub-agents
   /// and jobs by a call's id, and a chat outlives its sessions.
-  final _tag = _randomTag();
+  final _tag = randomToken(6);
   var _nextCall = 0;
   var _nextId = 0;
 
@@ -161,19 +163,13 @@ class AcpSession extends CliProcessSession {
   /// after it. Said at the head of the next reply.
   final _late = <LlmChunk>[];
 
-  static String _randomTag() {
-    const digits = "0123456789abcdefghijklmnopqrstuvwxyz";
-    final random = Random.secure();
-    return String.fromCharCodes([
-      for (var i = 0; i < 8; i++)
-        digits.codeUnitAt(random.nextInt(digits.length)),
-    ]);
-  }
-
   /// How long a request other than a prompt is waited on: a program that
   /// will not answer `initialize` would otherwise hold a sign-in check open.
   static const _answerWithin = Duration(seconds: 60);
   final _waiting = <int, Completer<Object?>>{};
+
+  /// A session for asking the program about itself: no model, no tools.
+  static final bare = CliSessionSpec(model: "", system: "", tools: const []);
 
   static Future<AcpSession> start(AcpProvider provider, CliSessionSpec spec) {
     // Looked for now, so a program that is not there fails the start with
@@ -196,16 +192,11 @@ class AcpSession extends CliProcessSession {
   /// Signs [provider]'s program out by the protocol, where it offers that:
   /// true where it did.
   static Future<bool> logOut(AcpProvider provider) async {
-    provider.executable();
-    final session = AcpSession._(
-      CliSessionSpec(model: "", system: "", tools: const []),
-      provider.config.displayName,
-    );
+    final session = AcpSession._(bare, provider.config.displayName);
     try {
       await session.run(provider, provider.acpArguments(session.spec));
       await session._initialize();
-      final auth = session._capabilities["auth"];
-      if (auth is! Map || auth["logout"] == null) return false;
+      if (session._capability("auth")["logout"] == null) return false;
       await session._request("logout", const {});
       return true;
     } finally {
@@ -243,9 +234,10 @@ class AcpSession extends CliProcessSession {
         : await provider.bindBridge(tools, _held);
     _bridge = bridge;
     final prompt = _capability("sessionCapabilities")["systemPrompt"];
-    final override = prompt is Map && prompt["mode"] is Map
-        ? (prompt["mode"] as Map).containsKey("override")
-        : false;
+    final override =
+        prompt is Map &&
+        prompt["mode"] is Map &&
+        (prompt["mode"] as Map).containsKey("override");
     _systemSent = prompt != null && spec.system.isNotEmpty;
     final opened = await _request("session/new", {
       "cwd": cwd,
@@ -262,23 +254,31 @@ class AcpSession extends CliProcessSession {
       throw LlmException("$name opened no session");
     }
     _session = opened["sessionId"] as String;
-    if (spec.model.isNotEmpty) await _pick(opened, "model", spec.model);
+    if (spec.model.isNotEmpty) {
+      await _pick(
+        opened,
+        "model",
+        spec.model,
+        byEnvironment: provider.modelByEnvironment,
+      );
+    }
     if (effortOf(spec.reasoningEffort) case final effort?) {
-      await _pick(opened, "thought_level", effort, required: false);
+      await _pick(opened, "thought_level", effort);
     }
   }
 
   /// [value] chosen for the session's option of [category]: by its config
   /// options where it has them, else by the older `models` and
-  /// `session/set_model` for a model. Where nothing offers it, a [required]
-  /// choice fails the session saying what is offered, and any other is left
-  /// to the agent.
+  /// `session/set_model` for a model. Where nothing offers it, a model
+  /// fails the session saying what is offered, and anything else is left to
+  /// the agent; a model the program was given [byEnvironment] is its own.
   Future<void> _pick(
     Map<dynamic, dynamic> opened,
     String category,
     String value, {
-    bool required = true,
+    bool byEnvironment = false,
   }) async {
+    final required = category == "model";
     final options = opened["configOptions"];
     final option = options is List
         ? options
@@ -287,13 +287,7 @@ class AcpSession extends CliProcessSession {
               .firstOrNull
         : null;
     if (option != null) {
-      final values = [
-        for (final choice
-            in (option["options"] as List?)
-                    ?.whereType<Map<dynamic, dynamic>>() ??
-                const <Map<dynamic, dynamic>>[])
-          "${choice["value"]}",
-      ];
+      final values = _each(option["options"], "value");
       if (option["currentValue"] == value) return;
       if (values.contains(value)) {
         await _request("session/set_config_option", {
@@ -307,26 +301,27 @@ class AcpSession extends CliProcessSession {
       return;
     }
     final models = opened["models"];
-    if (category != "model" || models is! Map) {
-      if (required) {
+    if (!required || models is! Map) {
+      if (required && !byEnvironment) {
         logFailure("llm", "$name offers no choice of $category");
       }
       return;
     }
     if (models["currentModelId"] == value) return;
-    final ids = [
-      for (final model
-          in (models["availableModels"] as List?)
-                  ?.whereType<Map<dynamic, dynamic>>() ??
-              const <Map<dynamic, dynamic>>[])
-        "${model["modelId"]}",
-    ];
+    final ids = _each(models["availableModels"], "modelId");
     if (!ids.contains(value)) _refuse(category, value, ids);
     await _request("session/set_model", {
       "sessionId": _session,
       "modelId": value,
     });
   }
+
+  /// [key] of each map in [list].
+  static List<String> _each(Object? list, String key) => [
+    if (list is List)
+      for (final item in list.whereType<Map<dynamic, dynamic>>())
+        "${item[key]}",
+  ];
 
   Never _refuse(String category, String value, List<String> offered) =>
       throw LlmException(
@@ -368,10 +363,11 @@ class AcpSession extends CliProcessSession {
   @override
   void begin(List<LlmMessage> rest) {
     _turnOpen = true;
+    // A prompt turn runs as long as the work does.
     _request("session/prompt", {
       "sessionId": _session,
       "prompt": _prompt(rest),
-    }).then(
+    }, within: null).then(
       _turnEnded,
       onError: (Object e) {
         _turnEnded(null);
@@ -507,7 +503,7 @@ class AcpSession extends CliProcessSession {
       call.fail(HeldToolCall.stopped);
       return;
     }
-    _queued.add(_Call("acp_${_tag}_${++_nextCall}", call));
+    _queued["acp_${_tag}_${++_nextCall}"] = call;
     _handOutSoon();
   }
 
@@ -515,11 +511,7 @@ class AcpSession extends CliProcessSession {
   void _turnEnded(Object? result) {
     _turnOpen = false;
     // A turn that ended leaves nothing waiting on its calls.
-    for (final call in [for (final c in _queued) c.held, ..._reported.values]) {
-      call.fail(HeldToolCall.stopped);
-    }
-    _queued.clear();
-    _reported.clear();
+    _dropHeld();
     _late.clear();
     if (result is! Map) return;
     final stop = switch (result["stopReason"]) {
@@ -539,21 +531,19 @@ class AcpSession extends CliProcessSession {
     if (current == null) return;
     Timer.run(() {
       if (current == null || _queued.isEmpty) return;
-      final calls = [..._queued];
+      final calls = {..._queued};
       _queued.clear();
-      for (final call in calls) {
-        _reported[call.id] = call.held;
-      }
+      _reported.addAll(calls);
       end(
         last: LlmCompletion(
           stop: LlmStop.toolUse,
           usage: _usage,
           message: _reply([
-            for (final call in calls)
+            for (final MapEntry(key: id, value: call) in calls.entries)
               LlmToolCall(
-                id: call.id,
-                name: call.held.name,
-                argumentsJson: jsonEncode(call.held.arguments ?? const {}),
+                id: id,
+                name: call.name,
+                argumentsJson: jsonEncode(call.arguments ?? const {}),
               ),
           ]),
         ),
@@ -568,16 +558,21 @@ class AcpSession extends CliProcessSession {
     toolCalls: calls,
   );
 
-  Future<Object?> _request(String method, Map<String, dynamic> params) {
+  /// [method] asked, its answer waited on for [within]; null waits as long
+  /// as it takes.
+  Future<Object?> _request(
+    String method,
+    Map<String, dynamic> params, {
+    Duration? within = _answerWithin,
+  }) {
     if (!alive) return Future.error(LlmException("$name is gone"));
     final id = ++_nextId;
     final done = Completer<Object?>();
     _waiting[id] = done;
     write({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
-    // A prompt turn runs as long as the work does.
-    if (method == "session/prompt") return done.future;
+    if (within == null) return done.future;
     return done.future.timeout(
-      _answerWithin,
+      within,
       onTimeout: () {
         _waiting.remove(id);
         throw LlmException("$name did not answer $method");
@@ -604,19 +599,15 @@ class AcpSession extends CliProcessSession {
 
   @override
   Future<void> release() async {
-    for (final call in [for (final c in _queued) c.held, ..._reported.values]) {
+    _dropHeld();
+    await _bridge?.close();
+  }
+
+  void _dropHeld() {
+    for (final call in [..._queued.values, ..._reported.values]) {
       call.fail(HeldToolCall.stopped);
     }
     _queued.clear();
     _reported.clear();
-    await _bridge?.close();
   }
-}
-
-/// A call the agent made over the bridge, and the id the loop knows it by.
-class _Call {
-  _Call(this.id, this.held);
-
-  final String id;
-  final HeldToolCall held;
 }

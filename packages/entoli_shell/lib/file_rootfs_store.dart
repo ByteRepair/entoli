@@ -81,7 +81,7 @@ class FileRootfsStore extends RootfsStore {
         ..createSync(recursive: true);
       final archive = p.join(dir.path, "_rootfs.tar.gz");
 
-      final digest = await run.fetchSha256(
+      final digest = await run.fetchHashed(
         url: image.url,
         to: archive,
         total: image.bytes,

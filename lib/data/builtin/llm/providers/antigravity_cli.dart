@@ -99,9 +99,11 @@ class AntigravityCliProvider extends AcpProvider with OfferedByName {
 
   Future<void> _prepare(File file) async {
     var settings = <String, dynamic>{};
+    String? was;
     if (file.existsSync()) {
       try {
-        final read = jsonDecode(await file.readAsString());
+        was = await file.readAsString();
+        final read = jsonDecode(was);
         if (read is Map<String, dynamic>) settings = read;
       } on FormatException catch (e) {
         logFailure("cli", "Antigravity's settings would not parse", e);
@@ -120,11 +122,14 @@ class AntigravityCliProvider extends AcpProvider with OfferedByName {
       "toolPermission": "request-review",
       "permissions": {...permissions, "allow": allow.toList()},
     };
+    final text = jsonEncode(settings);
+    // Once written, every later start finds it so.
+    if (text == was) return;
     await file.parent.create(recursive: true);
     await writeThroughRename(
       const LocalFileSystem(),
       file.path,
-      utf8.encode(jsonEncode(settings)),
+      utf8.encode(text),
     );
   }
 

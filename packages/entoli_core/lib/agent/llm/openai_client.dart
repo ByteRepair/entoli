@@ -83,10 +83,20 @@ class OpenAiClient implements LlmClient {
   @protected
   String callIdOf(String id) => id;
 
-  /// The request [body] as this host takes it: the shape's own, unless a
-  /// host refuses a field in it.
+  /// Whether the request asks for usage on the last frame, which the shape
+  /// sends only when asked; a host that refuses `stream_options` sends it
+  /// unasked.
   @protected
-  Map<String, dynamic> shaped(Map<String, dynamic> body) => body;
+  bool get asksUsage => true;
+
+  /// [effort] as this host's `reasoning_effort` takes it; null sends none.
+  @protected
+  String? reasoningEffortOf(String? effort) => effort;
+
+  /// Whether a replayed tool call carries Gemini's signature, a field a
+  /// strict host refuses.
+  @protected
+  bool get sendsCallSignatures => true;
 
   /// The field a reply's length is capped by. The shape's own is
   /// `max_tokens`; a host that renamed it overrides this.
@@ -125,7 +135,7 @@ class OpenAiClient implements LlmClient {
       _http,
       under(baseUrl, "chat/completions"),
       headers: _headers,
-      body: shaped({
+      body: {
         "model": model,
         "messages": _encodeAll(
           mergeLeadingSystem(messages),
@@ -139,18 +149,18 @@ class OpenAiClient implements LlmClient {
         // shape sends it only when asked, and the auto-compact threshold
         // reads it. A gateway that drops the field degrades to no usage,
         // which the parse below already answers.
-        "stream_options": {"include_usage": true},
+        if (asksUsage) "stream_options": {"include_usage": true},
         if (returnProgress) "return_progress": true,
         if (tools.isNotEmpty) ...{
           "tools": tools.map(_encodeTool).toList(),
           "tool_choice": "auto",
         },
         "temperature": ?temperature,
-        "reasoning_effort": ?reasoningEffort,
+        "reasoning_effort": ?reasoningEffortOf(reasoningEffort),
         // Only the user's cap: unasked, the model writes to its own limit,
         // which this shape lets it — there is no number to guess.
         maxTokensField: ?outputLimit.cap,
-      }),
+      },
     ).onError<LlmException>((e, _) => throw refused(e));
     responded(response.headers);
 
@@ -466,11 +476,12 @@ class OpenAiClient implements LlmClient {
                     "name": call.name,
                     "arguments": _replayable(call.argumentsJson),
                   },
-                  if ((call.signature ?? (i == 0 ? placeholder : null))
-                      case final signature?)
-                    "extra_content": {
-                      "google": {"thought_signature": signature},
-                    },
+                  if (sendsCallSignatures)
+                    if ((call.signature ?? (i == 0 ? placeholder : null))
+                        case final signature?)
+                      "extra_content": {
+                        "google": {"thought_signature": signature},
+                      },
                 },
             ],
         };

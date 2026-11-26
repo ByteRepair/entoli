@@ -4,7 +4,6 @@ import "dart:ffi" show Abi;
 import "dart:io";
 
 import "package:collection/collection.dart";
-import "package:crypto/crypto.dart" show sha256;
 import "package:flutter/foundation.dart" show mustCallSuper, protected;
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
@@ -232,27 +231,15 @@ abstract class CliProvider extends LlmProvider with KeyFree {
         var done = 0;
         for (final file in release.files) {
           final part = p.join(_bin, "${file.name}.part");
-          final checksum = file.checksum;
-          final String digest;
-          if (checksum.algorithm == sha256) {
-            digest = await run.fetchSha256(
-              url: "${file.url}",
-              to: part,
-              total: total,
-              done: done,
-            );
-            if (run.cancelled) return;
-          } else {
-            await run.fetch(
-              url: "${file.url}",
-              to: part,
-              total: total,
-              done: done,
-            );
-            if (run.cancelled) return;
-            digest = await checksum.of(File(part));
-          }
-          if (!checksum.matches(digest)) {
+          final digest = await run.fetchHashed(
+            url: "${file.url}",
+            to: part,
+            total: total,
+            done: done,
+            algorithm: file.checksum.algorithm,
+          );
+          if (run.cancelled) return;
+          if (!file.checksum.matches(digest)) {
             throw FormatException(
               "${file.url} does not match the checksum its publisher states",
             );
