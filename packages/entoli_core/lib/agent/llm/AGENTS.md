@@ -34,6 +34,19 @@ with no signature at all — logged before they were kept, or made by another
 model — goes to Gemini's host with LiteLLM's placeholder
 `skip_thought_signature_validator` on its first call.
 
+Mistral's host (`MistralClient`, over the same hooks) is the strictest: an
+unknown field is a 422, so `stream_options` is never sent (its last frame
+carries the usage unasked, `asksUsage`), a Gemini call's signature is not
+replayed (`sendsCallSignatures`), and the effort is held to low, medium or
+high (`reasoningEffortOf`). A
+tool call's id must be nine letters and digits, so one another provider made
+earlier in the chat is sent as nine characters of its hash (`callIdOf`), its
+result paired by the same rewrite. The preset is also how a Le Chat Pro or
+Team plan answers: the key made on Mistral Vibe's page
+(`chat.mistral.ai/code/extensions`) draws on the plan before pay-as-you-go,
+and Vibe's own browser sign-in is a token for Vibe's OAuth client, which
+nothing else may use.
+
 A model that thinks between tool calls is handed its earlier reasoning back
 as text, on the assistant message it came with. DeepSeek's thinking mode
 requires it: on a request carrying `tools`, the `reasoning_content` of every

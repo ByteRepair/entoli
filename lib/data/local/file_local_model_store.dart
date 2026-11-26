@@ -114,7 +114,7 @@ class FileLocalModelStore extends LocalModelStore {
       for (final file in model.files) {
         final to = p.join(directory, file.path);
         Directory(p.dirname(to)).createSync(recursive: true);
-        final digest = await run.fetchSha256(
+        final digest = await run.fetchHashed(
           url: file.url,
           to: to,
           total: total,

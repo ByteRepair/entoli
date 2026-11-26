@@ -18,8 +18,10 @@ import "package:entoli_core/agent/llm/providers/provider.dart";
 
 import "../../../tls.dart";
 import "../../../download.dart";
+
 import "package:entoli_shell/entoli_shell.dart"
     show CliGuest, CliProcess, HostCliGuest, makeExecutable;
+
 import "cli_release.dart";
 export "cli_release.dart";
 
@@ -229,14 +231,15 @@ abstract class CliProvider extends LlmProvider with KeyFree {
         var done = 0;
         for (final file in release.files) {
           final part = p.join(_bin, "${file.name}.part");
-          final digest = await run.fetchSha256(
+          final digest = await run.fetchHashed(
             url: "${file.url}",
             to: part,
             total: total,
             done: done,
+            algorithm: file.checksum.algorithm,
           );
           if (run.cancelled) return;
-          if (digest != file.sha256.toLowerCase()) {
+          if (!file.checksum.matches(digest)) {
             throw FormatException(
               "${file.url} does not match the checksum its publisher states",
             );

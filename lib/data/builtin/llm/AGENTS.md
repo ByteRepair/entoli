@@ -6,9 +6,9 @@ The clients, `LlmProvider` and the registry are the core's: see
 `packages/entoli_core/lib/agent/llm/AGENTS.md`.
 
 `CliProvider` (`providers/cli.dart`) is the third kind beside the two wire
-formats: another harness's command-line program — Claude CLI and Codex
-CLI — answering Entoli's turns under the user's own sign-in.
-Its config is `LlmApi.claudeCli` or `LlmApi.codexCli` with a `command` (a path,
+formats: another harness's command-line program — Claude CLI, Codex CLI,
+Copilot CLI and Antigravity CLI — answering Entoli's turns under the user's
+own sign-in. Its config is the program's `LlmApi` with a `command` (a path,
 or a bare name looked up on `PATH`, null for the subclass's `defaultCommand`)
 and an `env` laid over the app's own environment; `baseUrl` is empty and no key
 is asked for (`KeyFree`). `providerOf` reads it by API before anything else, so
@@ -267,3 +267,58 @@ error, there being nobody to ask. The program a default name falls back to
 is the ChatGPT app's copy. The models offered are what a ChatGPT account
 was offered when this was written, and depend on the plan; the user adds
 any other as the provider's own.
+
+**Copilot CLI and Antigravity CLI are driven over ACP.** Neither GitHub nor
+Google lets a third party call the plan's models by API, so both programs
+are run the way an editor runs them, as an Agent Client Protocol agent on
+stdio (`copilot --acp --stdio`, `agy acp`). `AcpProvider` (`providers/acp.dart`)
+is what they share, `AcpSession` the session: `initialize` with no file
+system or terminal of Entoli's, `session/new` in the provider's work folder
+with Entoli's tools as an HTTP MCP server (the same `McpToolBridge` Claude CLI
+reaches, its headers as ACP's list of name and value), the system text as the
+session's `systemPrompt` where the agent takes one (override where it offers
+that, else append) and in front of the first prompt where it does not, then
+the model by the `model` config option or the older `session/set_model`, a
+model it does not offer failing the session with the list it does. Each new
+user turn is a `session/prompt`; text and thought chunks stream as they come,
+`usage_update`'s `used` is the reply's input. A reply ends where the agent
+calls Entoli's tools through the bridge: calls read together are one reply
+(`Timer.run`, as Codex's), the bridge holds each, and the next step's results
+answer them; the prompt's response ends the last reply, by its `stopReason`.
+A call's id is `acp_<tag>_<n>`, the tag random per session, since the loop
+keys sub-agents and jobs by it and a chat outlives its sessions. The bridge
+and stdout are two channels, so text the agent wrote before a call can be read
+after the reply carrying it went out: it is held and opens the next reply,
+and only output with no prompt turn open strays the session. Every request but
+`session/prompt` is waited on for a minute, so an agent that never answers
+`initialize` cannot hold a sign-in check open. A permission the agent asks for
+is for a tool of its own and is refused (`reject_once`); any other request is
+answered with an error.
+
+Neither has a status command, so `signedIn` opens a session and an
+`auth_required` (-32000) is signed out, and said as "sign it in again"
+wherever it comes back; `signOut` is ACP's `logout` where the agent advertises
+it, and otherwise the provider's folders forgotten, then checked: a sign-in
+kept in the system's credential store survives that, and is said rather than
+left for Sign in again to find still signed in.
+Copilot's own tools are held off by its flags — `--deny-tool` for shell,
+write, url and memory, `--disable-builtin-mcps`, `--no-custom-instructions` —
+and Entoli's server let through by `--allow-tool=entoli`; its home is
+`COPILOT_HOME`, the model also `COPILOT_MODEL`, the effort `--effort`. The
+machine's `COPILOT_*`, `GH_TOKEN` and `GITHUB_TOKEN` are not inherited, since
+a token there signs it in as whoever that is. It
+signs in by `copilot login --web-flow`, whose page calls back to a loopback
+port. Its release is GitHub's: one tarball (a zip on Windows) holding the one
+program, its SHA-256 the asset's `digest`. Antigravity names no variable for
+its home, so `HOME` (and `USERPROFILE`) is moved to the provider's data folder,
+and its permissions are by file: `prepare` writes `toolPermission` and an
+allow of `mcp(entoli/*)` into `.gemini/antigravity-cli/settings.json` there,
+keeping what else the file says, through a rename and one write at a time,
+since sub-agents start sessions beside a turn's. It signs in by `agy acp --login`. Its release
+is the manifest its own installer reads, per platform, naming the archive and
+its SHA-512 (`CliChecksum.sha512`); the tarball holds `antigravity` beside
+other files, taken out by name (`TarGzProgram(member:)`). The models each
+lists are what the plans offered when this was written; only Gemini 4 Neon's
+window is published (512k), so the rest are taken as 200k, and Copilot's as
+the 128k it serves. Nothing here has run against either program: the shapes
+are the ACP spec's and the programs' docs'.
