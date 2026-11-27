@@ -47,7 +47,7 @@ export "package:entoli_shell/entoli_shell.dart"
 
 import "../../data/download.dart" show startDownload;
 import "../../data/local/android_assistant_launch.dart";
-import "../../data/local/android_device_name.dart";
+import "../../data/local/system_device_name.dart";
 import "../../data/local/android_reminder_alarms.dart";
 import "../../data/local/byte_repair_store.dart";
 import "../../data/local/file_secret_store.dart";
@@ -425,13 +425,14 @@ SecretStore createSecretStore(AppConfig config) => Platform.isLinux
 
 LanSignaling? createLanSignaling() => SignalingServer();
 
-/// What this machine calls itself, for the sync device name. Android's
+/// What this machine calls itself, for the sync device name. A phone's
 /// `localHostname` is "localhost", so the system device name is read instead.
 Future<String?> deviceHostname() async {
-  if (Platform.isAndroid) return AndroidDeviceName.read();
+  if (Platform.isAndroid || Platform.isIOS) return SystemDeviceName.read();
   try {
     final name = Platform.localHostname.trim();
-    return name.isEmpty ? null : name;
+    // A machine with no hostname of its own answers localhost.
+    return name.isEmpty || name == "localhost" ? null : name;
   } catch (_) {
     return null;
   }

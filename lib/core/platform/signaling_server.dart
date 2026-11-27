@@ -47,9 +47,20 @@ class SignalingServer implements LanSignaling {
   @override
   int? get port => _server?.port;
 
+  /// The bind under way, which a second caller waits on rather than racing
+  /// it to a second listener.
+  Future<int>? _starting;
+
   @override
   Future<int> start() async {
-    if (_server != null) return _server!.port;
+    if (_server case final server?) {
+      if (_udp == null) await _listenForDiscovery(server.port);
+      return server.port;
+    }
+    return _starting ??= _bind().whenComplete(() => _starting = null);
+  }
+
+  Future<int> _bind() async {
     // The usual port, so a peer holding an address from before this device
     // restarted can still guess where it went. Ephemeral where that is taken,
     // which means another Entoli is already running here: that one is then
@@ -64,7 +75,16 @@ class SignalingServer implements LanSignaling {
       server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
     }
     _server = server;
-    server.listen(_handle, onError: (_) {});
+    // A listener the system closed under the app — iOS takes a suspended
+    // app's sockets — is gone, so the next start binds again rather than
+    // answering with a port nothing is on.
+    server.listen(
+      _handle,
+      onError: (Object error) => logFailure("sync", "lan listener", error),
+      onDone: () {
+        if (identical(_server, server)) _server = null;
+      },
+    );
     await _listenForDiscovery(server.port);
     return server.port;
   }
@@ -76,6 +96,8 @@ class SignalingServer implements LanSignaling {
   /// this server holds gets a reply, so the port is no use for reflecting
   /// traffic at anyone.
   Future<void> _listenForDiscovery(int httpPort) async {
+    _udp?.close();
+    _udp = null;
     try {
       final udp = _udp =
           await RawDatagramSocket.bind(
@@ -83,29 +105,39 @@ class SignalingServer implements LanSignaling {
               preferredSignalingPort,
             )
             ..broadcastEnabled = true;
-      udp.listen((event) {
-        final datagram = event == RawSocketEvent.read ? udp.receive() : null;
-        if (datagram == null) return;
-        try {
-          final message =
-              jsonDecode(utf8.decode(datagram.data)) as Map<String, dynamic>;
-          final answer = _routes.answerProbe(message);
-          if (answer != null) {
-            udp.send(
-              utf8.encode(jsonEncode({...answer, "port": httpPort})),
-              datagram.address,
-              datagram.port,
-            );
-          } else {
-            for (final heard in [..._discoveries]) {
-              heard(datagram.address.address, message);
+      udp.listen(
+        onError: (Object error) {
+          logFailure("sync", "lan discovery", error);
+          if (identical(_udp, udp)) _udp = null;
+          udp.close();
+        },
+        onDone: () {
+          if (identical(_udp, udp)) _udp = null;
+        },
+        (event) {
+          final datagram = event == RawSocketEvent.read ? udp.receive() : null;
+          if (datagram == null) return;
+          try {
+            final message =
+                jsonDecode(utf8.decode(datagram.data)) as Map<String, dynamic>;
+            final answer = _routes.answerProbe(message);
+            if (answer != null) {
+              udp.send(
+                utf8.encode(jsonEncode({...answer, "port": httpPort})),
+                datagram.address,
+                datagram.port,
+              );
+            } else {
+              for (final heard in [..._discoveries]) {
+                heard(datagram.address.address, message);
+              }
             }
+          } catch (_) {
+            // Anything else on the LAN may send to this port; traffic, not a
+            // failure.
           }
-        } catch (_) {
-          // Anything else on the LAN may send to this port; traffic, not a
-          // failure.
-        }
-      });
+        },
+      );
     } catch (error) {
       logFailure(
         "sync",

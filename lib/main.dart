@@ -7,6 +7,7 @@ import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:http/http.dart" as http;
 import "package:entoli_core/model/config.dart";
+import "package:entoli_core/model/log.dart" show logFailure;
 import "package:entoli_core/model/app_restart.dart";
 import "package:entoli_core/model/app_secrets.dart";
 import "package:entoli_core/model/chat_intents.dart" show ChatIntentAction;
@@ -630,6 +631,15 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
             );
         if (state == AppLifecycleState.resumed) {
           ref.read(appResumesProvider.notifier).resumed();
+          // A phone's system closes a suspended app's listener.
+          unawaited(
+            ref
+                .read(syncHubProvider)
+                .relisten()
+                .catchError(
+                  (Object e) => logFailure("sync", "no listener on resume", e),
+                ),
+          );
         }
       },
     );

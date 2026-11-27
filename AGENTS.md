@@ -442,7 +442,9 @@ holding a fallback for the old shape. 8.4.0's entry gathered what the readers
 had been holding: settings under the names they had before (`opencodeEnv`,
 `approveCommands`, `localModelKvCacheChats`, `useProjectMemory`), provider
 entries from 7.0.0 or older, and triggers in the reminder shape. A command
-rule's old `writes` key, reset rather than carried over, it drops. Taking an old
+rule's old `writes` key, reset rather than carried over, it drops. 8.9.0's
+marks every paired device's name the user's (`renamed`), since a record from
+before could not say, except a phone's bare "localhost". Taking an old
 name out of a reader is safe against sync only because every build on the
 current `SyncIdentity.protocolVersion` already writes today's name: a peer sends
 `toJson`, never a file, so the day one does not, the protocol is bumped with the

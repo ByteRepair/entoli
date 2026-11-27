@@ -13,6 +13,7 @@ class PairedDevice {
     required this.addedAt,
     DateTime? lastSeenAt,
     this.addresses = const [],
+    this.renamed = false,
   }) : lastSeenAt = lastSeenAt ?? addedAt;
 
   /// The peer's identity id — derived from its public key, so it travels with
@@ -29,16 +30,31 @@ class PairedDevice {
   /// move, though a tailnet's do not.
   List<String> addresses;
 
-  /// The record as [name] addresses it: what a rename is. The name is final
+  /// Whether [name] is one the user gave it here. Until then it is the name
+  /// the device calls itself, taken again on every connection.
+  final bool renamed;
+
+  /// The record as the user named it: what a rename is. The name is final
   /// on the record, so a rename is this replacement — every other fact
   /// carried over whole — rather than a field write.
-  PairedDevice withName(String name) => PairedDevice(
+  PairedDevice withName(String name) => _named(name, renamed: true);
+
+  /// The record under the name the device now calls itself, where the user
+  /// has not named it here. Not "localhost", which an older build's phone
+  /// gave and which names nothing.
+  PairedDevice announcing(String name) =>
+      renamed || name.isEmpty || name == "localhost" || name == this.name
+      ? this
+      : _named(name, renamed: false);
+
+  PairedDevice _named(String name, {required bool renamed}) => PairedDevice(
     id: id,
     name: name,
     publicKey: publicKey,
     addedAt: addedAt,
     lastSeenAt: lastSeenAt,
     addresses: addresses,
+    renamed: renamed,
   );
 
   /// The fingerprint over this record's stored key, or null where it will
@@ -60,6 +76,7 @@ class PairedDevice {
     "addedAt": addedAt.toIso8601String(),
     "lastSeenAt": lastSeenAt.toIso8601String(),
     if (addresses.isNotEmpty) "addresses": addresses,
+    if (renamed) "renamed": true,
   };
 
   static PairedDevice fromJson(Map<String, dynamic> json) => PairedDevice(
@@ -74,6 +91,7 @@ class PairedDevice {
     addresses:
         (json["addresses"] as List<Object?>?)?.cast<String>() ??
         [?json["lastAddress"] as String?],
+    renamed: json["renamed"] as bool? ?? false,
   );
 }
 

@@ -47,14 +47,12 @@ class LanSignaler {
     Duration timeout = const Duration(seconds: 45),
   }) async {
     Object? last;
-    var outdated = false;
-    await for (final (address, status) in Stream.fromFutures(
+    final heard = <_Probed>{};
+    await for (final (address, probed) in Stream.fromFutures(
       addresses.toSet().map((address) => _probe(address, token)),
     )) {
-      // A build before the probe route answers it 404, and would refuse the
-      // handshake on its version anyway.
-      if (status == 404) outdated = true;
-      if (status != 200) continue;
+      heard.add(probed);
+      if (probed != _Probed.ok) continue;
       try {
         return (
           answer: await _exchange(address, code, token, offerSdp, timeout),
@@ -64,7 +62,19 @@ class LanSignaler {
         last = error;
       }
     }
-    if (last == null && outdated) throw ProtocolMismatchException("older");
+    if (last == null && heard.contains(_Probed.outdated)) {
+      throw ProtocolMismatchException("older");
+    }
+    // Only where every address answered: one that did not may be the peer,
+    // and a refusal from an address another Entoli took since is no verdict.
+    if (last == null &&
+        heard.contains(_Probed.refused) &&
+        !heard.contains(_Probed.unreached)) {
+      throw const SignalingException(
+        "the other device does not recognise this pairing; remove it on "
+        "both devices and pair again",
+      );
+    }
     throw SignalingException(
       last == null
           ? "could not reach the other device; check that its firewall allows "
@@ -73,17 +83,17 @@ class LanSignaler {
     );
   }
 
-  /// The address and the status it answered with, 0 where it did not; 200
-  /// only from a host that proved it holds [token], where there is one.
+  /// The address and what it answered: [_Probed.ok] only from a host that
+  /// proved it holds [token], where there is one.
   // shortcut: the timeout abandons the connect rather than cancelling it, so
   // a dead address holds a socket until the OS gives up; fine at a /24.
-  Future<(String, int)> _probe(String address, String token) async {
+  Future<(String, _Probed)> _probe(String address, String token) async {
     try {
       if (token.isEmpty) {
         final response = await client
             .get(Uri.parse("http://$address${SignalingRoutes.healthPath}"))
             .timeout(probeTimeout);
-        return (address, response.statusCode);
+        return (address, _Probed.of(response.statusCode));
       }
       final (:probe, :isAnswer) = SignalingRoutes.probeFor(token);
       final response = await client
@@ -93,10 +103,15 @@ class LanSignaler {
             body: jsonEncode(probe),
           )
           .timeout(probeTimeout);
-      if (response.statusCode != 200) return (address, response.statusCode);
-      return (address, isAnswer(jsonDecode(response.body)) ? 200 : 403);
+      if (response.statusCode != 200) {
+        return (address, _Probed.of(response.statusCode));
+      }
+      return (
+        address,
+        isAnswer(jsonDecode(response.body)) ? _Probed.ok : _Probed.refused,
+      );
     } catch (_) {
-      return (address, 0);
+      return (address, _Probed.unreached);
     }
   }
 
@@ -139,4 +154,30 @@ class SignalingException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// What one address said to a probe.
+enum _Probed {
+  ok,
+
+  /// Nothing answered: dropped, refused, or timed out.
+  unreached,
+
+  /// A build before the probe route, which would refuse the handshake on its
+  /// version anyway.
+  outdated,
+
+  /// It answered and does not hold this pair's token: reached, not blocked.
+  refused,
+
+  /// Anything else it answered.
+  failed;
+
+  static _Probed of(int status) => switch (status) {
+    200 => ok,
+    // The probe route's own word for a token it does not hold.
+    403 => refused,
+    404 => outdated,
+    _ => failed,
+  };
 }
