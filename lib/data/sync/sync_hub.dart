@@ -274,6 +274,7 @@ class SyncHub implements ArtifactBytes, RemoteChats {
   Future<void> connect(String deviceId) => _signaling.connect(deviceId);
   Future<void> disconnect(String deviceId) => _signaling.disconnect(deviceId);
   Future<void> ensureReady() => _signaling.ensureReady();
+  Future<void> relisten() => _signaling.relisten();
 
   @visibleForTesting
   bool admitsReconnect(String psk) => _signaling.admitsReconnect(psk);

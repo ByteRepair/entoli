@@ -85,8 +85,6 @@ class SignalingServer implements LanSignaling {
         if (identical(_server, server)) _server = null;
       },
     );
-    _udp?.close();
-    _udp = null;
     await _listenForDiscovery(server.port);
     return server.port;
   }
@@ -98,6 +96,8 @@ class SignalingServer implements LanSignaling {
   /// this server holds gets a reply, so the port is no use for reflecting
   /// traffic at anyone.
   Future<void> _listenForDiscovery(int httpPort) async {
+    _udp?.close();
+    _udp = null;
     try {
       final udp = _udp =
           await RawDatagramSocket.bind(

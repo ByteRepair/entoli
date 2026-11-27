@@ -191,6 +191,12 @@ class SyncPairing {
     _watchOffers(server);
   }
 
+  /// Listening again, where the system closed the listener under the app;
+  /// nothing where it is open or nothing is paired.
+  Future<void> relisten() async {
+    if (_reconnects.isNotEmpty) await _server?.start();
+  }
+
   Future<void> dispose() async {
     cancelPairingWindow();
     await _serverInstance?.close();
@@ -860,25 +866,23 @@ class SyncPairing {
       });
       final reply = await hello.future.timeout(const Duration(seconds: 15));
 
-      var device = peerDevice;
-      if (device == null) {
-        device = PairedDevice(
-          id: deviceId,
-          name: live.deviceName,
-          publicKey: peer.publicKeyB64,
-          addedAt: DateTime.now(),
-        );
-        await registry.add(device);
-        await registry.setPairingSecret(deviceId, psk);
-      } else if (knownDeviceId == null) {
-        // Paired again over a record this side kept, the other having
-        // forgotten it: the secret is this pairing's. Keeping the old one
-        // admitted the old token after a restart, which the other side no
-        // longer sends, and each refused the other.
+      final device =
+          peerDevice ??
+          PairedDevice(
+            id: deviceId,
+            name: live.deviceName,
+            publicKey: peer.publicKeyB64,
+            addedAt: DateTime.now(),
+          );
+      // A first pairing's secret is the pair's, over a record this side kept
+      // too: keeping the old one admitted the old token after a restart,
+      // which the other side, having forgotten it, no longer sends.
+      if (knownDeviceId == null) {
         final old = await registry.pairingSecret(deviceId);
         if (old != null && old != psk) _forgetReconnect(old);
         await registry.setPairingSecret(deviceId, psk);
       }
+      if (peerDevice == null) await registry.add(device);
       // The registry's own verb rather than the same two fields written here:
       // when a device was last reached, and where, is what a registry is for.
       // The one we dialled first, since it answered, then every one it gave:

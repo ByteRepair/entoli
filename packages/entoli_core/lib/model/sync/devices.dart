@@ -40,9 +40,10 @@ class PairedDevice {
   PairedDevice withName(String name) => _named(name, renamed: true);
 
   /// The record under the name the device now calls itself, where the user
-  /// has not named it here.
+  /// has not named it here. Not "localhost", which an older build's phone
+  /// gave and which names nothing.
   PairedDevice announcing(String name) =>
-      renamed || name.isEmpty || name == this.name
+      renamed || name.isEmpty || name == "localhost" || name == this.name
       ? this
       : _named(name, renamed: false);
 

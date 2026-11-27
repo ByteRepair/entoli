@@ -315,10 +315,11 @@ Future<void> _ownNames(FileSystem fs, String dataDir) => _rewriteJson(
   (Map<String, dynamic> json) {
     var changed = false;
     for (final device in (json["devices"] as List<Object?>? ?? const [])) {
-      if (device is! Map<String, dynamic> || device["renamed"] != null) {
+      if (device is! Map<String, dynamic> ||
+          device["renamed"] != null ||
+          device["name"] == "localhost") {
         continue;
       }
-      if (device["name"] == "localhost") continue;
       device["renamed"] = true;
       changed = true;
     }

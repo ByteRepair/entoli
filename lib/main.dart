@@ -2,7 +2,6 @@ import "dart:async";
 import "dart:ui" show AppExitResponse;
 
 import "package:file/local.dart";
-import "package:flutter/foundation.dart" show defaultTargetPlatform;
 import "package:flutter/material.dart";
 import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -632,20 +631,15 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
             );
         if (state == AppLifecycleState.resumed) {
           ref.read(appResumesProvider.notifier).resumed();
-          // Listening again where the system closed the listener while away,
-          // which a phone's does to a suspended app.
-          if (defaultTargetPlatform
-              case TargetPlatform.iOS || TargetPlatform.android) {
-            unawaited(
-              ref
-                  .read(syncHubProvider)
-                  .ensureReady()
-                  .catchError(
-                    (Object e) =>
-                        logFailure("sync", "no listener on resume", e),
-                  ),
-            );
-          }
+          // A phone's system closes a suspended app's listener.
+          unawaited(
+            ref
+                .read(syncHubProvider)
+                .relisten()
+                .catchError(
+                  (Object e) => logFailure("sync", "no listener on resume", e),
+                ),
+          );
         }
       },
     );

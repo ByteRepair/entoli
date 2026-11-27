@@ -431,7 +431,8 @@ Future<String?> deviceHostname() async {
   if (Platform.isAndroid || Platform.isIOS) return SystemDeviceName.read();
   try {
     final name = Platform.localHostname.trim();
-    return name.isEmpty ? null : name;
+    // A machine with no hostname of its own answers localhost.
+    return name.isEmpty || name == "localhost" ? null : name;
   } catch (_) {
     return null;
   }

@@ -905,14 +905,7 @@ void main() {
       final links = loopbackPair();
       await pair(links.$1, links.$2);
       final record = (await home.registry.byId(away.identity.id))!;
-      await home.registry.add(
-        PairedDevice(
-          id: record.id,
-          name: "localhost",
-          publicKey: record.publicKey,
-          addedAt: record.addedAt,
-        ),
-      );
+      await home.registry.add(record.announcing("localhost"));
 
       await redial();
 
