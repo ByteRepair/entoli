@@ -8,7 +8,7 @@ import "package:entoli_core/model/permission.dart";
 import "package:entoli_core/model/project_settings.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/provider_picker.dart"
-    show ProviderCard, ProviderPickerPage;
+    show CardBox, ProviderCard, ProviderPickerPage;
 import "package:agent_chat/ui/settings/settings_category.dart";
 import "package:agent_chat/ui/widgets/toggle_chip.dart";
 
@@ -389,11 +389,12 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      final heights = {
-        for (final chip in find.byType(ToggleChip).evaluate())
-          chip.size!.height,
-      };
-      expect(heights, hasLength(1), reason: "every filter chip one height");
+      final cards = find.byType(CardBox, skipOffstage: false);
+      expect(
+        {for (final card in cards.evaluate()) card.size},
+        hasLength(1),
+        reason: "every card one size",
+      );
 
       expect(card("Groq"), findsOneWidget);
       expect(find.text("Custom endpoint", skipOffstage: false), findsOneWidget);

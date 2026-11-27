@@ -1,3 +1,5 @@
+import "dart:math";
+
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -88,8 +90,7 @@ class _ProviderPickerPageState extends ConsumerState<ProviderPickerPage> {
           const SizedBox(height: 8),
           _FilterRow(
             items: _makers,
-            leading: (maker) =>
-                ProviderMark(maker, radius: ToggleChip.markSize / 2),
+            leading: (maker) => ProviderMark(maker, radius: 10),
             label: (maker) => maker,
             selected: _filter.makers.contains,
             onToggle: (maker) =>
@@ -155,11 +156,14 @@ class _FilterRow<T extends Object> extends StatelessWidget {
   );
 }
 
-/// Cards as many abreast as fit at a readable width, one on a phone.
+/// The cards, every one the same size, as many abreast as fit, the grid
+/// centred and its rows filled from the start. One that cannot fit even one
+/// at full width narrows it.
 class _CardGrid extends StatelessWidget {
   const _CardGrid({required this.children});
 
-  static const _minWidth = 320.0;
+  static const _width = 320.0;
+  static const _height = 160.0;
   static const _gap = 12.0;
 
   final List<Widget> children;
@@ -167,19 +171,44 @@ class _CardGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final columns = ((constraints.maxWidth + _gap) / (_minWidth + _gap))
+      final width = constraints.maxWidth.clamp(0.0, _width);
+      // No more columns than cards, so a few stay centred.
+      final columns = ((constraints.maxWidth + _gap) / (width + _gap))
           .floor()
-          .clamp(1, 4);
-      final width = (constraints.maxWidth - _gap * (columns - 1)) / columns;
-      return Wrap(
-        spacing: _gap,
-        runSpacing: _gap,
-        children: [
-          for (final child in children) SizedBox(width: width, child: child),
-        ],
+          .clamp(1, max(1, children.length));
+      return Center(
+        child: SizedBox(
+          width: columns * width + (columns - 1) * _gap,
+          child: Wrap(
+            spacing: _gap,
+            runSpacing: _gap,
+            children: [
+              for (final child in children)
+                CardBox(width: width, height: _height, child: child),
+            ],
+          ),
+        ),
       );
     },
   );
+}
+
+/// One cell of the grid: its card, at the grid's one size.
+class CardBox extends StatelessWidget {
+  const CardBox({
+    super.key,
+    required this.width,
+    required this.height,
+    required this.child,
+  });
+
+  final double width;
+  final double height;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      SizedBox(width: width, height: height, child: child);
 }
 
 /// One offer on the page: its company's mark, its name, and the tags it is
@@ -258,13 +287,24 @@ class _OfferCard extends StatelessWidget {
                   leading,
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(title, style: theme.textTheme.titleMedium),
+                    child: Text(
+                      title,
+                      style: theme.textTheme.titleMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
               if (tags.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Wrap(spacing: 6, runSpacing: 4, children: tags),
+                // The card is the grid's one size; tags past its bottom
+                // scroll rather than spill.
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Wrap(spacing: 6, runSpacing: 4, children: tags),
+                  ),
+                ),
               ],
             ],
           ),

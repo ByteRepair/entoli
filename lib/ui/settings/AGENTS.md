@@ -380,7 +380,8 @@ one, since the key and a program's sign-in go with it. Adding one opens
 `showProviderPicker` (`provider_picker.dart`), a page of its own: every
 preset and every program this platform runs, as a card under its company's
 `ProviderMark` (an initial, the model catalog's too, not a logo: Anthropic's trademark terms allow its marks only
-in material it approves and forbid recolouring them), with no grouping. Above
+in material it approves and forbid recolouring them), with no grouping, every card one size in a centred grid (`_CardGrid`), its
+tags scrolling inside it rather than growing it. Above
 the cards are two rows of `ToggleChip`s: the `ProviderTag`s (Private, Privacy
 controls, Paid, Free), every one picked required, so Free and Private shows
 nothing; and the companies, any one picked allowed, since an offer has one
