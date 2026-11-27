@@ -47,9 +47,20 @@ class SignalingServer implements LanSignaling {
   @override
   int? get port => _server?.port;
 
+  /// The bind under way, which a second caller waits on rather than racing
+  /// it to a second listener.
+  Future<int>? _starting;
+
   @override
   Future<int> start() async {
-    if (_server != null) return _server!.port;
+    if (_server case final server?) {
+      if (_udp == null) await _listenForDiscovery(server.port);
+      return server.port;
+    }
+    return _starting ??= _bind().whenComplete(() => _starting = null);
+  }
+
+  Future<int> _bind() async {
     // The usual port, so a peer holding an address from before this device
     // restarted can still guess where it went. Ephemeral where that is taken,
     // which means another Entoli is already running here: that one is then
@@ -69,7 +80,7 @@ class SignalingServer implements LanSignaling {
     // answering with a port nothing is on.
     server.listen(
       _handle,
-      onError: (_) {},
+      onError: (Object error) => logFailure("sync", "lan listener", error),
       onDone: () {
         if (identical(_server, server)) _server = null;
       },
@@ -95,6 +106,11 @@ class SignalingServer implements LanSignaling {
             )
             ..broadcastEnabled = true;
       udp.listen(
+        onError: (Object error) {
+          logFailure("sync", "lan discovery", error);
+          if (identical(_udp, udp)) _udp = null;
+          udp.close();
+        },
         onDone: () {
           if (identical(_udp, udp)) _udp = null;
         },

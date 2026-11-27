@@ -136,7 +136,11 @@ enum DeviceChannel {
     let channel = FlutterMethodChannel(name: "agent_chat/device", binaryMessenger: messenger)
     channel.setMethodCallHandler { call, result in
       switch call.method {
-      case "name": result(UIDevice.current.name)
+      // The bare model is every iPhone's: nil, so the fingerprint's name,
+      // which two devices cannot share, stands instead.
+      case "name":
+        let device = UIDevice.current
+        result(device.name == device.model ? nil : device.name)
       default: result(FlutterMethodNotImplemented)
       }
     }

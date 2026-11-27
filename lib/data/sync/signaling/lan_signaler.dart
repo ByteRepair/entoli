@@ -49,6 +49,7 @@ class LanSignaler {
     Object? last;
     var outdated = false;
     var refused = false;
+    var unreached = false;
     await for (final (address, status) in Stream.fromFutures(
       addresses.toSet().map((address) => _probe(address, token)),
     )) {
@@ -58,6 +59,7 @@ class LanSignaler {
       // It answered and does not hold this pair's token: reached, not
       // blocked, so the firewall advice would send the user the wrong way.
       if (status == 403) refused = true;
+      if (status == 0) unreached = true;
       if (status != 200) continue;
       try {
         return (
@@ -69,7 +71,9 @@ class LanSignaler {
       }
     }
     if (last == null && outdated) throw ProtocolMismatchException("older");
-    if (last == null && refused) {
+    // Only where every address answered: one that did not may be the peer,
+    // and a 403 from an address another Entoli took since is no verdict.
+    if (last == null && refused && !unreached) {
       throw const SignalingException(
         "the other device does not recognise this pairing; remove it on "
         "both devices and pair again",

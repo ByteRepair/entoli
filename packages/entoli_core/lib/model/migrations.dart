@@ -31,6 +31,7 @@ String migrationStamp(String dataDir) => p.join(dataDir, "version");
 const List<Migration> migrations = [
   Migration("8.0.0", _athena),
   Migration("8.4.0", _todaysShapes),
+  Migration("8.9.0", _ownNames),
 ];
 
 /// 8.0.0: the main agent is Athena, a participant like any other. Every
@@ -302,3 +303,25 @@ Future<void> _stamp(FileSystem fs, String dataDir, Migration migration) =>
       migrationStamp(dataDir),
       utf8.encode(migration.version),
     );
+
+/// 8.9.0: a paired device's record takes the name the device gives on every
+/// connection unless it is `renamed`, the user's own. A record from before
+/// cannot say which its name was, so each is the user's: a rename is not
+/// undone by an upgrade. All but "localhost", which is what a phone's
+/// hostname said and nobody's choice.
+Future<void> _ownNames(FileSystem fs, String dataDir) => _rewriteJson(
+  fs,
+  p.join(dataDir, "sync", "devices.json"),
+  (Map<String, dynamic> json) {
+    var changed = false;
+    for (final device in (json["devices"] as List<Object?>? ?? const [])) {
+      if (device is! Map<String, dynamic> || device["renamed"] != null) {
+        continue;
+      }
+      if (device["name"] == "localhost") continue;
+      device["renamed"] = true;
+      changed = true;
+    }
+    return changed;
+  },
+);
