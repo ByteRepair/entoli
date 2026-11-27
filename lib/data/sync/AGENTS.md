@@ -900,7 +900,20 @@ items back through `setReplyStyle`, `setProviderKey` and `setProviders`, and
 tells the exchange of every change to either. A CLI provider's `command` and
 `env` are this machine's, so they are not synced and a merged provider keeps
 the local ones: `LlmProviderConfig.toPortableJson` and `fromPortable` say
-which fields those are. The exchange reaches peers by id, through the hub's
+which fields those are.
+
+A provider is synced by its id, so a rename on one device is the same
+provider renamed on the other, the winner's name where both renamed it. Names
+stay unique (`providerNameKey`: case and surrounding space aside), being what
+the user tells two apart by: two entries the merge leaves sharing one — each
+device having added Ollama Cloud for itself, under an id of its own — are one
+too many. The one the winner has under that name stays, and the other goes
+with its key and a program's sign-in; where the winner has neither under it,
+the first by id. A chat or a model role names its provider by id, so on the
+device whose entry went the driver hands `setProviders` what replaced it:
+the roles move to the kept one, and the chats follow `providerAliases`, this
+machine's map of a replaced id to its replacement, which `chatModelOf` reads
+through. The exchange reaches peers by id, through the hub's
 send, and the hub tells it which are connected.
 
 What a pair agreed is kept per peer in `sync/settings/<peer-id>.json`

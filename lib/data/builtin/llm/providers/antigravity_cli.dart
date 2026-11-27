@@ -45,6 +45,9 @@ class AntigravityCliProvider extends AcpProvider with OfferedByName {
   String get planName => "Google AI";
 
   @override
+  String get maker => "Google";
+
+  @override
   String get serviceName => "Google AI Pro";
 
   @override

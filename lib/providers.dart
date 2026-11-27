@@ -999,7 +999,14 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// here takes its stored key with it — nothing else would ever delete it,
   /// and an entry nobody names is a secret kept for no one. A CLI's takes
   /// its folders, the account signed in there, for the same reason.
-  Future<void> setProviders(List<LlmProviderConfig> providers) async {
+  ///
+  /// [replacedBy] is a removed id to the kept one standing in for it, which
+  /// a sync gives where two shared a name: what named the removed one names
+  /// the other.
+  Future<void> setProviders(
+    List<LlmProviderConfig> providers, {
+    Map<String, String> replacedBy = const {},
+  }) async {
     final kept = providers.map((p) => p.id).toSet();
     final removed = [
       for (final p in state.llmProviders)
@@ -1019,8 +1026,17 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     final gone = {for (final p in removed) p.id};
     await _update((s) {
       s.llmProviders = List.unmodifiable(providers);
+      if (replacedBy.isNotEmpty) {
+        s.providerAliases = {...s.providerAliases, ...replacedBy};
+      }
       for (final role in _modelRoles) {
-        if (gone.contains(s.doc.read(role.provider))) {
+        final named = s.doc.read(role.provider);
+        if (replacedBy[named] case final standIn?) {
+          _assign(s, role, (
+            providerId: standIn,
+            modelId: s.doc.read(role.model),
+          ));
+        } else if (gone.contains(named)) {
           _assign(s, role, (providerId: null, modelId: null));
         }
       }

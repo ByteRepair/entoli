@@ -19,8 +19,12 @@ abstract interface class SyncedSettings {
   SyncedItems read();
 
   /// Makes these the settings: an item that is null or missing from [items]
-  /// is not kept.
-  Future<void> write(SyncedItems items);
+  /// is not kept. [replaced] is a provider gone for another of its name, the
+  /// removed id to the kept one.
+  Future<void> write(
+    SyncedItems items, {
+    Map<String, String> replaced = const {},
+  });
 }
 
 /// What one pair has settled about its settings, kept per peer: who wins a
@@ -382,13 +386,15 @@ class SettingsSync {
     MergeBase? base,
   ) async {
     final local = synced.read();
-    final merged = mergeSettings(
+    final (:items, :replaced) = mergeSettings(
       local: local,
       remote: remote,
       base: base,
       localWins: state.precedence!.winner == selfId,
     );
-    if (!sameItems(merged, local)) await synced.write(merged);
-    return merged;
+    if (!sameItems(items, local)) {
+      await synced.write(items, replaced: replaced);
+    }
+    return items;
   }
 }

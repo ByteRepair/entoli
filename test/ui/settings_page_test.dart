@@ -359,7 +359,8 @@ void main() {
     Future<void> addAnthropic(WidgetTester tester) async {
       await tester.tap(find.text("Add provider"));
       await settleIo(tester);
-      await tester.tap(find.text("Anthropic"));
+      // The card, not the company's filter chip above it.
+      await tester.tap(find.text("Anthropic").last);
       await settleIo(tester);
       await tester.tap(find.text("Save"));
       await settleIo(tester, least: 3);

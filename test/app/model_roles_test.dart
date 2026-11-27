@@ -54,4 +54,21 @@ void main() {
     expect(settings().memoryProviderId, other.id);
     expect(settings().classifierProviderId, other.id);
   });
+
+  test("a provider a sync replaced hands its roles and chats over", () async {
+    final app = TestApp.create();
+    addTearDown(app.dispose);
+    final notifier = app.container.read(appSettingsProvider.notifier);
+    AppSettings settings() => app.container.read(appSettingsProvider);
+
+    await notifier.upsertProvider(testProvider);
+    expect(settings().defaultProviderId, testProviderId);
+    final model = settings().defaultModelId;
+
+    await notifier.setProviders([other], replacedBy: {testProviderId: "other"});
+    expect(settings().defaultProviderId, "other");
+    expect(settings().defaultModelId, model);
+    expect(settings().providerNow(testProviderId), "other");
+    expect(settings().providerNow("other"), "other");
+  });
 }

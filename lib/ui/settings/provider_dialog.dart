@@ -116,7 +116,7 @@ class _ProviderDialogState extends ConsumerState<ProviderDialog> {
                 onChanged: (text) => setState(() => _edit.name = text),
                 decoration: InputDecoration(
                   labelText: "Name",
-                  hintText: _edit.preset?.displayName,
+                  hintText: _edit.derivedName,
                   helperText: "What the model list calls it",
                   errorText: _edit.nameError,
                 ),

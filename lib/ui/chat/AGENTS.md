@@ -473,7 +473,7 @@ does: animated.
 Under this device's badges, and only on the new-chat screen, sit **the paired
 devices' badges** (`paired_project_badges.dart`): for each device that has
 listed its projects, a `ConversationSeparator` line naming it (with
-"· offline" while it is away), then every project it listed as a `ChoiceChip`
+"· offline" while it is away), then every project it listed as a `ProjectBadge`
 — its default included, a project there rather than nothing selected. They
 come from `remoteEntries`, the sidebar switcher's own list. Ticking one is
 `selectProject`; unticking it is this device's default. This device's badges

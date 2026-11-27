@@ -78,7 +78,15 @@ class ProviderEdit {
 
   String get resolvedName {
     final typed = name.trim();
-    return typed.isNotEmpty ? typed : preset?.displayName ?? "";
+    return typed.isNotEmpty ? typed : derivedName;
+  }
+
+  /// What an empty name is saved as: the preset's, and where another entry
+  /// already has it, numbered on from 02 — the unnumbered one being the
+  /// first. The name is what a model is picked by, so two cannot share one.
+  String get derivedName {
+    final base = preset?.displayName ?? "";
+    return base.isEmpty ? base : freeProviderName(base, nameTaken);
   }
 
   String get resolvedBaseUrl {

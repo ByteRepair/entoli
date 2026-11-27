@@ -46,6 +46,9 @@ class CodexCliProvider extends CliProvider with OfferedByName {
   String get planName => "ChatGPT";
 
   @override
+  String get maker => "OpenAI";
+
+  @override
   String get serviceName => "ChatGPT";
 
   @override

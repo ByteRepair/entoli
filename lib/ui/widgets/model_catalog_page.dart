@@ -19,6 +19,7 @@ import "../../data/builtin/llm/providers/presets.dart";
 import "../../app/model_role.dart";
 import "../../providers.dart";
 import "catalog.dart" show InfoTag;
+import "provider_mark.dart";
 export "../../app/model_picker.dart" show CatalogEntry, catalogEntries;
 export "../../app/model_role.dart";
 
@@ -455,7 +456,7 @@ class _ModelCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  _Monogram(entry.providerName),
+                  ProviderMark(entry.providerName),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -534,35 +535,6 @@ class _ModelCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// The hue a provider's monogram wears, 0 to 359, from its name's characters
-/// rather than `hashCode`, which is not the same from one run to the next.
-int providerHue(String name) =>
-    name.codeUnits.fold(0, (a, c) => a * 31 + c) % 360;
-
-/// The provider's initial on a colour of its own, so a long list reads by
-/// provider at a glance.
-class _Monogram extends StatelessWidget {
-  const _Monogram(this.name);
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final hue = providerHue(name).toDouble();
-    final bg = HSLColor.fromAHSL(1, hue, 0.45, dark ? 0.28 : 0.86).toColor();
-    final fg = HSLColor.fromAHSL(1, hue, 0.5, dark ? 0.86 : 0.28).toColor();
-    return CircleAvatar(
-      radius: 18,
-      backgroundColor: bg,
-      child: Text(
-        name.isEmpty ? "?" : name.characters.first.toUpperCase(),
-        style: TextStyle(color: fg, fontWeight: FontWeight.w600),
       ),
     );
   }

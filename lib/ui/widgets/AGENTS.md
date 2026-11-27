@@ -134,6 +134,13 @@ motion: an `AnimatedSize` over the `Wrap` glides a change of line count — a
 badge pushed onto a new line, or a line collapsing — where the column below
 used to snap with it.
 
+`ToggleChip` (`toggle_chip.dart`) is the chip such a row holds where the
+user ticks things on and off: a leading mark in the label (a `ChoiceChip`
+paints its check over the avatar slot), then a name, inside an `AnimatedSize`
+so the check's growth is a width change the row re-flows along with. The
+start page's `ProjectBadge`s are one, and so are the Add provider page's
+filters.
+
 `Composer` opens a menu above the field when the caret sits in a `/` or `@`
 token, over a library that is already loaded — so it takes no chat id, has no
 loading state, and starts nothing. Enter, Tab and the arrows are bound only

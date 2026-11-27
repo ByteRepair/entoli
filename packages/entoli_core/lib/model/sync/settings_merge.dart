@@ -3,6 +3,8 @@ import "dart:convert";
 import "package:collection/collection.dart";
 import "package:crypto/crypto.dart";
 
+import "../llm_provider.dart" show providerNameKey;
+
 /// What two paired devices keep in step of their settings, item by item:
 /// the profile, and each provider by its id. An item is its fields as JSON
 /// values; one the device does not have is not in the map.
@@ -128,17 +130,67 @@ class MergeBase {
 /// where only one side has it, and taken whole from the winner where both
 /// do: the profile the user chose to keep, not a mix of the two.
 ///
+/// Two providers left sharing a name are one too many: the winner's stays,
+/// and [MergedSettings.replaced] says which went for which.
+///
 /// Symmetric: the other device, passing its own side as [local] and the
 /// opposite [localWins], reaches the same items.
-SyncedItems mergeSettings({
+MergedSettings mergeSettings({
   required SyncedItems local,
   required SyncedItems remote,
   required MergeBase? base,
   required bool localWins,
-}) => {
+}) => _oneOfEachName({
   for (final key in {...local.keys, ...remote.keys})
     key: ?_mergeItem(local[key], remote[key], base?.items[key], localWins),
-};
+}, winner: localWins ? local : remote);
+
+/// [items] with no two providers of one name, which is what a model is
+/// picked by: of two entries sharing one — each device having added Ollama
+/// Cloud for itself, under ids of its own — the one the [winner] has under
+/// that name stays and the other goes. Where the winner has neither under
+/// it, as when the loser renamed one onto the other's, the first by id
+/// stays, so both sides keep the same one.
+MergedSettings _oneOfEachName(
+  SyncedItems items, {
+  required SyncedItems winner,
+}) {
+  final byName = items.keys
+      .where((key) => providerIdOf(key) != null)
+      .groupListsBy((key) => _nameOf(key, items[key]!));
+  final replaced = <String, String>{
+    for (final MapEntry(key: name, value: keys) in byName.entries)
+      if (keys.length > 1)
+        for (final gone in (keys..sort(_winnerFirst(name, winner))).skip(1))
+          providerIdOf(gone)!: providerIdOf(keys.first)!,
+  };
+  return (
+    items: {
+      for (final MapEntry(:key, :value) in items.entries)
+        if (!replaced.containsKey(providerIdOf(key))) key: value,
+    },
+    replaced: replaced,
+  );
+}
+
+/// What a merge settles on, and the providers it took out for another of
+/// the same name: a removed id to the kept one.
+typedef MergedSettings = ({SyncedItems items, Map<String, String> replaced});
+
+String _nameOf(String key, Map<String, Object?> item) =>
+    providerNameKey(item["name"] as String? ?? providerIdOf(key)!);
+
+/// The key the [winner] holds under [name] first, then by id.
+Comparator<String> _winnerFirst(String name, SyncedItems winner) {
+  int rank(String key) => switch (winner[key]) {
+    final item? when _nameOf(key, item) == name => 0,
+    _ => 1,
+  };
+  return (a, b) {
+    final byRank = rank(a).compareTo(rank(b));
+    return byRank != 0 ? byRank : a.compareTo(b);
+  };
+}
 
 Map<String, Object?>? _mergeItem(
   Map<String, Object?>? mine,

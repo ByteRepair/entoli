@@ -269,6 +269,15 @@ abstract final class SettingKeys {
     fallback: true,
   );
 
+  /// Provider ids a sync took out in favour of a same-named one, each to
+  /// the id that took its place: what a chat that picked the old one runs
+  /// on. This machine's, never synced.
+  static const providerAliases = DefaultedSetting<Map<String, String>>(
+    "providerAliases",
+    StringMapCodec(),
+    fallback: <String, String>{},
+  );
+
   /// Environment variables the agent's commands run under, and that a provider
   /// may name instead of holding its key. Held here rather than in the shell
   /// because the settings page edits them.

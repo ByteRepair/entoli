@@ -40,6 +40,13 @@ class CopilotCliProvider extends AcpProvider with OfferedByName {
   String get planName => "GitHub Copilot";
 
   @override
+  String get maker => "GitHub";
+
+  /// Copilot Free is a plan too.
+  @override
+  Set<ProviderTag> get tags => {...super.tags, ProviderTag.free};
+
+  @override
   String get serviceName => "GitHub Copilot";
 
   @override

@@ -4,6 +4,7 @@ import "package:uuid/uuid.dart";
 import "package:entoli_core/model/llm_provider.dart";
 import "package:entoli_core/model/provider_usage.dart";
 import "package:entoli_core/view/widgets/busy.dart";
+import "package:entoli_core/view/widgets/dialogs.dart" show confirm;
 
 import "../../app/provider_usage_words.dart";
 import "../../app/settings/cli_account.dart" show forgetCliEntry;
@@ -23,7 +24,8 @@ import "provider_picker.dart";
 /// A new entry is given its id before the dialog opens: a CLI's account is
 /// kept in a folder named by it, and the dialog can sign one in before Save.
 /// Cancelled, a new entry's folders go, and any sign-in made in them.
-Future<void> editProvider(
+/// Whether it was saved.
+Future<bool> editProvider(
   BuildContext context, {
   LlmProviderConfig? provider,
   LlmProvider? preset,
@@ -50,13 +52,14 @@ Future<void> editProvider(
   );
   if (draft == null) {
     if (edit.adding) await forgetCliEntry(programs, edit.id);
-    return;
+    return false;
   }
   await notifier.upsertProvider(
     draft.config,
     setKey: draft.setKey,
     adopt: adopt,
   );
+  return true;
 }
 
 /// The Providers category: where the models come from, each an endpoint, a
@@ -65,21 +68,36 @@ Future<void> editProvider(
 class ProvidersSection extends ConsumerWidget {
   const ProvidersSection({super.key});
 
-  Future<void> _remove(WidgetRef ref, LlmProviderConfig provider) async {
-    final providers = ref
+  /// Asked first: the key and a program's sign-in go with it, and neither
+  /// comes back with a second Add.
+  Future<void> _remove(BuildContext context, LlmProviderConfig provider) async {
+    // Read now: the section can be rebuilt away while the dialog is open.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final gone = provider.api.isCli
+        ? "Its sign-in on this device goes with it, and anything"
+        : providerOf(provider).needsKey
+        ? "Its saved key goes with it, and anything"
+        : "Anything";
+    final sure = await confirm(
+      context,
+      title: "Remove ${provider.displayName}?",
+      message: "$gone set to its models falls back to the default.",
+      confirmLabel: "Remove",
+      destructive: true,
+    );
+    if (!sure) return;
+    final providers = container
         .read(appSettingsProvider)
         .llmProviders
         .where((p) => p.id != provider.id)
         .toList();
-    await ref.read(appSettingsProvider.notifier).setProviders(providers);
+    await container.read(appSettingsProvider.notifier).setProviders(providers);
   }
 
-  Future<void> _add(BuildContext context) async {
-    final chosen = await pickProviderPreset(context);
-    if (chosen != null && context.mounted) {
-      await editProvider(context, preset: chosen.preset);
-    }
-  }
+  Future<void> _add(BuildContext context) => showProviderPicker(
+    context,
+    connect: (context, preset) => editProvider(context, preset: preset),
+  );
 
   String _status(WidgetRef ref, LlmProviderConfig config) {
     final environment = ref.read(appSettingsProvider).environment;
@@ -114,7 +132,7 @@ class ProvidersSection extends ConsumerWidget {
               context,
               () => editProvider(context, provider: provider),
             ),
-            onRemove: () => guarded(context, () => _remove(ref, provider)),
+            onRemove: () => guarded(context, () => _remove(context, provider)),
             detail: ProviderUsageView(provider.id),
           ),
         AddButtonRow(

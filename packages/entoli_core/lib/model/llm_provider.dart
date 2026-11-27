@@ -1,5 +1,19 @@
 import "model_info.dart";
 
+/// What two provider names are told apart by: not case, nor the space around
+/// them. A device keeps them unique by it, and a sync too.
+String providerNameKey(String name) => name.trim().toLowerCase();
+
+/// [base], or where [taken] says it is in use, numbered on from 02 — the
+/// unnumbered one being the first.
+String freeProviderName(String base, bool Function(String name) taken) {
+  if (!taken(base)) return base;
+  for (var n = 2; ; n++) {
+    final numbered = "$base-${n.toString().padLeft(2, "0")}";
+    if (!taken(numbered)) return numbered;
+  }
+}
+
 /// Which wire format a provider speaks. Everything that copied OpenAI's
 /// `/chat/completions` is [openai]; Anthropic's `/messages` is its own.
 /// The CLI ones are no wire at all: another harness's command-line program,
@@ -223,8 +237,13 @@ enum PromptUse {
   /// Never leaves the machine.
   local,
 
-  /// Not kept or trained on, by the provider's own terms.
+  /// Not kept or trained on, by the provider's own terms, with no setting
+  /// that would have it.
   notTrained,
+
+  /// Not trained on unless the account opts in: off by default, but a
+  /// setting away, so the account's settings are what keep it private.
+  notTrainedUnlessOptedIn,
 
   /// Up to whichever upstream a request is routed to.
   dependsOnRoute,
@@ -237,19 +256,56 @@ enum PromptUse {
   unstated,
 }
 
+/// What the Add provider page filters on. A filter of several asks for a
+/// provider carrying every one, so Free and Private together is nothing: no
+/// free tier is private.
+enum ProviderTag {
+  /// Not trained on, or never leaving the machine, with no setting that
+  /// could change it.
+  private("Private", TagGroup.privacy),
+
+  /// Not trained on unless the account turns it on: off by default, but a
+  /// setting away.
+  optInCollection("Opt-in data collection", TagGroup.privacy),
+
+  /// Trained on unless the account turns it off, or pays for a plan that
+  /// is not: on by default.
+  optOutCollection("Opt-out data collection", TagGroup.privacy),
+
+  /// A hosted service someone pays for. A model run here is neither this
+  /// nor [free]: there is no service to pay or not.
+  paid("Paid", TagGroup.cost),
+
+  /// A hosted service with a free tier.
+  free("Free", TagGroup.cost);
+
+  const ProviderTag(this.label, this.group);
+
+  final String label;
+
+  /// The filters it is one of: what is done with the prompts, or what it
+  /// costs. A filter picks at most one of a group.
+  final TagGroup group;
+}
+
+enum TagGroup { privacy, cost }
+
 /// What the Add provider list says about a preset, beside its name. Held by the
 /// provider's class rather than its config, so it is never written into
 /// `settings.json` and a policy change is a release, not a migration.
 class PresetTerms {
   const PresetTerms({
-    required this.blurb,
+    required this.maker,
     required this.prompts,
     this.freeTier,
     this.policy,
     this.keyUrl,
   });
 
-  final String blurb;
+  /// The company behind it, which the Add provider page groups and filters
+  /// by: a constant, not the preset's label, which a rename would split.
+  final String maker;
+
   final PromptUse prompts;
 
   /// Non-null where the preset can be used for free and that comes at a cost

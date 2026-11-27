@@ -29,6 +29,33 @@ abstract class LlmProvider {
 
   String get id => config.id;
   String get displayName => config.displayName;
+
+  /// The company behind it, which the Add provider page filters by: two
+  /// offers of one company (its API and its plan's program) share it. An
+  /// endpoint typed in by hand is its own.
+  String get maker => terms?.maker ?? displayName;
+
+  /// What the Add provider page filters it by, read off [terms]: none for an
+  /// endpoint typed in by hand.
+  Set<ProviderTag> get tags {
+    final terms = this.terms;
+    if (terms == null) return const {};
+    final privacy = switch (terms.prompts) {
+      PromptUse.local || PromptUse.notTrained => ProviderTag.private,
+      // OpenRouter routes to a provider that may train only once the
+      // account allows it.
+      PromptUse.notTrainedUnlessOptedIn ||
+      PromptUse.dependsOnRoute => ProviderTag.optInCollection,
+      PromptUse.trainedWhenFree => ProviderTag.optOutCollection,
+      PromptUse.unstated => null,
+    };
+    return {
+      ?privacy,
+      if (terms.prompts != PromptUse.local) ProviderTag.paid,
+      if (terms.freeTier != null) ProviderTag.free,
+    };
+  }
+
   Uri get baseUrl => Uri.parse(config.baseUrl);
   Uri? get modelsUrl {
     final url = config.modelsEndpoint;

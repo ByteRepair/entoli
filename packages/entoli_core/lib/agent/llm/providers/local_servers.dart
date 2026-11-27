@@ -26,10 +26,7 @@ class OllamaProvider extends LocalServerProvider with OllamaCompat {
     defaultLightModelId: "nemotron-3-nano:30b",
   );
 
-  static const _terms = PresetTerms(
-    blurb: "Models you run yourself with Ollama.",
-    prompts: PromptUse.local,
-  );
+  static const _terms = PresetTerms(maker: "Ollama", prompts: PromptUse.local);
 }
 
 class LmStudioProvider extends LocalServerProvider {
@@ -46,7 +43,7 @@ class LmStudioProvider extends LocalServerProvider {
   );
 
   static const _terms = PresetTerms(
-    blurb: "Models you run yourself with LM Studio.",
+    maker: "LM Studio",
     prompts: PromptUse.local,
   );
 }

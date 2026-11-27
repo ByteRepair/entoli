@@ -17,8 +17,8 @@ class OpenAiProvider extends OpenAiCompatibleProvider {
   );
 
   static const _terms = PresetTerms(
-    blurb: "GPT models, and gpt-image for pictures.",
-    prompts: PromptUse.notTrained,
+    maker: "OpenAI",
+    prompts: PromptUse.notTrainedUnlessOptedIn,
     policy: "https://openai.com/enterprise-privacy",
     keyUrl: "https://platform.openai.com/api-keys",
   );

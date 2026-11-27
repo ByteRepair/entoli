@@ -21,7 +21,7 @@ class OpenRouterProvider extends OpenAiCompatibleProvider {
   );
 
   static const _terms = PresetTerms(
-    blurb: "One key for hundreds of models from many providers.",
+    maker: "OpenRouter",
     prompts: PromptUse.dependsOnRoute,
     policy: "https://openrouter.ai/privacy",
     keyUrl: "https://openrouter.ai/settings/keys",

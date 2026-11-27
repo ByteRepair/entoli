@@ -50,16 +50,19 @@ class SettingsSyncDriver implements SyncedSettings {
   }
 
   @override
-  Future<void> write(SyncedItems items) async {
+  Future<void> write(
+    SyncedItems items, {
+    Map<String, String> replaced = const {},
+  }) async {
     _writing = true;
     try {
-      await _write(items);
+      await _write(items, replaced);
     } finally {
       _writing = false;
     }
   }
 
-  Future<void> _write(SyncedItems items) async {
+  Future<void> _write(SyncedItems items, Map<String, String> replaced) async {
     final notifier = _ref.read(appSettingsProvider.notifier);
     final settings = _ref.read(appSettingsProvider);
     final profile = Profile.fromJson(items[profileItem]);
@@ -91,7 +94,7 @@ class SettingsSyncDriver implements SyncedSettings {
       [for (final p in providers) p.toJson()],
       [for (final p in settings.llmProviders) p.toJson()],
     )) {
-      await notifier.setProviders(providers);
+      await notifier.setProviders(providers, replacedBy: replaced);
     }
   }
 

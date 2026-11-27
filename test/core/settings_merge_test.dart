@@ -2,7 +2,7 @@ import "package:entoli_core/model/sync/settings_merge.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {
-  SyncedItems merge(
+  MergedSettings mergeBoth(
     SyncedItems local,
     SyncedItems remote, {
     SyncedItems? agreed,
@@ -23,9 +23,87 @@ void main() {
       base: base,
       localWins: !localWins,
     );
-    expect(sameItems(here, there), isTrue, reason: "$here vs $there");
+    expect(
+      sameItems(here.items, there.items),
+      isTrue,
+      reason: "$here vs $there",
+    );
+    expect(here.replaced, there.replaced);
     return here;
   }
+
+  SyncedItems merge(
+    SyncedItems local,
+    SyncedItems remote, {
+    SyncedItems? agreed,
+    bool localWins = true,
+  }) => mergeBoth(local, remote, agreed: agreed, localWins: localWins).items;
+
+  group("names stay unique", () {
+    // Each device added Ollama Cloud for itself, under an id of its own.
+    final here = {
+      "provider:mine": {"name": "Ollama Cloud", "key": "k-here"},
+      "provider:a": {"name": "A"},
+    };
+    final there = {
+      "provider:theirs": {"name": "ollama cloud ", "key": "k-there"},
+      "provider:b": {"name": "B"},
+    };
+
+    test("the winner's of two sharing a name stays", () {
+      expect(merge(here, there), {
+        "provider:mine": {"name": "Ollama Cloud", "key": "k-here"},
+        "provider:a": {"name": "A"},
+        "provider:b": {"name": "B"},
+      });
+      expect(merge(here, there, localWins: false).keys, {
+        "provider:theirs",
+        "provider:a",
+        "provider:b",
+      });
+    });
+
+    test("a rename is the same provider, synced by its id", () {
+      final agreed = {
+        "provider:x": {"name": "Work"},
+      };
+      expect(
+        merge(
+          {
+            "provider:x": {"name": "Work"},
+          },
+          {
+            "provider:x": {"name": "University"},
+          },
+          agreed: agreed,
+        ),
+        {
+          "provider:x": {"name": "University"},
+        },
+      );
+    });
+
+    test("of two renamed onto one name, the winner's own stays", () {
+      final agreed = {
+        "provider:x": {"name": "Home"},
+        "provider:y": {"name": "Work"},
+      };
+      // The winner renamed y to Lab; the loser renamed x to Lab.
+      final winner = {
+        "provider:x": {"name": "Home"},
+        "provider:y": {"name": "Lab"},
+      };
+      final loser = {
+        "provider:x": {"name": "Lab"},
+        "provider:y": {"name": "Work"},
+      };
+      final merged = mergeBoth(winner, loser, agreed: agreed);
+      expect(merged.items, {
+        "provider:y": {"name": "Lab"},
+      });
+      expect(merged.replaced, {"x": "y"});
+    });
+  });
 
   group("a first sync", () {
     test("keeps an item only one side has", () {
