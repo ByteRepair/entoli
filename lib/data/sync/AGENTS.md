@@ -644,7 +644,8 @@ because it crosses a method channel, which is why `deviceHostname` is a
 A name is for showing and nothing else: no token, probe, discovery reply or
 key involves one. A peer's record takes the name the peer gives on every
 connection until the user renames it here (`PairedDevice.renamed`), after
-which the user's stands.
+which the user's stands; a record from before the flag is the user's,
+"localhost" aside (8.9.0's migration).
 
 ## Being dialled again
 
