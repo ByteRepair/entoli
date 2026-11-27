@@ -748,12 +748,17 @@ class ChatRepository {
 
   /// Delete every expired chat except [exceptId] (the one currently open, which
   /// is handled by the on-open prompt). Called at startup and on a 30-minute
-  /// timer.
+  /// timer. One that cannot be deleted — a workspace file a container left
+  /// owned by another user — is said and left for the next sweep: startup
+  /// waits on this, and one stuck chat must not keep the app from opening.
   Future<void> sweepExpired({String? exceptId}) async {
     final chats = await listChats();
     await Future.wait([
       for (final c in chats)
-        if (c.id != exceptId && c.isExpired()) deleteChat(c.id),
+        if (c.id != exceptId && c.isExpired())
+          deleteChat(c.id).catchError(
+            (Object e) => logFailure("chats", "expired ${c.id} kept", e),
+          ),
     ]);
   }
 
