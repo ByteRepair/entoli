@@ -46,6 +46,7 @@ class AnthropicProvider extends AnthropicCompatibleProvider {
   );
 
   static const _terms = PresetTerms(
+    maker: "Anthropic",
     blurb: "Claude models.",
     prompts: PromptUse.notTrained,
     policy: "https://www.anthropic.com/legal/commercial-terms",

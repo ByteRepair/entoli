@@ -265,12 +265,17 @@ enum ProviderTag {
 /// `settings.json` and a policy change is a release, not a migration.
 class PresetTerms {
   const PresetTerms({
+    required this.maker,
     required this.blurb,
     required this.prompts,
     this.freeTier,
     this.policy,
     this.keyUrl,
   });
+
+  /// The company behind it, which the Add provider page groups and filters
+  /// by: a constant, not the preset's label, which a rename would split.
+  final String maker;
 
   final String blurb;
   final PromptUse prompts;

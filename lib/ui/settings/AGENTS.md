@@ -379,13 +379,13 @@ local server, and an endpoint typed in by hand carries its address in front
 one, since the key and a program's sign-in go with it. Adding one opens
 `pickProviderPreset` (`provider_picker.dart`), a page of its own: every
 preset and every program this platform runs, as a card under its company's
-mark (an initial, not a logo: Anthropic's trademark terms allow its marks only
+`ProviderMark` (an initial, the model catalog's too, not a logo: Anthropic's trademark terms allow its marks only
 in material it approves and forbid recolouring them), with no grouping. Above
 the cards are two rows of `ToggleChip`s: the `ProviderTag`s (Private, Privacy
 controls, Paid, Free), every one picked required, so Free and Private shows
 nothing; and the companies, any one picked allowed, since an offer has one
 (`ProviderFilter`, `lib/app/settings/provider_filter.dart`). A provider's tags
-are read off its `terms`; a plan's program is Privacy controls and Paid, its
+are read off its `terms`, which also name its company (`maker`); a plan's program is Privacy controls and Paid, its
 account settings deciding the training, and a model run here is Private
 alone. Custom is a card only while nothing is picked, having no tags. A free
 tier is agreed to in a dialog before anything else is asked. Then

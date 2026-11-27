@@ -31,8 +31,9 @@ abstract class LlmProvider {
   String get displayName => config.displayName;
 
   /// The company behind it, which the Add provider page filters by: two
-  /// offers of one company (its API and its plan's program) share it.
-  String get maker => displayName;
+  /// offers of one company (its API and its plan's program) share it. An
+  /// endpoint typed in by hand is its own.
+  String get maker => terms?.maker ?? displayName;
 
   /// What it is, in a line under its name.
   String? get blurb => terms?.blurb;
@@ -42,14 +43,15 @@ abstract class LlmProvider {
   Set<ProviderTag> get tags {
     final terms = this.terms;
     if (terms == null) return const {};
-    final local = terms.prompts == PromptUse.local;
+    final privacy = switch (terms.prompts) {
+      PromptUse.local || PromptUse.notTrained => ProviderTag.private,
+      PromptUse.trainedWhenFree ||
+      PromptUse.dependsOnRoute => ProviderTag.privacyControls,
+      PromptUse.unstated => null,
+    };
     return {
-      if (terms.prompts case PromptUse.local || PromptUse.notTrained)
-        ProviderTag.private,
-      if (terms.prompts
-          case PromptUse.trainedWhenFree || PromptUse.dependsOnRoute)
-        ProviderTag.privacyControls,
-      if (!local) ProviderTag.paid,
+      ?privacy,
+      if (terms.prompts != PromptUse.local) ProviderTag.paid,
       if (terms.freeTier != null) ProviderTag.free,
     };
   }

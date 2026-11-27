@@ -82,16 +82,16 @@ class ProjectBadge extends ConsumerWidget {
   final bool? omada;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => ToggleChip(
-    leading: switch (projectIcon(project)) {
-      final icon? => Icon(icon, size: 18),
-      null => null,
-    },
-    label: Text(
-      projectLabel(project),
-      style: projectLabelStyle(omada ?? ref.watch(omadaOnProvider(project))),
-    ),
-    selected: selected,
-    onSelected: onSelected,
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final icon = projectIcon(project);
+    return ToggleChip(
+      leading: icon == null ? null : Icon(icon, size: 18),
+      label: Text(
+        projectLabel(project),
+        style: projectLabelStyle(omada ?? ref.watch(omadaOnProvider(project))),
+      ),
+      selected: selected,
+      onSelected: onSelected,
+    );
+  }
 }

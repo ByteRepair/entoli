@@ -7,7 +7,10 @@ import "../../app/settings/provider_filter.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../providers.dart";
 import "../widgets/catalog.dart" show InfoTag, InfoTone;
+import "package:entoli_core/view/widgets/empty_pane.dart";
+
 import "../widgets/chip_row.dart";
+import "../widgets/provider_mark.dart";
 import "../widgets/toggle_chip.dart";
 
 /// Ask which provider to add, on a page of its own: every offer as a card,
@@ -64,48 +67,28 @@ class _ProviderPickerPageState extends ConsumerState<ProviderPickerPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
-          ChipRow(
-            settled: true,
-            entries: [
-              for (final tag in ProviderTag.values)
-                ChipRowEntry(
-                  key: ValueKey(tag),
-                  child: ToggleChip(
-                    leading: Icon(tag.icon, size: 18),
-                    label: Text(tag.label),
-                    selected: _filter.tags.contains(tag),
-                    onSelected: (_) =>
-                        setState(() => _filter = _filter.toggleTag(tag)),
-                  ),
-                ),
-            ],
+          _FilterRow(
+            items: ProviderTag.values,
+            leading: (tag) => Icon(tag.icon, size: 18),
+            label: (tag) => tag.label,
+            selected: _filter.tags.contains,
+            onToggle: (tag) => setState(() => _filter = _filter.toggleTag(tag)),
           ),
           const SizedBox(height: 8),
-          ChipRow(
-            settled: true,
-            entries: [
-              for (final maker in _makers)
-                ChipRowEntry(
-                  key: ValueKey(maker),
-                  child: ToggleChip(
-                    leading: MakerMark(maker, radius: 10),
-                    label: Text(maker),
-                    selected: _filter.makers.contains(maker),
-                    onSelected: (_) =>
-                        setState(() => _filter = _filter.toggleMaker(maker)),
-                  ),
-                ),
-            ],
+          _FilterRow(
+            items: _makers,
+            leading: (maker) => ProviderMark(maker, radius: 10),
+            label: (maker) => maker,
+            selected: _filter.makers.contains,
+            onToggle: (maker) =>
+                setState(() => _filter = _filter.toggleMaker(maker)),
           ),
           const SizedBox(height: 16),
           if (shown.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text(
-                "No provider is all of these.",
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+            const EmptyPane(
+              icon: Icons.filter_alt_off_outlined,
+              title: "No provider is all of these.",
+              detail: "Untick a filter to see more.",
             ),
           _CardGrid(
             children: [
@@ -114,7 +97,7 @@ class _ProviderPickerPageState extends ConsumerState<ProviderPickerPage> {
               // An endpoint typed in has no tags, so any filter leaves it out.
               if (_filter.isEmpty)
                 _OfferCard(
-                  leading: const _Mark(child: Icon(Icons.link)),
+                  leading: const CircleAvatar(child: Icon(Icons.link)),
                   title: "Custom",
                   blurb:
                       "Any OpenAI- or Anthropic-compatible endpoint, by URL.",
@@ -126,6 +109,40 @@ class _ProviderPickerPageState extends ConsumerState<ProviderPickerPage> {
       ),
     );
   }
+}
+
+/// A row of things to filter by, each ticked on and off.
+class _FilterRow<T extends Object> extends StatelessWidget {
+  const _FilterRow({
+    required this.items,
+    required this.leading,
+    required this.label,
+    required this.selected,
+    required this.onToggle,
+  });
+
+  final List<T> items;
+  final Widget Function(T) leading;
+  final String Function(T) label;
+  final bool Function(T) selected;
+  final void Function(T) onToggle;
+
+  @override
+  Widget build(BuildContext context) => ChipRow(
+    settled: true,
+    entries: [
+      for (final item in items)
+        ChipRowEntry(
+          key: ValueKey(item),
+          child: ToggleChip(
+            leading: leading(item),
+            label: Text(label(item)),
+            selected: selected(item),
+            onSelected: (_) => onToggle(item),
+          ),
+        ),
+    ],
+  );
 }
 
 /// Cards as many abreast as fit at a readable width, one on a phone.
@@ -165,15 +182,14 @@ class ProviderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _OfferCard(
-    leading: MakerMark(offer.maker),
+    leading: ProviderMark(offer.maker),
     title: offer.displayName,
     blurb: offer.blurb,
     tags: [
       for (final tag in ProviderTag.values)
         if (offer.tags.contains(tag))
           InfoTag(tag.icon, tag.label, tone: tag.tone),
-      if (offer.terms?.prompts case final use? when _caveat(use) != null)
-        _caveat(use)!,
+      ?_caveat(offer.terms?.prompts),
       if (offer case final CliProvider cli)
         InfoTag(Icons.account_circle_outlined, cli.account),
       if (offer.imageModel != null)
@@ -183,7 +199,7 @@ class ProviderCard extends StatelessWidget {
   );
 
   /// What the tags leave unsaid about the prompts, where it is a warning.
-  static InfoTag? _caveat(PromptUse use) => switch (use) {
+  static InfoTag? _caveat(PromptUse? use) => switch (use) {
     PromptUse.trainedWhenFree => const InfoTag(
       Icons.visibility_outlined,
       "Free tier trains on prompts",
@@ -198,7 +214,7 @@ class ProviderCard extends StatelessWidget {
       Icons.alt_route,
       "Training depends on the model",
     ),
-    PromptUse.local || PromptUse.notTrained => null,
+    PromptUse.local || PromptUse.notTrained || null => null,
   };
 }
 
@@ -251,63 +267,6 @@ class _OfferCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// A company's mark: its initial in a circle of a hue of its own, so OpenAI
-/// and Ollama are told apart by more than the letter. Not its logo, which
-/// the companies' trademark terms keep to what they approve.
-class MakerMark extends StatelessWidget {
-  const MakerMark(this.maker, {super.key, this.radius = 18});
-
-  final String maker;
-  final double radius;
-
-  @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    // A string's hashCode is not stable across runs; its code units are.
-    final hue = maker.codeUnits.fold(0, (h, c) => (h * 31 + c) % 360);
-    final colour = HSLColor.fromAHSL(
-      1,
-      hue.toDouble(),
-      0.45,
-      dark ? 0.3 : 0.85,
-    );
-    return _Mark(
-      radius: radius,
-      background: colour.toColor(),
-      foreground: colour.withLightness(dark ? 0.9 : 0.2).toColor(),
-      child: Text(
-        maker.characters.first.toUpperCase(),
-        style: TextStyle(fontSize: radius, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-}
-
-class _Mark extends StatelessWidget {
-  const _Mark({
-    required this.child,
-    this.radius = 18,
-    this.background,
-    this.foreground,
-  });
-
-  final Widget child;
-  final double radius;
-  final Color? background;
-  final Color? foreground;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: background ?? colors.secondaryContainer,
-      foregroundColor: foreground ?? colors.onSecondaryContainer,
-      child: child,
     );
   }
 }

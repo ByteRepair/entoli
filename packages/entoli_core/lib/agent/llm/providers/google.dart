@@ -20,10 +20,8 @@ class GoogleProvider extends OpenAiCompatibleProvider {
     defaultLightModelId: "gemini-flash-lite-latest",
   );
 
-  @override
-  String get maker => "Google";
-
   static const _terms = PresetTerms(
+    maker: "Google",
     blurb: "Gemini models, with a free tier.",
     prompts: PromptUse.trainedWhenFree,
     freeTier:

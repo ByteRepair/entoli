@@ -20,6 +20,7 @@ class MistralProvider extends OpenAiCompatibleProvider with OfferedByName {
   );
 
   static const _terms = PresetTerms(
+    maker: "Mistral",
     blurb: "Mistral and Devstral models, on a Le Chat plan or the API.",
     prompts: PromptUse.trainedWhenFree,
     freeTier:

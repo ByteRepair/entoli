@@ -11,14 +11,12 @@ class ToggleChip extends StatelessWidget {
     required this.selected,
     required this.onSelected,
     this.leading,
-    this.tooltip,
   });
 
   final Widget label;
   final Widget? leading;
   final bool selected;
   final ValueChanged<bool> onSelected;
-  final String? tooltip;
 
   @override
   Widget build(BuildContext context) => AnimatedSize(
@@ -35,7 +33,6 @@ class ToggleChip extends StatelessWidget {
       ),
       selected: selected,
       onSelected: onSelected,
-      tooltip: tooltip,
     ),
   );
 }
