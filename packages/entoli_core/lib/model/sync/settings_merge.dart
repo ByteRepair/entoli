@@ -3,6 +3,8 @@ import "dart:convert";
 import "package:collection/collection.dart";
 import "package:crypto/crypto.dart";
 
+import "../llm_provider.dart" show providerNameKey;
+
 /// What two paired devices keep in step of their settings, item by item:
 /// the profile, and each provider by its id. An item is its fields as JSON
 /// values; one the device does not have is not in the map.
@@ -144,33 +146,36 @@ SyncedItems mergeSettings({
 
 /// [items] with no two providers of one name, which is what a model is
 /// picked by: of two entries sharing one — each device having added Ollama
-/// Cloud for itself, under ids of its own — the [winner]'s stays and the
-/// other goes. Neither the winner's, as when both arrived from the loser
-/// under names since changed, the first by id stays, so both sides keep
-/// the same one.
+/// Cloud for itself, under ids of its own — the one the [winner] has under
+/// that name stays and the other goes. Where the winner has neither under
+/// it, as when the loser renamed one onto the other's, the first by id
+/// stays, so both sides keep the same one.
 SyncedItems _oneOfEachName(SyncedItems items, {required SyncedItems winner}) {
   final byName = <String, List<String>>{};
   for (final MapEntry(:key, :value) in items.entries) {
     if (providerIdOf(key) == null) continue;
-    final name = (value["name"] as String? ?? providerIdOf(key)!)
-        .trim()
-        .toLowerCase();
-    (byName[name] ??= []).add(key);
+    (byName[_nameOf(key, value)] ??= []).add(key);
   }
   final dropped = <String>{
-    for (final keys in byName.values)
-      if (keys.length > 1)
-        ...(keys..sort((a, b) {
-              final aWins = winner.containsKey(a) ? 0 : 1;
-              final bWins = winner.containsKey(b) ? 0 : 1;
-              return aWins != bWins ? aWins - bWins : a.compareTo(b);
-            }))
-            .skip(1),
+    for (final MapEntry(key: name, value: keys) in byName.entries)
+      if (keys.length > 1) ...(keys..sort(_winnerFirst(name, winner))).skip(1),
   };
   return {
     for (final MapEntry(:key, :value) in items.entries)
       if (!dropped.contains(key)) key: value,
   };
+}
+
+String _nameOf(String key, Map<String, Object?> item) =>
+    providerNameKey(item["name"] as String? ?? providerIdOf(key)!);
+
+/// The key the [winner] holds under [name] first, then by id.
+Comparator<String> _winnerFirst(String name, SyncedItems winner) {
+  int rank(String key) => switch (winner[key]) {
+    final item? when _nameOf(key, item) == name => 0,
+    _ => 1,
+  };
+  return (a, b) => rank(a) != rank(b) ? rank(a) - rank(b) : a.compareTo(b);
 }
 
 Map<String, Object?>? _mergeItem(

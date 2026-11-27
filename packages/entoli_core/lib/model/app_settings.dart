@@ -263,6 +263,21 @@ class AppSettings {
   ApproveMode get approveMode => doc.of(SettingKeys.approveMode);
   set approveMode(ApproveMode value) => doc.set(SettingKeys.approveMode, value);
 
+  Map<String, String> get providerAliases =>
+      doc.of(SettingKeys.providerAliases);
+  set providerAliases(Map<String, String> value) =>
+      doc.set(SettingKeys.providerAliases, value);
+
+  /// The provider [id] names now: itself, or the one a sync replaced it with.
+  String providerNow(String id) {
+    final seen = <String>{};
+    var now = id;
+    while (seen.add(now)) {
+      now = providerAliases[now] ?? now;
+    }
+    return now;
+  }
+
   List<LlmProviderConfig> get llmProviders => doc.of(SettingKeys.llmProviders);
   set llmProviders(List<LlmProviderConfig> value) =>
       doc.set(SettingKeys.llmProviders, value);
@@ -444,9 +459,9 @@ class AppSettings {
   /// Whether a provider other than [exceptId] is called [name], whatever its
   /// case: a name is what tells two of them apart.
   bool providerNameTaken(String name, {String? exceptId}) {
-    final lower = name.trim().toLowerCase();
+    final key = providerNameKey(name);
     return llmProviders.any(
-      (p) => p.id != exceptId && p.displayName.toLowerCase() == lower,
+      (p) => p.id != exceptId && providerNameKey(p.displayName) == key,
     );
   }
 

@@ -901,7 +901,7 @@ class ChatRepository {
 /// the app default named instead.
 ModelChoice chatModelOf(ChatMeta meta, AppSettings settings) =>
     meta.provider != null
-    ? (modelId: meta.model, providerId: meta.provider)
+    ? (modelId: meta.model, providerId: settings.providerNow(meta.provider!))
     : (
         modelId: meta.model ?? settings.defaultModelId,
         providerId: meta.model != null ? null : settings.defaultProviderId,

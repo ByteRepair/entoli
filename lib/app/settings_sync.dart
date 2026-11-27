@@ -86,12 +86,23 @@ class SettingsSyncDriver implements SyncedSettings {
       for (final MapEntry(key: id, value: (config, _)) in incoming.entries)
         if (!local.containsKey(id)) config,
     ];
+    // An entry here that gave way to the peer's of its name: whatever
+    // picked it picks that one now.
+    final arrived = {
+      for (final p in providers)
+        if (!local.containsKey(p.id)) providerNameKey(p.displayName): p.id,
+    };
+    final replacedBy = {
+      for (final p in settings.llmProviders)
+        if (!incoming.containsKey(p.id))
+          p.id: ?arrived[providerNameKey(p.displayName)],
+    };
     // A list set again rebuilds every model list, so only where it moved.
     if (!const DeepCollectionEquality().equals(
       [for (final p in providers) p.toJson()],
       [for (final p in settings.llmProviders) p.toJson()],
     )) {
-      await notifier.setProviders(providers);
+      await notifier.setProviders(providers, replacedBy: replacedBy);
     }
   }
 

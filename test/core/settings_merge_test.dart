@@ -71,18 +71,23 @@ void main() {
       );
     });
 
-    test("a rename onto another's name leaves the winner's", () {
+    test("of two renamed onto one name, the winner's own stays", () {
       final agreed = {
-        "provider:x": {"name": "X"},
-        "provider:y": {"name": "Y"},
+        "provider:x": {"name": "Home"},
+        "provider:y": {"name": "Work"},
       };
-      final renamed = {
-        "provider:x": {"name": "Y"},
-        "provider:y": {"name": "Y2"},
+      // The winner renamed y to Lab; the loser renamed x to Lab.
+      final winner = {
+        "provider:x": {"name": "Home"},
+        "provider:y": {"name": "Lab"},
       };
-      final merged = merge(agreed, renamed, agreed: agreed, localWins: false);
-      expect(merged["provider:x"], {"name": "Y"});
-      expect(merged["provider:y"], {"name": "Y2"});
+      final loser = {
+        "provider:x": {"name": "Lab"},
+        "provider:y": {"name": "Work"},
+      };
+      expect(merge(winner, loser, agreed: agreed), {
+        "provider:y": {"name": "Lab"},
+      });
     });
   });
 

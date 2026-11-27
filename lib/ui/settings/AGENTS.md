@@ -396,12 +396,14 @@ Opt-in data collection; one that trains until the account turns it off or
 pays (a plan's program, a free tier) is Opt-out. A model run here is Private
 alone. Custom is a card only while nothing is picked, having no tags. A free
 tier is agreed to in a dialog before anything else is asked. Then
-`ProviderDialog` opens over the page, which stays until a provider is saved,
-so backing out of a sign-in is back to the choice: `ProviderDialog` ("Connect X" for a preset), over a `ProviderEdit`
+`ProviderDialog` ("Connect X" for a preset) opens over the page, which stays
+until a provider is saved, so backing out of a sign-in is back to the choice.
+It is over a `ProviderEdit`
 (`lib/app/settings/provider_edit.dart`), which holds the entry being edited
 and builds what is saved: an empty base URL or models.dev id falls back to the
 preset's, and an empty name to the preset's name, numbered `-02`, `-03` on
-where an entry already has it, the name being what a model is picked by. A preset's dialog is written for someone who has
+where an entry already has it (`freeProviderName`, which a CLI connected by
+name from the tour is given too), the name being what tells two apart. A preset's dialog is written for someone who has
 never seen a base URL: what a key is and a link to make one, the key field as
 "Access key" and focused, and the provider's privacy policy, with the technical
 fields — name, API, base URL, models, the named variable — folded under

@@ -9,6 +9,7 @@ import "../../app/settings/provider_filter.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../providers.dart";
 import "../widgets/catalog.dart" show InfoTag, InfoTone;
+import "package:entoli_core/view/widgets/busy.dart" show guarded;
 import "package:entoli_core/view/widgets/empty_pane.dart";
 
 import "../widgets/chip_row.dart";
@@ -106,13 +107,16 @@ class _ProviderPickerPageState extends ConsumerState<ProviderPickerPage> {
           _CardGrid(
             children: [
               for (final offer in shown)
-                ProviderCard(offer, onTap: () => _choose(offer)),
+                ProviderCard(
+                  offer,
+                  onTap: () => guarded(context, () => _choose(offer)),
+                ),
               // An endpoint typed in has no tags, so any filter leaves it out.
               if (_filter.isEmpty)
                 _OfferCard(
                   leading: const CircleAvatar(child: Icon(Icons.link)),
                   title: "Custom endpoint",
-                  onTap: () => _choose(null),
+                  onTap: () => guarded(context, () => _choose(null)),
                 ),
             ],
           ),

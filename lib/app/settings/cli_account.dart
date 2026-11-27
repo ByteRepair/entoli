@@ -39,7 +39,18 @@ Future<void> connectCli(
       .where((p) => p.api == service.config.api && p.command == null)
       .firstOrNull;
   // A new entry's id first: its account is kept in a folder named by it.
-  final config = existing ?? service.config.copyWith(id: const Uuid().v4());
+  // Under a name no other entry has: one with a command of its own may
+  // already be called this.
+  final settings = read(appSettingsProvider);
+  final config =
+      existing ??
+      service.config.copyWith(
+        id: const Uuid().v4(),
+        name: freeProviderName(
+          service.config.displayName,
+          settings.providerNameTaken,
+        ),
+      );
   if (!await signIn(config)) {
     if (existing == null) await forgetCliEntry(programs, config.id);
     return;

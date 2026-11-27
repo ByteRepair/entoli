@@ -1,5 +1,19 @@
 import "model_info.dart";
 
+/// What two provider names are told apart by: not case, nor the space around
+/// them. A device keeps them unique by it, and a sync too.
+String providerNameKey(String name) => name.trim().toLowerCase();
+
+/// [base], or where [taken] says it is in use, numbered on from 02 — the
+/// unnumbered one being the first.
+String freeProviderName(String base, bool Function(String name) taken) {
+  if (!taken(base)) return base;
+  for (var n = 2; ; n++) {
+    final numbered = "$base-${n.toString().padLeft(2, "0")}";
+    if (!taken(numbered)) return numbered;
+  }
+}
+
 /// Which wire format a provider speaks. Everything that copied OpenAI's
 /// `/chat/completions` is [openai]; Anthropic's `/messages` is its own.
 /// The CLI ones are no wire at all: another harness's command-line program,

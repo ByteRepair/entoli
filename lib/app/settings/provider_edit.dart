@@ -86,11 +86,7 @@ class ProviderEdit {
   /// first. The name is what a model is picked by, so two cannot share one.
   String get derivedName {
     final base = preset?.displayName ?? "";
-    if (base.isEmpty || !nameTaken(base)) return base;
-    for (var n = 2; ; n++) {
-      final numbered = "$base-${n.toString().padLeft(2, "0")}";
-      if (!nameTaken(numbered)) return numbered;
-    }
+    return base.isEmpty ? base : freeProviderName(base, nameTaken);
   }
 
   String get resolvedBaseUrl {

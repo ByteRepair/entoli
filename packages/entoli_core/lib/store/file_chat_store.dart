@@ -263,9 +263,12 @@ class FileChatStore implements ChatStore {
   @override
   Future<void> delete(String id) async {
     final project = await projectOf(id);
+    // The workspace first: it is what may refuse (a file a container left
+    // owned by another user), and a chat whose own directory is gone is not
+    // listed again, so its workspace would never be swept.
     for (final path in [
-      config.chatDir(id, project: project),
       config.workspaceDir(id, project: project),
+      config.chatDir(id, project: project),
     ]) {
       final dir = _fs.directory(path);
       if (!dir.existsSync()) continue;
