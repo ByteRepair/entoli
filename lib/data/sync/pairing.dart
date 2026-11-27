@@ -798,7 +798,14 @@ class SyncPairing {
       }
 
       final deviceId = peer.id;
-      final peerDevice = await registry.byId(deviceId);
+      // A name is for showing only: the one the peer gives now replaces the
+      // one it gave before, unless the user named it here.
+      var peerDevice = await registry.byId(deviceId);
+      if (peerDevice?.announcing(peer.name) case final named?
+          when named != peerDevice) {
+        peerDevice = named;
+        await registry.add(named);
+      }
       final live = LivePeer(
         channel,
         deviceId: deviceId,
@@ -862,6 +869,14 @@ class SyncPairing {
           addedAt: DateTime.now(),
         );
         await registry.add(device);
+        await registry.setPairingSecret(deviceId, psk);
+      } else if (knownDeviceId == null) {
+        // Paired again over a record this side kept, the other having
+        // forgotten it: the secret is this pairing's. Keeping the old one
+        // admitted the old token after a restart, which the other side no
+        // longer sends, and each refused the other.
+        final old = await registry.pairingSecret(deviceId);
+        if (old != null && old != psk) _forgetReconnect(old);
         await registry.setPairingSecret(deviceId, psk);
       }
       // The registry's own verb rather than the same two fields written here:

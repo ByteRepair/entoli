@@ -45,6 +45,7 @@ final class AppDelegate: FlutterAppDelegate {
     // The models run in the app's own process here: iOS cannot start one.
     MlxChannel.register(with: messenger)
     ClipboardChannel.register(with: messenger)
+    DeviceChannel.register(with: messenger)
     IntentBridge.shared.register(with: messenger)
     BrowserChannel.register(with: messenger)
     FilesChannel.register(with: messenger)
@@ -121,6 +122,25 @@ final class FlutterContainer: UIViewController {
       flutter.beginAppearanceTransition(true, animated: false)
       flutter.endAppearanceTransition()
     }
+  }
+}
+
+/// The device's name, the sync device name's default: `gethostname` answers
+/// "localhost" here. Without Apple's user-assigned-device-name entitlement
+/// iOS 16 on gives the model ("iPhone"), not what the user called it. Here
+/// rather than its own file for the reason the clipboard's is.
+enum DeviceChannel {
+  private static var channel: FlutterMethodChannel?
+
+  static func register(with messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: "agent_chat/device", binaryMessenger: messenger)
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "name": result(UIDevice.current.name)
+      default: result(FlutterMethodNotImplemented)
+      }
+    }
+    Self.channel = channel
   }
 }
 

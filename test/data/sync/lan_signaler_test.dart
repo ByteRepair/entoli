@@ -202,6 +202,23 @@ void main() {
     );
   });
 
+  test("a peer that does not hold the token says so, not the firewall", () {
+    expect(
+      client.exchange(
+        addresses: ["192.168.1.5:47921"],
+        token: "not.armed",
+        offerSdp: "v=0 offer",
+      ),
+      throwsA(
+        isA<SignalingException>().having(
+          (e) => e.message,
+          "message",
+          contains("does not recognise this pairing"),
+        ),
+      ),
+    );
+  });
+
   test("with nothing reachable it says so rather than hanging", () async {
     silent = {"192.168.1.3:47921"};
     await expectLater(

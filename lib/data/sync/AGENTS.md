@@ -631,12 +631,20 @@ The sync device name is the machine's own hostname where it has one, falling
 back to the first characters of the key fingerprint. A user's own name for it
 wins over both. The hostname comes in as a constructor argument rather than
 being read in the hub, because `Platform.localHostname` is not the answer
-everywhere: on Android it is `localhost`, so the system device name is read
-through `agent_chat/device` instead — `Settings.Global device_name`, the name
-the user set in system settings, falling back to `Build.MODEL`. `minSdk` is 26
-and the setting has been there since 24, so no fallback path is needed. The
-read is async because it crosses a method channel, which is why
-`deviceHostname` is a `Future<String?>` and `main` awaits it.
+everywhere: on the phones it is `localhost`, so the system device name is read
+through `agent_chat/device` instead (`SystemDeviceName`). Android answers
+`Settings.Global device_name`, the name the user set in system settings,
+falling back to `Build.MODEL`; `minSdk` is 26 and the setting has been there
+since 24, so no fallback path is needed. iOS answers `UIDevice.current.name`,
+which from iOS 16 is the model ("iPhone") unless the app holds Apple's
+user-assigned-device-name entitlement, which it does not. The read is async
+because it crosses a method channel, which is why `deviceHostname` is a
+`Future<String?>` and `main` awaits it.
+
+A name is for showing and nothing else: no token, probe, discovery reply or
+key involves one. A peer's record takes the name the peer gives on every
+connection until the user renames it here (`PairedDevice.renamed`), after
+which the user's stands.
 
 ## Being dialled again
 

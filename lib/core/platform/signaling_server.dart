@@ -64,7 +64,18 @@ class SignalingServer implements LanSignaling {
       server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
     }
     _server = server;
-    server.listen(_handle, onError: (_) {});
+    // A listener the system closed under the app — iOS takes a suspended
+    // app's sockets — is gone, so the next start binds again rather than
+    // answering with a port nothing is on.
+    server.listen(
+      _handle,
+      onError: (_) {},
+      onDone: () {
+        if (identical(_server, server)) _server = null;
+      },
+    );
+    _udp?.close();
+    _udp = null;
     await _listenForDiscovery(server.port);
     return server.port;
   }
@@ -83,29 +94,34 @@ class SignalingServer implements LanSignaling {
               preferredSignalingPort,
             )
             ..broadcastEnabled = true;
-      udp.listen((event) {
-        final datagram = event == RawSocketEvent.read ? udp.receive() : null;
-        if (datagram == null) return;
-        try {
-          final message =
-              jsonDecode(utf8.decode(datagram.data)) as Map<String, dynamic>;
-          final answer = _routes.answerProbe(message);
-          if (answer != null) {
-            udp.send(
-              utf8.encode(jsonEncode({...answer, "port": httpPort})),
-              datagram.address,
-              datagram.port,
-            );
-          } else {
-            for (final heard in [..._discoveries]) {
-              heard(datagram.address.address, message);
+      udp.listen(
+        onDone: () {
+          if (identical(_udp, udp)) _udp = null;
+        },
+        (event) {
+          final datagram = event == RawSocketEvent.read ? udp.receive() : null;
+          if (datagram == null) return;
+          try {
+            final message =
+                jsonDecode(utf8.decode(datagram.data)) as Map<String, dynamic>;
+            final answer = _routes.answerProbe(message);
+            if (answer != null) {
+              udp.send(
+                utf8.encode(jsonEncode({...answer, "port": httpPort})),
+                datagram.address,
+                datagram.port,
+              );
+            } else {
+              for (final heard in [..._discoveries]) {
+                heard(datagram.address.address, message);
+              }
             }
+          } catch (_) {
+            // Anything else on the LAN may send to this port; traffic, not a
+            // failure.
           }
-        } catch (_) {
-          // Anything else on the LAN may send to this port; traffic, not a
-          // failure.
-        }
-      });
+        },
+      );
     } catch (error) {
       logFailure(
         "sync",

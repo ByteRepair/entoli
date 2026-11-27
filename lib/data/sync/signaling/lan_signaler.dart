@@ -48,12 +48,16 @@ class LanSignaler {
   }) async {
     Object? last;
     var outdated = false;
+    var refused = false;
     await for (final (address, status) in Stream.fromFutures(
       addresses.toSet().map((address) => _probe(address, token)),
     )) {
       // A build before the probe route answers it 404, and would refuse the
       // handshake on its version anyway.
       if (status == 404) outdated = true;
+      // It answered and does not hold this pair's token: reached, not
+      // blocked, so the firewall advice would send the user the wrong way.
+      if (status == 403) refused = true;
       if (status != 200) continue;
       try {
         return (
@@ -65,6 +69,12 @@ class LanSignaler {
       }
     }
     if (last == null && outdated) throw ProtocolMismatchException("older");
+    if (last == null && refused) {
+      throw const SignalingException(
+        "the other device does not recognise this pairing; remove it on "
+        "both devices and pair again",
+      );
+    }
     throw SignalingException(
       last == null
           ? "could not reach the other device; check that its firewall allows "

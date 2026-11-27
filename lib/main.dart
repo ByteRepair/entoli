@@ -630,6 +630,8 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
             );
         if (state == AppLifecycleState.resumed) {
           ref.read(appResumesProvider.notifier).resumed();
+          // Listening again where the system closed the listener while away.
+          unawaited(ref.read(syncHubProvider).ensureReady());
         }
       },
     );

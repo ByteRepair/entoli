@@ -874,6 +874,65 @@ void main() {
     expect(away.hub.peers.value[home.identity.id]?.status, PeerStatus.online);
   });
 
+  test("pairing again over a kept record takes the new secret", () async {
+    final old = generatePsk();
+    final first = loopbackPair();
+    await pairing(home, away, first.$1, first.$2, psk: old);
+    // Away forgot the pair; home kept its record.
+    await away.hub.revoke(home.identity.id);
+
+    final fresh = generatePsk();
+    final second = loopbackPair();
+    await pairing(home, away, second.$1, second.$2, psk: fresh);
+
+    expect(await home.registry.pairingSecret(away.identity.id), fresh);
+    expect(home.hub.admitsReconnect(fresh), isTrue);
+    expect(home.hub.admitsReconnect(old), isFalse);
+  });
+
+  group("a peer's name", () {
+    Future<void> redial() async {
+      final links = loopbackPair();
+      await pair(
+        links.$1,
+        links.$2,
+        knownToHome: away.identity.id,
+        knownToAway: home.identity.id,
+      );
+    }
+
+    test("is the one it gives, on every connection", () async {
+      final links = loopbackPair();
+      await pair(links.$1, links.$2);
+      final record = (await home.registry.byId(away.identity.id))!;
+      await home.registry.add(
+        PairedDevice(
+          id: record.id,
+          name: "localhost",
+          publicKey: record.publicKey,
+          addedAt: record.addedAt,
+        ),
+      );
+
+      await redial();
+
+      final now = (await home.registry.byId(away.identity.id))!;
+      expect(now.name, away.hub.deviceName);
+      expect(home.hub.peers.value[away.identity.id]?.name, now.name);
+    });
+
+    test("is the user's once renamed here", () async {
+      final links = loopbackPair();
+      await pair(links.$1, links.$2);
+      await home.hub.rename(away.identity.id, "Desk");
+
+      await redial();
+
+      expect((await home.registry.byId(away.identity.id))!.name, "Desk");
+      expect(home.hub.peers.value[away.identity.id]?.name, "Desk");
+    });
+  });
+
   test("a chat made after pairing appears in the mirror's list", () async {
     final links = loopbackPair();
     await pair(links.$1, links.$2);
