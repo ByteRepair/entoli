@@ -383,7 +383,9 @@ preset and every program this platform runs, as a card under its company's
 in material it approves and forbid recolouring them), with no grouping, every card one size in a centred grid (`_CardGrid`), its
 tags scrolling inside it rather than growing it. Above
 the cards are two rows of `ToggleChip`s: the `ProviderTag`s (Private, Opt-in
-data collection, Opt-out data collection, Paid, Free), every one picked
+data collection, Opt-out data collection, Paid, Free), in two groups of
+which one each may be picked (`TagGroup`: what is done with the prompts, and
+what it costs; picking one unpicks the rest of its group), every one picked
 required, so Free and Private shows
 nothing; and the companies, any one picked allowed, since an offer has one
 (`ProviderFilter`, `lib/app/settings/provider_filter.dart`). A provider's tags

@@ -2,9 +2,10 @@ import "package:entoli_core/model/llm_provider.dart";
 
 import "../../data/builtin/llm/providers/presets.dart";
 
-/// What the Add provider page narrows its offers to. Every tag picked must be
-/// one the offer carries, so the filter only ever tightens; a company picked
-/// is one of those the offer may be from, an offer having one company.
+/// What the Add provider page narrows its offers to. A tag is picked one of
+/// its group at a time, and every tag picked must be one the offer carries;
+/// a company picked is one of those the offer may be from, an offer having
+/// one company.
 class ProviderFilter {
   const ProviderFilter({this.tags = const {}, this.makers = const {}});
 
@@ -17,8 +18,13 @@ class ProviderFilter {
       offer.tags.containsAll(tags) &&
       (makers.isEmpty || makers.contains(offer.maker));
 
-  ProviderFilter toggleTag(ProviderTag tag) =>
-      ProviderFilter(tags: _toggled(tags, tag), makers: makers);
+  /// [tag] picked, in place of any other of its group, or unpicked.
+  ProviderFilter toggleTag(ProviderTag tag) => ProviderFilter(
+    tags: tags.contains(tag)
+        ? ({...tags}..remove(tag))
+        : {...tags.where((t) => t.group != tag.group), tag},
+    makers: makers,
+  );
 
   ProviderFilter toggleMaker(String maker) =>
       ProviderFilter(tags: tags, makers: _toggled(makers, maker));

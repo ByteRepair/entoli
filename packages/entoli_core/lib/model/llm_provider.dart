@@ -248,27 +248,33 @@ enum PromptUse {
 enum ProviderTag {
   /// Not trained on, or never leaving the machine, with no setting that
   /// could change it.
-  private("Private"),
+  private("Private", TagGroup.privacy),
 
   /// Not trained on unless the account turns it on: off by default, but a
   /// setting away.
-  optInCollection("Opt-in data collection"),
+  optInCollection("Opt-in data collection", TagGroup.privacy),
 
   /// Trained on unless the account turns it off, or pays for a plan that
   /// is not: on by default.
-  optOutCollection("Opt-out data collection"),
+  optOutCollection("Opt-out data collection", TagGroup.privacy),
 
   /// A hosted service someone pays for. A model run here is neither this
   /// nor [free]: there is no service to pay or not.
-  paid("Paid"),
+  paid("Paid", TagGroup.cost),
 
   /// A hosted service with a free tier.
-  free("Free");
+  free("Free", TagGroup.cost);
 
-  const ProviderTag(this.label);
+  const ProviderTag(this.label, this.group);
 
   final String label;
+
+  /// The filters it is one of: what is done with the prompts, or what it
+  /// costs. A filter picks at most one of a group.
+  final TagGroup group;
 }
+
+enum TagGroup { privacy, cost }
 
 /// What the Add provider list says about a preset, beside its name. Held by the
 /// provider's class rather than its config, so it is never written into

@@ -44,6 +44,18 @@ void main() {
     }
   });
 
+  test("one tag of a group at a time, and a second group narrows", () {
+    final free = const ProviderFilter().toggleTag(ProviderTag.free);
+    expect(free.toggleTag(ProviderTag.paid).tags, {ProviderTag.paid});
+    final optIn = free
+        .toggleTag(ProviderTag.private)
+        .toggleTag(ProviderTag.optInCollection);
+    expect(optIn.tags, {ProviderTag.free, ProviderTag.optInCollection});
+    expect(optIn.toggleTag(ProviderTag.optInCollection).tags, {
+      ProviderTag.free,
+    });
+  });
+
   test("companies widen among themselves, and a toggle undoes itself", () {
     final ollama = const ProviderFilter().toggleMaker("Ollama");
     expect(shown(ollama), ["Ollama Cloud", "Ollama (local)"]);
