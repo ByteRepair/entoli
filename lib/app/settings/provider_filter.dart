@@ -34,9 +34,10 @@ List<LlmProvider> providerOffers() {
     ...llmProviderPresets,
     ...cliProviderPresets.where((cli) => cli.supported),
   ];
-  final order = makersOf(offers);
-  return offers
-    ..sort((a, b) => order.indexOf(a.maker).compareTo(order.indexOf(b.maker)));
+  return [
+    for (final maker in makersOf(offers))
+      ...offers.where((offer) => offer.maker == maker),
+  ];
 }
 
 /// The companies behind [offers], in the order they first appear.

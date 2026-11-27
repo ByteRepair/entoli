@@ -68,30 +68,28 @@ class ProvidersSection extends ConsumerWidget {
 
   /// Asked first: the key and a program's sign-in go with it, and neither
   /// comes back with a second Add.
-  Future<void> _remove(
-    BuildContext context,
-    WidgetRef ref,
-    LlmProviderConfig provider,
-  ) async {
-    final notifier = ref.read(appSettingsProvider.notifier);
+  Future<void> _remove(BuildContext context, LlmProviderConfig provider) async {
+    // Read now: the section can be rebuilt away while the dialog is open.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final gone = provider.api.isCli
+        ? "Its sign-in on this device goes with it, and anything"
+        : providerOf(provider).needsKey
+        ? "Its saved key goes with it, and anything"
+        : "Anything";
     final sure = await confirm(
       context,
       title: "Remove ${provider.displayName}?",
-      message: provider.api.isCli
-          ? "Its sign-in on this device goes with it, and anything set to "
-                "its models falls back to the default."
-          : "Its saved key goes with it, and anything set to its models "
-                "falls back to the default.",
+      message: "$gone set to its models falls back to the default.",
       confirmLabel: "Remove",
       destructive: true,
     );
     if (!sure) return;
-    final providers = ref
+    final providers = container
         .read(appSettingsProvider)
         .llmProviders
         .where((p) => p.id != provider.id)
         .toList();
-    await notifier.setProviders(providers);
+    await container.read(appSettingsProvider.notifier).setProviders(providers);
   }
 
   Future<void> _add(BuildContext context) async {
@@ -134,8 +132,7 @@ class ProvidersSection extends ConsumerWidget {
               context,
               () => editProvider(context, provider: provider),
             ),
-            onRemove: () =>
-                guarded(context, () => _remove(context, ref, provider)),
+            onRemove: () => guarded(context, () => _remove(context, provider)),
             detail: ProviderUsageView(provider.id),
           ),
         AddButtonRow(

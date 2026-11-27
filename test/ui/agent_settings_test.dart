@@ -1,4 +1,5 @@
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:entoli_core/agent/llm/llm_client.dart" show LlmException;
 import "package:entoli_core/model/app_settings.dart";
@@ -6,7 +7,8 @@ import "package:entoli_core/model/llm_provider.dart";
 import "package:entoli_core/model/permission.dart";
 import "package:entoli_core/model/project_settings.dart";
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/settings/provider_picker.dart" show ProviderCard;
+import "package:agent_chat/ui/settings/provider_picker.dart"
+    show ProviderCard, ProviderPickerPage;
 import "package:agent_chat/ui/settings/settings_category.dart";
 import "package:agent_chat/ui/widgets/toggle_chip.dart";
 
@@ -345,6 +347,17 @@ void main() {
 
       await removeProvider(tester, "Groq");
       expect(saved().map((p) => p.displayName), ["OpenAI"]);
+    });
+
+    testWidgets("Escape leaves the picker", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await tester.tap(find.text("Add provider"));
+      await settleIo(tester);
+      expect(find.byType(ProviderPickerPage), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(ProviderPickerPage), findsNothing);
     });
 
     testWidgets("the picker narrows to every tag and any company picked", (

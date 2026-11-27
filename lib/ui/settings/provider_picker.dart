@@ -1,4 +1,5 @@
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:entoli_core/model/llm_provider.dart";
 
@@ -47,6 +48,17 @@ class _ProviderPickerPageState extends ConsumerState<ProviderPickerPage> {
   @override
   Widget build(BuildContext context) {
     final shown = _offers.where(_filter.admits).toList();
+    // A page route has no barrier to take Escape, as the dialog it was did.
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): () =>
+            Navigator.maybePop(context),
+      },
+      child: Focus(autofocus: true, child: _page(context, shown)),
+    );
+  }
+
+  Widget _page(BuildContext context, List<LlmProvider> shown) {
     return Scaffold(
       appBar: AppBar(title: const Text("Add provider")),
       body: ListView(
@@ -160,6 +172,8 @@ class ProviderCard extends StatelessWidget {
       for (final tag in ProviderTag.values)
         if (offer.tags.contains(tag))
           InfoTag(tag.icon, tag.label, tone: tag.tone),
+      if (offer.terms?.prompts case final use? when _caveat(use) != null)
+        _caveat(use)!,
       if (offer case final CliProvider cli)
         InfoTag(Icons.account_circle_outlined, cli.account),
       if (offer.imageModel != null)
@@ -167,6 +181,25 @@ class ProviderCard extends StatelessWidget {
     ],
     onTap: onTap,
   );
+
+  /// What the tags leave unsaid about the prompts, where it is a warning.
+  static InfoTag? _caveat(PromptUse use) => switch (use) {
+    PromptUse.trainedWhenFree => const InfoTag(
+      Icons.visibility_outlined,
+      "Free tier trains on prompts",
+      tone: InfoTone.warn,
+    ),
+    PromptUse.unstated => const InfoTag(
+      Icons.help_outline,
+      "Free tier terms unclear",
+      tone: InfoTone.warn,
+    ),
+    PromptUse.dependsOnRoute => const InfoTag(
+      Icons.alt_route,
+      "Training depends on the model",
+    ),
+    PromptUse.local || PromptUse.notTrained => null,
+  };
 }
 
 class _OfferCard extends StatelessWidget {
@@ -222,8 +255,9 @@ class _OfferCard extends StatelessWidget {
   }
 }
 
-/// A company's mark: its initial in a circle. Not its logo, which the
-/// companies' trademark terms keep to what they approve.
+/// A company's mark: its initial in a circle of a hue of its own, so OpenAI
+/// and Ollama are told apart by more than the letter. Not its logo, which
+/// the companies' trademark terms keep to what they approve.
 class MakerMark extends StatelessWidget {
   const MakerMark(this.maker, {super.key, this.radius = 18});
 
@@ -231,28 +265,48 @@ class MakerMark extends StatelessWidget {
   final double radius;
 
   @override
-  Widget build(BuildContext context) => _Mark(
-    radius: radius,
-    child: Text(
-      maker.characters.first.toUpperCase(),
-      style: TextStyle(fontSize: radius, fontWeight: FontWeight.w600),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    // A string's hashCode is not stable across runs; its code units are.
+    final hue = maker.codeUnits.fold(0, (h, c) => (h * 31 + c) % 360);
+    final colour = HSLColor.fromAHSL(
+      1,
+      hue.toDouble(),
+      0.45,
+      dark ? 0.3 : 0.85,
+    );
+    return _Mark(
+      radius: radius,
+      background: colour.toColor(),
+      foreground: colour.withLightness(dark ? 0.9 : 0.2).toColor(),
+      child: Text(
+        maker.characters.first.toUpperCase(),
+        style: TextStyle(fontSize: radius, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
 }
 
 class _Mark extends StatelessWidget {
-  const _Mark({required this.child, this.radius = 18});
+  const _Mark({
+    required this.child,
+    this.radius = 18,
+    this.background,
+    this.foreground,
+  });
 
   final Widget child;
   final double radius;
+  final Color? background;
+  final Color? foreground;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return CircleAvatar(
       radius: radius,
-      backgroundColor: colors.secondaryContainer,
-      foregroundColor: colors.onSecondaryContainer,
+      backgroundColor: background ?? colors.secondaryContainer,
+      foregroundColor: foreground ?? colors.onSecondaryContainer,
       child: child,
     );
   }
