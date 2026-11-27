@@ -1,6 +1,5 @@
 import "package:collection/collection.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:uuid/uuid.dart";
 import "package:entoli_core/model/app_settings.dart";
 import "package:entoli_core/model/llm_provider.dart";
 import "package:entoli_core/model/profile.dart";
@@ -43,7 +42,7 @@ class SettingsSyncDriver implements SyncedSettings {
       if (settings.profile case final profile? when !profile.isEmpty)
         profileItem: profile.toJson(),
       for (final provider in providers)
-        providerItem(provider.displayName): {
+        providerItem(provider.id): {
           ...provider.toPortableJson(),
           "key": ?keys[provider.id],
         },
@@ -68,19 +67,12 @@ class SettingsSyncDriver implements SyncedSettings {
       await notifier.setReplyStyle(profile: profile);
     }
     final local = {for (final p in settings.llmProviders) p.id: p};
-    final named = {
-      for (final p in settings.llmProviders) providerItem(p.displayName): p,
-    };
     final incoming = <String, (LlmProviderConfig, String?)>{
       for (final MapEntry(:key, :value) in items.entries)
-        if (isProviderItem(key))
-          // The entry this device has under that name keeps its id, and so
-          // its key's slot and its program's sign-in; a name new here is a
-          // new entry.
-          if (named[key]?.id ?? const Uuid().v4() case final id)
-            if (LlmProviderConfig.fromPortable(id, value, here: named[key])
-                case final config?)
-              id: (config, value["key"] as String?),
+        if (providerIdOf(key) case final id?)
+          if (LlmProviderConfig.fromPortable(id, value, here: local[id])
+              case final config?)
+            id: (config, value["key"] as String?),
     };
     // Keys first: the list's rebuild reads the store.
     await _ref.read(appSecretsProvider).setProviderKeys({

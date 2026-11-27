@@ -27,6 +27,65 @@ void main() {
     return here;
   }
 
+  group("names stay unique", () {
+    // Each device added Ollama Cloud for itself, under an id of its own.
+    final here = {
+      "provider:mine": {"name": "Ollama Cloud", "key": "k-here"},
+      "provider:a": {"name": "A"},
+    };
+    final there = {
+      "provider:theirs": {"name": "ollama cloud ", "key": "k-there"},
+      "provider:b": {"name": "B"},
+    };
+
+    test("the winner's of two sharing a name stays", () {
+      expect(merge(here, there), {
+        "provider:mine": {"name": "Ollama Cloud", "key": "k-here"},
+        "provider:a": {"name": "A"},
+        "provider:b": {"name": "B"},
+      });
+      expect(merge(here, there, localWins: false).keys, {
+        "provider:theirs",
+        "provider:a",
+        "provider:b",
+      });
+    });
+
+    test("a rename is the same provider, synced by its id", () {
+      final agreed = {
+        "provider:x": {"name": "Work"},
+      };
+      expect(
+        merge(
+          {
+            "provider:x": {"name": "Work"},
+          },
+          {
+            "provider:x": {"name": "University"},
+          },
+          agreed: agreed,
+        ),
+        {
+          "provider:x": {"name": "University"},
+        },
+      );
+    });
+
+    test("a rename onto another's name leaves the winner's", () {
+      final agreed = {
+        "provider:x": {"name": "X"},
+        "provider:y": {"name": "Y"},
+      };
+      final renamed = {
+        "provider:x": {"name": "Y"},
+        "provider:y": {"name": "Y2"},
+      };
+      final merged = merge(agreed, renamed, agreed: agreed, localWins: false);
+      expect(merged["provider:x"], {"name": "Y"});
+      expect(merged["provider:y"], {"name": "Y2"});
+    });
+  });
+
   group("a first sync", () {
     test("keeps an item only one side has", () {
       expect(

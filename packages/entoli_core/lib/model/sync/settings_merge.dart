@@ -4,20 +4,19 @@ import "package:collection/collection.dart";
 import "package:crypto/crypto.dart";
 
 /// What two paired devices keep in step of their settings, item by item:
-/// the profile, and each provider by its name. An item is its fields as JSON
+/// the profile, and each provider by its id. An item is its fields as JSON
 /// values; one the device does not have is not in the map.
 typedef SyncedItems = Map<String, Map<String, Object?>>;
 
 /// The key the profile is synced under.
 const profileItem = "profile";
 
-/// The key a provider is synced under: its name, as the user tells two apart,
-/// and not its id, which each device mints for itself. Two devices that each
-/// added Ollama Cloud have one Ollama Cloud between them.
-String providerItem(String name) => "provider:${name.trim().toLowerCase()}";
+/// The key a provider is synced under, by its id.
+String providerItem(String id) => "provider:$id";
 
-/// Whether [item] is a provider's.
-bool isProviderItem(String item) => item.startsWith("provider:");
+/// The provider id [item] names, or null for an item that is not one.
+String? providerIdOf(String item) =>
+    item.startsWith("provider:") ? item.substring("provider:".length) : null;
 
 const _deep = DeepCollectionEquality();
 
@@ -129,6 +128,8 @@ class MergeBase {
 /// where only one side has it, and taken whole from the winner where both
 /// do: the profile the user chose to keep, not a mix of the two.
 ///
+/// Two providers left sharing a name are one too many: the winner's stays.
+///
 /// Symmetric: the other device, passing its own side as [local] and the
 /// opposite [localWins], reaches the same items.
 SyncedItems mergeSettings({
@@ -136,10 +137,41 @@ SyncedItems mergeSettings({
   required SyncedItems remote,
   required MergeBase? base,
   required bool localWins,
-}) => {
+}) => _oneOfEachName({
   for (final key in {...local.keys, ...remote.keys})
     key: ?_mergeItem(local[key], remote[key], base?.items[key], localWins),
-};
+}, winner: localWins ? local : remote);
+
+/// [items] with no two providers of one name, which is what a model is
+/// picked by: of two entries sharing one — each device having added Ollama
+/// Cloud for itself, under ids of its own — the [winner]'s stays and the
+/// other goes. Neither the winner's, as when both arrived from the loser
+/// under names since changed, the first by id stays, so both sides keep
+/// the same one.
+SyncedItems _oneOfEachName(SyncedItems items, {required SyncedItems winner}) {
+  final byName = <String, List<String>>{};
+  for (final MapEntry(:key, :value) in items.entries) {
+    if (providerIdOf(key) == null) continue;
+    final name = (value["name"] as String? ?? providerIdOf(key)!)
+        .trim()
+        .toLowerCase();
+    (byName[name] ??= []).add(key);
+  }
+  final dropped = <String>{
+    for (final keys in byName.values)
+      if (keys.length > 1)
+        ...(keys..sort((a, b) {
+              final aWins = winner.containsKey(a) ? 0 : 1;
+              final bWins = winner.containsKey(b) ? 0 : 1;
+              return aWins != bWins ? aWins - bWins : a.compareTo(b);
+            }))
+            .skip(1),
+  };
+  return {
+    for (final MapEntry(:key, :value) in items.entries)
+      if (!dropped.contains(key)) key: value,
+  };
+}
 
 Map<String, Object?>? _mergeItem(
   Map<String, Object?>? mine,
