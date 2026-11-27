@@ -94,12 +94,10 @@ class ProvidersSection extends ConsumerWidget {
     await container.read(appSettingsProvider.notifier).setProviders(providers);
   }
 
-  Future<void> _add(BuildContext context) async {
-    await showProviderPicker(
-      context,
-      connect: (context, preset) => editProvider(context, preset: preset),
-    );
-  }
+  Future<void> _add(BuildContext context) => showProviderPicker(
+    context,
+    connect: (context, preset) => editProvider(context, preset: preset),
+  );
 
   String _status(WidgetRef ref, LlmProviderConfig config) {
     final environment = ref.read(appSettingsProvider).environment;

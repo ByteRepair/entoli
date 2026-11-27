@@ -17,7 +17,10 @@ class _Settings implements SyncedSettings {
   SyncedItems read() => items;
 
   @override
-  Future<void> write(SyncedItems items) async {
+  Future<void> write(
+    SyncedItems items, {
+    Map<String, String> replaced = const {},
+  }) async {
     writes++;
     this.items = items;
   }

@@ -20,9 +20,10 @@ class ProviderFilter {
 
   /// [tag] picked, in place of any other of its group, or unpicked.
   ProviderFilter toggleTag(ProviderTag tag) => ProviderFilter(
-    tags: tags.contains(tag)
-        ? ({...tags}..remove(tag))
-        : {...tags.where((t) => t.group != tag.group), tag},
+    tags: _toggled({
+      for (final t in tags)
+        if (t == tag || t.group != tag.group) t,
+    }, tag),
     makers: makers,
   );
 

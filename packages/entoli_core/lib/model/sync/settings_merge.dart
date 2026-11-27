@@ -130,11 +130,12 @@ class MergeBase {
 /// where only one side has it, and taken whole from the winner where both
 /// do: the profile the user chose to keep, not a mix of the two.
 ///
-/// Two providers left sharing a name are one too many: the winner's stays.
+/// Two providers left sharing a name are one too many: the winner's stays,
+/// and [MergedSettings.replaced] says which went for which.
 ///
 /// Symmetric: the other device, passing its own side as [local] and the
 /// opposite [localWins], reaches the same items.
-SyncedItems mergeSettings({
+MergedSettings mergeSettings({
   required SyncedItems local,
   required SyncedItems remote,
   required MergeBase? base,
@@ -150,21 +151,31 @@ SyncedItems mergeSettings({
 /// that name stays and the other goes. Where the winner has neither under
 /// it, as when the loser renamed one onto the other's, the first by id
 /// stays, so both sides keep the same one.
-SyncedItems _oneOfEachName(SyncedItems items, {required SyncedItems winner}) {
-  final byName = <String, List<String>>{};
-  for (final MapEntry(:key, :value) in items.entries) {
-    if (providerIdOf(key) == null) continue;
-    (byName[_nameOf(key, value)] ??= []).add(key);
-  }
-  final dropped = <String>{
+MergedSettings _oneOfEachName(
+  SyncedItems items, {
+  required SyncedItems winner,
+}) {
+  final byName = items.keys
+      .where((key) => providerIdOf(key) != null)
+      .groupListsBy((key) => _nameOf(key, items[key]!));
+  final replaced = <String, String>{
     for (final MapEntry(key: name, value: keys) in byName.entries)
-      if (keys.length > 1) ...(keys..sort(_winnerFirst(name, winner))).skip(1),
+      if (keys.length > 1)
+        for (final gone in (keys..sort(_winnerFirst(name, winner))).skip(1))
+          providerIdOf(gone)!: providerIdOf(keys.first)!,
   };
-  return {
-    for (final MapEntry(:key, :value) in items.entries)
-      if (!dropped.contains(key)) key: value,
-  };
+  return (
+    items: {
+      for (final MapEntry(:key, :value) in items.entries)
+        if (!replaced.containsKey(providerIdOf(key))) key: value,
+    },
+    replaced: replaced,
+  );
 }
+
+/// What a merge settles on, and the providers it took out for another of
+/// the same name: a removed id to the kept one.
+typedef MergedSettings = ({SyncedItems items, Map<String, String> replaced});
 
 String _nameOf(String key, Map<String, Object?> item) =>
     providerNameKey(item["name"] as String? ?? providerIdOf(key)!);
@@ -175,7 +186,10 @@ Comparator<String> _winnerFirst(String name, SyncedItems winner) {
     final item? when _nameOf(key, item) == name => 0,
     _ => 1,
   };
-  return (a, b) => rank(a) != rank(b) ? rank(a) - rank(b) : a.compareTo(b);
+  return (a, b) {
+    final byRank = rank(a).compareTo(rank(b));
+    return byRank != 0 ? byRank : a.compareTo(b);
+  };
 }
 
 Map<String, Object?>? _mergeItem(

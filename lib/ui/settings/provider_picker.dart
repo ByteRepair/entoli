@@ -50,8 +50,20 @@ class _ProviderPickerPageState extends ConsumerState<ProviderPickerPage> {
   final _offers = providerOffers();
   late final _makers = makersOf(_offers);
   var _filter = const ProviderFilter();
+  var _choosing = false;
 
+  /// One sign-in at a time: a second tap while one is open is dropped.
   Future<void> _choose(LlmProvider? offer) async {
+    if (_choosing) return;
+    _choosing = true;
+    try {
+      await guarded(context, () => _connect(offer));
+    } finally {
+      _choosing = false;
+    }
+  }
+
+  Future<void> _connect(LlmProvider? offer) async {
     final terms = offer?.terms;
     final warning = terms?.freeTier;
     if (warning != null &&
@@ -107,16 +119,13 @@ class _ProviderPickerPageState extends ConsumerState<ProviderPickerPage> {
           _CardGrid(
             children: [
               for (final offer in shown)
-                ProviderCard(
-                  offer,
-                  onTap: () => guarded(context, () => _choose(offer)),
-                ),
+                ProviderCard(offer, onTap: () => _choose(offer)),
               // An endpoint typed in has no tags, so any filter leaves it out.
               if (_filter.isEmpty)
                 _OfferCard(
                   leading: const CircleAvatar(child: Icon(Icons.link)),
                   title: "Custom endpoint",
-                  onTap: () => guarded(context, () => _choose(null)),
+                  onTap: () => _choose(null),
                 ),
             ],
           ),
@@ -175,7 +184,7 @@ class _CardGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final width = constraints.maxWidth.clamp(0.0, _width);
+      final width = min(constraints.maxWidth, _width);
       // No more columns than cards, so a few stay centred.
       final columns = ((constraints.maxWidth + _gap) / (width + _gap))
           .floor()

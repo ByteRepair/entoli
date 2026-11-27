@@ -35,13 +35,13 @@ Future<void> connectCli(
 }) async {
   final notifier = read(appSettingsProvider.notifier);
   final programs = read(cliProgramsProvider);
-  final existing = read(appSettingsProvider).llmProviders
+  final settings = read(appSettingsProvider);
+  final existing = settings.llmProviders
       .where((p) => p.api == service.config.api && p.command == null)
       .firstOrNull;
   // A new entry's id first: its account is kept in a folder named by it.
   // Under a name no other entry has: one with a command of its own may
   // already be called this.
-  final settings = read(appSettingsProvider);
   final config =
       existing ??
       service.config.copyWith(

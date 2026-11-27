@@ -7,6 +7,7 @@ import "package:entoli_core/model/settings/setting.dart";
 import "package:entoli_core/view/widgets/busy.dart";
 
 import "../../app/settings/scope.dart";
+import "../../providers.dart" show appSettingsProvider;
 import "../widgets/environment_section.dart";
 import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
@@ -273,11 +274,15 @@ class ScopedModel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scope = scopeOf(ref, at);
+    final provider = scope.own(keys.provider);
     return LabelledField(
       label: title,
       child: ModelPicker(
         choice: (
-          providerId: scope.own(keys.provider),
+          // A provider a sync replaced shows as the one turns run on.
+          providerId: provider == null
+              ? null
+              : ref.watch(appSettingsProvider).providerNow(provider),
           modelId: scope.own(keys.model),
         ),
         nullLabel: nullLabel,

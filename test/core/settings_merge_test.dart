@@ -2,7 +2,7 @@ import "package:entoli_core/model/sync/settings_merge.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {
-  SyncedItems merge(
+  MergedSettings mergeBoth(
     SyncedItems local,
     SyncedItems remote, {
     SyncedItems? agreed,
@@ -23,9 +23,21 @@ void main() {
       base: base,
       localWins: !localWins,
     );
-    expect(sameItems(here, there), isTrue, reason: "$here vs $there");
+    expect(
+      sameItems(here.items, there.items),
+      isTrue,
+      reason: "$here vs $there",
+    );
+    expect(here.replaced, there.replaced);
     return here;
   }
+
+  SyncedItems merge(
+    SyncedItems local,
+    SyncedItems remote, {
+    SyncedItems? agreed,
+    bool localWins = true,
+  }) => mergeBoth(local, remote, agreed: agreed, localWins: localWins).items;
 
   group("names stay unique", () {
     // Each device added Ollama Cloud for itself, under an id of its own.
@@ -85,9 +97,11 @@ void main() {
         "provider:x": {"name": "Lab"},
         "provider:y": {"name": "Work"},
       };
-      expect(merge(winner, loser, agreed: agreed), {
+      final merged = mergeBoth(winner, loser, agreed: agreed);
+      expect(merged.items, {
         "provider:y": {"name": "Lab"},
       });
+      expect(merged.replaced, {"x": "y"});
     });
   });
 

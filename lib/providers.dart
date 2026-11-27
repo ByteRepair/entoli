@@ -1031,8 +1031,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
       }
       for (final role in _modelRoles) {
         final named = s.doc.read(role.provider);
-        if (replacedBy[named] case final kept?) {
-          _assign(s, role, (providerId: kept, modelId: s.doc.read(role.model)));
+        if (replacedBy[named] case final standIn?) {
+          _assign(s, role, (
+            providerId: standIn,
+            modelId: s.doc.read(role.model),
+          ));
         } else if (gone.contains(named)) {
           _assign(s, role, (providerId: null, modelId: null));
         }
