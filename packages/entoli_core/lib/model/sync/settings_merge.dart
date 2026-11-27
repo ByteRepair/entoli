@@ -4,19 +4,20 @@ import "package:collection/collection.dart";
 import "package:crypto/crypto.dart";
 
 /// What two paired devices keep in step of their settings, item by item:
-/// the profile, and each provider by its id. An item is its fields as JSON
+/// the profile, and each provider by its name. An item is its fields as JSON
 /// values; one the device does not have is not in the map.
 typedef SyncedItems = Map<String, Map<String, Object?>>;
 
 /// The key the profile is synced under.
 const profileItem = "profile";
 
-/// The key a provider is synced under, by its id.
-String providerItem(String id) => "provider:$id";
+/// The key a provider is synced under: its name, as the user tells two apart,
+/// and not its id, which each device mints for itself. Two devices that each
+/// added Ollama Cloud have one Ollama Cloud between them.
+String providerItem(String name) => "provider:${name.trim().toLowerCase()}";
 
-/// The provider id [item] names, or null for an item that is not one.
-String? providerIdOf(String item) =>
-    item.startsWith("provider:") ? item.substring("provider:".length) : null;
+/// Whether [item] is a provider's.
+bool isProviderItem(String item) => item.startsWith("provider:");
 
 const _deep = DeepCollectionEquality();
 

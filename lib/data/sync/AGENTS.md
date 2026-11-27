@@ -874,7 +874,7 @@ Nothing but the question travels until one has been made.
 
 The pieces are three, each a class. `mergeSettings`
 (`packages/entoli_core/lib/model/sync/settings_merge.dart`) is the pure
-merge: items are `profile` and `provider:<id>`, each a map of fields, and it
+merge: items are `profile` and `provider:<name>`, each a map of fields, and it
 is three-way against what the two last agreed. A field only one side changed
 since keeps that edit, so the latest edit wins wherever there is no conflict;
 one both changed differently is the winner's; an item one side removed and the
@@ -899,7 +899,16 @@ port: it reads the settings and the secret store into items and writes merged
 items back through `setReplyStyle`, `setProviderKey` and `setProviders`, and
 tells the exchange of every change to either. A CLI provider's `command` and
 `env` are this machine's, so they are not synced and a merged provider keeps
-the local ones: `LlmProviderConfig.toPortableJson` and `fromPortable` say
+the local ones. A provider is matched by its name, lowercased, which is what
+the user tells two apart by and what a device keeps unique, rather than its
+id, which each device mints for itself: two devices that each added Ollama
+Cloud would otherwise keep both, each other's, under one name. An entry that
+arrives keeps the id of the one this device has under that name, so its key
+and a program's sign-in stay where they are, and one whose name is new here
+is given an id of its own. A rename is the old name's removal and the new
+one's arrival, so on the other device it starts again: whatever was set to
+its models, and a program's sign-in. The same names on both sides at a first
+sync are one provider each, the winner's whole: `LlmProviderConfig.toPortableJson` and `fromPortable` say
 which fields those are. The exchange reaches peers by id, through the hub's
 send, and the hub tells it which are connected.
 
