@@ -8,6 +8,7 @@ import "../../../providers.dart";
 import "../../selection.dart";
 import "../../../app/remote_projects.dart";
 import "../../widgets/chip_row.dart";
+import "../../widgets/toggle_chip.dart";
 
 /// The new-chat screen's badges for the projects of the devices paired with
 /// this one: under a line naming each device, every project it last listed —
@@ -43,11 +44,9 @@ class PairedProjectBadges extends ConsumerWidget {
                 if (entry.scope.device == device)
                   ChipRowEntry(
                     key: ValueKey(entry.scope),
-                    child: ChoiceChip(
-                      label: ProjectChipLabel(
-                        entry.scope.project,
-                        omada: entry.omada,
-                      ),
+                    child: ProjectBadge(
+                      entry.scope.project,
+                      omada: entry.omada,
                       selected: entry.scope == selected,
                       onSelected: (on) => selectProject(
                         ref,
@@ -63,31 +62,36 @@ class PairedProjectBadges extends ConsumerWidget {
   }
 }
 
-/// A project badge's label: its built-in icon where it has one, then its name.
-/// In the label rather than the chip's avatar slot, since a `ChoiceChip`
-/// paints its selected check over the avatar.
-class ProjectChipLabel extends ConsumerWidget {
-  const ProjectChipLabel(this.project, {this.omada, super.key});
+/// A project's badge: its built-in icon where it has one, then its name in
+/// the style that says whether it runs Omada.
+class ProjectBadge extends ConsumerWidget {
+  const ProjectBadge(
+    this.project, {
+    required this.selected,
+    required this.onSelected,
+    this.omada,
+    super.key,
+  });
 
   final String? project;
+  final bool selected;
+  final ValueChanged<bool> onSelected;
 
   /// Whether [project] runs Omada; null asks this device, which is wrong for
   /// a paired device's project of the same name.
   final bool? omada;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      if (projectIcon(project) case final icon?)
-        Padding(
-          padding: const EdgeInsets.only(right: 6),
-          child: Icon(icon, size: 18),
-        ),
-      Text(
-        projectLabel(project),
-        style: projectLabelStyle(omada ?? ref.watch(omadaOnProvider(project))),
-      ),
-    ],
+  Widget build(BuildContext context, WidgetRef ref) => ToggleChip(
+    leading: switch (projectIcon(project)) {
+      final icon? => Icon(icon, size: 18),
+      null => null,
+    },
+    label: Text(
+      projectLabel(project),
+      style: projectLabelStyle(omada ?? ref.watch(omadaOnProvider(project))),
+    ),
+    selected: selected,
+    onSelected: onSelected,
   );
 }

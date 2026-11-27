@@ -29,6 +29,31 @@ abstract class LlmProvider {
 
   String get id => config.id;
   String get displayName => config.displayName;
+
+  /// The company behind it, which the Add provider page filters by: two
+  /// offers of one company (its API and its plan's program) share it.
+  String get maker => displayName;
+
+  /// What it is, in a line under its name.
+  String? get blurb => terms?.blurb;
+
+  /// What the Add provider page filters it by, read off [terms]: none for an
+  /// endpoint typed in by hand.
+  Set<ProviderTag> get tags {
+    final terms = this.terms;
+    if (terms == null) return const {};
+    final local = terms.prompts == PromptUse.local;
+    return {
+      if (terms.prompts case PromptUse.local || PromptUse.notTrained)
+        ProviderTag.private,
+      if (terms.prompts
+          case PromptUse.trainedWhenFree || PromptUse.dependsOnRoute)
+        ProviderTag.privacyControls,
+      if (!local) ProviderTag.paid,
+      if (terms.freeTier != null) ProviderTag.free,
+    };
+  }
+
   Uri get baseUrl => Uri.parse(config.baseUrl);
   Uri? get modelsUrl {
     final url = config.modelsEndpoint;

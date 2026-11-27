@@ -4,6 +4,7 @@ import "package:uuid/uuid.dart";
 import "package:entoli_core/model/llm_provider.dart";
 import "package:entoli_core/model/provider_usage.dart";
 import "package:entoli_core/view/widgets/busy.dart";
+import "package:entoli_core/view/widgets/dialogs.dart" show confirm;
 
 import "../../app/provider_usage_words.dart";
 import "../../app/settings/cli_account.dart" show forgetCliEntry;
@@ -65,13 +66,32 @@ Future<void> editProvider(
 class ProvidersSection extends ConsumerWidget {
   const ProvidersSection({super.key});
 
-  Future<void> _remove(WidgetRef ref, LlmProviderConfig provider) async {
+  /// Asked first: the key and a program's sign-in go with it, and neither
+  /// comes back with a second Add.
+  Future<void> _remove(
+    BuildContext context,
+    WidgetRef ref,
+    LlmProviderConfig provider,
+  ) async {
+    final notifier = ref.read(appSettingsProvider.notifier);
+    final sure = await confirm(
+      context,
+      title: "Remove ${provider.displayName}?",
+      message: provider.api.isCli
+          ? "Its sign-in on this device goes with it, and anything set to "
+                "its models falls back to the default."
+          : "Its saved key goes with it, and anything set to its models "
+                "falls back to the default.",
+      confirmLabel: "Remove",
+      destructive: true,
+    );
+    if (!sure) return;
     final providers = ref
         .read(appSettingsProvider)
         .llmProviders
         .where((p) => p.id != provider.id)
         .toList();
-    await ref.read(appSettingsProvider.notifier).setProviders(providers);
+    await notifier.setProviders(providers);
   }
 
   Future<void> _add(BuildContext context) async {
@@ -114,7 +134,8 @@ class ProvidersSection extends ConsumerWidget {
               context,
               () => editProvider(context, provider: provider),
             ),
-            onRemove: () => guarded(context, () => _remove(ref, provider)),
+            onRemove: () =>
+                guarded(context, () => _remove(context, ref, provider)),
             detail: ProviderUsageView(provider.id),
           ),
         AddButtonRow(

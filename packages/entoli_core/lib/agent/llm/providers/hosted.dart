@@ -90,6 +90,9 @@ class OllamaCloudProvider extends OpenAiCompatibleProvider
   );
 
   @override
+  String get maker => "Ollama";
+
+  @override
   String get serviceName => "Ollama Cloud";
 
   @override

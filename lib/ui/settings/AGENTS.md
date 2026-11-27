@@ -375,14 +375,25 @@ recommended-provider card) goes to the secret store, under the provider's id,
 and the row says "Connected" rather than showing any of it — "Needs a key" where
 neither a stored key nor its named variable is there, "On this computer" for a
 local server, and an endpoint typed in by hand carries its address in front
-(`ProvidersSection`, `provider_settings.dart`). Adding one opens
-`pickProviderPreset` (`provider_picker.dart`) on the presets alone, grouped as
-paid, free at a cost to privacy and on this machine, each with what it does with
-the prompts, and a free tier is agreed to in a second dialog before anything
-else is asked. Then `ProviderDialog` ("Connect X" for a preset), over a
-`ProviderEdit` (`lib/app/settings/provider_edit.dart`), which holds the entry
-being edited and builds what is saved: an empty name, base URL or models.dev id
-falls back to the preset's. A preset's dialog is written for someone who has
+(`ProvidersSection`, `provider_settings.dart`), and its X asks before removing
+one, since the key and a program's sign-in go with it. Adding one opens
+`pickProviderPreset` (`provider_picker.dart`), a page of its own: every
+preset and every program this platform runs, as a card under its company's
+mark (an initial, not a logo: Anthropic's trademark terms allow its marks only
+in material it approves and forbid recolouring them), with no grouping. Above
+the cards are two rows of `ToggleChip`s: the `ProviderTag`s (Private, Privacy
+controls, Paid, Free), every one picked required, so Free and Private shows
+nothing; and the companies, any one picked allowed, since an offer has one
+(`ProviderFilter`, `lib/app/settings/provider_filter.dart`). A provider's tags
+are read off its `terms`; a plan's program is Privacy controls and Paid, its
+account settings deciding the training, and a model run here is Private
+alone. Custom is a card only while nothing is picked, having no tags. A free
+tier is agreed to in a dialog before anything else is asked. Then
+`ProviderDialog` ("Connect X" for a preset), over a `ProviderEdit`
+(`lib/app/settings/provider_edit.dart`), which holds the entry being edited
+and builds what is saved: an empty base URL or models.dev id falls back to the
+preset's, and an empty name to the preset's name, numbered `-02`, `-03` on
+where an entry already has it, the name being what a model is picked by. A preset's dialog is written for someone who has
 never seen a base URL: what a key is and a link to make one, the key field as
 "Access key" and focused, and the provider's privacy policy, with the technical
 fields — name, API, base URL, models, the named variable — folded under

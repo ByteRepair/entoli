@@ -6,7 +6,9 @@ import "package:entoli_core/model/llm_provider.dart";
 import "package:entoli_core/model/permission.dart";
 import "package:entoli_core/model/project_settings.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/settings/provider_picker.dart" show ProviderCard;
 import "package:agent_chat/ui/settings/settings_category.dart";
+import "package:agent_chat/ui/widgets/toggle_chip.dart";
 
 import "../harness.dart";
 
@@ -24,6 +26,20 @@ void main() {
     await tester.ensureVisible(find.text(entry).last);
     await tester.pumpAndSettle();
     await tester.tap(find.text(entry).last);
+    await settleIo(tester);
+  }
+
+  /// Press a provider's X and answer its confirmation.
+  Future<void> removeProvider(
+    WidgetTester tester,
+    String name, {
+    bool confirm = true,
+  }) async {
+    await scrollTo(tester, find.byTooltip("Remove $name"));
+    await tester.tap(find.byTooltip("Remove $name"));
+    await tester.pumpAndSettle();
+    expect(find.text("Remove $name?"), findsOneWidget);
+    await tester.tap(find.text(confirm ? "Remove" : "Cancel"));
     await settleIo(tester);
   }
 
@@ -105,7 +121,7 @@ void main() {
       tester,
     ) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
-      await addProvider(tester, "Custom…");
+      await addProvider(tester, "Custom");
 
       await tester.enterText(dialogField("Name"), "vllm");
       await tester.enterText(
@@ -127,7 +143,7 @@ void main() {
 
     testWidgets("one missing its name or URL is not saved", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
-      await addProvider(tester, "Custom…");
+      await addProvider(tester, "Custom");
 
       await tester.enterText(dialogField("Name"), "nameless");
       await saveDialog(tester);
@@ -175,7 +191,7 @@ void main() {
       tester,
     ) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
-      await addProvider(tester, "Custom…");
+      await addProvider(tester, "Custom");
       await tester.enterText(dialogField("Name"), "vllm");
       await tester.enterText(
         dialogField("Base URL"),
@@ -245,10 +261,22 @@ void main() {
       "a preset already configured is added again under a name of its own",
       (tester) async {
         await pumpSettings(tester, app, SettingsCategory.providers);
-        await addProvider(tester, "Groq");
-        await saveDialog(tester);
-        await addProvider(tester, "Groq");
+        for (var i = 0; i < 3; i++) {
+          await addProvider(tester, "Groq");
+          await saveDialog(tester);
+        }
 
+        expect(saved().map((p) => p.displayName), [
+          "Groq",
+          "Groq-02",
+          "Groq-03",
+        ]);
+        expect(saved().map((p) => p.catalogId), ["groq", "groq", "groq"]);
+        expect(saved().map((p) => p.id).toSet(), hasLength(3));
+
+        await addProvider(tester, "Groq");
+        await tester.enterText(dialogField("Name"), "Groq");
+        await tester.pump();
         expect(find.text("Another provider is called Groq"), findsOneWidget);
         expect(
           tester
@@ -256,13 +284,6 @@ void main() {
               .onPressed,
           isNull,
         );
-        await tester.enterText(dialogField("Name"), "Groq work");
-        await tester.pump();
-        await saveDialog(tester);
-
-        expect(saved().map((p) => p.displayName), ["Groq", "Groq work"]);
-        expect(saved().map((p) => p.catalogId), ["groq", "groq"]);
-        expect(saved().first.id, isNot(saved().last.id));
       },
     );
 
@@ -319,11 +340,44 @@ void main() {
       await addProvider(tester, "Groq");
       await saveDialog(tester);
 
-      await scrollTo(tester, find.byTooltip("Remove Groq"));
-      await tester.tap(find.byTooltip("Remove Groq"));
-      await settleIo(tester);
+      await removeProvider(tester, "Groq", confirm: false);
+      expect(saved().map((p) => p.displayName), ["OpenAI", "Groq"]);
 
+      await removeProvider(tester, "Groq");
       expect(saved().map((p) => p.displayName), ["OpenAI"]);
+    });
+
+    testWidgets("the picker narrows to every tag and any company picked", (
+      tester,
+    ) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await tester.tap(find.text("Add provider"));
+      await settleIo(tester);
+      Finder card(String name) =>
+          find.widgetWithText(ProviderCard, name, skipOffstage: false);
+      Future<void> toggle(String chip) async {
+        await tester.tap(find.widgetWithText(ToggleChip, chip));
+        await tester.pumpAndSettle();
+      }
+
+      expect(card("Groq"), findsOneWidget);
+      expect(find.text("Custom", skipOffstage: false), findsOneWidget);
+
+      await toggle("Free");
+      expect(card("Groq"), findsNothing);
+      expect(card("Google Gemini"), findsOneWidget);
+      expect(find.text("Custom", skipOffstage: false), findsNothing);
+
+      await toggle("Private");
+      expect(find.byType(ProviderCard, skipOffstage: false), findsNothing);
+      expect(find.text("No provider is all of these."), findsOneWidget);
+
+      await toggle("Free");
+      await toggle("Private");
+      await toggle("Ollama");
+      expect(card("Ollama Cloud"), findsOneWidget);
+      expect(card("Ollama (local)"), findsOneWidget);
+      expect(card("Groq"), findsNothing);
     });
 
     testWidgets("adding one refreshes what the model picker can offer", (
@@ -350,9 +404,7 @@ void main() {
       final id = saved().single.id;
       expect(app.secrets.providerKey(id), "sk-o");
 
-      await scrollTo(tester, find.byTooltip("Remove OpenAI"));
-      await tester.tap(find.byTooltip("Remove OpenAI"));
-      await settleIo(tester);
+      await removeProvider(tester, "OpenAI");
 
       expect(app.secrets.providerKey(id), isNull);
     });
@@ -374,7 +426,7 @@ void main() {
 
     testWidgets("renaming one keeps its id, and so its key", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
-      await addProvider(tester, "Custom…");
+      await addProvider(tester, "Custom");
       await tester.enterText(dialogField("Name"), "vllm");
       await tester.enterText(
         dialogField("Base URL"),

@@ -237,6 +237,29 @@ enum PromptUse {
   unstated,
 }
 
+/// What the Add provider page filters on. A filter of several asks for a
+/// provider carrying every one, so Free and Private together is nothing: no
+/// free tier is private.
+enum ProviderTag {
+  /// Not trained on, or never leaving the machine, without anything to set.
+  private("Private"),
+
+  /// Trained on unless the user turns it off or pays: a setting or a plan
+  /// decides.
+  privacyControls("Privacy controls"),
+
+  /// A hosted service someone pays for. A model run here is neither this
+  /// nor [free]: there is no service to pay or not.
+  paid("Paid"),
+
+  /// A hosted service with a free tier.
+  free("Free");
+
+  const ProviderTag(this.label);
+
+  final String label;
+}
+
 /// What the Add provider list says about a preset, beside its name. Held by the
 /// provider's class rather than its config, so it is never written into
 /// `settings.json` and a policy change is a release, not a migration.

@@ -176,7 +176,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
 /// AGENTS.md.
 ///
 /// The row is a [ChipRow], so it animates both ways a badge moves: picking
-/// one grows the check, and the `AnimatedSize` inside each entry turns that
+/// one grows the check, and the `AnimatedSize` inside each [ProjectBadge] turns that
 /// into a width change whose re-flow every other badge glides along with —
 /// one pushed onto a new line travels there rather than teleports — and a
 /// project made or deleted elsewhere grows in or shrinks out.
@@ -200,15 +200,11 @@ class _ProjectBadges extends ConsumerWidget {
           for (final project in projects)
             ChipRowEntry(
               key: ValueKey(project),
-              child: AnimatedSize(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOut,
-                child: ChoiceChip(
-                  label: ProjectChipLabel(project),
-                  selected: localProject(project) == selected,
-                  onSelected: (on) =>
-                      selectProject(ref, localProject(on ? project : null)),
-                ),
+              child: ProjectBadge(
+                project,
+                selected: localProject(project) == selected,
+                onSelected: (on) =>
+                    selectProject(ref, localProject(on ? project : null)),
               ),
             ),
         ],

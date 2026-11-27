@@ -29,6 +29,20 @@ void main() {
     storedKey: stored,
   );
 
+  test("a name already taken is numbered on from 02", () {
+    final names = {"openai", "openai-02", "openai-04"};
+    final e = edit(from: preset("OpenAI"), taken: names.contains);
+    expect(e.derivedName, "OpenAI");
+    final second = edit(
+      from: preset("OpenAI"),
+      taken: (n) => names.contains(n.toLowerCase()),
+    );
+    expect(second.derivedName, "OpenAI-03");
+    expect(second.resolvedName, "OpenAI-03");
+    expect(second.canSave, isTrue);
+    expect((second..name = "Work").resolvedName, "Work");
+  });
+
   test("a preset falls back to its own name and address", () {
     final e = edit(from: preset("Ollama Cloud"))..key = "sk-ollama";
     expect(e.title, "Connect Ollama Cloud");
@@ -41,11 +55,11 @@ void main() {
     expect(made.setKey, "sk-ollama");
   });
 
-  test("a preset already configured needs a name of its own", () {
+  test("a name typed that is taken is refused", () {
     final e = edit(
       from: preset("Ollama Cloud"),
       taken: (name) => name == "Ollama Cloud",
-    );
+    )..name = "Ollama Cloud";
     expect(e.canSave, isFalse);
     expect(e.nameError, "Another provider is called Ollama Cloud");
     e.name = "Ollama work";

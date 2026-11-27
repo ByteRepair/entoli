@@ -2,133 +2,273 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:entoli_core/model/llm_provider.dart";
 
+import "../../app/settings/provider_filter.dart";
 import "../../data/builtin/llm/providers/presets.dart";
 import "../../providers.dart";
 import "../widgets/catalog.dart" show InfoTag, InfoTone;
+import "../widgets/chip_row.dart";
+import "../widgets/toggle_chip.dart";
 
-/// Ask which provider to add, saying beside each preset what it does with the
-/// prompts it is sent. A free tier paid for in privacy is accepted here, in a
-/// second dialog, before the key is asked for. Null if dismissed; a null
-/// [preset] is Custom. One already configured is offered again, for a second
-/// account.
+/// Ask which provider to add, on a page of its own: every offer as a card,
+/// narrowed by the tags and companies picked above them. A free tier paid
+/// for in privacy is accepted here, in a dialog, before the key is asked
+/// for. Null if left; a null [preset] is Custom. One already configured is
+/// offered again, for a second account.
 Future<({LlmProvider? preset})?> pickProviderPreset(BuildContext context) =>
-    showDialog<({LlmProvider? preset})>(
-      context: context,
-      builder: (context) => const _PresetPicker(),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const ProviderPickerPage(),
+      ),
     );
 
-class _PresetPicker extends ConsumerWidget {
-  const _PresetPicker();
+class ProviderPickerPage extends ConsumerStatefulWidget {
+  const ProviderPickerPage({super.key});
 
-  Future<void> _choose(
-    BuildContext context,
-    WidgetRef ref,
-    LlmProvider preset,
-  ) async {
-    final terms = preset.terms;
+  @override
+  ConsumerState<ProviderPickerPage> createState() => _ProviderPickerPageState();
+}
+
+class _ProviderPickerPageState extends ConsumerState<ProviderPickerPage> {
+  final _offers = providerOffers();
+  late final _makers = makersOf(_offers);
+  var _filter = const ProviderFilter();
+
+  Future<void> _choose(LlmProvider offer) async {
+    final terms = offer.terms;
     final warning = terms?.freeTier;
     if (warning != null &&
-        !await _acceptFreeTier(context, ref, preset, terms!, warning)) {
+        !await _acceptFreeTier(context, ref, offer, terms!, warning)) {
       return;
     }
-    if (context.mounted) Navigator.pop(context, (preset: preset));
+    if (mounted) Navigator.pop(context, (preset: offer));
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    bool free(LlmProvider p) => p.terms?.freeTier != null;
-    bool local(LlmProvider p) => p.terms?.prompts == PromptUse.local;
-    final groups = [
-      ("Paid", llmProviderPresets.where((p) => !free(p) && !local(p))),
-      ("Free, at a cost to privacy", llmProviderPresets.where(free)),
-      (_onThisMachine, llmProviderPresets.where(local)),
-    ];
-
-    return AlertDialog(
-      title: const Text("Add provider"),
-      // The default 40px a side leaves a phone too little room for the tags.
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      contentPadding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
-      content: SizedBox(
-        width: 480,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final (heading, entries) in groups)
-                if (entries.isNotEmpty || heading == _onThisMachine) ...[
-                  _GroupHeading(heading),
-                  for (final p in entries)
-                    _PresetTile(
-                      preset: p,
-                      onTap: () => _choose(context, ref, p),
-                    ),
-                  // A program run here: a desktop's own, or in Android's
-                  // Linux. iOS runs neither.
-                  if (heading == _onThisMachine)
-                    for (final cli in cliProviderPresets)
-                      if (cli.supported)
-                        _CliTile(
-                          cli,
-                          onTap: () => Navigator.pop(context, (preset: cli)),
-                        ),
-                ],
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.tune),
-                title: const Text("Custom…"),
-                subtitle: const Text(
-                  "Any OpenAI- or Anthropic-compatible "
-                  "endpoint, by URL.",
+  Widget build(BuildContext context) {
+    final shown = _offers.where(_filter.admits).toList();
+    return Scaffold(
+      appBar: AppBar(title: const Text("Add provider")),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        children: [
+          ChipRow(
+            settled: true,
+            entries: [
+              for (final tag in ProviderTag.values)
+                ChipRowEntry(
+                  key: ValueKey(tag),
+                  child: ToggleChip(
+                    leading: Icon(tag.icon, size: 18),
+                    label: Text(tag.label),
+                    selected: _filter.tags.contains(tag),
+                    onSelected: (_) =>
+                        setState(() => _filter = _filter.toggleTag(tag)),
+                  ),
                 ),
-                onTap: () => Navigator.pop(context, (preset: null)),
-              ),
             ],
           ),
-        ),
+          const SizedBox(height: 8),
+          ChipRow(
+            settled: true,
+            entries: [
+              for (final maker in _makers)
+                ChipRowEntry(
+                  key: ValueKey(maker),
+                  child: ToggleChip(
+                    leading: MakerMark(maker, radius: 10),
+                    label: Text(maker),
+                    selected: _filter.makers.contains(maker),
+                    onSelected: (_) =>
+                        setState(() => _filter = _filter.toggleMaker(maker)),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (shown.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                "No provider is all of these.",
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+          _CardGrid(
+            children: [
+              for (final offer in shown)
+                ProviderCard(offer, onTap: () => _choose(offer)),
+              // An endpoint typed in has no tags, so any filter leaves it out.
+              if (_filter.isEmpty)
+                _OfferCard(
+                  leading: const _Mark(child: Icon(Icons.link)),
+                  title: "Custom",
+                  blurb:
+                      "Any OpenAI- or Anthropic-compatible endpoint, by URL.",
+                  onTap: () => Navigator.pop(context, (preset: null)),
+                ),
+            ],
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text("Cancel"),
-        ),
-      ],
     );
   }
 }
 
-const _onThisMachine = "On this machine";
+/// Cards as many abreast as fit at a readable width, one on a phone.
+class _CardGrid extends StatelessWidget {
+  const _CardGrid({required this.children});
 
-/// A CLI beside the local servers. Not a [_PresetTile]: it has no terms of
-/// its own to tag, its prompts going wherever the user's account sends them.
-class _CliTile extends StatelessWidget {
-  const _CliTile(this.cli, {required this.onTap});
+  static const _minWidth = 320.0;
+  static const _gap = 12.0;
 
-  final CliProvider cli;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final columns = ((constraints.maxWidth + _gap) / (_minWidth + _gap))
+          .floor()
+          .clamp(1, 4);
+      final width = (constraints.maxWidth - _gap * (columns - 1)) / columns;
+      return Wrap(
+        spacing: _gap,
+        runSpacing: _gap,
+        children: [
+          for (final child in children) SizedBox(width: width, child: child),
+        ],
+      );
+    },
+  );
+}
+
+/// One offer on the page: its company's mark, its name, what it is, and the
+/// tags it is filtered by.
+class ProviderCard extends StatelessWidget {
+  const ProviderCard(this.offer, {super.key, required this.onTap});
+
+  final LlmProvider offer;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => _OfferCard(
+    leading: MakerMark(offer.maker),
+    title: offer.displayName,
+    blurb: offer.blurb,
+    tags: [
+      for (final tag in ProviderTag.values)
+        if (offer.tags.contains(tag))
+          InfoTag(tag.icon, tag.label, tone: tag.tone),
+      if (offer case final CliProvider cli)
+        InfoTag(Icons.account_circle_outlined, cli.account),
+      if (offer.imageModel != null)
+        const InfoTag(Icons.image_outlined, "Images"),
+    ],
+    onTap: onTap,
+  );
+}
+
+class _OfferCard extends StatelessWidget {
+  const _OfferCard({
+    required this.leading,
+    required this.title,
+    required this.onTap,
+    this.blurb,
+    this.tags = const [],
+  });
+
+  final Widget leading;
+  final String title;
+  final String? blurb;
+  final List<Widget> tags;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: colors.secondaryContainer,
-        foregroundColor: colors.onSecondaryContainer,
-        child: const Icon(Icons.terminal),
+    final theme = Theme.of(context);
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  leading,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(title, style: theme.textTheme.titleMedium),
+                  ),
+                ],
+              ),
+              if (blurb case final blurb?) ...[
+                const SizedBox(height: 8),
+                Text(blurb, style: theme.textTheme.bodyMedium),
+              ],
+              if (tags.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Wrap(spacing: 6, runSpacing: 4, children: tags),
+              ],
+            ],
+          ),
+        ),
       ),
-      title: Text(cli.config.displayName),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(cli.about),
-          const SizedBox(height: 6),
-          InfoTag(Icons.account_circle_outlined, cli.account),
-        ],
-      ),
-      isThreeLine: true,
-      onTap: onTap,
     );
   }
+}
+
+/// A company's mark: its initial in a circle. Not its logo, which the
+/// companies' trademark terms keep to what they approve.
+class MakerMark extends StatelessWidget {
+  const MakerMark(this.maker, {super.key, this.radius = 18});
+
+  final String maker;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) => _Mark(
+    radius: radius,
+    child: Text(
+      maker.characters.first.toUpperCase(),
+      style: TextStyle(fontSize: radius, fontWeight: FontWeight.w600),
+    ),
+  );
+}
+
+class _Mark extends StatelessWidget {
+  const _Mark({required this.child, this.radius = 18});
+
+  final Widget child;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: colors.secondaryContainer,
+      foregroundColor: colors.onSecondaryContainer,
+      child: child,
+    );
+  }
+}
+
+/// How a tag is drawn, on a filter chip and on a card.
+extension on ProviderTag {
+  IconData get icon => switch (this) {
+    ProviderTag.private => Icons.lock_outline,
+    ProviderTag.privacyControls => Icons.tune,
+    ProviderTag.paid => Icons.payments_outlined,
+    ProviderTag.free => Icons.redeem_outlined,
+  };
+
+  InfoTone get tone =>
+      this == ProviderTag.private ? InfoTone.good : InfoTone.plain;
 }
 
 Future<bool> _acceptFreeTier(
@@ -175,94 +315,4 @@ Future<bool> _acceptFreeTier(
     ),
   );
   return answer ?? false;
-}
-
-class _GroupHeading extends StatelessWidget {
-  const _GroupHeading(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-    child: Text(
-      text,
-      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-        color: Theme.of(context).colorScheme.primary,
-      ),
-    ),
-  );
-}
-
-class _PresetTile extends StatelessWidget {
-  const _PresetTile({required this.preset, required this.onTap});
-
-  final LlmProvider preset;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final terms = preset.terms;
-    final colors = Theme.of(context).colorScheme;
-    final local = terms?.prompts == PromptUse.local;
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: colors.secondaryContainer,
-        foregroundColor: colors.onSecondaryContainer,
-        child: Icon(local ? Icons.computer : Icons.cloud_outlined),
-      ),
-      title: Text(preset.displayName),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (terms != null) Text(terms.blurb),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            children: [
-              if (terms?.freeTier != null)
-                const InfoTag(
-                  Icons.warning_amber_rounded,
-                  "Free",
-                  tone: InfoTone.warn,
-                ),
-              if (terms != null) _promptsTag(terms.prompts),
-              if (preset.imageModel != null)
-                const InfoTag(Icons.image_outlined, "Images"),
-            ],
-          ),
-        ],
-      ),
-      isThreeLine: true,
-      onTap: onTap,
-    );
-  }
-
-  static InfoTag _promptsTag(PromptUse use) => switch (use) {
-    PromptUse.local => const InfoTag(
-      Icons.lock_outline,
-      "Stays on your machine",
-      tone: InfoTone.good,
-    ),
-    PromptUse.notTrained => const InfoTag(
-      Icons.shield_outlined,
-      "Doesn't train on prompts",
-      tone: InfoTone.good,
-    ),
-    PromptUse.dependsOnRoute => const InfoTag(
-      Icons.alt_route,
-      "Training depends on the model",
-    ),
-    PromptUse.trainedWhenFree => const InfoTag(
-      Icons.visibility_outlined,
-      "Free tier trains on prompts",
-      tone: InfoTone.warn,
-    ),
-    PromptUse.unstated => const InfoTag(
-      Icons.help_outline,
-      "Free tier terms unclear",
-      tone: InfoTone.warn,
-    ),
-  };
 }

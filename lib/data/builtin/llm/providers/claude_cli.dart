@@ -59,6 +59,9 @@ class ClaudeCliProvider extends CliProvider with OfferedByName {
   String get planName => "Claude";
 
   @override
+  String get maker => "Anthropic";
+
+  @override
   String get serviceName => "Claude Pro";
 
   @override
