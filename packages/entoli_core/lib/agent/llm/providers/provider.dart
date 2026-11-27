@@ -35,9 +35,6 @@ abstract class LlmProvider {
   /// endpoint typed in by hand is its own.
   String get maker => terms?.maker ?? displayName;
 
-  /// What it is, in a line under its name.
-  String? get blurb => terms?.blurb;
-
   /// What the Add provider page filters it by, read off [terms]: none for an
   /// endpoint typed in by hand.
   Set<ProviderTag> get tags {

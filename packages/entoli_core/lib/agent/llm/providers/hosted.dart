@@ -24,7 +24,6 @@ class GroqProvider extends OpenAiCompatibleProvider {
 
   static const _terms = PresetTerms(
     maker: "Groq",
-    blurb: "Open models on fast hardware.",
     prompts: PromptUse.notTrained,
     policy: "https://groq.com/privacy-policy",
     keyUrl: "https://console.groq.com/keys",
@@ -56,7 +55,6 @@ class ZaiProvider extends OpenAiCompatibleProvider with ChecksKeyByCompletion {
 
   static const _terms = PresetTerms(
     maker: "Z.ai",
-    blurb: "GLM models, some of them free.",
     prompts: PromptUse.unstated,
     freeTier:
         "The GLM Flash models are free. Z.ai's terms do not say how "
@@ -86,7 +84,6 @@ class OllamaCloudProvider extends OpenAiCompatibleProvider
 
   static const _terms = PresetTerms(
     maker: "Ollama",
-    blurb: "Open models, hosted by Ollama.",
     prompts: PromptUse.notTrained,
     policy: "https://ollama.com/privacy",
     keyUrl: "https://ollama.com/settings/keys",

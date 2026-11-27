@@ -123,7 +123,7 @@ void main() {
       tester,
     ) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
-      await addProvider(tester, "Custom");
+      await addProvider(tester, "Custom endpoint");
 
       await tester.enterText(dialogField("Name"), "vllm");
       await tester.enterText(
@@ -145,7 +145,7 @@ void main() {
 
     testWidgets("one missing its name or URL is not saved", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
-      await addProvider(tester, "Custom");
+      await addProvider(tester, "Custom endpoint");
 
       await tester.enterText(dialogField("Name"), "nameless");
       await saveDialog(tester);
@@ -193,7 +193,7 @@ void main() {
       tester,
     ) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
-      await addProvider(tester, "Custom");
+      await addProvider(tester, "Custom endpoint");
       await tester.enterText(dialogField("Name"), "vllm");
       await tester.enterText(
         dialogField("Base URL"),
@@ -374,12 +374,12 @@ void main() {
       }
 
       expect(card("Groq"), findsOneWidget);
-      expect(find.text("Custom", skipOffstage: false), findsOneWidget);
+      expect(find.text("Custom endpoint", skipOffstage: false), findsOneWidget);
 
       await toggle("Free");
       expect(card("Groq"), findsNothing);
       expect(card("Google Gemini"), findsOneWidget);
-      expect(find.text("Custom", skipOffstage: false), findsNothing);
+      expect(find.text("Custom endpoint", skipOffstage: false), findsNothing);
 
       await toggle("Private");
       expect(find.byType(ProviderCard, skipOffstage: false), findsNothing);
@@ -439,7 +439,7 @@ void main() {
 
     testWidgets("renaming one keeps its id, and so its key", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
-      await addProvider(tester, "Custom");
+      await addProvider(tester, "Custom endpoint");
       await tester.enterText(dialogField("Name"), "vllm");
       await tester.enterText(
         dialogField("Base URL"),

@@ -266,7 +266,6 @@ enum ProviderTag {
 class PresetTerms {
   const PresetTerms({
     required this.maker,
-    required this.blurb,
     required this.prompts,
     this.freeTier,
     this.policy,
@@ -277,7 +276,6 @@ class PresetTerms {
   /// by: a constant, not the preset's label, which a rename would split.
   final String maker;
 
-  final String blurb;
   final PromptUse prompts;
 
   /// Non-null where the preset can be used for free and that comes at a cost

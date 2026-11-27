@@ -98,9 +98,7 @@ class _ProviderPickerPageState extends ConsumerState<ProviderPickerPage> {
               if (_filter.isEmpty)
                 _OfferCard(
                   leading: const CircleAvatar(child: Icon(Icons.link)),
-                  title: "Custom",
-                  blurb:
-                      "Any OpenAI- or Anthropic-compatible endpoint, by URL.",
+                  title: "Custom endpoint",
                   onTap: () => Navigator.pop(context, (preset: null)),
                 ),
             ],
@@ -172,8 +170,8 @@ class _CardGrid extends StatelessWidget {
   );
 }
 
-/// One offer on the page: its company's mark, its name, what it is, and the
-/// tags it is filtered by.
+/// One offer on the page: its company's mark, its name, and the tags it is
+/// filtered by.
 class ProviderCard extends StatelessWidget {
   const ProviderCard(this.offer, {super.key, required this.onTap});
 
@@ -184,7 +182,6 @@ class ProviderCard extends StatelessWidget {
   Widget build(BuildContext context) => _OfferCard(
     leading: ProviderMark(offer.maker),
     title: offer.displayName,
-    blurb: offer.blurb,
     tags: [
       for (final tag in ProviderTag.values)
         if (offer.tags.contains(tag))
@@ -223,13 +220,11 @@ class _OfferCard extends StatelessWidget {
     required this.leading,
     required this.title,
     required this.onTap,
-    this.blurb,
     this.tags = const [],
   });
 
   final Widget leading;
   final String title;
-  final String? blurb;
   final List<Widget> tags;
   final VoidCallback onTap;
 
@@ -255,10 +250,6 @@ class _OfferCard extends StatelessWidget {
                   ),
                 ],
               ),
-              if (blurb case final blurb?) ...[
-                const SizedBox(height: 8),
-                Text(blurb, style: theme.textTheme.bodyMedium),
-              ],
               if (tags.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Wrap(spacing: 6, runSpacing: 4, children: tags),

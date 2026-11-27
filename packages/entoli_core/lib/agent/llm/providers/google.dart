@@ -22,7 +22,6 @@ class GoogleProvider extends OpenAiCompatibleProvider {
 
   static const _terms = PresetTerms(
     maker: "Google",
-    blurb: "Gemini models, with a free tier.",
     prompts: PromptUse.trainedWhenFree,
     freeTier:
         "On Google's free tier, your prompts and the replies are used "
