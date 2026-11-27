@@ -47,7 +47,7 @@ class AnthropicProvider extends AnthropicCompatibleProvider {
 
   static const _terms = PresetTerms(
     maker: "Anthropic",
-    prompts: PromptUse.notTrained,
+    prompts: PromptUse.notTrainedUnlessOptedIn,
     policy: "https://www.anthropic.com/legal/commercial-terms",
     keyUrl: "https://platform.claude.com/settings/keys",
   );

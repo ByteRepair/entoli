@@ -22,9 +22,25 @@ void main() {
 
   test("a model run here is private, and neither paid nor free", () {
     const private = ProviderFilter(tags: {ProviderTag.private});
-    expect(shown(private), containsAll(["Ollama (local)", "Anthropic"]));
+    expect(shown(private), containsAll(["Ollama (local)", "Groq"]));
     for (final tag in [ProviderTag.paid, ProviderTag.free]) {
       expect(shown(private.toggleTag(tag)), isNot(contains("Ollama (local)")));
+    }
+  });
+
+  test("an opt-in to training is not private, and not opt-out", () {
+    List<String> tagged(ProviderTag tag) => shown(ProviderFilter(tags: {tag}));
+    expect(
+      tagged(ProviderTag.optInCollection),
+      containsAll(["Anthropic", "OpenAI", "OpenRouter"]),
+    );
+    expect(
+      tagged(ProviderTag.optOutCollection),
+      containsAll(["Google Gemini", "Mistral"]),
+    );
+    for (final api in ["Anthropic", "OpenAI"]) {
+      expect(tagged(ProviderTag.private), isNot(contains(api)));
+      expect(tagged(ProviderTag.optOutCollection), isNot(contains(api)));
     }
   });
 

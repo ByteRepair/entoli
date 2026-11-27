@@ -75,11 +75,11 @@ abstract class CliProvider extends LlmProvider with KeyFree {
   /// "ChatGPT".
   String get planName;
 
-  /// A plan someone pays for, whose account settings say whether it trains
-  /// on what it is sent.
+  /// A plan someone pays for, which trains on what it is sent until the
+  /// account's settings say not to.
   @override
   Set<ProviderTag> get tags => const {
-    ProviderTag.privacyControls,
+    ProviderTag.optOutCollection,
     ProviderTag.paid,
   };
 

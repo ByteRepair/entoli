@@ -42,8 +42,11 @@ abstract class LlmProvider {
     if (terms == null) return const {};
     final privacy = switch (terms.prompts) {
       PromptUse.local || PromptUse.notTrained => ProviderTag.private,
-      PromptUse.trainedWhenFree ||
-      PromptUse.dependsOnRoute => ProviderTag.privacyControls,
+      // OpenRouter routes to a provider that may train only once the
+      // account allows it.
+      PromptUse.notTrainedUnlessOptedIn ||
+      PromptUse.dependsOnRoute => ProviderTag.optInCollection,
+      PromptUse.trainedWhenFree => ProviderTag.optOutCollection,
       PromptUse.unstated => null,
     };
     return {

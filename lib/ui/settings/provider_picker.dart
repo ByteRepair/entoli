@@ -236,7 +236,7 @@ class ProviderCard extends StatelessWidget {
     onTap: onTap,
   );
 
-  /// What the tags leave unsaid about the prompts, where it is a warning.
+  /// What the tags leave unsaid about the prompts.
   static InfoTag? _caveat(PromptUse? use) => switch (use) {
     PromptUse.trainedWhenFree => const InfoTag(
       Icons.visibility_outlined,
@@ -252,7 +252,10 @@ class ProviderCard extends StatelessWidget {
       Icons.alt_route,
       "Training depends on the model",
     ),
-    PromptUse.local || PromptUse.notTrained || null => null,
+    PromptUse.local ||
+    PromptUse.notTrained ||
+    PromptUse.notTrainedUnlessOptedIn ||
+    null => null,
   };
 }
 
@@ -318,7 +321,8 @@ class _OfferCard extends StatelessWidget {
 extension on ProviderTag {
   IconData get icon => switch (this) {
     ProviderTag.private => Icons.lock_outline,
-    ProviderTag.privacyControls => Icons.tune,
+    ProviderTag.optInCollection => Icons.toggle_off_outlined,
+    ProviderTag.optOutCollection => Icons.toggle_on_outlined,
     ProviderTag.paid => Icons.payments_outlined,
     ProviderTag.free => Icons.redeem_outlined,
   };

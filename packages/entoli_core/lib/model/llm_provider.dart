@@ -223,8 +223,13 @@ enum PromptUse {
   /// Never leaves the machine.
   local,
 
-  /// Not kept or trained on, by the provider's own terms.
+  /// Not kept or trained on, by the provider's own terms, with no setting
+  /// that would have it.
   notTrained,
+
+  /// Not trained on unless the account opts in: off by default, but a
+  /// setting away, so the account's settings are what keep it private.
+  notTrainedUnlessOptedIn,
 
   /// Up to whichever upstream a request is routed to.
   dependsOnRoute,
@@ -241,12 +246,17 @@ enum PromptUse {
 /// provider carrying every one, so Free and Private together is nothing: no
 /// free tier is private.
 enum ProviderTag {
-  /// Not trained on, or never leaving the machine, without anything to set.
+  /// Not trained on, or never leaving the machine, with no setting that
+  /// could change it.
   private("Private"),
 
-  /// Trained on unless the user turns it off or pays: a setting or a plan
-  /// decides.
-  privacyControls("Privacy controls"),
+  /// Not trained on unless the account turns it on: off by default, but a
+  /// setting away.
+  optInCollection("Opt-in data collection"),
+
+  /// Trained on unless the account turns it off, or pays for a plan that
+  /// is not: on by default.
+  optOutCollection("Opt-out data collection"),
 
   /// A hosted service someone pays for. A model run here is neither this
   /// nor [free]: there is no service to pay or not.

@@ -18,7 +18,7 @@ class OpenAiProvider extends OpenAiCompatibleProvider {
 
   static const _terms = PresetTerms(
     maker: "OpenAI",
-    prompts: PromptUse.notTrained,
+    prompts: PromptUse.notTrainedUnlessOptedIn,
     policy: "https://openai.com/enterprise-privacy",
     keyUrl: "https://platform.openai.com/api-keys",
   );

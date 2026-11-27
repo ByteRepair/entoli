@@ -382,12 +382,16 @@ preset and every program this platform runs, as a card under its company's
 `ProviderMark` (an initial, the model catalog's too, not a logo: Anthropic's trademark terms allow its marks only
 in material it approves and forbid recolouring them), with no grouping, every card one size in a centred grid (`_CardGrid`), its
 tags scrolling inside it rather than growing it. Above
-the cards are two rows of `ToggleChip`s: the `ProviderTag`s (Private, Privacy
-controls, Paid, Free), every one picked required, so Free and Private shows
+the cards are two rows of `ToggleChip`s: the `ProviderTag`s (Private, Opt-in
+data collection, Opt-out data collection, Paid, Free), every one picked
+required, so Free and Private shows
 nothing; and the companies, any one picked allowed, since an offer has one
 (`ProviderFilter`, `lib/app/settings/provider_filter.dart`). A provider's tags
-are read off its `terms`, which also name its company (`maker`); a plan's program is Privacy controls and Paid, its
-account settings deciding the training, and a model run here is Private
+are read off its `terms`, which also name its company (`maker`). Private is
+no setting that could have it trained on; one that trains only once the
+account turns it on (Anthropic's and OpenAI's APIs, OpenRouter's routing) is
+Opt-in data collection; one that trains until the account turns it off or
+pays (a plan's program, a free tier) is Opt-out. A model run here is Private
 alone. Custom is a card only while nothing is picked, having no tags. A free
 tier is agreed to in a dialog before anything else is asked. Then
 `ProviderDialog` opens over the page, which stays until a provider is saved,
