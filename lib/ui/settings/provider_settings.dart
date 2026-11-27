@@ -24,7 +24,8 @@ import "provider_picker.dart";
 /// A new entry is given its id before the dialog opens: a CLI's account is
 /// kept in a folder named by it, and the dialog can sign one in before Save.
 /// Cancelled, a new entry's folders go, and any sign-in made in them.
-Future<void> editProvider(
+/// Whether it was saved.
+Future<bool> editProvider(
   BuildContext context, {
   LlmProviderConfig? provider,
   LlmProvider? preset,
@@ -51,13 +52,14 @@ Future<void> editProvider(
   );
   if (draft == null) {
     if (edit.adding) await forgetCliEntry(programs, edit.id);
-    return;
+    return false;
   }
   await notifier.upsertProvider(
     draft.config,
     setKey: draft.setKey,
     adopt: adopt,
   );
+  return true;
 }
 
 /// The Providers category: where the models come from, each an endpoint, a
@@ -93,10 +95,10 @@ class ProvidersSection extends ConsumerWidget {
   }
 
   Future<void> _add(BuildContext context) async {
-    final chosen = await pickProviderPreset(context);
-    if (chosen != null && context.mounted) {
-      await editProvider(context, preset: chosen.preset);
-    }
+    await showProviderPicker(
+      context,
+      connect: (context, preset) => editProvider(context, preset: preset),
+    );
   }
 
   String _status(WidgetRef ref, LlmProviderConfig config) {

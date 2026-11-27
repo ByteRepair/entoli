@@ -349,6 +349,22 @@ void main() {
       expect(saved().map((p) => p.displayName), ["OpenAI"]);
     });
 
+    testWidgets("backing out of a sign-in is back to the picker", (
+      tester,
+    ) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addProvider(tester, "Groq");
+      await tester.tap(find.text("Cancel"));
+      await settleIo(tester);
+      expect(find.byType(ProviderPickerPage), findsOneWidget);
+
+      await tester.tap(find.text("Groq").last);
+      await settleIo(tester);
+      await saveDialog(tester);
+      expect(find.byType(ProviderPickerPage), findsNothing);
+      expect(saved().map((p) => p.displayName), ["Groq"]);
+    });
+
     testWidgets("Escape leaves the picker", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await tester.tap(find.text("Add provider"));
@@ -372,6 +388,12 @@ void main() {
         await tester.tap(find.widgetWithText(ToggleChip, chip));
         await tester.pumpAndSettle();
       }
+
+      final heights = {
+        for (final chip in find.byType(ToggleChip).evaluate())
+          chip.size!.height,
+      };
+      expect(heights, hasLength(1), reason: "every filter chip one height");
 
       expect(card("Groq"), findsOneWidget);
       expect(find.text("Custom endpoint", skipOffstage: false), findsOneWidget);

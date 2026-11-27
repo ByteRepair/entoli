@@ -16,18 +16,28 @@ import "../widgets/toggle_chip.dart";
 /// Ask which provider to add, on a page of its own: every offer as a card,
 /// narrowed by the tags and companies picked above them. A free tier paid
 /// for in privacy is accepted here, in a dialog, before the key is asked
-/// for. Null if left; a null [preset] is Custom. One already configured is
-/// offered again, for a second account.
-Future<({LlmProvider? preset})?> pickProviderPreset(BuildContext context) =>
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => const ProviderPickerPage(),
-      ),
-    );
+/// for. A card picked is handed to [connect] over the page, a null preset
+/// being Custom, and the page stays until it says the provider was added:
+/// backing out of the sign-in is back to the choice, not past it. One already
+/// configured is offered again, for a second account.
+Future<void> showProviderPicker(
+  BuildContext context, {
+  required Connect connect,
+}) => Navigator.of(context).push(
+  MaterialPageRoute<void>(
+    fullscreenDialog: true,
+    builder: (_) => ProviderPickerPage(connect: connect),
+  ),
+);
+
+/// Sign [preset] in, over [context]; whether it was added.
+typedef Connect =
+    Future<bool> Function(BuildContext context, LlmProvider? preset);
 
 class ProviderPickerPage extends ConsumerStatefulWidget {
-  const ProviderPickerPage({super.key});
+  const ProviderPickerPage({super.key, required this.connect});
+
+  final Connect connect;
 
   @override
   ConsumerState<ProviderPickerPage> createState() => _ProviderPickerPageState();
@@ -38,14 +48,15 @@ class _ProviderPickerPageState extends ConsumerState<ProviderPickerPage> {
   late final _makers = makersOf(_offers);
   var _filter = const ProviderFilter();
 
-  Future<void> _choose(LlmProvider offer) async {
-    final terms = offer.terms;
+  Future<void> _choose(LlmProvider? offer) async {
+    final terms = offer?.terms;
     final warning = terms?.freeTier;
     if (warning != null &&
-        !await _acceptFreeTier(context, ref, offer, terms!, warning)) {
+        !await _acceptFreeTier(context, ref, offer!, terms!, warning)) {
       return;
     }
-    if (mounted) Navigator.pop(context, (preset: offer));
+    if (!mounted || !await widget.connect(context, offer)) return;
+    if (mounted) Navigator.pop(context);
   }
 
   @override
@@ -77,7 +88,8 @@ class _ProviderPickerPageState extends ConsumerState<ProviderPickerPage> {
           const SizedBox(height: 8),
           _FilterRow(
             items: _makers,
-            leading: (maker) => ProviderMark(maker, radius: 10),
+            leading: (maker) =>
+                ProviderMark(maker, radius: ToggleChip.markSize / 2),
             label: (maker) => maker,
             selected: _filter.makers.contains,
             onToggle: (maker) =>
@@ -99,7 +111,7 @@ class _ProviderPickerPageState extends ConsumerState<ProviderPickerPage> {
                 _OfferCard(
                   leading: const CircleAvatar(child: Icon(Icons.link)),
                   title: "Custom endpoint",
-                  onTap: () => Navigator.pop(context, (preset: null)),
+                  onTap: () => _choose(null),
                 ),
             ],
           ),

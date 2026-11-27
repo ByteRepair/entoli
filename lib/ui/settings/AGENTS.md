@@ -377,7 +377,7 @@ neither a stored key nor its named variable is there, "On this computer" for a
 local server, and an endpoint typed in by hand carries its address in front
 (`ProvidersSection`, `provider_settings.dart`), and its X asks before removing
 one, since the key and a program's sign-in go with it. Adding one opens
-`pickProviderPreset` (`provider_picker.dart`), a page of its own: every
+`showProviderPicker` (`provider_picker.dart`), a page of its own: every
 preset and every program this platform runs, as a card under its company's
 `ProviderMark` (an initial, the model catalog's too, not a logo: Anthropic's trademark terms allow its marks only
 in material it approves and forbid recolouring them), with no grouping. Above
@@ -389,7 +389,8 @@ are read off its `terms`, which also name its company (`maker`); a plan's progra
 account settings deciding the training, and a model run here is Private
 alone. Custom is a card only while nothing is picked, having no tags. A free
 tier is agreed to in a dialog before anything else is asked. Then
-`ProviderDialog` ("Connect X" for a preset), over a `ProviderEdit`
+`ProviderDialog` opens over the page, which stays until a provider is saved,
+so backing out of a sign-in is back to the choice: `ProviderDialog` ("Connect X" for a preset), over a `ProviderEdit`
 (`lib/app/settings/provider_edit.dart`), which holds the entry being edited
 and builds what is saved: an empty base URL or models.dev id falls back to the
 preset's, and an empty name to the preset's name, numbered `-02`, `-03` on
